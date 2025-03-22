@@ -1,0 +1,66 @@
+/* src/styles/Header.css */
+header {
+  position: fixed;
+  top: 0;
+  width: 100%;
+  min-height: 70px;
+  background: transparent;
+  z-index: 999;
+  transition: background 0.3s ease;
+  overflow: visible;
+}
+
+header.scrolled {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.header-container {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  box-sizing: border-box;
+  color: #fff;
+}
+
+.logo img {
+  max-height: 80px;
+  object-fit: contain;
+  object-position: center;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+nav a {
+  margin-left: 30px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.2rem;
+}
+
+nav a:hover {
+  text-decoration: underline;
+}
+
+/* 언어 전환 버튼을 화면의 가장 오른쪽에 고정 */
+.lang-switcher-absolute {
+  position: fixed;
+  top: 10px;    /* 상단에서 10px */
+  right: 10px;  /* 오른쪽에서 10px */
+  z-index: 1000;
+}
+
+/* 화면이 작을 경우 위치 및 크기 조정 */
+@media (max-width: 480px) {
+  .lang-switcher-absolute {
+    top: 5px;
+    right: 5px;
+    font-size: 0.8rem; /* 버튼 크기를 줄이는 등 필요에 따라 조정 */
+  }
+}

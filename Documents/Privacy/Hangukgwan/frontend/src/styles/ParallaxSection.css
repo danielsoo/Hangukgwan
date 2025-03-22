@@ -1,0 +1,28 @@
+  /* src/components/ParallaxSection.css */
+.parallax-section {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  /* public/images 폴더의 배경 이미지 사용 – 대소문자 주의 */
+  background: url("../assets/images/background.JPG") center center / cover no-repeat fixed;
+  filter: brightness(30%); /* 배경 명도 낮춤 (값 조절 가능) */
+  z-index: 1;
+}
+
+  .parallax-section::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.3); /* 오버레이 */
+    z-index: 0;
+  }
+  
+  .content {
+    position: relative;
+    z-index: 1;
+    color: #fff;
+    /* ... */
+  }
+  
