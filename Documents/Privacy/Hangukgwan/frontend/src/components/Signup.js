@@ -1,7 +1,6 @@
 // src/components/Signup.js
 import React, { useState } from 'react';
-import { Box, Paper, Typography, TextField, Button, Link as MuiLink } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { Box, Paper, Typography, TextField, Button } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import PasswordField from './PasswordField';
 import SignupSuccess from './SignupSuccess';
@@ -21,7 +20,8 @@ function Signup() {
   const [message, setMessage] = useState('');
   const [isError, setIsError] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
-  const navigate = useNavigate();
+
+  // 'navigate'와 'MuiLink'는 사용하지 않으므로 제거했습니다.
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -61,14 +61,32 @@ function Signup() {
 
   if (signupSuccess) {
     return (
-      <Box sx={{ width: '100vw', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'background.default' }}>
+      <Box
+        sx={{
+          width: '100vw',
+          minHeight: '100vh',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'transparent'
+        }}
+      >
         <SignupSuccess userName={firstName} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ width: '100vw', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'background.default' }}>
+    <Box
+      sx={{
+        width: '100vw',
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'transparent'
+      }}
+    >
       <Paper sx={{ width: 400, p: 3, borderRadius: 2 }}>
         <Typography variant="h5" align="center" gutterBottom>
           {t('signup')}
@@ -144,7 +162,11 @@ function Signup() {
             {t('signup')}
           </Button>
         </form>
-        <Typography variant="body2" align="center" sx={{ color: isError ? 'error.main' : 'secondary.main' }}>
+        <Typography
+          variant="body2"
+          align="center"
+          sx={{ color: isError ? 'error.main' : 'secondary.main' }}
+        >
           {message}
         </Typography>
       </Paper>

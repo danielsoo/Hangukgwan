@@ -8,21 +8,26 @@ import Home from './components/Home';
 import Login from './components/Login';
 import Signup from './components/Signup';
 import ForgotPassword from './components/ForgotPassword';
+import ParallaxSection from './components/ParallaxSection'; // 또는 그냥 div를 직접 사용해도 됩니다.
+import './index.css';
+
 
 function App() {
   return (
     <Router>
-      {/* 모든 페이지에 공통으로 표시될 고정 헤더 */}
+      <ParallaxSection />
       <Header />
-      
-      {/* 각 페이지별 라우팅 */}
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-      </Routes>
-    </Router>
+      {/* 다른 콘텐츠들은 배경 위에 위치하도록 z-index 조정 */}
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        {/* 각 페이지별 라우팅 */}
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+        </Routes>
+      </div>
+      </Router>
   );
 }
 

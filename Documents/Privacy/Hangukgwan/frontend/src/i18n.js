@@ -37,7 +37,7 @@ const resources = {
   },
   ko: {
     translation: {
-      siteName: "한국ㅘㄴ",
+      siteName: "한국관",
       about: "소개",
       contact: "문의하기",
       login: "로그인",

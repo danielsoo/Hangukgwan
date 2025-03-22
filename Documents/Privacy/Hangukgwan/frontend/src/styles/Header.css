@@ -55,8 +55,25 @@ header.scrolled {
   color: #fff;
   text-decoration: none;
   font-size: 1.8rem;
-  /* height: 10px;       원하는 높이로 지정 */
-  /* line-height: 70px;  텍스트를 수직 중앙 정렬 */
+}
+
+/* 활성 링크에 빨간 밑줄 */
+.active-link {
+  position: relative;
+}
+
+/* 가상 요소를 활용한 밑줄 */
+.active-link::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -10px; /* 텍스트 아래쪽에 선이 오도록 조정 */
+  width: calc(100% + 10px);
+  height: 4px;
+  background-color: red;
+  transition: width 0.3s ease; /* 밑줄 등장/변경 시 부드러운 전환 */
+  z-index: 10; /* 추가: 가상 요소를 위로 올립니다 */
 }
 
 .main-nav a:hover {
@@ -68,7 +85,7 @@ header.scrolled {
   position: absolute;  /* header를 기준으로 절대 위치 */
   top: 0;
   right: 20px;        /* 원하는 만큼 오른쪽 여백 */
-  height: 125px;       /* 헤더와 동일한 높이 -> 수직 중앙 정렬 가능 */
+  height: 125px;      /* 헤더와 동일한 높이 -> 수직 중앙 정렬 가능 */
   display: flex;
   align-items: center;
   gap: 20px;

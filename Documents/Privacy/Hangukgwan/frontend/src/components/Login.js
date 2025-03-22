@@ -50,7 +50,7 @@ function Login() {
   };
 
   return (
-    <Box sx={{ width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'background.default' }}>
+    <Box sx={{ width: '100vw', height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' }}>
       <Paper sx={{ width: 400, p: 3, borderRadius: 2 }}>
         <Typography variant="h5" align="center" gutterBottom>
           {t('login')}

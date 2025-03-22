@@ -1,25 +1,3 @@
-// // src/components/Home.js
-// import React from 'react';
-// import ParallaxSection from './ParallaxSection'; // 배경 전담
-// import { Typography, Button } from '@mui/material';
-
-// function Home() {
-//   return (
-//     <>
-//       <ParallaxSection />
-//       {/* Home 내용만 */}
-//       <div style={{ position: 'relative', zIndex: 2, marginTop: '400px', textAlign: 'center' }}>
-//         <Typography variant="h3" sx={{ mb: 2, color: '#fff' }}>
-//           Welcome
-//         </Typography>
-//         <Button variant="contained" color="primary">Sign Up</Button>
-//       </div>
-//     </>
-//   );
-// }
-
-// export default Home;
-
 // src/components/Home.js
 import React from 'react';
 import { Typography, Button } from '@mui/material';

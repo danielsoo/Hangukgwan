@@ -49,7 +49,7 @@ function ForgotPassword() {
         sx={{
           width: 350,
           p: 3,
-          backgroundColor: 'rgba(255, 255, 255, 0.3)',
+          backgroundColor: 'rgba(255, 255, 255)',
           backdropFilter: 'blur(10px)',
           borderRadius: 2,
         }}
