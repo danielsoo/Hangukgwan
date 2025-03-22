@@ -1,6 +1,6 @@
-/* src/styles/Header.css */
+/* 헤더 기본 스타일 */
 header {
-  position: fixed;
+  position: fixed;   /* 화면 최상단 고정 */
   top: 0;
   width: 100%;
   min-height: 70px;
@@ -10,57 +10,104 @@ header {
   overflow: visible;
 }
 
+/* 스크롤 시 배경 색상 변화 */
 header.scrolled {
   background: rgba(0, 0, 0, 0.5);
 }
 
+/* 1) 로고와 메인 내비게이션을 Flex로 배치하는 컨테이너 */
 .header-container {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  max-width: 1200px;
+  align-items: center;         /* 세로 가운데 정렬 */
+  justify-content: space-between; /* 로고 왼쪽, 내비 오른쪽 */
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 0px;
   box-sizing: border-box;
   color: #fff;
+  height: 125px; /* 헤더와 동일한 높이(수직 정렬 유지) */
 }
 
+/* 로고 컨테이너 수정 */
+.logo {
+  position: relative;       /* 내부에서 절대 위치 적용을 위한 기준 */
+  height: 70px;             /* 헤더와 동일한 높이 */
+  overflow: visible;        /* 로고 이미지가 컨테이너 밖으로 나가도 헤더 크기는 그대로 */
+}
+
+/* 로고 이미지 크기 및 위치 지정 */
 .logo img {
-  max-height: 80px;
-  object-fit: contain;
-  object-position: center;
+  position: absolute;       /* 컨테이너(.logo)를 기준으로 절대 위치 */
+  left: 0;
+  bottom: -50px;            /* 헤더 아래로 10px 정도 노출되게 설정 (원하는 값으로 조정) */
+  height: 140px;            /* 원하는 로고 이미지 크기 */
+  /* width: auto;  기본 비율 유지 */
 }
 
-nav {
+/* 메인 내비게이션 (Home/Menu/Contact) */
+.main-nav {
   display: flex;
   align-items: center;
-  margin-left: auto;
+  gap: 30px; /* 링크 간 간격 */
 }
 
-nav a {
-  margin-left: 30px;
+.main-nav a {
   color: #fff;
   text-decoration: none;
-  font-size: 1.2rem;
+  font-size: 1.8rem;
+  /* height: 10px;       원하는 높이로 지정 */
+  /* line-height: 70px;  텍스트를 수직 중앙 정렬 */
 }
 
-nav a:hover {
+.main-nav a:hover {
   text-decoration: underline;
 }
 
-/* 언어 전환 버튼을 화면의 가장 오른쪽에 고정 */
-.lang-switcher-absolute {
-  position: fixed;
-  top: 10px;    /* 상단에서 10px */
-  right: 10px;  /* 오른쪽에서 10px */
-  z-index: 1000;
+/* 2) 로그인/사인업 + 언어 스위처: 화면 오른쪽으로 고정 */
+.right-menu {
+  position: absolute;  /* header를 기준으로 절대 위치 */
+  top: 0;
+  right: 20px;        /* 원하는 만큼 오른쪽 여백 */
+  height: 125px;       /* 헤더와 동일한 높이 -> 수직 중앙 정렬 가능 */
+  display: flex;
+  align-items: center;
+  gap: 20px;
 }
 
-/* 화면이 작을 경우 위치 및 크기 조정 */
+/* 로그인/사인업 링크 */
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.auth-links a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.3rem;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+/* 반응형(모바일) 예시 */
 @media (max-width: 480px) {
-  .lang-switcher-absolute {
-    top: 5px;
-    right: 5px;
-    font-size: 0.8rem; /* 버튼 크기를 줄이는 등 필요에 따라 조정 */
+  .header-container {
+    /* 화면이 작아지면 수직으로 배치할 수도 있음 */
+    flex-direction: column;
+    height: auto;
+    gap: 10px;
+  }
+  .main-nav a {
+    font-size: 1rem;
+  }
+  .right-menu {
+    right: 10px;
+    height: auto;
+    gap: 10px;
+  }
+  .auth-links a {
+    font-size: 1rem;
   }
 }

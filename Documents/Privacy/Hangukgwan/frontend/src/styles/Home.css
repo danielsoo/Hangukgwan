@@ -11,11 +11,12 @@
   justify-content: space-around; /* 왼쪽 슬로건, 오른쪽 이미지 분할 */
   box-sizing: border-box;
   padding: 20px;
+  color: #fff; /* 글씨 색상을 흰색으로 설정 */
 }
 
 .overlay-left {
   flex: 1;
-  max-width: 15%; /* 반 화면 정도 */
+  max-width: 35%; /* 반 화면 정도 */
 }
 
 .overlay-right {

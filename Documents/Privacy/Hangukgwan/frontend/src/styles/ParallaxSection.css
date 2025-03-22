@@ -1,15 +1,16 @@
   /* src/components/ParallaxSection.css */
-.parallax-section {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100vh;
-  /* public/images 폴더의 배경 이미지 사용 – 대소문자 주의 */
-  background: url("../assets/images/background.JPG") center center / cover no-repeat fixed;
-  filter: brightness(30%); /* 배경 명도 낮춤 (값 조절 가능) */
-  z-index: 1;
-}
+  .parallax-section {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100vh;
+    /* assets/images 폴더의 배경 이미지 사용 */
+    background: url("../assets/images/background.JPG") center center / cover no-repeat;
+    filter: brightness(30%); /* 배경 어둡게 */
+    z-index: 1;
+    transform: translateY(0); /* 초기값 */
+  }
 
   .parallax-section::before {
     content: "";

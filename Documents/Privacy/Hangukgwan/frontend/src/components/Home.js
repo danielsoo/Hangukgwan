@@ -45,8 +45,8 @@ function Home() {
           <Typography variant="h3" sx={{ mb: 2 }}>
             {t('bibimbapSlogan')}
           </Typography>
-          <Button variant="contained" color="primary" onClick={() => navigate('/signup')}>
-            {t('signup')}
+          <Button variant="contained" color="primary" onClick={() => navigate('/menu')}>
+            {t('menu')}
           </Button>
         </div>
         {/* 오른쪽 영역: 비빔밥 이미지 */}
