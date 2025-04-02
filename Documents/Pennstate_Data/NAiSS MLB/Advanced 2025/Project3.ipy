@@ -1,0 +1,137 @@
+import numpy as np
+from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader as PDFReader
+from transformers import pipeline
+from huggingface_hub import login
+
+# 모델 이름과 API 키를 설정합니다.
+LLM_MODEL = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+EMBEDDING_MODEL = "all-MiniLM-L12-v2"
+# HF_API_KEY = "YOUR-HF-API-KEY-HERE"  # 필요하면 HF API 키를 입력하세요.
+
+# # 로그인 (필요한 경우)
+# login(token=HF_API_KEY)
+
+class VectorDB:
+    def __init__(self, model_name: str) -> None:
+        # 임베딩 모델 로딩 및 기본 변수 초기화
+        self.embedModel = SentenceTransformer(model_name)
+        self.nDim = self.embedModel.get_sentence_embedding_dimension()
+        self._embeddings = np.ndarray((0, self.nDim), dtype=np.float32)
+        self._strings = []
+
+    def addToDatabase(self, input: list[str]):
+        """
+        문자열 리스트를 받아 임베딩 벡터로 변환 후 데이터베이스에 추가
+        """
+        # 문자열을 임베딩 벡터로 변환
+        embeddings = self.embedModel.encode(input, convert_to_numpy=True)
+        # 기존 임베딩 배열이 비어있다면 바로 할당, 아니면 세로로 합치기
+        if self._embeddings.size == 0:
+            self._embeddings = embeddings
+        else:
+            self._embeddings = np.vstack([self._embeddings, embeddings])
+        # 문자열 리스트를 동일한 순서로 저장
+        self._strings.extend(input)
+
+    def clearDatabase(self):
+        """
+        데이터베이스의 임베딩과 문자열 리스트를 초기화합니다.
+        """
+        self._embeddings = np.ndarray((0, self.nDim), dtype=np.float32)
+        self._strings = []
+
+    def euclideanSim(self, x: np.ndarray, y: np.ndarray) -> float:
+        """
+        두 임베딩 벡터 간의 유클리드 거리를 기반으로 한 유사도 점수를 계산합니다.
+        유사도가 높을수록 값이 1에 가까워지도록 1/(1+distance)로 변환합니다.
+        """
+        distance = np.linalg.norm(x - y)
+        similarity = 1 / (1 + distance)
+        return similarity
+
+    def search(self, input: str, n_return=1):
+        """
+        입력 문자열과 데이터베이스에 저장된 임베딩 간의 유사도를 계산하여 상위 n_return개의 결과를 반환합니다.
+        반환값은 (텍스트 리스트, 유사도 배열) 형태입니다.
+        """
+        query_embedding = self.embedModel.encode([input], convert_to_numpy=True)[0]
+        similarities = []
+        for emb in self._embeddings:
+            sim = self.euclideanSim(query_embedding, emb)
+            similarities.append(sim)
+        similarities = np.array(similarities)
+        # 유사도가 높은 순으로 인덱스를 정렬합니다.
+        if len(similarities) == 0:
+            return ([], np.array([]))
+        top_indices = similarities.argsort()[::-1][:n_return]
+        tRText = [self._strings[i] for i in top_indices]
+        tRSim = similarities[top_indices]
+        return (tRText, tRSim)
+
+# VectorDB 인스턴스 생성
+vDB = VectorDB(model_name=EMBEDDING_MODEL)
+
+def chunksFromText(text: str):
+    """
+    주어진 텍스트를 CHUNK_SIZE 크기의 청크로 나누고, CHUNK_OVERLAP만큼 중복되게 만든 후
+    이를 벡터 데이터베이스에 추가합니다.
+    """
+    CHUNK_SIZE = 500
+    CHUNK_OVERLAP = 50
+    docChunks = []
+    # 청크를 생성합니다.
+    start = 0
+    while start < len(text):
+        end = start + CHUNK_SIZE
+        chunk = text[start:end]
+        # 청크의 길이가 50자 이상일 때만 추가합니다.
+        if len(chunk.strip()) > 50:
+            docChunks.append(chunk)
+        start += CHUNK_SIZE - CHUNK_OVERLAP
+    # 생성한 청크를 벡터 데이터베이스에 추가합니다.
+    vDB.addToDatabase(input=docChunks)
+
+def chunksFromPDF(path: str, startPage=0, endPage=None):
+    """
+    PDF 파일을 읽어 각 페이지의 텍스트를 추출하고, 불필요한 부분(헤더, 푸터 등)을 간단히 제거한 뒤,
+    텍스트를 청크로 나눠 벡터 데이터베이스에 저장합니다.
+    """
+    pdf = PDFReader(path)
+    num_pages = len(pdf.pages)
+    # endPage가 지정되지 않은 경우 마지막 페이지까지
+    if endPage is None or endPage > num_pages:
+        endPage = num_pages
+    for i in range(startPage, endPage):
+        page = pdf.pages[i]
+        text = page.extract_text()
+        if text:
+            # 간단한 정제: 양쪽 공백 제거, 여러 공백을 한 칸으로 변경
+            cleaned_text = " ".join(text.split())
+            # 만약 특정 페이지가 인덱스나 제목 페이지라면 건너뛸 수 있도록 조건 추가 가능
+            chunksFromText(cleaned_text)
+
+chunksFromPDF(path="Understanding Stocks.pdf", startPage=0)
+
+# LLM 파이프라인 생성
+answerBot = pipeline("text-generation", model=LLM_MODEL, trust_remote_code=True)
+
+def generateAnswer(question: str, n_chunks=3) -> str:
+    """
+    주어진 질문에 대해 벡터 데이터베이스에서 가장 유사한 청크를 검색한 후,
+    해당 청크들을 컨텍스트로 추가하여 LLM에게 질문하고 답변을 생성합니다.
+    """
+    # 유사한 청크 n_chunks개를 검색합니다.
+    chunks, sims = vDB.search(input=question, n_return=n_chunks)
+    # 검색된 청크들을 하나의 컨텍스트 문자열로 결합합니다.
+    context = "\n".join(chunks)
+    # LLM에게 전달할 프롬프트 작성 (컨텍스트와 질문 포함)
+    prompt = f"Context:\n{context}\n\nBased on the above context, answer the following question:\n{question}"
+    # LLM을 통해 답변 생성 (max_length 및 기타 파라미터는 필요에 따라 조정)
+    #output = answerBot(prompt, max_length=200, do_sample=False)[0]['generated_text']
+    output = answerBot(prompt, max_new_tokens=50, do_sample=False)[0]['generated_text']
+
+    return output
+
+# 예시 질문: 401(k)가 무엇인지 질문하고 결과 출력
+print(generateAnswer("What is a 401k?"))
