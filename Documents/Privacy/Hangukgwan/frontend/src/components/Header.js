@@ -34,6 +34,12 @@ function Header() {
             Home
           </NavLink>
           <NavLink
+            to="/location"
+            className={({ isActive }) => (isActive ? 'active-link' : '')}
+          >
+            Location
+          </NavLink>
+          <NavLink
             to="/menu"
             className={({ isActive }) => (isActive ? 'active-link' : '')}
           >

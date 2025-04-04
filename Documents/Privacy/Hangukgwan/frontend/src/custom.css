@@ -1,0 +1,14 @@
+/* src/custom.css */
+/* 기본 텍스트 색상 */
+.text-primary {
+    color: #ffffff; /* 흰색 */
+  }
+  
+  .text-secondary {
+    color: #fbbf24; /* Tailwind의 yellow-400과 유사한 금색 느낌 */
+  }
+  
+  .text-accent {
+    color: #ef4444; /* Tailwind의 red-500과 유사한 빨간색 */
+  }
+  
