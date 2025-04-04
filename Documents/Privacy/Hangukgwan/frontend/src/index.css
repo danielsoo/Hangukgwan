@@ -16,3 +16,11 @@
   text-align: center;
   max-width: 800px; /* 필요에 따라 조정 */
 }
+
+.pac-container {
+  z-index: 9999 !important; /* 모달보다 높게 설정 */
+}
+
+body {
+  overflow-x: hidden;
+}

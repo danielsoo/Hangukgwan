@@ -3,8 +3,8 @@ header {
   position: fixed;   /* 화면 최상단 고정 */
   top: 0;
   width: 100%;
-  min-height: 70px;
-  background: transparent;
+  height: 125px; /* 헤더 높이 */
+  background: transparent;  /* 기본 배경은 투명 */
   z-index: 999;
   transition: background 0.3s ease;
   overflow: visible;
@@ -12,36 +12,37 @@ header {
 
 /* 스크롤 시 배경 색상 변화 */
 header.scrolled {
-  background: rgba(0, 0, 0, 0.5);
+  background: black; /* 스크롤 시 완전한 검은색 */
 }
 
-/* 1) 로고와 메인 내비게이션을 Flex로 배치하는 컨테이너 */
+/* 헤더 내부 컨테이너: 로고와 내비게이션을 좌우로 배치 */
 .header-container {
   display: flex;
   align-items: center;         /* 세로 가운데 정렬 */
   justify-content: space-between; /* 로고 왼쪽, 내비 오른쪽 */
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 0px;
+  padding: 0 20px; /* 좌우 여백 */
   box-sizing: border-box;
   color: #fff;
-  height: 125px; /* 헤더와 동일한 높이(수직 정렬 유지) */
+  height: 100%; /* 헤더 전체 높이 */
 }
 
-/* 로고 컨테이너 수정 */
+/* 로고 컨테이너: 헤더 높이에 맞춰 로고를 세로 정렬 */
 .logo {
-  position: relative;       /* 내부에서 절대 위치 적용을 위한 기준 */
-  height: 70px;             /* 헤더와 동일한 높이 */
-  overflow: visible;        /* 로고 이미지가 컨테이너 밖으로 나가도 헤더 크기는 그대로 */
+  display: flex;
+  align-items: center;
+  height: 100%;       /* 헤더와 동일한 높이 */
+  margin-left: 0;     /* 왼쪽으로 밀착 */
+  overflow: visible;  
 }
 
-/* 로고 이미지 크기 및 위치 지정 */
+/* 로고 이미지: 세로 높이를 헤더 높이에 맞추고 가로 비율은 자동 조정 */
 .logo img {
-  position: absolute;       /* 컨테이너(.logo)를 기준으로 절대 위치 */
-  left: 0;
-  bottom: -50px;            /* 헤더 아래로 10px 정도 노출되게 설정 (원하는 값으로 조정) */
-  height: 140px;            /* 원하는 로고 이미지 크기 */
-  /* width: auto;  기본 비율 유지 */
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 /* 메인 내비게이션 (Home/Menu/Contact) */
@@ -57,41 +58,39 @@ header.scrolled {
   font-size: 1.8rem;
 }
 
-/* 활성 링크에 빨간 밑줄 */
+/* 활성 링크에 빨간 밑줄 (가상 요소 사용) */
 .active-link {
   position: relative;
 }
 
-/* 가상 요소를 활용한 밑줄 */
 .active-link::after {
   content: '';
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: -10px; /* 텍스트 아래쪽에 선이 오도록 조정 */
+  bottom: -10px; /* 텍스트 아래에 선이 오도록 */
   width: calc(100% + 10px);
   height: 4px;
   background-color: red;
-  transition: width 0.3s ease; /* 밑줄 등장/변경 시 부드러운 전환 */
-  z-index: 10; /* 추가: 가상 요소를 위로 올립니다 */
+  transition: width 0.3s ease;
+  z-index: 10;
 }
 
 .main-nav a:hover {
   text-decoration: underline;
 }
 
-/* 2) 로그인/사인업 + 언어 스위처: 화면 오른쪽으로 고정 */
+/* 오른쪽 메뉴: 로그인/사인업 + 언어 스위처 (헤더 내 오른쪽에 위치) */
 .right-menu {
   position: absolute;  /* header를 기준으로 절대 위치 */
   top: 0;
-  right: 20px;        /* 원하는 만큼 오른쪽 여백 */
-  height: 125px;      /* 헤더와 동일한 높이 -> 수직 중앙 정렬 가능 */
+  right: 20px;        /* 오른쪽 여백 */
+  height: 125px;      /* 헤더와 동일한 높이 */
   display: flex;
   align-items: center;
   gap: 20px;
 }
 
-/* 로그인/사인업 링크 */
 .auth-links {
   display: flex;
   align-items: center;
@@ -108,10 +107,9 @@ header.scrolled {
   text-decoration: underline;
 }
 
-/* 반응형(모바일) 예시 */
+/* 반응형 (모바일) 예시 */
 @media (max-width: 480px) {
   .header-container {
-    /* 화면이 작아지면 수직으로 배치할 수도 있음 */
     flex-direction: column;
     height: auto;
     gap: 10px;
