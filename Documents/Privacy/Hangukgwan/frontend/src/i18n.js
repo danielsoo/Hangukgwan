@@ -1,4 +1,3 @@
-// src/i18n.js
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
@@ -6,7 +5,8 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 const resources = {
   en: {
     translation: {
-      siteName: "Hangukgwan",
+      restaurantName: "Hangukgwan",
+      home: "Home",
       about: "About",
       contact: "Contact",
       login: "Login",
@@ -15,6 +15,8 @@ const resources = {
       profileSettings: "Profile Settings",
       chat: "Chat",
       documents: "Documents",
+      menu: "Menu",
+      location: "Location",
       defaultUser: "User",
       firstName: "First Name",
       lastName: "Last Name",
@@ -33,11 +35,15 @@ const resources = {
       enterEmail: "Enter your email",
       manageProfile: "Manage your account settings and view your profile information.",
       viewProfileDetails: "View Profile Details",
+      bibimbapSlogan: "Experience the warmth and flavor of Korea in every bowl.",
+      signupSuccessTitle: "Signup Successful!",
+      signupSuccessMessage: "Welcome, {{userName}}! Please log in to enjoy our services."
     },
   },
   ko: {
     translation: {
-      siteName: "한국관",
+      restaurantName: "한국관",
+      home: "홈",
       about: "소개",
       contact: "문의하기",
       login: "로그인",
@@ -46,6 +52,8 @@ const resources = {
       profileSettings: "프로필 설정",
       chat: "채팅",
       documents: "문서",
+      menu: "메뉴",
+      location: "위치",
       defaultUser: "사용자",
       firstName: "이름",
       lastName: "성",
@@ -65,19 +73,24 @@ const resources = {
       manageProfile: "계정 설정을 관리하고 프로필 정보를 확인하세요.",
       viewProfileDetails: "프로필 상세보기",
       bibimbapSlogan: "한 그릇에 담긴 정성과 풍미, 비빔밥 한 그릇에 담긴 한국의 따뜻한 정을 느껴보세요.",
+      signupSuccessTitle: "회원가입 성공!",
+      signupSuccessMessage: "환영합니다, {{userName}}님! 로그인 후 한국관의 서비스를 이용해 주세요."
     },
   },
   zh: {
     translation: {
-      siteName: "Hangukgwan",
+      restaurantName: "韩国馆",
+      home: "主页",
       about: "关于",
-      contact: "联系",
+      contact: "联系方式",
       login: "登录",
       signup: "注册",
       logout: "退出登录",
       profileSettings: "个人资料设置",
       chat: "聊天",
-      documents: "文档",
+      documents: "文件",
+      menu: "菜单",
+      location: "位置",
       defaultUser: "用户",
       firstName: "名字",
       lastName: "姓氏",
@@ -87,7 +100,7 @@ const resources = {
       password: "密码",
       confirmPassword: "确认密码",
       passwordsNotMatch: "密码不匹配。",
-      serverConnectionError: "无法连接到服务器。",
+      serverConnectionError: "无法连接服务器。",
       keepLoggedIn: "保持登录状态",
       noAccount: "没有账户？",
       forgotPassword: "忘记密码？",
@@ -96,19 +109,25 @@ const resources = {
       enterEmail: "请输入您的电子邮件",
       manageProfile: "管理您的账户设置并查看您的个人资料信息。",
       viewProfileDetails: "查看个人资料详情",
+      bibimbapSlogan: "一碗拌饭，品尝韩国的温情与风味。",
+      signupSuccessTitle: "注册成功！",
+      signupSuccessMessage: "欢迎，{{userName}}！请登录以享受我们的服务。"
     },
   },
   'zh-TW': {
     translation: {
-      siteName: "Hangukgwan",
+      restaurantName: "韓國館",
+      home: "首頁",
       about: "關於",
-      contact: "聯繫",
+      contact: "聯繫方式",
       login: "登入",
       signup: "註冊",
       logout: "登出",
       profileSettings: "個人資料設定",
       chat: "聊天",
       documents: "文件",
+      menu: "菜單",
+      location: "位置",
       defaultUser: "用戶",
       firstName: "名字",
       lastName: "姓氏",
@@ -127,21 +146,27 @@ const resources = {
       enterEmail: "請輸入您的電子郵件",
       manageProfile: "管理您的帳戶設定並查看您的個人資料信息。",
       viewProfileDetails: "查看個人資料詳情",
+      bibimbapSlogan: "一碗拌飯，感受韓國的溫暖與風味。",
+      signupSuccessTitle: "註冊成功！",
+      signupSuccessMessage: "歡迎，{{userName}}！請登入以享受我們的服務。"
     },
   },
   ja: {
     translation: {
-      siteName: "Hangukgwan",
-      about: "About", // 필요 시 수정 가능
-      contact: "Contact",
+      restaurantName: "韓国館",
+      home: "ホーム",
+      about: "紹介",
+      contact: "連絡先",
       login: "ログイン",
       signup: "サインアップ",
       logout: "ログアウト",
-      profileSettings: "プロファイル設定",
+      profileSettings: "プロフィール設定",
       chat: "チャット",
       documents: "ドキュメント",
+      menu: "メニュー",
+      location: "ロケーション",
       defaultUser: "ユーザー",
-      firstName: "名",
+      firstName: "名前",
       lastName: "姓",
       phoneNumber: "電話番号",
       dateOfBirth: "生年月日",
@@ -151,13 +176,16 @@ const resources = {
       passwordsNotMatch: "パスワードが一致しません。",
       serverConnectionError: "サーバーに接続できません。",
       keepLoggedIn: "ログイン状態を維持する",
-      noAccount: "アカウントをお持ちでないですか？",
+      noAccount: "アカウントがありませんか？",
       forgotPassword: "パスワードをお忘れですか？",
       emailSent: "メール送信完了",
       resetPassword: "パスワード再設定",
       enterEmail: "メールアドレスを入力してください",
       manageProfile: "アカウント設定を管理し、プロフィール情報を確認してください。",
       viewProfileDetails: "プロフィール詳細を表示",
+      bibimbapSlogan: "一杯のビビンバに、韓国の温かさと風味を感じてください。",
+      signupSuccessTitle: "登録成功！",
+      signupSuccessMessage: "ようこそ、{{userName}}さん！ログインして韓国館のサービスをご利用ください。"
     },
   }
 };
@@ -167,7 +195,8 @@ i18n
   .use(initReactI18next)
   .init({
     resources,
-    fallbackLng: 'en',
+    lng: 'zh-TW', // 기본 언어
+    fallbackLng: 'zh-TW',
     debug: true,
     interpolation: {
       escapeValue: false,

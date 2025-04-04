@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import {
   Box,
-  Typography,
   Paper,
+  Typography,
   Button,
   Link,
   Divider,
@@ -18,11 +18,10 @@ import PhoneIcon from '@mui/icons-material/PhoneInTalk';
 function StoreDetailPage() {
   const { storeId } = useParams();
   const navigate = useNavigate();
-  // 탭 선택 상태 관리
   const [tabValue, setTabValue] = useState(0);
 
-  // 탭 변경 핸들러
-  const handleChangeTab = (event, newValue) => {
+  // 탭 전환 핸들러
+  const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
 
@@ -40,7 +39,7 @@ function StoreDetailPage() {
         { day: "Friday - Saturday", time: "6:30 AM - 10:00 PM EDT" },
         { day: "Sunday", time: "Closed" }
       ],
-      description: "An original then, an original now. This store offers delicious menus.",
+      description: "An original then, an original now. This store offers delicious menus."
     },
     2: {
       name: "Zhubei Store 2",
@@ -53,7 +52,7 @@ function StoreDetailPage() {
         { day: "Tuesday - Sunday", time: "11AM–2PM, 5PM–9PM" },
         { day: "Monday", time: "Closed" }
       ],
-      description: "This store specializes in quick service for office workers.",
+      description: "This store specializes in quick service for office workers."
     }
   };
 
@@ -68,31 +67,26 @@ function StoreDetailPage() {
         backgroundImage: 'url("/path/to/your/background.jpg")', // 실제 배경 이미지
         backgroundSize: 'cover',
         backgroundPosition: 'center',
+        display: 'flex',           // 수직 수평 중앙 정렬
+        alignItems: 'center',
+        justifyContent: 'center',
         overflowX: 'hidden',
-        overflowY: 'auto', // 세로 스크롤 가능
+        overflowY: 'auto',        // 세로 스크롤 가능 (콘텐츠 많을 때)
       }}
     >
-      {/* 상단 메인 정보 영역 */}
-      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* 상단 컨테이너: 좌측 정보 + 우측 이미지 */}
-        <Paper
-          sx={{
-            width: '100%',
-            maxWidth: 1200,
-            p: 3,
-            mb: 2,
-            backgroundColor: 'rgba(255,255,255,0.9)',
-            display: 'flex',
-            flexDirection: { xs: 'column', md: 'row' },
-            gap: 2,
-          }}
-        >
-          {/* 좌측 정보 */}
+      {/* 하나의 Paper로 전체를 감싸서 레이어 하나로 합침 */}
+      <Paper
+        sx={{
+          width: '90%',
+          maxWidth: 1000,
+          p: 3,
+          backgroundColor: 'rgba(255,255,255,0.9)', // 밝은 반투명 배경
+        }}
+      >
+        {/* 상단 영역: 매장명, 주소, 상태, 전화번호, 버튼 등 */}
+        <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+          {/* 왼쪽: 매장 정보 */}
           <Box sx={{ flex: 1 }}>
-            {/* 즐겨찾기/상태 표시 (원하면 추가) */}
-            <Typography variant="body2" sx={{ color: 'error.main' }}>
-              {/* 예: ♥ Favorite this location */}
-            </Typography>
             <Typography variant="h3" sx={{ fontWeight: 'bold', mb: 1 }}>
               {store.name}
             </Typography>
@@ -101,7 +95,7 @@ function StoreDetailPage() {
               <LocationOnIcon sx={{ color: 'primary.main' }} />
               <Typography variant="body1">{store.address}</Typography>
             </Box>
-            {/* 상태(예: Closed - Opens today...) + 아이콘 */}
+            {/* 상태 + 아이콘 */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <AccessTimeIcon sx={{ color: 'primary.main' }} />
               <Typography variant="body1">{store.status}</Typography>
@@ -111,8 +105,8 @@ function StoreDetailPage() {
               <PhoneIcon sx={{ color: 'primary.main' }} />
               <Typography variant="body1">{store.phone}</Typography>
             </Box>
-            {/* 주문/버튼들 */}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 1 }}>
+            {/* 주문 버튼들 */}
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
               <Button variant="contained" color="error">
                 Order Pickup
               </Button>
@@ -124,14 +118,14 @@ function StoreDetailPage() {
               </Button>
             </Box>
             {/* 지도 링크 */}
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 1 }}>
               <Link href={store.mapUrl} target="_blank" underline="none" color="primary">
                 Map & Directions
               </Link>
             </Box>
           </Box>
 
-          {/* 우측 이미지 */}
+          {/* 오른쪽: 매장 이미지 */}
           <Box sx={{ flex: 1, textAlign: 'center' }}>
             <Box
               component="img"
@@ -146,85 +140,81 @@ function StoreDetailPage() {
               }}
             />
             <Typography variant="body2" sx={{ mt: 1, fontStyle: 'italic' }}>
-              {/* 예: "Restaurant Operator is responsible for content on this page..." */}
               {store.description}
             </Typography>
           </Box>
-        </Paper>
+        </Box>
+
+        {/* 구분선 */}
+        <Divider sx={{ my: 2 }} />
 
         {/* 탭 메뉴 */}
-        <Paper
-          sx={{
-            width: '100%',
-            maxWidth: 1200,
-            backgroundColor: 'rgba(255,255,255,0.9)',
-          }}
-        >
-          <Tabs value={tabValue} onChange={handleChangeTab} indicatorColor="primary" textColor="primary">
-            <Tab label="Restaurant Details" />
-            <Tab label="About Us" />
-            <Tab label="Community" />
-            <Tab label="Careers" />
-          </Tabs>
+        <Tabs value={tabValue} onChange={handleTabChange} indicatorColor="primary" textColor="primary">
+          <Tab label="Restaurant Details" />
+          <Tab label="About Us" />
+          <Tab label="Community" />
+          <Tab label="Careers" />
+        </Tabs>
 
-          <Divider />
+        <Divider />
 
-          {/* 탭 내용 */}
-          <Box sx={{ p: 3 }}>
-            {tabValue === 0 && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 2 }}>
-                  Hours
+        {/* 탭 내용 */}
+        <Box sx={{ p: 2 }}>
+          {tabValue === 0 && (
+            <Box>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                Hours
+              </Typography>
+              {store.hours.map((h, idx) => (
+                <Typography key={idx} variant="body1" sx={{ mb: 0.5 }}>
+                  {h.day}: {h.time}
                 </Typography>
-                {store.hours.map((h, idx) => (
-                  <Typography key={idx} variant="body1" sx={{ mb: 0.5 }}>
-                    {h.day}: {h.time}
-                  </Typography>
-                ))}
+              ))}
+              <Typography variant="h5" sx={{ mt: 3, mb: 2 }}>
+                Service Options and Hours
+              </Typography>
+              <Typography variant="body1">Phone: {store.phone}</Typography>
+            </Box>
+          )}
+          {tabValue === 1 && (
+            <Box>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                About Us
+              </Typography>
+              <Typography variant="body1">
+                We have been serving customers since ...
+              </Typography>
+            </Box>
+          )}
+          {tabValue === 2 && (
+            <Box>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                Community
+              </Typography>
+              <Typography variant="body1">
+                Our store participates in local events ...
+              </Typography>
+            </Box>
+          )}
+          {tabValue === 3 && (
+            <Box>
+              <Typography variant="h5" sx={{ mb: 2 }}>
+                Careers
+              </Typography>
+              <Typography variant="body1">
+                Join our team! We are hiring ...
+              </Typography>
+            </Box>
+          )}
+        </Box>
 
-                <Typography variant="h5" sx={{ mt: 3, mb: 2 }}>
-                  Service Options and Hours
-                </Typography>
-                <Typography variant="body1">Phone: {store.phone}</Typography>
-                {/* 필요에 따라 드라이브 스루, 배달, 테이크아웃 등의 옵션 표시 */}
-              </Box>
-            )}
-            {tabValue === 1 && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 2 }}>
-                  About Us
-                </Typography>
-                <Typography variant="body1">
-                  {/* 회사/브랜드 소개 등 */}
-                  We have been serving customers since ...
-                </Typography>
-              </Box>
-            )}
-            {tabValue === 2 && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 2 }}>
-                  Community
-                </Typography>
-                <Typography variant="body1">
-                  {/* 지역사회 활동, 기부, 행사 등 */}
-                  Our store participates in local events ...
-                </Typography>
-              </Box>
-            )}
-            {tabValue === 3 && (
-              <Box>
-                <Typography variant="h5" sx={{ mb: 2 }}>
-                  Careers
-                </Typography>
-                <Typography variant="body1">
-                  {/* 채용 정보, 지원 방법 */}
-                  Join our team! We are hiring ...
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </Paper>
-      </Box>
+        {/* 뒤로 가기 버튼 */}
+        <Box sx={{ textAlign: 'center', mt: 3 }}>
+          <Button variant="contained" color="error" onClick={() => navigate(-1)}>
+            Go Back
+          </Button>
+        </Box>
+      </Paper>
     </Box>
   );
 }

@@ -5,8 +5,10 @@ import logo from '../assets/images/hangukgwan_logo.png';
 import LanguageSwitcher from './LanguageSwitcher';
 import LocationModal from './LocationModal';
 import '../styles/Header.css';
+import { useTranslation } from 'react-i18next';
 
 function Header() {
+  const { t } = useTranslation();
   const [scrolled, setScrolled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const navigate = useNavigate();
@@ -21,7 +23,6 @@ function Header() {
 
   const handleLocationClick = (e) => {
     e.preventDefault();
-    console.log("Location button clicked"); // 디버깅용
     setModalOpen(true);
   };
 
@@ -30,36 +31,43 @@ function Header() {
   };
 
   const handleModalSubmit = async (locationData) => {
-    console.log("Location data received:", locationData); // 디버깅용
     if (locationData.lat && locationData.lng) {
       navigate('/location', { state: { lat: locationData.lat, lng: locationData.lng } });
     } else if (locationData.address) {
-      // 주소 입력 시 geocoding 처리 (코드가 추가되어야 함)
-      // 예: await geocodeAddress(...) 후 좌표를 얻어서 전달
-      // 테스트로 그냥 navigate 해보겠습니다.
       navigate('/location', { state: { address: locationData.address } });
     }
     setModalOpen(false);
   };
 
   return (
-    <header className={scrolled ? 'scrolled' : ''}>
+    <header
+      className={scrolled ? 'scrolled' : ''}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        zIndex: 1000,
+        backgroundColor: scrolled ? 'rgba(0, 0, 0, 0.8)' : 'transparent', // 스크롤 시 검정/반투명, 없으면 투명
+        transition: 'background-color 0.3s ease',
+      }}
+    >
       <div className="header-container">
         <NavLink to="/" className="logo">
-          <img src={logo} alt="Hangukgwan Logo" />
+          <img src={logo} alt={t('siteName')} />
         </NavLink>
         <nav className="main-nav">
-          <NavLink to="/" end>Home</NavLink>
+          <NavLink to="/" end>{t('home')}</NavLink>
           <a href="/location" onClick={handleLocationClick} className="location-link">
-            Location
+            {t('location')}
           </a>
-          <NavLink to="/menu">Menu</NavLink>
-          <NavLink to="/contact">Contact</NavLink>
+          <NavLink to="/menu">{t('menu')}</NavLink>
+          <NavLink to="/contact">{t('contact')}</NavLink>
         </nav>
         <div className="right-menu">
           <div className="auth-links">
-            <NavLink to="/login">Login</NavLink>
-            <NavLink to="/signup">Signup</NavLink>
+            <NavLink to="/login">{t('login')}</NavLink>
+            <NavLink to="/signup">{t('signup')}</NavLink>
           </div>
           <LanguageSwitcher />
         </div>

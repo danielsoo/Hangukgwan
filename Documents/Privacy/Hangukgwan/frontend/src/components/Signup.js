@@ -21,8 +21,6 @@ function Signup() {
   const [isError, setIsError] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
 
-  // 'navigate'와 'MuiLink'는 사용하지 않으므로 제거했습니다.
-
   const handleSignup = async (e) => {
     e.preventDefault();
     if (password !== confirmPassword) {
@@ -63,12 +61,11 @@ function Signup() {
     return (
       <Box
         sx={{
-          width: '100vw',
-          minHeight: '100vh',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: 'transparent'
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 3,
         }}
       >
         <SignupSuccess userName={firstName} />
@@ -79,12 +76,11 @@ function Signup() {
   return (
     <Box
       sx={{
-        width: '100vw',
-        minHeight: '100vh',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'transparent'
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 3,
       }}
     >
       <Paper sx={{ width: 400, p: 3, borderRadius: 2 }}>
