@@ -1,11 +1,10 @@
-/* src/styles/Header.css */
-
 /* 헤더 기본 스타일 */
 header {
   position: fixed;
   top: 0;
   width: 100%;
-  height: 125px;
+  height: auto;
+  padding: 10px 0;
   background: transparent;
   z-index: 999;
   transition: background 0.3s ease;
@@ -16,63 +15,51 @@ header.scrolled {
   background: black;
 }
 
-/* 컨테이너: 로고 · 스페이서 · 내비 · 오른쪽 메뉴 · 토글 */
+/* 컨테이너 */
 .header-container {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: flex-start; /* 스페이서로 간격 제어 */
-  max-width: 1400px;
-  width: 100%;
+  width: 100%;          /* “100” → “100%” */
+  padding: 0 40px;      /* 기존 20px → 40px (원하는 만큼 조정) */
   margin: 0 auto;
-  padding: 0 20px;
   box-sizing: border-box;
   color: #fff;
-  height: 100%;
+  height: 100px;
 }
 
-/* 로고 고정 */
+/* 로고 컨테이너 */
 .logo {
-  flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: center; /* 위아래 정렬: flex-start, center, flex-end */
   height: 100%;
 }
 
+/* 로고 이미지 */
 .logo img {
   height: 100%;
   width: auto;
-  object-fit: contain;
   display: block;
+  object-fit: contain;
+
+  /* 위치 미세 조정 */
+  margin-top: 5px;       /* ← 위로 밀고 싶으면 줄이기 */
+  margin-bottom: auto;   /* 아래 공간 채우기 */
 }
 
-.spacer-left {
-  flex-grow: 1;
-  flex-shrink: 2;   /* 더 빨리 줄어듦 */
-  flex-basis: 0;
-  min-width: 0;
-}
-
-.spacer-right {
-  flex-grow: 1;
-  flex-shrink: 1;   /* 덜 줄어듦 = 더 천천히 줄어듦 */
-  flex-basis: 0;
-  min-width: 0;
-}
-
-
-
-/* 메인 내비게이션 */
+/* 메인 내비게이션 - 중앙 정렬 */
 .main-nav {
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 30px;           /* 기존 간격 유지 */
-  overflow-x: auto;    /* 화면 좁아지면 스크롤 */
+  gap: 30px;
+  flex: 1;
+  justify-content: center;
+  overflow-x: auto;
 }
 
 .main-nav a {
-  flex-shrink: 0;           /* 글씨가 줄어들지 않도록 */
-  white-space: nowrap;      /* 줄 바꿈 방지 */
+  flex-shrink: 0;
+  white-space: nowrap;
   color: #fff;
   text-decoration: none;
   font-size: clamp(1.2rem, 2vw, 1.8rem);
@@ -83,10 +70,10 @@ header.scrolled {
   text-decoration: underline;
 }
 
-/* 활성 링크 표시 */
 .active-link {
   position: relative;
 }
+
 .active-link::after {
   content: '';
   position: absolute;
@@ -100,16 +87,12 @@ header.scrolled {
   z-index: 10;
 }
 
-/* 오른쪽 메뉴: 항상 헤더 오른쪽 끝에 고정 */
+/* 오른쪽 메뉴 */
 .right-menu {
-  position: absolute;
-  top: 0;
-  right: 20px;
-  height: 125px;
   display: flex;
   align-items: center;
   gap: 20px;
-  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .auth-links {
@@ -129,7 +112,7 @@ header.scrolled {
   text-decoration: underline;
 }
 
-/* 메뉴 토글 버튼 (모바일) 기본 숨김 */
+/* 메뉴 토글 버튼 (모바일) */
 .menu-toggle {
   display: none;
   flex-direction: column;
@@ -150,11 +133,12 @@ header.scrolled {
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
-/* 모바일 뷰: 토글 버튼 보이기, 내비 숨기기 */
+/* 모바일 뷰 */
 @media (max-width: 768px) {
   .menu-toggle {
     display: flex;
   }
+
   .main-nav {
     display: none;
     flex-direction: column;
@@ -166,19 +150,21 @@ header.scrolled {
     padding: 1rem 0;
     gap: 1rem;
   }
+
   .main-nav.open {
     display: flex;
   }
+
   .main-nav a {
     width: 100%;
     font-size: 1.4rem;
   }
+
   .right-menu {
     display: none;
   }
 }
 
-/* 토글 버튼 애니메이션 */
 .menu-toggle.open span:nth-child(1) {
   transform: translateY(9px) rotate(45deg);
 }

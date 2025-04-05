@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import logo from '../assets/images/hangukgwan_logo.png';
+import logo from '../assets/images/hangukgwan_logo_final.png';
 import LanguageSwitcher from './LanguageSwitcher';
 import LocationModal from './LocationModal';
 import '../styles/Header.css';
@@ -41,11 +41,8 @@ function Header() {
       <div className="header-container">
         {/* 로고 */}
         <NavLink to="/" className="logo">
-          <img src={logo} alt={t('siteName')} />
+          <img src={logo} alt={t('siteName')} width = "125" height = "100" />
         </NavLink>
-
-        {/* 스페이서: 로고 ↔ 메인 내비 */}
-        <div className="spacer-left" />
 
         {/* 메인 내비 */}
         <nav className={`main-nav${menuOpen ? ' open' : ''}`}>
@@ -54,9 +51,6 @@ function Header() {
           <NavLink to="/menu">{t('menu')}</NavLink>
           <NavLink to="/contact">{t('contact')}</NavLink>
         </nav>
-
-        {/* 스페이서: 메인 내비 ↔ 오른쪽 메뉴 */}
-        <div className="spacer-right" />
 
         {/* 오른쪽 메뉴: 항상 오른쪽 끝 */}
         <div className="right-menu">

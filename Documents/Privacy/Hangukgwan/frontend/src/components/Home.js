@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import ParallaxSection from './ParallaxSection'; // 기존 배경 컴포넌트
 import '../styles/Home.css';
-import bibimbapImage from '../assets/images/bibimbab.jpg'; // 이미지 import
+import bibimbapImage from '../assets/images/bibimbab.png'; // 이미지 import
 
 function Home() {
   const { t } = useTranslation();
