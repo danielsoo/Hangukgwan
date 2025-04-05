@@ -21,7 +21,7 @@ function Home() {
         {/* 왼쪽 영역: 슬로건 */}
         <div className="overlay-left">
           <Typography variant="h3" sx={{ mb: 2 }}>
-            {t('bibimbabSlogan')}
+            {t('bibimbapSlogan')}
           </Typography>
           <Button variant="contained" color="primary" onClick={() => navigate('/menu')}>
             {t('menu')}

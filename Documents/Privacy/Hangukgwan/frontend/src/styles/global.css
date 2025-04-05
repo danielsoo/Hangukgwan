@@ -1,0 +1,25 @@
+/* 전역 스타일: 뷰포트 기반 font-size 설정 */
+/* 320px 뷰포트에서는 1rem = 16px, 2560px 뷰포트에서는 1rem = 24px */
+html {
+    font-size: calc(
+      11px + (24 - 16) * ((100vw - 320px) / (2560 - 320))
+    );
+  }
+  
+  /* 기본 리셋(선택) */
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+  
+  body {
+    margin: 0;
+    font-family: sans-serif;
+    line-height: 1.5;
+  }
+  
+  /* 이미지 반응형 */
+  img, video {
+    max-width: 100%;
+    height: auto;
+  }
+  

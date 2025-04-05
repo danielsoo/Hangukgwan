@@ -1,43 +1,43 @@
+/* src/styles/Header.css */
+
 /* 헤더 기본 스타일 */
 header {
-  position: fixed;   /* 화면 최상단 고정 */
+  position: fixed;
   top: 0;
   width: 100%;
-  height: 125px; /* 헤더 높이 */
-  background: transparent;  /* 기본 배경은 투명 */
+  height: 125px;
+  background: transparent;
   z-index: 999;
   transition: background 0.3s ease;
   overflow: visible;
 }
 
-/* 스크롤 시 배경 색상 변화 */
 header.scrolled {
-  background: black; /* 스크롤 시 완전한 검은색 */
+  background: black;
 }
 
-/* 헤더 내부 컨테이너: 로고와 내비게이션을 좌우로 배치 */
+/* 컨테이너: 로고 · 스페이서 · 내비 · 오른쪽 메뉴 · 토글 */
 .header-container {
   display: flex;
-  align-items: center;         /* 세로 가운데 정렬 */
-  justify-content: space-between; /* 로고 왼쪽, 내비 오른쪽 */
+  align-items: center;
+  justify-content: flex-start; /* 스페이서로 간격 제어 */
   max-width: 1400px;
+  width: 100%;
   margin: 0 auto;
-  padding: 0 20px; /* 좌우 여백 */
+  padding: 0 20px;
   box-sizing: border-box;
   color: #fff;
-  height: 100%; /* 헤더 전체 높이 */
+  height: 100%;
 }
 
-/* 로고 컨테이너: 헤더 높이에 맞춰 로고를 세로 정렬 */
+/* 로고 고정 */
 .logo {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  height: 100%;       /* 헤더와 동일한 높이 */
-  margin-left: 0;     /* 왼쪽으로 밀착 */
-  overflow: visible;  
+  height: 100%;
 }
 
-/* 로고 이미지: 세로 높이를 헤더 높이에 맞추고 가로 비율은 자동 조정 */
 .logo img {
   height: 100%;
   width: auto;
@@ -45,30 +45,54 @@ header.scrolled {
   display: block;
 }
 
-/* 메인 내비게이션 (Home/Menu/Contact) */
+.spacer-left {
+  flex-grow: 1;
+  flex-shrink: 2;   /* 더 빨리 줄어듦 */
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.spacer-right {
+  flex-grow: 1;
+  flex-shrink: 1;   /* 덜 줄어듦 = 더 천천히 줄어듦 */
+  flex-basis: 0;
+  min-width: 0;
+}
+
+
+
+/* 메인 내비게이션 */
 .main-nav {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 30px; /* 링크 간 간격 */
+  gap: 30px;           /* 기존 간격 유지 */
+  overflow-x: auto;    /* 화면 좁아지면 스크롤 */
 }
 
 .main-nav a {
+  flex-shrink: 0;           /* 글씨가 줄어들지 않도록 */
+  white-space: nowrap;      /* 줄 바꿈 방지 */
   color: #fff;
   text-decoration: none;
-  font-size: 1.8rem;
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  padding: 0.5rem 0;
 }
 
-/* 활성 링크에 빨간 밑줄 (가상 요소 사용) */
+.main-nav a:hover {
+  text-decoration: underline;
+}
+
+/* 활성 링크 표시 */
 .active-link {
   position: relative;
 }
-
 .active-link::after {
   content: '';
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: -10px; /* 텍스트 아래에 선이 오도록 */
+  bottom: -10px;
   width: calc(100% + 10px);
   height: 4px;
   background-color: red;
@@ -76,19 +100,16 @@ header.scrolled {
   z-index: 10;
 }
 
-.main-nav a:hover {
-  text-decoration: underline;
-}
-
-/* 오른쪽 메뉴: 로그인/사인업 + 언어 스위처 (헤더 내 오른쪽에 위치) */
+/* 오른쪽 메뉴: 항상 헤더 오른쪽 끝에 고정 */
 .right-menu {
-  position: absolute;  /* header를 기준으로 절대 위치 */
+  position: absolute;
   top: 0;
-  right: 20px;        /* 오른쪽 여백 */
-  height: 125px;      /* 헤더와 동일한 높이 */
+  right: 20px;
+  height: 125px;
   display: flex;
   align-items: center;
   gap: 20px;
+  flex: 0 0 auto;
 }
 
 .auth-links {
@@ -101,28 +122,69 @@ header.scrolled {
   color: #fff;
   text-decoration: none;
   font-size: 1.3rem;
+  white-space: nowrap;
 }
 
 .auth-links a:hover {
   text-decoration: underline;
 }
 
-/* 반응형 (모바일) 예시 */
-@media (max-width: 480px) {
-  .header-container {
+/* 메뉴 토글 버튼 (모바일) 기본 숨김 */
+.menu-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 30px;
+  height: 22px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.menu-toggle span {
+  display: block;
+  height: 4px;
+  background: #fff;
+  border-radius: 2px;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* 모바일 뷰: 토글 버튼 보이기, 내비 숨기기 */
+@media (max-width: 768px) {
+  .menu-toggle {
+    display: flex;
+  }
+  .main-nav {
+    display: none;
     flex-direction: column;
-    height: auto;
-    gap: 10px;
+    background: rgba(0, 0, 0, 0.9);
+    position: absolute;
+    top: 125px;
+    left: 0;
+    width: 100%;
+    padding: 1rem 0;
+    gap: 1rem;
+  }
+  .main-nav.open {
+    display: flex;
   }
   .main-nav a {
-    font-size: 1rem;
+    width: 100%;
+    font-size: 1.4rem;
   }
   .right-menu {
-    right: 10px;
-    height: auto;
-    gap: 10px;
+    display: none;
   }
-  .auth-links a {
-    font-size: 1rem;
-  }
+}
+
+/* 토글 버튼 애니메이션 */
+.menu-toggle.open span:nth-child(1) {
+  transform: translateY(9px) rotate(45deg);
+}
+.menu-toggle.open span:nth-child(2) {
+  opacity: 0;
+}
+.menu-toggle.open span:nth-child(3) {
+  transform: translateY(-9px) rotate(-45deg);
 }

@@ -1,0 +1,128 @@
+/* 헤더 기본 스타일 */
+header {
+  position: fixed;   /* 화면 최상단 고정 */
+  top: 0;
+  width: 100%;
+  height: 125px; /* 헤더 높이 */
+  background: transparent;  /* 기본 배경은 투명 */
+  z-index: 999;
+  transition: background 0.3s ease;
+  overflow: visible;
+}
+
+/* 스크롤 시 배경 색상 변화 */
+header.scrolled {
+  background: black; /* 스크롤 시 완전한 검은색 */
+}
+
+/* 헤더 내부 컨테이너: 로고와 내비게이션을 좌우로 배치 */
+.header-container {
+  display: flex;
+  align-items: center;         /* 세로 가운데 정렬 */
+  justify-content: space-between; /* 로고 왼쪽, 내비 오른쪽 */
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px; /* 좌우 여백 */
+  box-sizing: border-box;
+  color: #fff;
+  height: 100%; /* 헤더 전체 높이 */
+}
+
+/* 로고 컨테이너: 헤더 높이에 맞춰 로고를 세로 정렬 */
+.logo {
+  display: flex;
+  align-items: center;
+  height: 100%;       /* 헤더와 동일한 높이 */
+  margin-left: 0;     /* 왼쪽으로 밀착 */
+  overflow: visible;  
+}
+
+/* 로고 이미지: 세로 높이를 헤더 높이에 맞추고 가로 비율은 자동 조정 */
+.logo img {
+  height: 100%;
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* 메인 내비게이션 (Home/Menu/Contact) */
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 30px; /* 링크 간 간격 */
+}
+
+.main-nav a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.8rem;
+}
+
+/* 활성 링크에 빨간 밑줄 (가상 요소 사용) */
+.active-link {
+  position: relative;
+}
+
+.active-link::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -10px; /* 텍스트 아래에 선이 오도록 */
+  width: calc(100% + 10px);
+  height: 4px;
+  background-color: red;
+  transition: width 0.3s ease;
+  z-index: 10;
+}
+
+.main-nav a:hover {
+  text-decoration: underline;
+}
+
+/* 오른쪽 메뉴: 로그인/사인업 + 언어 스위처 (헤더 내 오른쪽에 위치) */
+.right-menu {
+  position: absolute;  /* header를 기준으로 절대 위치 */
+  top: 0;
+  right: 20px;        /* 오른쪽 여백 */
+  height: 125px;      /* 헤더와 동일한 높이 */
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.auth-links {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.auth-links a {
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.3rem;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+/* 반응형 (모바일) 예시 */
+@media (max-width: 480px) {
+  .header-container {
+    flex-direction: column;
+    height: auto;
+    gap: 10px;
+  }
+  .main-nav a {
+    font-size: 1rem;
+  }
+  .right-menu {
+    right: 10px;
+    height: auto;
+    gap: 10px;
+  }
+  .auth-links a {
+    font-size: 1rem;
+  }
+}

@@ -12,8 +12,6 @@ import ForgotPassword from './components/ForgotPassword';
 import LocationPage from './pages/LocationPage';
 import StoreDetailPage from './pages/StoreDetailPage';
 import './index.css';
-import './styles/global.css';
-
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyAIt-n4dV362YKAlBHAaVTnbWdUNOwN9L0';
 

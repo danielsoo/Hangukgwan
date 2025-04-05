@@ -1,4 +1,14 @@
-// src/components/LocationModal.jsx
+// ============================================================================
+//  LocationModal.jsx
+//  ────────────────────────────────────────────────────────────────────────────
+//  • 사용자가 주소를 입력하거나 현재 위치를 이용해 레스토랑을 검색할 수 있는
+//    모달 컴포넌트입니다.
+//  • 변경 사항
+//      1) 제목 영역 아이콘 제거 (요청 반영)
+//      2) 하단 "현재 위치 사용" 버튼은 📍 아이콘 유지
+//      3) TextField에 placeholder={t('enterAddressPlaceholder')} 추가
+// ============================================================================
+
 import React, { useState } from 'react';
 import {
   Dialog,
@@ -10,46 +20,45 @@ import {
   Typography,
   TextField,
 } from '@mui/material';
-import RestaurantIcon from '@mui/icons-material/Restaurant';
+import LocationOnIcon from '@mui/icons-material/LocationOn';   // 📍 위치 아이콘
 import { Autocomplete } from '@react-google-maps/api';
+import { useTranslation } from 'react-i18next';
 
 /**
- * LocationModal 컴포넌트
- * @param {boolean} open - 모달 열림 상태
- * @param {function} onClose - 모달 닫기 함수
- * @param {function} onSubmit - 주소 또는 현재 위치 정보를 받아 처리하는 함수
+ * LocationModal Component
+ * ---------------------------------------------------------------------------
+ * @param {boolean}   open     - Modal open state
+ * @param {function}  onClose  - Callback to close the modal
+ * @param {function}  onSubmit - Callback; returns { address } or { lat, lng }
+ * ---------------------------------------------------------------------------
  */
 function LocationModal({ open, onClose, onSubmit }) {
-  const [address, setAddress] = useState('');
-  const [autocomplete, setAutocomplete] = useState(null);
+  const { t } = useTranslation();              // 🌐 다국어 훅
+  const [address, setAddress] = useState('');  // 입력된 주소 상태
+  const [autocomplete, setAutocomplete] = useState(null); // Google Autocomplete 인스턴스
 
-  // Autocomplete 로드 시 호출
-  const handleLoad = (autoC) => {
-    setAutocomplete(autoC);
-  };
+  // ──────────────────────────────────────────────────────────────────────────
+  // Google Places Autocomplete
+  // ──────────────────────────────────────────────────────────────────────────
+  const handleLoad = (autoC) => setAutocomplete(autoC); // Autocomplete 로드 시
 
-  // Autocomplete 결과가 변경되면, 선택한 주소를 state에 저장
   const handlePlaceChanged = () => {
-    if (autocomplete) {
-      const place = autocomplete.getPlace();
-      if (place.formatted_address) {
-        setAddress(place.formatted_address);
-      }
-    }
+    if (!autocomplete) return;
+    const place = autocomplete.getPlace();
+    if (place?.formatted_address) setAddress(place.formatted_address);
   };
 
-  // Search 버튼 클릭 시, 입력한 주소를 onSubmit에 전달 후 모달 닫기
+  // ──────────────────────────────────────────────────────────────────────────
+  // Event Handlers
+  // ──────────────────────────────────────────────────────────────────────────
   const handleSearch = () => {
-    if (address.trim()) {
-      onSubmit({ address });
-    }
+    if (address.trim()) onSubmit({ address });
     onClose();
   };
 
-  // "Use My Current Location" 버튼 클릭 시, 현재 위치 정보를 onSubmit에 전달
   const handleUseCurrentLocation = () => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      alert('Geolocation is not supported by your browser.');
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -59,31 +68,33 @@ function LocationModal({ open, onClose, onSubmit }) {
         onClose();
       },
       (error) => {
-        alert("Unable to retrieve your location.");
+        alert('Unable to retrieve your location.');
         console.error(error);
-      }
+      },
     );
   };
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Render
+  // ──────────────────────────────────────────────────────────────────────────
   return (
     <Dialog open={open} onClose={onClose}>
       <Box sx={{ textAlign: 'center', p: 2 }}>
-        {/* 다이얼로그 제목 영역 */}
+        {/* ---------- Title 영역 (아이콘 제거) ---------- */}
         <DialogTitle sx={{ textAlign: 'center', mb: 1 }}>
-          <Box sx={{ display: 'inline-flex', alignItems: 'center' }}>
-            <RestaurantIcon fontSize="large" sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h5" component="span">
-              Find a Restaurant
-            </Typography>
-          </Box>
+          <Typography variant="h5" component="span">
+            {t('findRestaurant')}
+          </Typography>
         </DialogTitle>
 
+        {/* ---------- Input 영역 ---------- */}
         <DialogContent sx={{ minWidth: 300 }}>
           {typeof window !== 'undefined' && window.google ? (
             <Autocomplete onLoad={handleLoad} onPlaceChanged={handlePlaceChanged}>
               <TextField
                 fullWidth
-                label="Enter address, city, or zip code"
+                label={t('enterAddress')}
+                placeholder={t('enterAddressPlaceholder')}   // ← placeholder 다국어
                 variant="outlined"
                 margin="normal"
                 value={address}
@@ -93,29 +104,35 @@ function LocationModal({ open, onClose, onSubmit }) {
           ) : (
             <TextField
               fullWidth
-              label="Enter address, city, or zip code"
+              label={t('enterAddress')}
+              placeholder={t('enterAddressPlaceholder')}     // ← placeholder 다국어
               variant="outlined"
               margin="normal"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
             />
           )}
-          <Button
-            variant="text"
-            onClick={handleUseCurrentLocation}
-            sx={{ mt: 2, textTransform: 'none' }}
-            startIcon={<RestaurantIcon />}
-          >
-            Use My Current Location
-          </Button>
+
+          {/* 현재 위치 사용 버튼 (왼쪽 정렬) */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <Button
+              variant="text"
+              onClick={handleUseCurrentLocation}
+              sx={{ mt: 2, textTransform: 'none' }}
+              startIcon={<LocationOnIcon />}  // 📍 아이콘 유지
+            >
+              {t('useCurrentLocation')}
+            </Button>
+          </Box>
         </DialogContent>
 
+        {/* ---------- Action Buttons ---------- */}
         <DialogActions sx={{ justifyContent: 'center' }}>
           <Button onClick={onClose} color="inherit">
-            Cancel
+            {t('cancel')}
           </Button>
           <Button variant="contained" onClick={handleSearch}>
-            Search
+            {t('search')}
           </Button>
         </DialogActions>
       </Box>

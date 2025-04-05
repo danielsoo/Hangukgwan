@@ -1,3 +1,4 @@
+// src/components/Header.js
 import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import logo from '../assets/images/hangukgwan_logo.png';
@@ -10,24 +11,26 @@ function Header() {
   const { t } = useTranslation();
   const [scrolled, setScrolled] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 80);
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 80);
+    };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const handleLocationClick = (e) => {
     e.preventDefault();
-    e.currentTarget.blur();
     setModalOpen(true);
   };
 
-  const handleModalClose = () => setModalOpen(false);
+  const handleModalClose = () => {
+    setModalOpen(false);
+  };
 
-  const handleModalSubmit = (locationData) => {
+  const handleModalSubmit = async (locationData) => {
     if (locationData.lat && locationData.lng) {
       navigate('/location', { state: { lat: locationData.lat, lng: locationData.lng } });
     } else if (locationData.address) {
@@ -37,28 +40,30 @@ function Header() {
   };
 
   return (
-    <header className={scrolled ? 'scrolled' : ''}>
+    <header
+      className={scrolled ? 'scrolled' : ''}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        zIndex: 1000,
+        backgroundColor: scrolled ? 'rgba(0, 0, 0, 0.8)' : 'transparent', // 스크롤 시 검정/반투명, 없으면 투명
+        transition: 'background-color 0.3s ease',
+      }}
+    >
       <div className="header-container">
-        {/* 로고 */}
         <NavLink to="/" className="logo">
           <img src={logo} alt={t('siteName')} />
         </NavLink>
-
-        {/* 스페이서: 로고 ↔ 메인 내비 */}
-        <div className="spacer-left" />
-
-        {/* 메인 내비 */}
-        <nav className={`main-nav${menuOpen ? ' open' : ''}`}>
+        <nav className="main-nav">
           <NavLink to="/" end>{t('home')}</NavLink>
-          <a href="/location" onClick={handleLocationClick}>{t('location')}</a>
+          <a href="/location" onClick={handleLocationClick} className="location-link">
+            {t('location')}
+          </a>
           <NavLink to="/menu">{t('menu')}</NavLink>
           <NavLink to="/contact">{t('contact')}</NavLink>
         </nav>
-
-        {/* 스페이서: 메인 내비 ↔ 오른쪽 메뉴 */}
-        <div className="spacer-right" />
-
-        {/* 오른쪽 메뉴: 항상 오른쪽 끝 */}
         <div className="right-menu">
           <div className="auth-links">
             <NavLink to="/login">{t('login')}</NavLink>
@@ -66,20 +71,7 @@ function Header() {
           </div>
           <LanguageSwitcher />
         </div>
-
-        {/* 메뉴 토글 버튼 (모바일) */}
-        <button
-          className={`menu-toggle${menuOpen ? ' open' : ''}`}
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle menu"
-        >
-          <span />
-          <span />
-          <span />
-        </button>
       </div>
-
-      {/* 모바일 내비 모달 */}
       <LocationModal
         open={modalOpen}
         onClose={handleModalClose}
