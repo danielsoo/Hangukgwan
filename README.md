@@ -17,6 +17,19 @@ The project is built using **React + TypeScript** (frontend), **Node.js (Express
 
 ---
 
+## 🏪 Store Information
+
+```text
+📍 Main Store:
+No. 32, Lane 135, Xianzhengjiu Rd., Zhubei City, Hsinchu County
+⏰ Hours: Tue–Sun 11:00–14:00, 17:00–21:00 (Closed on Mondays)
+
+📍 Branch Store (Corporate Only):
+No. 7, Taiyuan 1st St., Zhubei City, Hsinchu County
+⏰ Hours: Accessible only for employees of nearby office complexes (e.g., Samsung, TSMC)
+
+---
+
 ## 🛠 Tech Stack
 - **Frontend:** React (TypeScript), TailwindCSS, i18n
 - **Backend:** Node.js (Express)
@@ -62,7 +75,7 @@ MONGO_URI=your_mongodb_connection
 JWT_SECRET=your_secret_key
 GOOGLE_MAPS_API_KEY=your_api_key
 ```
-
+---
 
 ## 📜 License
 This project is licensed under the [MIT License](LICENSE).
