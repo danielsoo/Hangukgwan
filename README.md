@@ -26,6 +26,7 @@ The project is built using **React + TypeScript** (frontend), **Node.js (Express
 ---
 
 ## 📂 Project Structure
+```bash
 Hangukgwan/
 ├── backend/ # Express server
 │ ├── server.js
@@ -37,6 +38,7 @@ Hangukgwan/
 ├── .gitignore
 ├── README.md
 └── package.json
+```
 
 
 ---
@@ -59,6 +61,8 @@ npm start   # Runs on http://localhost:3000
 MONGO_URI=your_mongodb_connection
 JWT_SECRET=your_secret_key
 GOOGLE_MAPS_API_KEY=your_api_key
+```
+
 
 ## 📜 License
 This project is licensed under the [MIT License](LICENSE).
