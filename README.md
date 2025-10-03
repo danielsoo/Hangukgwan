@@ -26,3 +26,39 @@ The project is built using **React + TypeScript** (frontend), **Node.js (Express
 ---
 
 ## 📂 Project Structure
+Hangukgwan/
+├── backend/ # Express server
+│ ├── server.js
+│ ├── config/
+│ └── routes/
+├── frontend/ # React client
+│ ├── src/
+│ └── public/
+├── .gitignore
+├── README.md
+└── package.json
+
+
+---
+
+## ⚙️ Installation
+
+### 1. Clone Repository
+```bash
+git clone https://github.com/USERNAME/Hangukgwan.git
+cd Hangukgwan
+
+cd backend
+npm install
+node server.js   # Runs on http://localhost:5000
+
+cd frontend
+npm install
+npm start   # Runs on http://localhost:3000
+
+MONGO_URI=your_mongodb_connection
+JWT_SECRET=your_secret_key
+GOOGLE_MAPS_API_KEY=your_api_key
+
+## 📜 License
+This project is licensed under the [MIT License](LICENSE).
