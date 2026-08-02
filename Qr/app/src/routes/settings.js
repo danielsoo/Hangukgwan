@@ -14,6 +14,9 @@ const PUBLIC_KEYS = [
   "store_min_spend",
   "store_notice",
   "store_cover_photo",
+  "store_lat",
+  "store_lng",
+  "order_radius_m",
 ];
 
 function publicSettings() {

@@ -9,6 +9,8 @@
   let activeOrderId = null;
   let searchTerm = "";
   let statusPollTimer = null;
+  let storeLat = null;
+  let storeLng = null;
 
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
@@ -42,6 +44,10 @@
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
+    const lat = parseFloat(s.store_lat);
+    const lng = parseFloat(s.store_lng);
+    storeLat = Number.isNaN(lat) ? null : lat;
+    storeLng = Number.isNaN(lng) ? null : lng;
     $("#storeName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#storeInfoName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#infoHours").textContent = s.store_hours || "-";
@@ -297,9 +303,35 @@
     $("#submitOrderBtn").disabled = cart.length === 0;
   }
 
+  // Resolves { lat, lng } from the browser, or rejects. Only called when
+  // the owner has configured a store location (see loadSettings above) —
+  // this is what actually stops an old QR photo from being used far away
+  // from the restaurant; the server re-checks this independently too.
+  function getGeolocation() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) return reject(new Error("unsupported"));
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => reject(err),
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      );
+    });
+  }
+
   $("#submitOrderBtn").onclick = async () => {
     if (cart.length === 0) return;
     const btn = $("#submitOrderBtn");
+
+    let coords = null;
+    if (storeLat != null && storeLng != null) {
+      try {
+        coords = await getGeolocation();
+      } catch (e) {
+        alert(t("locationErrorMsg"));
+        return;
+      }
+    }
+
     btn.disabled = true;
     btn.textContent = t("submitting");
     try {
@@ -310,9 +342,16 @@
           tableNumber,
           items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, note: c.note })),
           note: $("#orderNote").value.trim(),
+          lat: coords ? coords.lat : undefined,
+          lng: coords ? coords.lng : undefined,
         }),
       });
-      if (!res.ok) throw new Error("submit_failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (body.error === "out_of_range") throw new Error("out_of_range");
+        if (body.error === "location_required") throw new Error("location_required");
+        throw new Error("submit_failed");
+      }
       const order = await res.json();
       activeOrderId = order.id;
       saveOrderToHistory(order.id);
@@ -321,7 +360,9 @@
       $("#cartBackdrop").hidden = true;
       showConfirmation(order);
     } catch (e) {
-      alert(t("submitFailed"));
+      if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
+      else if (e.message === "location_required") alert(t("locationRequiredMsg"));
+      else alert(t("submitFailed"));
     } finally {
       btn.disabled = false;
       btn.textContent = t("placeOrder");
@@ -406,6 +447,26 @@
       $("#langBackdrop").hidden = true;
     };
   });
+
+  // Security: if the phone sits untouched for too long, lock the page and
+  // require re-scanning the table's QR code. This stops an old session
+  // (customer who already left, or a stray phone) from placing surprise
+  // orders onto a table long after the fact — re-scanning is trivial for an
+  // actual customer, so there's no real cost to being strict about it.
+  const IDLE_LIMIT_MS = 3 * 60 * 1000;
+  let idleTimer = null;
+  function lockSession() {
+    stopStatusPolling();
+    $("#sessionLockBackdrop").hidden = false;
+  }
+  function resetIdleTimer() {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(lockSession, IDLE_LIMIT_MS);
+  }
+  ["click", "touchstart", "keydown", "scroll", "input"].forEach((evt) => {
+    document.addEventListener(evt, resetIdleTimer, { passive: true });
+  });
+  resetIdleTimer();
 
   applyStaticI18n();
   loadSettings();

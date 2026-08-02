@@ -493,6 +493,18 @@
   };
 
   // ---------- Settings ----------
+  let currentStoreLat = "";
+  let currentStoreLng = "";
+
+  function renderLocationStatus() {
+    const text = $("#locationStatusText");
+    if (currentStoreLat && currentStoreLng) {
+      text.textContent = `매장 위치 설정됨 (${parseFloat(currentStoreLat).toFixed(5)}, ${parseFloat(currentStoreLng).toFixed(5)}) — 이 반경 밖에서는 주문이 차단됩니다.`;
+    } else {
+      text.textContent = "아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)";
+    }
+  }
+
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
@@ -504,6 +516,10 @@
     $("#s_store_hours").value = s.store_hours || "";
     $("#s_store_min_spend").value = s.store_min_spend || "";
     $("#s_store_notice").value = s.store_notice || "";
+    $("#s_order_radius_m").value = s.order_radius_m || "200";
+    currentStoreLat = s.store_lat || "";
+    currentStoreLng = s.store_lng || "";
+    renderLocationStatus();
     if (s.store_cover_photo) {
       $("#coverPreview").style.backgroundImage = `url('${s.store_cover_photo}')`;
     }
@@ -518,6 +534,7 @@
       store_address_zh: $("#s_store_address_zh").value.trim(),
       store_hours: $("#s_store_hours").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
+      order_radius_m: $("#s_order_radius_m").value.trim(),
     };
     await fetch("/api/settings", {
       method: "PUT",
@@ -527,6 +544,45 @@
     const msg = $("#settingsMsg");
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
+  };
+
+  $("#captureLocationBtn").onclick = () => {
+    const msg = $("#locationMsg");
+    if (!navigator.geolocation) {
+      msg.style.color = "#b3261e";
+      msg.textContent = "이 브라우저는 위치 정보를 지원하지 않습니다.";
+      msg.hidden = false;
+      return;
+    }
+    msg.style.color = "#6b6357";
+    msg.textContent = "위치 확인 중…";
+    msg.hidden = false;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            store_lat: String(lat),
+            store_lng: String(lng),
+            order_radius_m: $("#s_order_radius_m").value.trim() || "200",
+          }),
+        });
+        currentStoreLat = String(lat);
+        currentStoreLng = String(lng);
+        renderLocationStatus();
+        msg.style.color = "#1a8a44";
+        msg.textContent = "매장 위치가 저장되었습니다.";
+        setTimeout(() => (msg.hidden = true), 3000);
+      },
+      (err) => {
+        msg.style.color = "#b3261e";
+        msg.textContent = "위치 확인 실패: 브라우저 위치 권한을 허용해주세요.";
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   $("#saveNoticeBtn").onclick = async () => {

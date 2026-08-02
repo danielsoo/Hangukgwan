@@ -111,6 +111,17 @@
     </div>
   </div>
 
+  <!-- Session lock (shown after 3 minutes of inactivity — must re-scan the
+       table's QR code to continue; there is no way to dismiss this except
+       reloading the page, which is exactly the point). -->
+  <div class="sheet-backdrop lock-backdrop" id="sessionLockBackdrop" hidden>
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h2 data-i18n="sessionLockTitle"></h2>
+      <p data-i18n="sessionLockDesc"></p>
+    </div>
+  </div>
+
   <!-- Language sheet -->
   <div class="sheet-backdrop" id="langBackdrop" hidden>
     <div class="sheet lang-sheet">

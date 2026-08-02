@@ -161,6 +161,12 @@ async function run() {
     store_min_spend: process.env.STORE_MIN_SPEND || "200",
     store_notice: process.env.STORE_NOTICE || "",
     store_cover_photo: "",
+    // Location-based order guard: empty until the owner taps "Set current
+    // location" from the store, standing at the restaurant. Until set, no
+    // location check is enforced (fully backward compatible).
+    store_lat: "",
+    store_lng: "",
+    order_radius_m: "200",
   };
   for (const [k, v] of Object.entries(storeDefaults)) {
     if (!(k in store.settings)) store.settings[k] = v;

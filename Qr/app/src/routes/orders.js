@@ -11,12 +11,46 @@ function nowLocal() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+// Straight-line distance between two lat/lng points, in meters.
+function haversineMeters(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// If the owner has set a store location (Admin > Settings), only accept
+// orders placed from within `order_radius_m` meters of it. This is the real
+// enforcement point — it doesn't matter whether the QR code was scanned in
+// person or from an old photo, since a request from far away is rejected
+// regardless. Returns null if OK, or an error code string if it should be
+// rejected.
+function checkLocation(lat, lng) {
+  const storeLat = parseFloat(store.settings.store_lat);
+  const storeLng = parseFloat(store.settings.store_lng);
+  if (Number.isNaN(storeLat) || Number.isNaN(storeLng)) return null; // feature not configured yet
+
+  if (typeof lat !== "number" || typeof lng !== "number" || Number.isNaN(lat) || Number.isNaN(lng)) {
+    return "location_required";
+  }
+  const radius = parseFloat(store.settings.order_radius_m) || 200;
+  const dist = haversineMeters(storeLat, storeLng, lat, lng);
+  return dist > radius ? "out_of_range" : null;
+}
+
 // Customer: place a new order
 router.post("/", async (req, res) => {
-  const { tableNumber, items, note } = req.body || {};
+  const { tableNumber, items, note, lat, lng } = req.body || {};
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
   }
+
+  const locationError = checkLocation(lat, lng);
+  if (locationError) return res.status(403).json({ error: locationError });
 
   const validated = [];
   let total = 0;
