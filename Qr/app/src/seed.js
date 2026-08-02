@@ -3,7 +3,7 @@
 // (when the categories list is empty).
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const { store, save, nextId } = require("./db");
+const { store, save, nextId, connectDB } = require("./db");
 
 const CATEGORIES = [
   { key: "rice", name_zh: "飯類", name_ko: "밥류", name_en: "Rice Dishes", sort_order: 1 },
@@ -92,7 +92,9 @@ const CODES_WITH_PHOTOS = [
 // uses the same photo as 辛拉麵) — code -> code whose dish-{code}.jpg to reuse.
 const PHOTO_ALIAS = { "22": "21", "25": "24", "27": "26", "29": "28", "53": "52" };
 
-function run() {
+async function run() {
+  await connectDB();
+
   if (store.categories.length === 0) {
     const catIds = {};
     for (const c of CATEGORIES) {
@@ -164,9 +166,7 @@ function run() {
     if (!(k in store.settings)) store.settings[k] = v;
   }
 
-  save();
+  await save();
 }
-
-run();
 
 module.exports = run;

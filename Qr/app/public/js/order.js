@@ -8,7 +8,7 @@
   let currentQty = 1;
   let activeOrderId = null;
   let searchTerm = "";
-  const socket = io();
+  let statusPollTimer = null;
 
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
@@ -339,6 +339,7 @@
   function showConfirmation(order) {
     renderStatusTrack(order.status);
     $("#confirmBackdrop").hidden = false;
+    startStatusPolling();
   }
   function renderStatusTrack(status) {
     const idx = STATUS_STEPS.indexOf(status);
@@ -351,11 +352,34 @@
       track.appendChild(step);
     });
   }
-  $("#backToMenuBtn").onclick = () => ($("#confirmBackdrop").hidden = true);
+  $("#backToMenuBtn").onclick = () => {
+    $("#confirmBackdrop").hidden = true;
+    stopStatusPolling();
+  };
 
-  socket.on("order_updated", (order) => {
-    if (order.id === activeOrderId) renderStatusTrack(order.status);
-  });
+  // Poll the order's own status every few seconds while the confirmation
+  // sheet is open (no persistent server connection needed this way).
+  function startStatusPolling() {
+    stopStatusPolling();
+    statusPollTimer = setInterval(async () => {
+      if (!activeOrderId) return;
+      try {
+        const res = await fetch(`/api/orders/${activeOrderId}`);
+        if (!res.ok) return;
+        const order = await res.json();
+        renderStatusTrack(order.status);
+        if (order.status === "paid") stopStatusPolling();
+      } catch (e) {
+        /* ignore transient network errors, next poll will retry */
+      }
+    }, 4000);
+  }
+  function stopStatusPolling() {
+    if (statusPollTimer) {
+      clearInterval(statusPollTimer);
+      statusPollTimer = null;
+    }
+  }
 
   // Store info sheet
   $("#storeInfoBtn").onclick = () => ($("#storeInfoBackdrop").hidden = false);

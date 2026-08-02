@@ -26,7 +26,7 @@ router.get("/me", (req, res) => {
   res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
 });
 
-router.post("/change-password", (req, res) => {
+router.post("/change-password", async (req, res) => {
   if (!req.session || !req.session.isAdmin) return res.status(401).json({ error: "not_authenticated" });
   const { currentPassword, newPassword } = req.body || {};
   if (!currentPassword || !newPassword || newPassword.length < 6) {
@@ -36,7 +36,7 @@ router.post("/change-password", (req, res) => {
     return res.status(401).json({ error: "wrong_current_password" });
   }
   store.settings.admin_password_hash = bcrypt.hashSync(newPassword, 10);
-  save();
+  await save();
   res.json({ ok: true });
 });
 

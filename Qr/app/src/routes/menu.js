@@ -1,31 +1,27 @@
 const express = require("express");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
-const { store, save, nextId } = require("../db");
+const { store, save, nextId, savePhoto, deletePhoto } = require("../db");
 const { requireAdmin } = require("../auth");
 
 const router = express.Router();
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, "..", "..", "public", "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-    cb(null, `${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`);
-  },
-});
+// Photos are kept in MongoDB (see src/db.js) instead of local disk, since
+// serverless hosts like Vercel don't have a writable disk that survives
+// between requests. multer just needs to hand us the raw buffer.
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 6 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
     else cb(new Error("invalid_file_type"));
   },
 });
+
+function photoIdFromUrl(url) {
+  if (!url) return null;
+  const m = url.match(/^\/api\/photo\/([a-f0-9]{24})$/);
+  return m ? m[1] : null;
+}
 
 function categoriesWithItems(onlyAvailable) {
   const cats = [...store.categories].sort((a, b) => a.sort_order - b.sort_order);
@@ -51,7 +47,7 @@ router.get("/admin/categories", requireAdmin, (req, res) => {
   res.json([...store.categories].sort((a, b) => a.sort_order - b.sort_order));
 });
 
-router.post("/admin/items", requireAdmin, (req, res) => {
+router.post("/admin/items", requireAdmin, async (req, res) => {
   const b = req.body || {};
   if (!b.category_id || !b.name_zh || b.price == null) {
     return res.status(400).json({ error: "missing_fields" });
@@ -77,11 +73,11 @@ router.post("/admin/items", requireAdmin, (req, res) => {
     sort_order: maxSort + 1,
   };
   store.menuItems.push(item);
-  save();
+  await save();
   res.status(201).json(item);
 });
 
-router.put("/admin/items/:id", requireAdmin, (req, res) => {
+router.put("/admin/items/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const item = store.menuItems.find((i) => i.id === id);
   if (!item) return res.status(404).json({ error: "not_found" });
@@ -95,42 +91,42 @@ router.put("/admin/items/:id", requireAdmin, (req, res) => {
   if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
   if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;
   if (b.available !== undefined) item.available = b.available ? 1 : 0;
-  save();
+  await save();
   res.json(item);
 });
 
-router.delete("/admin/items/:id", requireAdmin, (req, res) => {
+router.delete("/admin/items/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.menuItems = store.menuItems.filter((i) => i.id !== id);
-  save();
+  await save();
   res.json({ ok: true });
 });
 
-router.post("/admin/items/:id/photo", requireAdmin, upload.single("photo"), (req, res) => {
+router.post("/admin/items/:id/photo", requireAdmin, upload.single("photo"), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const item = store.menuItems.find((i) => i.id === id);
   if (!item) return res.status(404).json({ error: "not_found" });
   if (!req.file) return res.status(400).json({ error: "no_file" });
 
-  // remove old uploaded photo if it lives in our uploads dir
-  if (item.photo_url && item.photo_url.startsWith("/uploads/")) {
-    const oldPath = path.join(UPLOAD_DIR, path.basename(item.photo_url));
-    fs.unlink(oldPath, () => {});
-  }
+  const oldPhotoId = photoIdFromUrl(item.photo_url);
 
-  item.photo_url = `/uploads/${req.file.filename}`;
-  save();
+  const photoId = await savePhoto(req.file.buffer, req.file.mimetype);
+  item.photo_url = `/api/photo/${photoId}`;
+  await save();
+
+  if (oldPhotoId) await deletePhoto(oldPhotoId);
+
   res.json({ photo_url: item.photo_url });
 });
 
 // Admin: categories management
-router.post("/admin/categories", requireAdmin, (req, res) => {
+router.post("/admin/categories", requireAdmin, async (req, res) => {
   const { key, name_zh, name_ko, name_en } = req.body || {};
   if (!key || !name_zh) return res.status(400).json({ error: "missing_fields" });
   const maxSort = store.categories.reduce((m, c) => Math.max(m, c.sort_order), 0);
   const cat = { id: nextId("categories"), key, name_zh, name_ko: name_ko || "", name_en: name_en || "", sort_order: maxSort + 1 };
   store.categories.push(cat);
-  save();
+  await save();
   res.status(201).json(cat);
 });
 

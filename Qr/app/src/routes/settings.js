@@ -1,9 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
-const crypto = require("crypto");
-const { store, save } = require("../db");
+const { store, save, savePhoto, deletePhoto } = require("../db");
 const { requireAdmin } = require("../auth");
 
 const router = express.Router();
@@ -25,32 +22,28 @@ function publicSettings() {
   return map;
 }
 
+function photoIdFromUrl(url) {
+  if (!url) return null;
+  const m = url.match(/^\/api\/photo\/([a-f0-9]{24})$/);
+  return m ? m[1] : null;
+}
+
 router.get("/", (req, res) => {
   res.json(publicSettings());
 });
 
-router.put("/", requireAdmin, (req, res) => {
+router.put("/", requireAdmin, async (req, res) => {
   const b = req.body || {};
   for (const key of PUBLIC_KEYS) {
     if (key === "store_cover_photo") continue; // set only via the photo upload route
     if (b[key] != null) store.settings[key] = String(b[key]);
   }
-  save();
+  await save();
   res.json(publicSettings());
 });
 
-const UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, "..", "..", "public", "uploads");
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
-    cb(null, `cover-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`);
-  },
-});
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (/^image\/(jpeg|png|webp|gif)$/.test(file.mimetype)) cb(null, true);
@@ -58,14 +51,16 @@ const upload = multer({
   },
 });
 
-router.post("/cover-photo", requireAdmin, upload.single("photo"), (req, res) => {
+router.post("/cover-photo", requireAdmin, upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no_file" });
-  const old = store.settings.store_cover_photo;
-  if (old && old.startsWith("/uploads/")) {
-    fs.unlink(path.join(UPLOAD_DIR, path.basename(old)), () => {});
-  }
-  store.settings.store_cover_photo = `/uploads/${req.file.filename}`;
-  save();
+  const oldPhotoId = photoIdFromUrl(store.settings.store_cover_photo);
+
+  const photoId = await savePhoto(req.file.buffer, req.file.mimetype);
+  store.settings.store_cover_photo = `/api/photo/${photoId}`;
+  await save();
+
+  if (oldPhotoId) await deletePhoto(oldPhotoId);
+
   res.json({ store_cover_photo: store.settings.store_cover_photo });
 });
 

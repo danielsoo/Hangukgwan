@@ -8,7 +8,8 @@
   let editingItemPhotoUrl = null;
   let selectedPhotoFile = null;
   let soundOn = true;
-  let socket = null;
+  let pollTimer = null;
+  let knownOrderIds = new Set();
   let openTableNumber = null;
 
   // ---------- Auth ----------
@@ -27,8 +28,8 @@
   async function showDashboard() {
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
-    initSocket();
     await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings()]);
+    startPolling();
   }
 
   $("#loginBtn").onclick = doLogin;
@@ -54,7 +55,7 @@
 
   $("#logoutBtn").onclick = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
-    if (socket) socket.disconnect();
+    stopPolling();
     showLogin();
   };
 
@@ -68,26 +69,17 @@
     };
   });
 
-  // ---------- Socket / live orders ----------
-  function initSocket() {
-    socket = io();
-    socket.on("new_order", (order) => {
-      const exists = orders.find((o) => o.id === order.id);
-      if (!exists) orders.unshift(order);
-      renderOrders();
-      renderTables();
-      if (openTableNumber && String(order.table_number) === String(openTableNumber)) openTableDetail(openTableNumber);
-      flashNewOrder(order.id);
-      if (soundOn) playBeep();
-    });
-    socket.on("order_updated", (order) => {
-      const idx = orders.findIndex((o) => o.id === order.id);
-      if (idx >= 0) orders[idx] = order;
-      else orders.unshift(order);
-      renderOrders();
-      renderTables();
-      if (openTableNumber && String(order.table_number) === String(openTableNumber)) openTableDetail(openTableNumber);
-    });
+  // ---------- Live orders (polling — no persistent server connection
+  // needed, so this works the same on Vercel, Railway, or a laptop) ----------
+  function startPolling() {
+    if (pollTimer) return;
+    pollTimer = setInterval(loadOrders, 4000);
+  }
+  function stopPolling() {
+    if (pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
   }
 
   function playBeep() {
@@ -115,9 +107,21 @@
   async function loadOrders() {
     const res = await fetch("/api/orders");
     if (res.status === 401) return showLogin();
-    orders = await res.json();
+    const fresh = await res.json();
+
+    const isFirstLoad = orders.length === 0 && knownOrderIds.size === 0;
+    const newlyArrived = fresh.filter((o) => !knownOrderIds.has(o.id) && o.status === "new");
+
+    orders = fresh;
+    knownOrderIds = new Set(fresh.map((o) => o.id));
     renderOrders();
     renderTables();
+    if (openTableNumber) openTableDetail(openTableNumber);
+
+    if (!isFirstLoad && newlyArrived.length > 0) {
+      newlyArrived.forEach((o) => flashNewOrder(o.id));
+      if (soundOn) playBeep();
+    }
   }
 
   const STATUS_LABEL = { new: "신규 주문", preparing: "조리 중", served: "서빙 완료", paid: "결제 완료", cancelled: "취소됨" };

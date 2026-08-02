@@ -9,7 +9,7 @@ router.get("/", requireAdmin, (req, res) => {
   res.json([...store.tables].sort((a, b) => a.sort_order - b.sort_order));
 });
 
-router.post("/", requireAdmin, (req, res) => {
+router.post("/", requireAdmin, async (req, res) => {
   const { number, label } = req.body || {};
   if (!number) return res.status(400).json({ error: "number_required" });
   if (store.tables.some((t) => t.number === String(number))) {
@@ -18,14 +18,14 @@ router.post("/", requireAdmin, (req, res) => {
   const maxSort = store.tables.reduce((m, t) => Math.max(m, t.sort_order), 0);
   const table = { id: nextId("tables"), number: String(number), label: label || null, sort_order: maxSort + 1 };
   store.tables.push(table);
-  save();
+  await save();
   res.status(201).json(table);
 });
 
-router.delete("/:id", requireAdmin, (req, res) => {
+router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.tables = store.tables.filter((t) => t.id !== id);
-  save();
+  await save();
   res.json({ ok: true });
 });
 

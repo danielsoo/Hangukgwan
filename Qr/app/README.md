@@ -12,8 +12,8 @@ menu, tables, and see every order live from an admin dashboard.
   can then watch its status (Received → Preparing → Served → Paid) live.
 - **Owner admin dashboard** (`/admin`) — password-protected. Four tabs:
   - **即時訂單 (Live Orders)** — a kanban board of every order, grouped by
-    status, updating instantly (no refresh needed) with a sound alert on
-    new orders.
+    status, refreshing automatically every few seconds with a sound alert
+    on new orders.
   - **菜單管理 (Menu)** — add/edit/delete dishes: name (中/한/EN),
     description, price, price note (e.g. "2人份"), spicy/signature tags,
     options (e.g. 牛,豬), photo upload, and an availability toggle to take
@@ -29,17 +29,25 @@ menu, tables, and see every order live from an admin dashboard.
 
 ## Tech notes
 
-Plain Node.js + Express, Socket.IO for the live order board, and a small
-JSON-file datastore (`data/store.json`) — no database server to manage, and
-no native modules to compile, so it installs cleanly on any host.
+Plain Node.js + Express, with MongoDB Atlas as the datastore (menu, orders,
+tables, settings, and uploaded photos all live there — no local disk is
+used, which is what makes this deployable on serverless hosts like Vercel).
+The live order board and order-status tracking refresh via polling every
+few seconds rather than a persistent WebSocket connection, since serverless
+functions can't hold one open — in practice this means a few seconds of
+delay instead of instant push, which is a fair trade for being deployable
+anywhere for free/cheap.
 
 ## Running it locally (to try it out)
 
-You'll need [Node.js](https://nodejs.org) 18 or newer installed.
+You'll need [Node.js](https://nodejs.org) 18 or newer installed, and a
+MongoDB Atlas connection string (a free cluster at
+[mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas) is plenty —
+Database > Connect > Drivers gives you the URL).
 
 ```bash
 cd app
-cp .env.example .env      # then edit .env — at minimum change ADMIN_PASSWORD
+cp .env.example .env      # then edit .env — set MONGODB_URI and ADMIN_PASSWORD
 npm install
 npm start
 ```
@@ -51,38 +59,48 @@ Then open:
 ## Deploying so customers can scan and order on their own phones
 
 Because customers use their own mobile data (not your restaurant WiFi), the
-app needs to live at a public web address. **Railway** is the easiest option
-that doesn't require any command-line or server knowledge:
+app needs to live at a public web address. Since all data lives in MongoDB
+Atlas rather than on local disk, this app deploys cleanly to serverless
+hosts like Vercel as well as traditional hosts like Railway or Render.
 
-1. Push this `app` folder to a new GitHub repository (or ask someone to help
-   with this one-time step — GitHub Desktop makes it a few clicks).
-2. Go to [railway.app](https://railway.app), sign up, click **New Project >
-   Deploy from GitHub repo**, and select the repository.
-3. Railway auto-detects Node.js and runs `npm install` + `npm start` for you.
-4. Add a **Volume** (Railway calls it a "Volume") mounted at `/app/data` and
-   another at `/app/public/uploads` — this makes sure your menu, orders, and
-   uploaded photos survive restarts and redeploys. (Settings > Volumes)
-5. In the **Variables** tab, set:
+### Option A: Vercel
+
+1. Create a free MongoDB Atlas cluster at
+   [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas), and copy
+   its connection string (Database > Connect > Drivers).
+2. Push this repository to GitHub if you haven't already.
+3. Go to [vercel.com/new](https://vercel.com/new), import the GitHub repo.
+   If the repo has more than just this app in it, set **Root Directory**
+   to wherever this `app` folder lives (e.g. `Qr/app`).
+4. Under **Environment Variables**, add:
+   - `MONGODB_URI` — your Atlas connection string
    - `ADMIN_PASSWORD` — your real admin password
    - `SESSION_SECRET` — any long random string
-   - (optionally) `DEFAULT_TABLE_COUNT` if you want a different starting
-     number of tables than 40 — you can also just add/remove tables from
-     the admin dashboard afterwards.
-6. Once deployed, Railway gives you a public URL like
-   `https://hangukgwan-qr.up.railway.app`. Visit `/admin`, log in, go to
-   **桌號 / QR Code**, and click **🖨️ 列印所有 QR Code** — this generates a
-   printable sheet of QR codes that already point at your live URL. Print
-   it, cut it out, and put one on each table.
+5. Click **Deploy**. Once it's live, visit `/admin` on your Vercel URL, log
+   in, go to **桌號 / QR Code**, and click **🖨️ 全部 QR Code 列印** to get a
+   printable sheet of QR codes pointing at your live URL.
 
-**Render** ([render.com](https://render.com)) works the same way if you'd
-rather use that — "New Web Service" from your GitHub repo, add a persistent
-disk mounted at `/app/data` (and one for `/app/public/uploads`), set the same
-environment variables, and deploy.
+Note: the live order board and order-status screen refresh every few
+seconds (polling) rather than instantly, since Vercel's serverless
+functions can't hold a persistent connection open.
+
+### Option B: Railway or Render
+
+Both work the same way and don't require any command-line knowledge:
+
+1. Push this `app` folder to a GitHub repository.
+2. Railway: **New Project > Deploy from GitHub repo**. Render: **New Web
+   Service** from your GitHub repo. Either auto-detects Node.js and runs
+   `npm install` + `npm start`.
+3. Set the same three environment variables as above (`MONGODB_URI`,
+   `ADMIN_PASSWORD`, `SESSION_SECRET`).
+4. Once deployed, visit `/admin` on your public URL and print the QR sheet
+   the same way as above.
 
 If you'd rather run this on a computer physically at the restaurant instead
 of hosting it online (customers would then need your restaurant WiFi to
 order), just run `npm start` on that machine and keep it running — the app
-listens on port 3000 by default.
+listens on port 3000 by default (still needs `MONGODB_URI` set in `.env`).
 
 ## Day-to-day use
 
