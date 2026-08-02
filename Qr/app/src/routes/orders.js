@@ -88,6 +88,17 @@ router.post("/", async (req, res) => {
   res.status(201).json(order);
 });
 
+// Customer: this table's running order history (every item ordered so far,
+// across however many separate tickets were sent in). Excludes paid/
+// cancelled orders, so it naturally empties out the moment the table is
+// settled via the admin "전체 결제 완료" bulk-pay action.
+router.get("/table/:tableNumber", (req, res) => {
+  const list = store.orders
+    .filter((o) => String(o.table_number) === String(req.params.tableNumber) && o.status !== "paid" && o.status !== "cancelled")
+    .sort((a, b) => a.id - b.id);
+  res.json(list);
+});
+
 // Customer: check status of their own order (also used for polling in
 // place of the real-time push we used to do over Socket.IO)
 router.get("/:id", (req, res) => {

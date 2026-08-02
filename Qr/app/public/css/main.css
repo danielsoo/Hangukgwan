@@ -42,6 +42,22 @@ body {
   font-weight: 700;
   cursor: pointer;
 }
+.history-pill {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 36px;
+  height: 36px;
+  background: rgba(255,255,255,0.92);
+  color: var(--ink);
+  border: none;
+  border-radius: 999px;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 /* Store header */
 .store-header {
@@ -257,6 +273,25 @@ body {
 .cart-item-qty-ctrl button { width: 24px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
 .cart-empty { text-align: center; color: var(--muted); padding: 30px 0; }
 .cart-total-row { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-bottom: 14px; }
+
+/* Order history (receipt) */
+.history-sheet h2 { margin: 0 0 2px; }
+.history-table-label {
+  margin: 0 0 16px; font-size: 13px; color: var(--muted); font-weight: 700;
+}
+.history-list { margin-bottom: 14px; max-height: 50vh; overflow-y: auto; }
+.history-item {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding: 9px 0; border-bottom: 1px dashed var(--line); font-size: 14px;
+}
+.history-item-name { font-weight: 600; }
+.history-item-qty { color: var(--muted); font-weight: 500; margin-left: 4px; }
+.history-item-price { font-weight: 700; white-space: nowrap; }
+.history-empty { text-align: center; color: var(--muted); padding: 30px 0; }
+.history-total-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-weight: 800; font-size: 17px; padding-top: 10px; border-top: 2px solid var(--ink);
+}
 .submit-btn {
   width: 100%; background: var(--ink); color: #fff; border: none; border-radius: 12px;
   padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer;

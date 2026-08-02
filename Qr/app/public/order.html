@@ -12,6 +12,7 @@
 <div id="app" class="order-app">
 
   <div class="hero" id="hero">
+    <button class="history-pill" id="historyBtn" aria-label="Order history">🧾</button>
     <button class="lang-pill" id="langPillBtn"><span id="langPillLabel">Language</span></button>
   </div>
 
@@ -96,6 +97,20 @@
       <p data-i18n="orderPlacedDesc">餐點正在準備中，請稍候</p>
       <div class="order-status-track" id="orderStatusTrack"></div>
       <button class="submit-btn" id="backToMenuBtn" data-i18n="orderMore">繼續加點</button>
+    </div>
+  </div>
+
+  <!-- Order history (this table's running, unpaid total) -->
+  <div class="sheet-backdrop" id="historyBackdrop" hidden>
+    <div class="sheet history-sheet">
+      <button class="sheet-close" id="historyClose">✕</button>
+      <h2 data-i18n="myOrders">我的訂單</h2>
+      <p class="history-table-label" id="historyTableLabel"></p>
+      <div id="historyList" class="history-list"></div>
+      <div class="history-total-row">
+        <span data-i18n="total">總計</span>
+        <span id="historyTotalBig">$0</span>
+      </div>
     </div>
   </div>
 

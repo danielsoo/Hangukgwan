@@ -442,6 +442,55 @@
     }
   }
 
+  // Order history — this table's running (unpaid) receipt, shared by anyone
+  // ordering from this table. Disappears once the table is settled, since
+  // the endpoint only returns non-paid, non-cancelled orders.
+  async function openHistory() {
+    $("#historyTableLabel").textContent = `${t("table")} ${tableNumber}`;
+    const list = $("#historyList");
+    list.innerHTML = `<div class="loading">…</div>`;
+    $("#historyTotalBig").textContent = money(0);
+    $("#historyBackdrop").hidden = false;
+    try {
+      const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
+      const ordersForTable = await res.json();
+      renderHistory(ordersForTable);
+    } catch (e) {
+      list.innerHTML = `<div class="history-empty">${t("networkErrorMsg")}</div>`;
+    }
+  }
+
+  function renderHistory(ordersForTable) {
+    const list = $("#historyList");
+    list.innerHTML = "";
+    let total = 0;
+    let anyItem = false;
+    ordersForTable.forEach((o) => {
+      o.items.forEach((it) => {
+        anyItem = true;
+        total += it.unit_price * it.qty;
+        const name = it[`name_${lang}`] || it.name_zh || it.name_en || it.name_ko || "";
+        const row = document.createElement("div");
+        row.className = "history-item";
+        row.innerHTML = `
+          <span class="history-item-name">${name}${it.option_choice ? ` (${it.option_choice})` : ""}<span class="history-item-qty">x${it.qty}</span></span>
+          <span class="history-item-price">${money(it.unit_price * it.qty)}</span>
+        `;
+        list.appendChild(row);
+      });
+    });
+    if (!anyItem) {
+      list.innerHTML = `<div class="history-empty">${t("noOrdersYet")}</div>`;
+    }
+    $("#historyTotalBig").textContent = money(total);
+  }
+
+  $("#historyBtn").onclick = openHistory;
+  $("#historyClose").onclick = () => ($("#historyBackdrop").hidden = true);
+  $("#historyBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "historyBackdrop") $("#historyBackdrop").hidden = true;
+  });
+
   // Store info sheet
   $("#storeInfoBtn").onclick = () => ($("#storeInfoBackdrop").hidden = false);
   $("#storeInfoClose").onclick = () => ($("#storeInfoBackdrop").hidden = true);

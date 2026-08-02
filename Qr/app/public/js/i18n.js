@@ -40,6 +40,7 @@ const I18N = {
     partySizeTitle: "請問這桌有幾位？",
     partySizeConfirm: "確認",
     networkErrorMsg: "網路連線失敗，請再試一次",
+    noOrdersYet: "尚未點餐",
   },
   ko: {
     viewCart: "장바구니 보기",
@@ -81,6 +82,7 @@ const I18N = {
     partySizeTitle: "몇 분이세요?",
     partySizeConfirm: "확인",
     networkErrorMsg: "네트워크 연결에 실패했습니다. 다시 시도해주세요",
+    noOrdersYet: "아직 주문 내역이 없습니다",
   },
   en: {
     viewCart: "View Cart",
@@ -122,5 +124,6 @@ const I18N = {
     partySizeTitle: "How many guests?",
     partySizeConfirm: "Confirm",
     networkErrorMsg: "Network error, please try again",
+    noOrdersYet: "No orders yet",
   },
 };
