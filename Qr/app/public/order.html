@@ -38,6 +38,8 @@
     <div class="loading">Loading menu…</div>
   </main>
 
+  <div class="toast-banner" id="toastBanner"></div>
+
   <button class="cart-fab" id="cartFab" hidden>
     <span id="cartCount">0</span>
     <span class="cart-fab-label" data-i18n="viewCart">查看購物車</span>
@@ -108,6 +110,20 @@
         <div class="info-row"><span class="info-label" data-i18n="addressLabel">地址</span><span id="infoAddress"></span></div>
         <div class="info-row"><span class="info-label" data-i18n="minSpendLabel">每人低消</span><span id="infoMinSpend"></span></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Party size (asked once per fresh page load, before ordering) -->
+  <div class="sheet-backdrop lock-backdrop" id="partySizeBackdrop" hidden>
+    <div class="lock-card">
+      <div class="lock-icon">🍽️</div>
+      <h2 data-i18n="partySizeTitle">몇 분이세요?</h2>
+      <div class="qty-row" style="justify-content:center;margin:16px 0;">
+        <button id="partySizeMinus">−</button>
+        <span id="partySizeVal">1</span>
+        <button id="partySizePlus">+</button>
+      </div>
+      <button class="add-btn" id="partySizeConfirmBtn" data-i18n="partySizeConfirm">확인</button>
     </div>
   </div>
 

@@ -22,6 +22,21 @@ router.post("/", requireAdmin, async (req, res) => {
   res.status(201).json(table);
 });
 
+// Public: customer sets the headcount for the table they're ordering from.
+// Asked once per fresh page load (see public/js/order.js) and kept on the
+// table itself, since until payment everyone ordering from that table is
+// treated as the same party.
+router.put("/:tableNumber/party-size", async (req, res) => {
+  const size = parseInt((req.body || {}).partySize, 10);
+  if (!size || size < 1 || size > 50) return res.status(400).json({ error: "invalid_party_size" });
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  table.party_size = size;
+  table.party_size_updated_at = new Date().toISOString();
+  await save();
+  res.json({ party_size: table.party_size });
+});
+
 router.delete("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.tables = store.tables.filter((t) => t.id !== id);

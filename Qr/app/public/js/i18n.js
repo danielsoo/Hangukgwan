@@ -37,6 +37,9 @@ const I18N = {
     locationRequiredMsg: "請允許位置權限才能送出訂單",
     locationOutOfRangeMsg: "您似乎不在店內，無法送出訂單，如有疑問請洽店員",
     locationErrorMsg: "無法取得您的位置，請確認已開啟定位功能",
+    partySizeTitle: "請問這桌有幾位？",
+    partySizeConfirm: "確認",
+    networkErrorMsg: "網路連線失敗，請再試一次",
   },
   ko: {
     viewCart: "장바구니 보기",
@@ -75,6 +78,9 @@ const I18N = {
     locationRequiredMsg: "주문하려면 위치 정보 접근을 허용해주세요",
     locationOutOfRangeMsg: "매장 근처가 아닌 것 같아 주문을 보낼 수 없습니다. 문의사항은 직원에게 말씀해주세요",
     locationErrorMsg: "위치 정보를 가져올 수 없습니다. 위치 서비스가 켜져 있는지 확인해주세요",
+    partySizeTitle: "몇 분이세요?",
+    partySizeConfirm: "확인",
+    networkErrorMsg: "네트워크 연결에 실패했습니다. 다시 시도해주세요",
   },
   en: {
     viewCart: "View Cart",
@@ -113,5 +119,8 @@ const I18N = {
     locationRequiredMsg: "Please allow location access to place your order",
     locationOutOfRangeMsg: "You don't seem to be at the restaurant, so this order can't be placed. Please ask staff if you have questions",
     locationErrorMsg: "Couldn't get your location. Please make sure location services are enabled",
+    partySizeTitle: "How many guests?",
+    partySizeConfirm: "Confirm",
+    networkErrorMsg: "Network error, please try again",
   },
 };

@@ -11,6 +11,13 @@
   let statusPollTimer = null;
   let storeLat = null;
   let storeLng = null;
+  let partySize = null;
+
+  const PARTY_WARNING = {
+    zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
+    ko: (n) => `인원(${n}명)보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
+    en: (n) => `Your order has fewer items than your party size (${n}). Feel free to add more if you'd like.`,
+  };
 
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
@@ -39,6 +46,15 @@
 
   function money(n) {
     return `$${n}`;
+  }
+
+  let toastTimer = null;
+  function showToast(msg) {
+    const el = $("#toastBanner");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
   }
 
   async function loadSettings() {
@@ -322,6 +338,10 @@
     if (cart.length === 0) return;
     const btn = $("#submitOrderBtn");
 
+    if (partySize && cartCount() < partySize) {
+      showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
+    }
+
     let coords = null;
     if (storeLat != null && storeLng != null) {
       try {
@@ -448,6 +468,43 @@
     };
   });
 
+  // Party size: asked once per fresh page load, before ordering. Kept on the
+  // table itself (server side) since until payment everyone ordering from a
+  // table is treated as the same party — this also feeds the soft "1인
+  // 1메뉴" reminder at checkout and shows up on the kitchen ticket in admin.
+  let partySizeStep = 1;
+  function showPartySizeModal() {
+    partySizeStep = 1;
+    $("#partySizeVal").textContent = partySizeStep;
+    $("#partySizeBackdrop").hidden = false;
+  }
+  $("#partySizeMinus").onclick = () => {
+    partySizeStep = Math.max(1, partySizeStep - 1);
+    $("#partySizeVal").textContent = partySizeStep;
+  };
+  $("#partySizePlus").onclick = () => {
+    partySizeStep = Math.min(30, partySizeStep + 1);
+    $("#partySizeVal").textContent = partySizeStep;
+  };
+  $("#partySizeConfirmBtn").onclick = async () => {
+    const btn = $("#partySizeConfirmBtn");
+    btn.disabled = true;
+    try {
+      await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partySize: partySizeStep }),
+      });
+      partySize = partySizeStep;
+      $("#partySizeBackdrop").hidden = true;
+      resetIdleTimer();
+    } catch (e) {
+      alert(t("networkErrorMsg"));
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
   // Security: if the phone sits untouched for too long, lock the page and
   // require re-scanning the table's QR code. This stops an old session
   // (customer who already left, or a stray phone) from placing surprise
@@ -471,4 +528,5 @@
   applyStaticI18n();
   loadSettings();
   loadMenu();
+  showPartySizeModal();
 })();

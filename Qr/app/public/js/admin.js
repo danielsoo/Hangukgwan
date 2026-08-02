@@ -403,7 +403,8 @@
       const badge = unpaid.length > 0
         ? `<div class="table-order-badge active">주문 ${unpaid.length}건 · $${unpaid.reduce((s, o) => s + o.total, 0)}</div>`
         : `<div class="table-order-badge empty">비어있음</div>`;
-      chip.innerHTML = `<button class="del-btn" title="삭제">✕</button><div class="num">${t.label || t.number}</div>${badge}`;
+      const partyBadge = t.party_size ? `<div class="table-party-badge">👥 ${t.party_size}인</div>` : "";
+      chip.innerHTML = `<button class="del-btn" title="삭제">✕</button><div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
       chip.querySelector(".del-btn").onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(`테이블 ${t.number}을(를) 삭제하시겠습니까?`)) return;
@@ -417,11 +418,20 @@
 
   function openTableDetail(tableNumber, label) {
     openTableNumber = tableNumber;
+    const table = tables.find((t) => String(t.number) === String(tableNumber));
     const tableOrders = activeOrdersForTable(tableNumber);
-    const unpaidTotal = tableOrders.filter((o) => o.status !== "paid").reduce((s, o) => s + o.total, 0);
+    const unpaidOrders = tableOrders.filter((o) => o.status !== "paid");
+    const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
+    const partyText = table && table.party_size ? ` · 👥 ${table.party_size}인` : "";
+    const payAllBtn = unpaidOrders.length
+      ? `<button class="primary-btn" id="payAllBtn" style="padding:6px 14px;font-size:12px;">전체 결제 완료</button>`
+      : "";
     const header = `
-      <h2>테이블 ${label || tableNumber}</h2>
-      <p style="color:var(--muted);font-size:13px;margin-top:-6px;">현재 미결제 합계: <strong>$${unpaidTotal}</strong></p>
+      <h2>테이블 ${label || tableNumber}${partyText}</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
+        <p style="color:var(--muted);font-size:13px;margin:0;">현재 미결제 합계: <strong>$${unpaidTotal}</strong></p>
+        ${payAllBtn}
+      </div>
     `;
     const body = tableOrders.length
       ? tableOrders.map((o) => renderTableOrderBlock(o)).join("")
@@ -432,8 +442,19 @@
       .forEach((btn) => {
         btn.onclick = async () => {
           await updateOrderStatus(parseInt(btn.dataset.advanceId, 10), btn.dataset.advanceTo);
+          await loadOrders();
+          openTableDetail(tableNumber, label);
         };
       });
+    const payAll = $("#payAllBtn");
+    if (payAll) {
+      payAll.onclick = async () => {
+        if (!confirm(`테이블 ${label || tableNumber}의 미결제 주문 ${unpaidOrders.length}건을 모두 결제 완료로 처리하시겠습니까?`)) return;
+        await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
+        await loadOrders();
+        openTableDetail(tableNumber, label);
+      };
+    }
     $("#tableDetailBackdrop").hidden = false;
   }
 

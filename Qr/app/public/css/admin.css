@@ -98,6 +98,7 @@ input, select, button, textarea { font-family: inherit; }
 .table-order-badge { margin-top: 6px; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 999px; display: inline-block; }
 .table-order-badge.active { background: var(--red); color: #fff; }
 .table-order-badge.empty { background: #f2ede2; color: var(--muted); font-weight: 500; }
+.table-party-badge { margin-top: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
 .table-detail-modal { max-width: 480px; }
 
 /* Settings */
