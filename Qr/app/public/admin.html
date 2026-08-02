@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>한국관 관리자 페이지</title>
+<link rel="stylesheet" href="/css/admin.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-logo">☯ 한국관</div>
+    <h1>관리자 로그인</h1>
+    <input type="password" id="loginPassword" placeholder="관리자 비밀번호" autocomplete="current-password" />
+    <button id="loginBtn">로그인</button>
+    <div class="login-error" id="loginError" hidden></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="dashboard" hidden>
+  <header class="admin-topbar">
+    <div class="admin-brand">☯ 한국관 관리자</div>
+    <nav class="admin-tabs">
+      <button data-tab="orders" class="active">실시간 주문 <span id="newOrderBadge" class="badge-count" hidden>0</span></button>
+      <button data-tab="menu">메뉴 관리</button>
+      <button data-tab="tables">테이블 / QR 코드</button>
+      <button data-tab="settings">설정</button>
+    </nav>
+    <button id="logoutBtn" class="logout-btn">로그아웃</button>
+  </header>
+
+  <main class="admin-main">
+
+    <!-- ORDERS TAB -->
+    <section id="tab-orders" class="tab-panel">
+      <div class="orders-toolbar">
+        <label><input type="checkbox" id="soundToggle" checked /> 🔔 신규 주문 알림음</label>
+        <button id="refreshOrders">새로고침</button>
+      </div>
+      <div class="orders-board">
+        <div class="order-col" data-status="new"><h3>신규 주문 <span class="col-count"></span></h3><div class="col-body"></div></div>
+        <div class="order-col" data-status="preparing"><h3>조리 중 <span class="col-count"></span></h3><div class="col-body"></div></div>
+        <div class="order-col" data-status="served"><h3>서빙 완료 <span class="col-count"></span></h3><div class="col-body"></div></div>
+        <div class="order-col" data-status="paid"><h3>결제 완료 <span class="col-count"></span></h3><div class="col-body"></div></div>
+      </div>
+    </section>
+
+    <!-- MENU TAB -->
+    <section id="tab-menu" class="tab-panel" hidden>
+      <div class="menu-toolbar">
+        <button id="addItemBtn">+ 메뉴 추가</button>
+      </div>
+      <div id="menuCategories"></div>
+    </section>
+
+    <!-- TABLES TAB -->
+    <section id="tab-tables" class="tab-panel" hidden>
+      <div class="tables-toolbar">
+        <input type="text" id="newTableNumber" placeholder="테이블 번호 (예: 12)" />
+        <input type="text" id="newTableLabel" placeholder="표시 이름 (선택사항)" />
+        <button id="addTableBtn">+ 테이블 추가</button>
+        <a href="/api/tables/qr-sheet" target="_blank" class="print-qr-btn">🖨️ 전체 QR 코드 인쇄</a>
+      </div>
+      <div id="tablesList" class="tables-list"></div>
+    </section>
+
+    <!-- SETTINGS TAB -->
+    <section id="tab-settings" class="tab-panel" hidden>
+      <div class="settings-card">
+        <h3>손님 화면 상단 사진</h3>
+        <p class="settings-hint">주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.</p>
+        <div id="coverPreviewWrap" class="cover-preview-wrap">
+          <div id="coverPreview" class="cover-preview"></div>
+        </div>
+        <input type="file" id="coverPhotoInput" accept="image/*" />
+        <div class="save-msg" id="coverMsg" hidden></div>
+      </div>
+      <div class="settings-card">
+        <h3>공지 배너</h3>
+        <p class="settings-hint">손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).</p>
+        <label>공지 문구<textarea id="s_store_notice" rows="2"></textarea></label>
+        <button id="saveNoticeBtn">공지 저장</button>
+        <div class="save-msg" id="noticeMsg" hidden></div>
+      </div>
+      <div class="settings-card">
+        <h3>매장 정보</h3>
+        <label>상호명 (중국어)<input id="s_store_name_zh" /></label>
+        <label>상호명 (한국어)<input id="s_store_name_ko" /></label>
+        <label>Store name (EN)<input id="s_store_name_en" /></label>
+        <label>전화번호<input id="s_store_phone" /></label>
+        <label>주소<input id="s_store_address_zh" /></label>
+        <label>영업시간<input id="s_store_hours" /></label>
+        <label>1인당 최소 주문 금액 (NT$)<input id="s_store_min_spend" type="number" /></label>
+        <button id="saveSettingsBtn">설정 저장</button>
+        <div class="save-msg" id="settingsMsg" hidden>저장되었습니다</div>
+      </div>
+      <div class="settings-card">
+        <h3>관리자 비밀번호 변경</h3>
+        <label>현재 비밀번호<input id="pw_current" type="password" /></label>
+        <label>새 비밀번호 (6자 이상)<input id="pw_new" type="password" /></label>
+        <button id="changePwBtn">비밀번호 변경</button>
+        <div class="save-msg" id="pwMsg" hidden></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- Item edit modal -->
+<div id="itemModalBackdrop" class="modal-backdrop" hidden>
+  <div class="modal">
+    <button class="modal-close" id="itemModalClose">✕</button>
+    <h2 id="itemModalTitle">메뉴 추가</h2>
+    <div class="modal-form">
+      <label>카테고리
+        <select id="f_category_id"></select>
+      </label>
+      <label>코드 (선택사항)<input id="f_code" /></label>
+      <div class="form-row">
+        <label>이름 (중국어)<input id="f_name_zh" /></label>
+        <label>이름 (한국어)<input id="f_name_ko" /></label>
+        <label>Name (EN)<input id="f_name_en" /></label>
+      </div>
+      <div class="form-row">
+        <label>설명 (중국어)<input id="f_desc_zh" /></label>
+        <label>설명 (한국어)<input id="f_desc_ko" /></label>
+        <label>Description (EN)<input id="f_desc_en" /></label>
+      </div>
+      <div class="form-row">
+        <label>가격 (NT$)<input id="f_price" type="number" /></label>
+        <label>가격 비고<input id="f_price_note" placeholder="예: 2인분" /></label>
+      </div>
+      <label>옵션 (쉼표로 구분, 예: 소고기,돼지고기)<input id="f_options" placeholder="옵션이 없으면 비워두세요" /></label>
+      <div class="form-row checkboxes">
+        <label><input type="checkbox" id="f_is_spicy" /> 매운맛 🌶</label>
+        <label><input type="checkbox" id="f_is_signature" /> 대표 메뉴 ★</label>
+        <label><input type="checkbox" id="f_available" checked /> 판매 중</label>
+      </div>
+      <label>사진
+        <input type="file" id="f_photo" accept="image/*" />
+      </label>
+      <img id="f_photo_preview" class="photo-preview" hidden />
+      <div class="modal-actions">
+        <button id="deleteItemBtn" class="danger-btn" hidden>메뉴 삭제</button>
+        <button id="saveItemBtn" class="primary-btn">저장</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="orderDetailBackdrop" class="modal-backdrop" hidden>
+  <div class="modal order-detail-modal">
+    <button class="modal-close" id="orderDetailClose">✕</button>
+    <div id="orderDetailBody"></div>
+  </div>
+</div>
+
+<div id="tableDetailBackdrop" class="modal-backdrop" hidden>
+  <div class="modal table-detail-modal">
+    <button class="modal-close" id="tableDetailClose">✕</button>
+    <div id="tableDetailBody"></div>
+  </div>
+</div>
+
+<audio id="notifySound" preload="auto"></audio>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

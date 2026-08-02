@@ -1,0 +1,22 @@
+{
+  "name": "hangukgwan-qr-order",
+  "version": "1.0.0",
+  "description": "QR code table-ordering system for 韓國館 (Hangukgwan) — customer ordering + owner admin dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node src/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.3",
+    "socket.io": "^4.7.5"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
