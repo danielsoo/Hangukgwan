@@ -187,6 +187,7 @@ input, select, button, textarea { font-family: inherit; }
   font-weight: 700; font-size: 14px; color: var(--ink);
 }
 .table-picker-btn:hover { border-color: var(--red); color: var(--red); background: #fdf3f2; }
+.table-picker-btn.selected { border-color: var(--red); background: var(--red); color: #fff; }
 .table-picker-empty { color: var(--muted); font-size: 13px; padding: 16px 0; text-align: center; }
 
 @media (max-width: 900px) {

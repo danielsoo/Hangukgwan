@@ -190,13 +190,17 @@
   </div>
 </div>
 
-<!-- Pick a table to add into a zone (floor plan) -->
+<!-- Pick tables to add into a zone (floor plan) -->
 <div id="addTableToZoneBackdrop" class="modal-backdrop" hidden>
   <div class="modal add-table-zone-modal">
     <button class="modal-close" id="addTableToZoneClose">✕</button>
     <h2 id="addTableToZoneTitle">테이블 추가</h2>
-    <p class="settings-hint">추가할 테이블을 선택하세요.</p>
+    <p class="settings-hint">추가할 테이블을 모두 선택하세요 (여러 개 선택 가능).</p>
     <div id="addTableToZoneGrid" class="table-picker-grid"></div>
+    <div class="modal-actions">
+      <button class="danger-btn" id="addTableToZoneCancel">취소</button>
+      <button class="primary-btn" id="addTableToZoneConfirm">확인</button>
+    </div>
   </div>
 </div>
 

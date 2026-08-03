@@ -650,8 +650,47 @@
     });
   }
 
+  // Lays newly-added tables out into empty grid cells inside the zone,
+  // scanning around whatever's already placed there so nothing overlaps.
+  // Returns where each new table should go, plus how tall the zone needs to
+  // be to fit everything (grows downward — width stays as the owner set it).
+  function layoutNewTablesInZone(zone, existingInZone, newTables) {
+    const cellW = 80;
+    const cellH = 80;
+    const marginX = 10;
+    const topOffset = 34; // leaves room for the zone label/buttons
+    const cols = Math.max(1, Math.floor((zone.width - marginX * 2) / cellW));
+    const occupied = new Set();
+    existingInZone.forEach((t) => {
+      const col = Math.max(0, Math.round(((t.x != null ? t.x : marginX) - marginX) / cellW));
+      const row = Math.max(0, Math.round(((t.y != null ? t.y : topOffset) - topOffset) / cellH));
+      occupied.add(`${row},${col}`);
+    });
+    const placements = [];
+    let row = 0;
+    newTables.forEach((t) => {
+      let placed = false;
+      while (!placed) {
+        for (let col = 0; col < cols; col++) {
+          const key = `${row},${col}`;
+          if (!occupied.has(key)) {
+            occupied.add(key);
+            placements.push({ table: t, x: marginX + col * cellW, y: topOffset + row * cellH });
+            placed = true;
+            break;
+          }
+        }
+        if (!placed) row++;
+      }
+    });
+    const maxRow = Math.max(0, ...[...occupied].map((k) => parseInt(k.split(",")[0], 10)));
+    const neededHeight = topOffset + (maxRow + 1) * cellH + 10;
+    return { placements, neededHeight };
+  }
+
   function addTableToZone(zone) {
     const unplaced = tables.filter((t) => t.zone_id == null);
+    const selected = new Set();
     $("#addTableToZoneTitle").textContent = `"${zone.name}"에 테이블 추가`;
     const grid = $("#addTableToZoneGrid");
     grid.innerHTML = "";
@@ -664,24 +703,57 @@
           const btn = document.createElement("button");
           btn.className = "table-picker-btn";
           btn.textContent = t.label || t.number;
-          btn.onclick = async () => {
-            await fetch(`/api/tables/${t.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ zoneId: zone.id, x: 10, y: 10 }),
-            });
-            t.zone_id = zone.id;
-            t.x = 10;
-            t.y = 10;
-            $("#addTableToZoneBackdrop").hidden = true;
-            renderFloorPlan();
+          btn.onclick = () => {
+            if (selected.has(t.id)) {
+              selected.delete(t.id);
+              btn.classList.remove("selected");
+            } else {
+              selected.add(t.id);
+              btn.classList.add("selected");
+            }
           };
           grid.appendChild(btn);
         });
     }
     $("#addTableToZoneBackdrop").hidden = false;
+
+    $("#addTableToZoneConfirm").onclick = async () => {
+      if (selected.size === 0) {
+        $("#addTableToZoneBackdrop").hidden = true;
+        return;
+      }
+      const chosen = unplaced.filter((t) => selected.has(t.id));
+      const existingInZone = tables.filter((t) => t.zone_id === zone.id);
+      const { placements, neededHeight } = layoutNewTablesInZone(zone, existingInZone, chosen);
+
+      if (neededHeight > zone.height) {
+        zone.height = neededHeight;
+        await fetch(`/api/zones/${zone.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ height: neededHeight }),
+        });
+      }
+
+      await Promise.all(
+        placements.map(({ table: t, x, y }) => {
+          t.zone_id = zone.id;
+          t.x = x;
+          t.y = y;
+          return fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ zoneId: zone.id, x, y }),
+          });
+        })
+      );
+
+      $("#addTableToZoneBackdrop").hidden = true;
+      renderFloorPlan();
+    };
   }
   $("#addTableToZoneClose").onclick = () => ($("#addTableToZoneBackdrop").hidden = true);
+  $("#addTableToZoneCancel").onclick = () => ($("#addTableToZoneBackdrop").hidden = true);
   $("#addTableToZoneBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "addTableToZoneBackdrop") $("#addTableToZoneBackdrop").hidden = true;
   });
@@ -740,9 +812,15 @@
           });
         },
       });
+      // A zone can never be shrunk smaller than the tables already sitting
+      // inside it — the floor for the resize is whichever is bigger: the
+      // fixed minimum, or the bounding box of its current tables.
+      const tablesInThisZone = tables.filter((t) => t.zone_id === z.id);
+      const requiredWidth = tablesInThisZone.reduce((m, t) => Math.max(m, (t.x || 0) + (t.width || 70) + 10), 120);
+      const requiredHeight = tablesInThisZone.reduce((m, t) => Math.max(m, (t.y || 0) + (t.height || 70) + 10), 100);
       makeResizable(el, {
-        minWidth: 120,
-        minHeight: 100,
+        minWidth: requiredWidth,
+        minHeight: requiredHeight,
         onEnd: async (width, height) => {
           z.width = width;
           z.height = height;
@@ -754,7 +832,7 @@
         },
       });
 
-      tables.filter((t) => t.zone_id === z.id).forEach((t) => renderTableBlock(el, t));
+      tablesInThisZone.forEach((t) => renderTableBlock(el, t));
     });
   }
 
