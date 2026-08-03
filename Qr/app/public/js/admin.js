@@ -512,9 +512,12 @@
   // real drag apart from a plain click, so tapping a table still opens its
   // detail modal without accidentally nudging it.
   function makeDraggable(el, opts) {
+    // opts.bounded: true -> clamp to the parent element's own box (used for
+    // tables, which must stay inside their zone). Zones themselves are left
+    // unbounded (only clamped to >= 0) since they live directly on the canvas.
     let moved = false;
     el.addEventListener("mousedown", (e) => {
-      if (e.target.closest(".resize-handle") || e.target.closest(".zone-label") || e.target.closest(".zone-del")) return;
+      if (e.target.closest(".resize-handle") || e.target.closest(".zone-label") || e.target.closest(".zone-del") || e.target.closest(".zone-add-btn") || e.target.closest(".table-unassign")) return;
       e.preventDefault();
       moved = false;
       const startMouseX = e.clientX;
@@ -523,12 +526,14 @@
       const rect = el.getBoundingClientRect();
       const startX = rect.left - parentRect.left + el.parentElement.scrollLeft;
       const startY = rect.top - parentRect.top + el.parentElement.scrollTop;
+      const maxX = opts.bounded ? Math.max(0, el.parentElement.clientWidth - rect.width) : Infinity;
+      const maxY = opts.bounded ? Math.max(0, el.parentElement.clientHeight - rect.height) : Infinity;
       function onMove(e2) {
         const dx = e2.clientX - startMouseX;
         const dy = e2.clientY - startMouseY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-        el.style.left = Math.max(0, startX + dx) + "px";
-        el.style.top = Math.max(0, startY + dy) + "px";
+        el.style.left = Math.min(maxX, Math.max(0, startX + dx)) + "px";
+        el.style.top = Math.min(maxY, Math.max(0, startY + dy)) + "px";
       }
       function onUp() {
         document.removeEventListener("mousemove", onMove);
@@ -539,7 +544,7 @@
       document.addEventListener("mouseup", onUp);
     });
     el.addEventListener("click", (e) => {
-      if (moved) {
+      if (moved || el._suppressClick) {
         e.stopPropagation();
         e.preventDefault();
       } else if (opts.onClick) {
@@ -555,14 +560,22 @@
     handle.addEventListener("mousedown", (e) => {
       e.preventDefault();
       e.stopPropagation();
+      // A resize still ends in a native "click" on this element afterward
+      // (mousedown + mouseup counts as a click even though we stopped the
+      // mousedown from bubbling) — suppress that one click so resizing a
+      // table doesn't also pop open its detail modal.
+      el._suppressClick = true;
       const startMouseX = e.clientX;
       const startMouseY = e.clientY;
       const rect = el.getBoundingClientRect();
       const startW = rect.width;
       const startH = rect.height;
+      // opts.bounded: clamp so the table can't be resized past its zone's edge.
+      const maxW = opts.bounded ? el.parentElement.clientWidth - el.offsetLeft : Infinity;
+      const maxH = opts.bounded ? el.parentElement.clientHeight - el.offsetTop : Infinity;
       function onMove(e2) {
-        const w = Math.max(opts.minWidth || 60, startW + (e2.clientX - startMouseX));
-        const h = Math.max(opts.minHeight || 60, startH + (e2.clientY - startMouseY));
+        const w = Math.min(maxW, Math.max(opts.minWidth || 60, startW + (e2.clientX - startMouseX)));
+        const h = Math.min(maxH, Math.max(opts.minHeight || 60, startH + (e2.clientY - startMouseY)));
         el.style.width = w + "px";
         el.style.height = h + "px";
       }
@@ -570,6 +583,7 @@
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         opts.onEnd(parseFloat(el.style.width), parseFloat(el.style.height));
+        setTimeout(() => (el._suppressClick = false), 0);
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
@@ -579,6 +593,86 @@
   async function loadZones() {
     const res = await fetch("/api/zones");
     zones = await res.json();
+  }
+
+  function renderTableBlock(container, t) {
+    const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
+    const el = document.createElement("div");
+    el.className = "table-block" + (unpaid.length ? " has-order" : "");
+    el.style.left = (t.x != null ? t.x : 10) + "px";
+    el.style.top = (t.y != null ? t.y : 10) + "px";
+    el.style.width = (t.width || 70) + "px";
+    el.style.height = (t.height || 70) + "px";
+    el.innerHTML = `
+      <button class="table-unassign" title="구역에서 빼기">✕</button>
+      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+    `;
+    container.appendChild(el);
+
+    el.querySelector(".table-unassign").onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`테이블 ${t.label || t.number}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`)) return;
+      await fetch(`/api/tables/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zoneId: null }),
+      });
+      t.zone_id = null;
+      renderFloorPlan();
+    };
+
+    makeDraggable(el, {
+      bounded: true,
+      onEnd: async (x, y) => {
+        t.x = x;
+        t.y = y;
+        await fetch(`/api/tables/${t.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x, y }),
+        });
+      },
+      onClick: () => openTableDetail(t.number, t.label),
+    });
+    makeResizable(el, {
+      bounded: true,
+      minWidth: 44,
+      minHeight: 44,
+      onEnd: async (width, height) => {
+        t.width = width;
+        t.height = height;
+        await fetch(`/api/tables/${t.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ width, height }),
+        });
+      },
+    });
+  }
+
+  async function addTableToZone(zone) {
+    const unplaced = tables.filter((t) => t.zone_id == null);
+    if (unplaced.length === 0) {
+      alert("배치할 수 있는 테이블이 없습니다. 먼저 위에서 새 테이블을 추가해주세요.");
+      return;
+    }
+    const list = unplaced.map((t) => t.label || t.number).join(", ");
+    const input = prompt(`이 구역에 추가할 테이블 번호를 입력하세요.\n배치 가능한 테이블: ${list}`);
+    if (!input) return;
+    const target = unplaced.find((t) => String(t.label) === input.trim() || String(t.number) === input.trim());
+    if (!target) {
+      alert("해당 번호의 배치 가능한 테이블을 찾을 수 없습니다.");
+      return;
+    }
+    await fetch(`/api/tables/${target.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ zoneId: zone.id, x: 10, y: 10 }),
+    });
+    target.zone_id = zone.id;
+    target.x = 10;
+    target.y = 10;
+    renderFloorPlan();
   }
 
   function renderFloorPlan() {
@@ -592,7 +686,11 @@
       el.style.top = z.y + "px";
       el.style.width = z.width + "px";
       el.style.height = z.height + "px";
-      el.innerHTML = `<span class="zone-label">${z.name}</span><button class="zone-del" title="구역 삭제">✕</button>`;
+      el.innerHTML = `
+        <span class="zone-label">${z.name}</span>
+        <button class="zone-add-btn" title="테이블 추가">+ 테이블</button>
+        <button class="zone-del" title="구역 삭제">✕</button>
+      `;
       wrap.appendChild(el);
 
       el.querySelector(".zone-label").onclick = async () => {
@@ -607,9 +705,15 @@
           });
         }
       };
-      el.querySelector(".zone-del").onclick = async () => {
-        if (!confirm(`"${z.name}" 구역을 삭제하시겠습니까?`)) return;
+      el.querySelector(".zone-add-btn").onclick = (e) => {
+        e.stopPropagation();
+        addTableToZone(z);
+      };
+      el.querySelector(".zone-del").onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(`"${z.name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`)) return;
         await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
+        tables.filter((t) => t.zone_id === z.id).forEach((t) => (t.zone_id = null));
         await loadZones();
         renderFloorPlan();
       };
@@ -638,44 +742,8 @@
           });
         },
       });
-    });
 
-    tables.forEach((t) => {
-      const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
-      const el = document.createElement("div");
-      el.className = "table-block" + (unpaid.length ? " has-order" : "");
-      el.style.left = (t.x != null ? t.x : 20) + "px";
-      el.style.top = (t.y != null ? t.y : 20) + "px";
-      el.style.width = (t.width || 70) + "px";
-      el.style.height = (t.height || 70) + "px";
-      el.innerHTML = `<span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}`;
-      wrap.appendChild(el);
-
-      makeDraggable(el, {
-        onEnd: async (x, y) => {
-          t.x = x;
-          t.y = y;
-          await fetch(`/api/tables/${t.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x, y }),
-          });
-        },
-        onClick: () => openTableDetail(t.number, t.label),
-      });
-      makeResizable(el, {
-        minWidth: 44,
-        minHeight: 44,
-        onEnd: async (width, height) => {
-          t.width = width;
-          t.height = height;
-          await fetch(`/api/tables/${t.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ width, height }),
-          });
-        },
-      });
+      tables.filter((t) => t.zone_id === z.id).forEach((t) => renderTableBlock(el, t));
     });
   }
 

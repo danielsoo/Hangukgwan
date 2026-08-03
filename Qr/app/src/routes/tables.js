@@ -17,15 +17,16 @@ router.post("/", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "table_exists" });
   }
   const maxSort = store.tables.reduce((m, t) => Math.max(m, t.sort_order), 0);
-  // Default floor-plan position/size — a fresh table shows up somewhere
-  // visible on the 배치도 view immediately; the owner can drag it into place.
+  // zone_id starts unset — the table won't appear on the 배치도 floor plan
+  // until the owner explicitly adds it into a zone from that view.
   const table = {
     id: nextId("tables"),
     number: String(number),
     label: label || null,
     sort_order: maxSort + 1,
-    x: 20 + ((maxSort * 90) % 720),
-    y: 20 + Math.floor((maxSort * 90) / 720) * 90,
+    zone_id: null,
+    x: 10,
+    y: 10,
     width: 70,
     height: 70,
   };
@@ -34,12 +35,25 @@ router.post("/", requireAdmin, async (req, res) => {
   res.status(201).json(table);
 });
 
-// Admin: move/resize a table on the floor-plan canvas (or rename its label).
+// Admin: move/resize a table within its zone on the floor-plan canvas (or
+// assign/unassign it to a zone, or rename its label). x/y are relative to
+// the zone the table belongs to, not the overall canvas.
 router.patch("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const table = store.tables.find((t) => t.id === id);
   if (!table) return res.status(404).json({ error: "not_found" });
-  const { x, y, width, height, label } = req.body || {};
+  const { x, y, width, height, label, zoneId } = req.body || {};
+  if (zoneId !== undefined) {
+    if (zoneId === null) {
+      table.zone_id = null;
+    } else {
+      const zone = store.zones.find((z) => z.id === parseInt(zoneId, 10));
+      if (!zone) return res.status(400).json({ error: "zone_not_found" });
+      table.zone_id = zone.id;
+      if (table.x == null) table.x = 10;
+      if (table.y == null) table.y = 10;
+    }
+  }
   if (x != null) table.x = Math.max(0, Number(x));
   if (y != null) table.y = Math.max(0, Number(y));
   if (width != null) table.width = Math.max(40, Number(width));
