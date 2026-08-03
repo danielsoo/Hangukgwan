@@ -17,11 +17,12 @@ const uri = process.env.MONGODB_URI;
 function defaultStore() {
   return {
     _id: "main",
-    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1 },
+    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1 },
     categories: [],
     menuItems: [],
     tables: [],
     orders: [],
+    zones: [],
     settings: {},
   };
 }

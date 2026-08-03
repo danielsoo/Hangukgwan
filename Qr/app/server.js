@@ -56,6 +56,7 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/api/auth", require("./src/routes/auth"));
 app.use("/api/menu", require("./src/routes/menu"));
 app.use("/api/tables", require("./src/routes/tables"));
+app.use("/api/zones", require("./src/routes/zones"));
 app.use("/api/orders", require("./src/routes/orders"));
 app.use("/api/settings", require("./src/routes/settings"));
 app.use("/api/photo", require("./src/routes/photos"));

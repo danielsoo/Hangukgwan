@@ -4,6 +4,7 @@
   let categories = [];
   let orders = [];
   let tables = [];
+  let zones = [];
   let editingItemId = null;
   let editingItemPhotoUrl = null;
   let selectedPhotoFile = null;
@@ -116,6 +117,7 @@
     knownOrderIds = new Set(fresh.map((o) => o.id));
     renderOrders();
     renderTables();
+    if (!$("#floorPlanWrap").hidden) renderFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber);
 
     if (!isFirstLoad && newlyArrived.length > 0) {
@@ -503,6 +505,206 @@
       openTableNumber = null;
     }
   });
+
+  // ---------- Floor plan (배치도) ----------
+  // Generic drag helper: mousedown+drag moves the element (position: absolute
+  // inside a position: relative parent); a small movement threshold tells a
+  // real drag apart from a plain click, so tapping a table still opens its
+  // detail modal without accidentally nudging it.
+  function makeDraggable(el, opts) {
+    let moved = false;
+    el.addEventListener("mousedown", (e) => {
+      if (e.target.closest(".resize-handle") || e.target.closest(".zone-label") || e.target.closest(".zone-del")) return;
+      e.preventDefault();
+      moved = false;
+      const startMouseX = e.clientX;
+      const startMouseY = e.clientY;
+      const parentRect = el.parentElement.getBoundingClientRect();
+      const rect = el.getBoundingClientRect();
+      const startX = rect.left - parentRect.left + el.parentElement.scrollLeft;
+      const startY = rect.top - parentRect.top + el.parentElement.scrollTop;
+      function onMove(e2) {
+        const dx = e2.clientX - startMouseX;
+        const dy = e2.clientY - startMouseY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+        el.style.left = Math.max(0, startX + dx) + "px";
+        el.style.top = Math.max(0, startY + dy) + "px";
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        if (moved) opts.onEnd(parseFloat(el.style.left), parseFloat(el.style.top));
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+    el.addEventListener("click", (e) => {
+      if (moved) {
+        e.stopPropagation();
+        e.preventDefault();
+      } else if (opts.onClick) {
+        opts.onClick();
+      }
+    });
+  }
+
+  function makeResizable(el, opts) {
+    const handle = document.createElement("div");
+    handle.className = "resize-handle";
+    el.appendChild(handle);
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const startMouseX = e.clientX;
+      const startMouseY = e.clientY;
+      const rect = el.getBoundingClientRect();
+      const startW = rect.width;
+      const startH = rect.height;
+      function onMove(e2) {
+        const w = Math.max(opts.minWidth || 60, startW + (e2.clientX - startMouseX));
+        const h = Math.max(opts.minHeight || 60, startH + (e2.clientY - startMouseY));
+        el.style.width = w + "px";
+        el.style.height = h + "px";
+      }
+      function onUp() {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        opts.onEnd(parseFloat(el.style.width), parseFloat(el.style.height));
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    });
+  }
+
+  async function loadZones() {
+    const res = await fetch("/api/zones");
+    zones = await res.json();
+  }
+
+  function renderFloorPlan() {
+    const wrap = $("#floorPlan");
+    wrap.innerHTML = "";
+
+    [...zones].sort((a, b) => a.sort_order - b.sort_order).forEach((z) => {
+      const el = document.createElement("div");
+      el.className = "zone-block";
+      el.style.left = z.x + "px";
+      el.style.top = z.y + "px";
+      el.style.width = z.width + "px";
+      el.style.height = z.height + "px";
+      el.innerHTML = `<span class="zone-label">${z.name}</span><button class="zone-del" title="구역 삭제">✕</button>`;
+      wrap.appendChild(el);
+
+      el.querySelector(".zone-label").onclick = async () => {
+        const name = prompt("구역 이름", z.name);
+        if (name && name.trim() && name.trim() !== z.name) {
+          z.name = name.trim();
+          el.querySelector(".zone-label").textContent = z.name;
+          await fetch(`/api/zones/${z.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: z.name }),
+          });
+        }
+      };
+      el.querySelector(".zone-del").onclick = async () => {
+        if (!confirm(`"${z.name}" 구역을 삭제하시겠습니까?`)) return;
+        await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
+        await loadZones();
+        renderFloorPlan();
+      };
+
+      makeDraggable(el, {
+        onEnd: async (x, y) => {
+          z.x = x;
+          z.y = y;
+          await fetch(`/api/zones/${z.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x, y }),
+          });
+        },
+      });
+      makeResizable(el, {
+        minWidth: 120,
+        minHeight: 100,
+        onEnd: async (width, height) => {
+          z.width = width;
+          z.height = height;
+          await fetch(`/api/zones/${z.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ width, height }),
+          });
+        },
+      });
+    });
+
+    tables.forEach((t) => {
+      const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
+      const el = document.createElement("div");
+      el.className = "table-block" + (unpaid.length ? " has-order" : "");
+      el.style.left = (t.x != null ? t.x : 20) + "px";
+      el.style.top = (t.y != null ? t.y : 20) + "px";
+      el.style.width = (t.width || 70) + "px";
+      el.style.height = (t.height || 70) + "px";
+      el.innerHTML = `<span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}`;
+      wrap.appendChild(el);
+
+      makeDraggable(el, {
+        onEnd: async (x, y) => {
+          t.x = x;
+          t.y = y;
+          await fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x, y }),
+          });
+        },
+        onClick: () => openTableDetail(t.number, t.label),
+      });
+      makeResizable(el, {
+        minWidth: 44,
+        minHeight: 44,
+        onEnd: async (width, height) => {
+          t.width = width;
+          t.height = height;
+          await fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ width, height }),
+          });
+        },
+      });
+    });
+  }
+
+  $("#viewListBtn").onclick = () => {
+    $("#viewListBtn").classList.add("active");
+    $("#viewFloorBtn").classList.remove("active");
+    $("#tablesList").hidden = false;
+    $("#floorPlanWrap").hidden = true;
+    $("#addZoneBtn").hidden = true;
+  };
+  $("#viewFloorBtn").onclick = async () => {
+    $("#viewFloorBtn").classList.add("active");
+    $("#viewListBtn").classList.remove("active");
+    $("#tablesList").hidden = true;
+    $("#floorPlanWrap").hidden = false;
+    $("#addZoneBtn").hidden = false;
+    await loadZones();
+    renderFloorPlan();
+  };
+  $("#addZoneBtn").onclick = async () => {
+    const res = await fetch("/api/zones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: `구역 ${zones.length + 1}`, x: 20, y: 20, width: 300, height: 240 }),
+    });
+    const zone = await res.json();
+    zones.push(zone);
+    renderFloorPlan();
+  };
 
   $("#addTableBtn").onclick = async () => {
     const number = $("#newTableNumber").value.trim();

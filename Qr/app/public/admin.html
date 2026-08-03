@@ -66,7 +66,16 @@
         <button id="addTableBtn">+ 테이블 추가</button>
         <a href="/api/tables/qr-sheet" target="_blank" class="print-qr-btn">🖨️ 전체 QR 코드 인쇄</a>
       </div>
+      <div class="view-toggle">
+        <button id="viewListBtn" class="view-toggle-btn active">📋 목록 보기</button>
+        <button id="viewFloorBtn" class="view-toggle-btn">🗺️ 배치도 보기</button>
+        <button id="addZoneBtn" class="view-toggle-btn" hidden>+ 구역 추가</button>
+      </div>
       <div id="tablesList" class="tables-list"></div>
+      <div id="floorPlanWrap" class="floor-plan-wrap" hidden>
+        <p class="settings-hint">구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요.</p>
+        <div id="floorPlan" class="floor-plan"></div>
+      </div>
     </section>
 
     <!-- SETTINGS TAB -->

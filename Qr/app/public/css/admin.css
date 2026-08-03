@@ -101,6 +101,45 @@ input, select, button, textarea { font-family: inherit; }
 .table-party-badge { margin-top: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
 .table-detail-modal { max-width: 480px; }
 
+/* Floor plan (배치도) */
+.view-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+.view-toggle-btn {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff;
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.view-toggle-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.floor-plan-wrap { margin-top: 4px; }
+.floor-plan {
+  position: relative; width: 100%; min-height: 620px; overflow: auto;
+  background-color: #fbf9f4;
+  background-image: linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px);
+  background-size: 20px 20px;
+  border: 1px solid var(--line); border-radius: 12px;
+}
+.zone-block {
+  position: absolute; background: rgba(22,33,62,0.05); border: 2px dashed var(--muted);
+  border-radius: 10px; box-sizing: border-box; user-select: none;
+}
+.zone-label {
+  position: absolute; top: 6px; left: 8px; font-size: 12px; font-weight: 700; color: var(--muted);
+  background: #fbf9f4; padding: 2px 6px; border-radius: 6px; cursor: text; pointer-events: auto;
+}
+.zone-del { position: absolute; top: 4px; right: 4px; border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 12px; }
+.resize-handle {
+  position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--muted) 50%); border-radius: 0 0 8px 0; opacity: 0.6;
+}
+.table-block {
+  position: absolute; background: #fff; border: 2px solid var(--line); border-radius: 10px;
+  box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; cursor: grab; font-weight: 800; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  user-select: none; z-index: 5;
+}
+.table-block:active { cursor: grabbing; }
+.table-block.has-order { border-color: var(--red); background: #fdf3f2; }
+.table-block .tb-party { font-size: 9px; font-weight: 600; color: var(--muted); margin-top: 1px; }
+.table-block .resize-handle { background: linear-gradient(135deg, transparent 50%, var(--red) 50%); }
+
 /* Settings */
 .settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 480px; margin-bottom: 20px; }
 .settings-card h3 { margin-top: 0; }

@@ -152,6 +152,39 @@ async function run() {
     console.log(`Seeded ${DEFAULT_TABLE_COUNT} tables (skipping numbers containing "4").`);
   }
 
+  // Floor plan: 4 default zones (owner can rename/resize/move them from
+  // Admin > 테이블 / QR 코드 > 배치도 보기), arranged 2x2 to start.
+  if (store.zones.length === 0) {
+    const defaultZones = [
+      { name: "구역 1", x: 20, y: 20, width: 340, height: 260 },
+      { name: "구역 2", x: 380, y: 20, width: 340, height: 260 },
+      { name: "구역 3", x: 20, y: 300, width: 340, height: 260 },
+      { name: "구역 4", x: 380, y: 300, width: 340, height: 260 },
+    ];
+    defaultZones.forEach((z, i) => {
+      store.zones.push({ id: nextId("zones"), sort_order: i + 1, ...z });
+    });
+    console.log("Seeded 4 default floor-plan zones.");
+  }
+
+  // Backfill floor-plan position/size for any table that doesn't have one
+  // yet (existing installs from before this feature) so every table shows
+  // up somewhere sensible on first load of the 배치도 view.
+  if (store.tables.some((t) => t.x == null)) {
+    const perRow = 8;
+    let i = 0;
+    for (const t of store.tables) {
+      if (t.x == null) {
+        t.x = 20 + (i % perRow) * 90;
+        t.y = 20 + Math.floor(i / perRow) * 90;
+        t.width = 70;
+        t.height = 70;
+      }
+      i++;
+    }
+    console.log("Backfilled floor-plan positions for existing tables.");
+  }
+
   if (!store.settings.admin_password_hash) {
     const pw = process.env.ADMIN_PASSWORD || "changeme123";
     store.settings.admin_password_hash = bcrypt.hashSync(pw, 10);

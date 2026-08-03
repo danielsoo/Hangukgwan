@@ -17,10 +17,36 @@ router.post("/", requireAdmin, async (req, res) => {
     return res.status(400).json({ error: "table_exists" });
   }
   const maxSort = store.tables.reduce((m, t) => Math.max(m, t.sort_order), 0);
-  const table = { id: nextId("tables"), number: String(number), label: label || null, sort_order: maxSort + 1 };
+  // Default floor-plan position/size — a fresh table shows up somewhere
+  // visible on the 배치도 view immediately; the owner can drag it into place.
+  const table = {
+    id: nextId("tables"),
+    number: String(number),
+    label: label || null,
+    sort_order: maxSort + 1,
+    x: 20 + ((maxSort * 90) % 720),
+    y: 20 + Math.floor((maxSort * 90) / 720) * 90,
+    width: 70,
+    height: 70,
+  };
   store.tables.push(table);
   await save();
   res.status(201).json(table);
+});
+
+// Admin: move/resize a table on the floor-plan canvas (or rename its label).
+router.patch("/:id", requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const table = store.tables.find((t) => t.id === id);
+  if (!table) return res.status(404).json({ error: "not_found" });
+  const { x, y, width, height, label } = req.body || {};
+  if (x != null) table.x = Math.max(0, Number(x));
+  if (y != null) table.y = Math.max(0, Number(y));
+  if (width != null) table.width = Math.max(40, Number(width));
+  if (height != null) table.height = Math.max(40, Number(height));
+  if (label != null) table.label = String(label).slice(0, 20) || null;
+  await save();
+  res.json(table);
 });
 
 // Public: customer sets the headcount for the table they're ordering from.
