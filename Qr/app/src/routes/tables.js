@@ -1,9 +1,33 @@
 const express = require("express");
 const QRCode = require("qrcode");
-const { store, save, nextId } = require("../db");
+const { store, save, nextId, getPhoto } = require("../db");
 const { requireAdmin } = require("../auth");
 
 const router = express.Router();
+
+function photoIdFromUrl(url) {
+  if (!url) return null;
+  const m = url.match(/^\/api\/photo\/([a-f0-9]{24})$/);
+  return m ? m[1] : null;
+}
+
+// Centers a logo (as a base64 data URI) inside a QR code SVG string, with a
+// white rounded backing so it stays legible against the black modules. Only
+// safe because the QR is generated with errorCorrectionLevel "H" (survives
+// up to ~30% obstruction) — see below.
+function embedLogoInQrSvg(svg, logoDataUri) {
+  const m = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+  if (!m) return svg;
+  const vb = parseInt(m[1], 10);
+  const logoSize = vb * 0.22;
+  const backingSize = logoSize * 1.35;
+  const center = vb / 2;
+  const overlay = `
+    <rect x="${center - backingSize / 2}" y="${center - backingSize / 2}" width="${backingSize}" height="${backingSize}" rx="${backingSize * 0.15}" fill="#ffffff" />
+    <image x="${center - logoSize / 2}" y="${center - logoSize / 2}" width="${logoSize}" height="${logoSize}" href="${logoDataUri}" />
+  `;
+  return svg.replace("</svg>", `${overlay}</svg>`);
+}
 
 router.get("/", requireAdmin, (req, res) => {
   res.json([...store.tables].sort((a, b) => a.sort_order - b.sort_order));
@@ -93,14 +117,31 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
   const tables = [...store.tables].sort((a, b) => a.sort_order - b.sort_order);
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
+  // Load the store logo once (if the owner uploaded one from Admin >
+  // 설정), to stamp into the center of every QR code below.
+  let logoDataUri = null;
+  const logoPhotoId = photoIdFromUrl(store.settings.store_logo);
+  if (logoPhotoId) {
+    const photo = await getPhoto(logoPhotoId);
+    if (photo && photo.data) {
+      const buffer = Buffer.isBuffer(photo.data) ? photo.data : Buffer.from(photo.data.buffer || photo.data);
+      logoDataUri = `data:${photo.contentType || "image/png"};base64,${buffer.toString("base64")}`;
+    }
+  }
+
   const cards = await Promise.all(
     tables.map(async (t) => {
       const url = `${baseUrl}/t/${encodeURIComponent(t.number)}`;
-      const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 300 });
+      // High error correction so the center logo can safely cover part of
+      // the code without breaking scannability.
+      let svg = await QRCode.toString(url, { type: "svg", errorCorrectionLevel: "H", margin: 1, width: 300 });
+      if (logoDataUri) svg = embedLogoInQrSvg(svg, logoDataUri);
       return `
         <div class="card">
-          <div class="table-no">桌號 ${t.label || t.number}</div>
-          <img src="${dataUrl}" alt="QR ${t.number}" />
+          <div class="qr-wrap">
+            <div class="table-no-badge">${t.label || t.number}</div>
+            ${svg}
+          </div>
           <div class="url">${url}</div>
         </div>`;
     })
@@ -120,8 +161,14 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
     border: 2px dashed #999; border-radius: 12px; padding: 16px; text-align: center;
     page-break-inside: avoid; display:flex; flex-direction:column; align-items:center; gap:8px;
   }
-  .table-no { font-size: 20px; font-weight: 700; }
-  .card img { width: 200px; height: 200px; }
+  .qr-wrap { position: relative; width: 200px; height: 200px; }
+  .qr-wrap svg { width: 200px; height: 200px; display: block; }
+  .table-no-badge {
+    position: absolute; top: -10px; left: -10px; min-width: 30px; height: 30px; padding: 0 6px;
+    border-radius: 999px; background: #b5232c; color: #fff; font-size: 15px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;
+  }
   .url { font-size: 10px; color: #666; word-break: break-all; }
   @media print {
     .toolbar { display: none; }

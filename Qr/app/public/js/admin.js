@@ -948,6 +948,9 @@
     if (s.store_cover_photo) {
       $("#coverPreview").style.backgroundImage = `url('${s.store_cover_photo}')`;
     }
+    if (s.store_logo) {
+      $("#logoPreview").style.backgroundImage = `url('${s.store_logo}')`;
+    }
   }
 
   $("#saveSettingsBtn").onclick = async () => {
@@ -1021,6 +1024,26 @@
     const msg = $("#noticeMsg");
     msg.style.color = "#1a8a44";
     msg.textContent = "저장되었습니다";
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2000);
+  };
+
+  $("#logoPhotoInput").onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append("photo", file);
+    const msg = $("#logoMsg");
+    const res = await fetch("/api/settings/logo", { method: "POST", body: fd });
+    if (res.ok) {
+      const data = await res.json();
+      $("#logoPreview").style.backgroundImage = `url('${data.store_logo}')`;
+      msg.style.color = "#1a8a44";
+      msg.textContent = "로고가 업데이트되었습니다";
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = "업로드 실패. 다시 시도해주세요";
+    }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
   };

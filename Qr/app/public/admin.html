@@ -90,6 +90,15 @@
         <div class="save-msg" id="coverMsg" hidden></div>
       </div>
       <div class="settings-card">
+        <h3>매장 로고 (QR 코드 중앙에 표시)</h3>
+        <p class="settings-hint">정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.</p>
+        <div id="logoPreviewWrap" class="cover-preview-wrap logo-preview-wrap">
+          <div id="logoPreview" class="cover-preview logo-preview"></div>
+        </div>
+        <input type="file" id="logoPhotoInput" accept="image/*" />
+        <div class="save-msg" id="logoMsg" hidden></div>
+      </div>
+      <div class="settings-card">
         <h3>공지 배너</h3>
         <p class="settings-hint">손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).</p>
         <label>공지 문구<textarea id="s_store_notice" rows="2"></textarea></label>
