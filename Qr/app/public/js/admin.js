@@ -507,6 +507,9 @@
   });
 
   // ---------- Floor plan (배치도) ----------
+  // Height reserved at the top of every zone for its label / "+ 테이블" / ✕
+  // buttons — tables can never be dragged or placed up into this strip.
+  const ZONE_HEADER_HEIGHT = 34;
   // Generic drag helper: mousedown+drag moves the element (position: absolute
   // inside a position: relative parent); a small movement threshold tells a
   // real drag apart from a plain click, so tapping a table still opens its
@@ -528,12 +531,13 @@
       const startY = rect.top - parentRect.top + el.parentElement.scrollTop;
       const maxX = opts.bounded ? Math.max(0, el.parentElement.clientWidth - rect.width) : Infinity;
       const maxY = opts.bounded ? Math.max(0, el.parentElement.clientHeight - rect.height) : Infinity;
+      const minY = opts.minY || 0;
       function onMove(e2) {
         const dx = e2.clientX - startMouseX;
         const dy = e2.clientY - startMouseY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
         el.style.left = Math.min(maxX, Math.max(0, startX + dx)) + "px";
-        el.style.top = Math.min(maxY, Math.max(0, startY + dy)) + "px";
+        el.style.top = Math.min(maxY, Math.max(minY, startY + dy)) + "px";
       }
       function onUp() {
         document.removeEventListener("mousemove", onMove);
@@ -597,10 +601,20 @@
 
   function renderTableBlock(container, t) {
     const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
+    // Correct any table that ended up above the header strip (e.g. placed
+    // before this protection existed) — nudge it down and persist the fix.
+    if (t.y == null || t.y < ZONE_HEADER_HEIGHT) {
+      t.y = ZONE_HEADER_HEIGHT;
+      fetch(`/api/tables/${t.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ y: t.y }),
+      });
+    }
     const el = document.createElement("div");
     el.className = "table-block" + (unpaid.length ? " has-order" : "");
     el.style.left = (t.x != null ? t.x : 10) + "px";
-    el.style.top = (t.y != null ? t.y : 10) + "px";
+    el.style.top = t.y + "px";
     el.style.width = (t.width || 70) + "px";
     el.style.height = (t.height || 70) + "px";
     el.innerHTML = `
@@ -623,6 +637,7 @@
 
     makeDraggable(el, {
       bounded: true,
+      minY: ZONE_HEADER_HEIGHT,
       onEnd: async (x, y) => {
         t.x = x;
         t.y = y;
@@ -658,7 +673,7 @@
     const cellW = 80;
     const cellH = 80;
     const marginX = 10;
-    const topOffset = 34; // leaves room for the zone label/buttons
+    const topOffset = ZONE_HEADER_HEIGHT;
     const cols = Math.max(1, Math.floor((zone.width - marginX * 2) / cellW));
     const occupied = new Set();
     existingInZone.forEach((t) => {

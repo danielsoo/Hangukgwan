@@ -51,11 +51,12 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       if (!zone) return res.status(400).json({ error: "zone_not_found" });
       table.zone_id = zone.id;
       if (table.x == null) table.x = 10;
-      if (table.y == null) table.y = 10;
+      if (table.y == null || table.y < 34) table.y = 34; // stay clear of the zone's header strip
     }
   }
   if (x != null) table.x = Math.max(0, Number(x));
-  if (y != null) table.y = Math.max(0, Number(y));
+  // Stay clear of the zone's header strip (label / + 테이블 / ✕ buttons).
+  if (y != null) table.y = table.zone_id != null ? Math.max(34, Number(y)) : Math.max(0, Number(y));
   if (width != null) table.width = Math.max(40, Number(width));
   if (height != null) table.height = Math.max(40, Number(height));
   if (label != null) table.label = String(label).slice(0, 20) || null;
