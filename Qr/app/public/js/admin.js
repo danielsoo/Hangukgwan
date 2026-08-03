@@ -389,7 +389,7 @@
   function activeOrdersForTable(tableNumber) {
     return orders
       .filter((o) => String(o.table_number) === String(tableNumber) && o.status !== "cancelled")
-      .sort((a, b) => new Date(b.created_at.replace(" ", "T")) - new Date(a.created_at.replace(" ", "T")));
+      .sort((a, b) => new Date(a.created_at.replace(" ", "T")) - new Date(b.created_at.replace(" ", "T")));
   }
 
   function renderTables() {
@@ -424,7 +424,7 @@
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
     const partyText = table && table.party_size ? ` · 👥 ${table.party_size}인` : "";
     const payAllBtn = unpaidOrders.length
-      ? `<button class="primary-btn" id="payAllBtn" style="padding:6px 14px;font-size:12px;">전체 결제 완료</button>`
+      ? `<button class="primary-btn pay-all-btn" style="padding:6px 14px;font-size:12px;">전체 결제 완료</button>`
       : "";
     const header = `
       <h2>테이블 ${label || tableNumber}${partyText}</h2>
@@ -436,7 +436,15 @@
     const body = tableOrders.length
       ? tableOrders.map((o) => renderTableOrderBlock(o)).join("")
       : `<p style="color:var(--muted);padding:20px 0;text-align:center;">아직 주문이 없습니다.</p>`;
-    $("#tableDetailBody").innerHTML = header + body;
+    const footer = tableOrders.length
+      ? `
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
+          <p style="font-size:15px;margin:0;">미결제 합계: <strong>$${unpaidTotal}</strong></p>
+          ${payAllBtn}
+        </div>
+      `
+      : "";
+    $("#tableDetailBody").innerHTML = header + body + footer;
     $("#tableDetailBody")
       .querySelectorAll("[data-advance-id]")
       .forEach((btn) => {
@@ -446,15 +454,16 @@
           openTableDetail(tableNumber, label);
         };
       });
-    const payAll = $("#payAllBtn");
-    if (payAll) {
-      payAll.onclick = async () => {
-        if (!confirm(`테이블 ${label || tableNumber}의 미결제 주문 ${unpaidOrders.length}건을 모두 결제 완료로 처리하시겠습니까?`)) return;
-        await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
-        await loadOrders();
-        openTableDetail(tableNumber, label);
-      };
-    }
+    $("#tableDetailBody")
+      .querySelectorAll(".pay-all-btn")
+      .forEach((btn) => {
+        btn.onclick = async () => {
+          if (!confirm(`테이블 ${label || tableNumber}의 미결제 주문 ${unpaidOrders.length}건을 모두 결제 완료로 처리하시겠습니까?`)) return;
+          await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
+          await loadOrders();
+          openTableDetail(tableNumber, label);
+        };
+      });
     $("#tableDetailBackdrop").hidden = false;
   }
 
