@@ -10,6 +10,8 @@ const PUBLIC_KEYS = [
   "store_name_en",
   "store_phone",
   "store_address_zh",
+  "store_address_ko",
+  "store_address_en",
   "store_hours",
   "store_min_spend",
   "store_notice",

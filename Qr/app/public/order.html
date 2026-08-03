@@ -36,7 +36,7 @@
   </div>
 
   <main class="menu-list" id="menuList">
-    <div class="loading">Loading menu…</div>
+    <div class="loading" data-i18n="loadingMenu">Loading menu…</div>
   </main>
 
   <div class="toast-banner" id="toastBanner"></div>
@@ -60,7 +60,7 @@
           <div class="options-label" data-i18n="chooseOption">請選擇</div>
           <div class="options-list" id="optionsList"></div>
         </div>
-        <textarea id="itemNote" placeholder="特殊要求（例如：不要辣、不要蔥）" maxlength="200"></textarea>
+        <textarea id="itemNote" data-i18n-placeholder="itemNotePlaceholder" placeholder="特殊要求（例如：不要辣、不要蔥）" maxlength="200"></textarea>
         <div class="qty-row">
           <button id="qtyMinus">−</button>
           <span id="qtyVal">1</span>
@@ -80,7 +80,7 @@
       <button class="sheet-close" id="cartClose">✕</button>
       <h2 data-i18n="yourOrder">您的訂單</h2>
       <div id="cartItems" class="cart-items"></div>
-      <textarea id="orderNote" placeholder="整單備註（選填）" maxlength="300"></textarea>
+      <textarea id="orderNote" data-i18n-placeholder="orderNotePlaceholder" placeholder="整單備註（選填）" maxlength="300"></textarea>
       <div class="cart-total-row">
         <span data-i18n="total">總計</span>
         <span id="cartTotalBig">$0</span>

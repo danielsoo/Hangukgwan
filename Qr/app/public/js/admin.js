@@ -534,6 +534,8 @@
     $("#s_store_name_en").value = s.store_name_en || "";
     $("#s_store_phone").value = s.store_phone || "";
     $("#s_store_address_zh").value = s.store_address_zh || "";
+    $("#s_store_address_ko").value = s.store_address_ko || "";
+    $("#s_store_address_en").value = s.store_address_en || "";
     $("#s_store_hours").value = s.store_hours || "";
     $("#s_store_min_spend").value = s.store_min_spend || "";
     $("#s_store_notice").value = s.store_notice || "";
@@ -553,6 +555,8 @@
       store_name_en: $("#s_store_name_en").value.trim(),
       store_phone: $("#s_store_phone").value.trim(),
       store_address_zh: $("#s_store_address_zh").value.trim(),
+      store_address_ko: $("#s_store_address_ko").value.trim(),
+      store_address_en: $("#s_store_address_en").value.trim(),
       store_hours: $("#s_store_hours").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
       order_radius_m: $("#s_order_radius_m").value.trim(),

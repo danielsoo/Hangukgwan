@@ -41,6 +41,9 @@ const I18N = {
     partySizeConfirm: "確認",
     networkErrorMsg: "網路連線失敗，請再試一次",
     noOrdersYet: "尚未點餐",
+    loadingMenu: "菜單載入中…",
+    itemNotePlaceholder: "特殊要求（例如：不要辣、不要蔥）",
+    orderNotePlaceholder: "整單備註（選填）",
   },
   ko: {
     viewCart: "장바구니 보기",
@@ -83,6 +86,9 @@ const I18N = {
     partySizeConfirm: "확인",
     networkErrorMsg: "네트워크 연결에 실패했습니다. 다시 시도해주세요",
     noOrdersYet: "아직 주문 내역이 없습니다",
+    loadingMenu: "메뉴 불러오는 중…",
+    itemNotePlaceholder: "특별 요청 사항 (예: 맵지 않게, 파 빼주세요)",
+    orderNotePlaceholder: "전체 요청 사항 (선택)",
   },
   en: {
     viewCart: "View Cart",
@@ -125,5 +131,8 @@ const I18N = {
     partySizeConfirm: "Confirm",
     networkErrorMsg: "Network error, please try again",
     noOrdersYet: "No orders yet",
+    loadingMenu: "Loading menu…",
+    itemNotePlaceholder: "Special requests (e.g. no spice, no scallions)",
+    orderNotePlaceholder: "Note for the whole order (optional)",
   },
 };

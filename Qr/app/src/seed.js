@@ -30,7 +30,7 @@ const ITEMS = {
   noodle: [
     { code: "21", name_zh: "辛拉麵(泡麵)", name_ko: "신라면", name_en: "Shin Ramyun", price: 180 },
     { code: "22", name_zh: "辛拉麵套餐", name_ko: "신라면 김밥세트", name_en: "Shin Ramyun + Kimbap Set", price: 280 },
-    { code: "23", name_zh: "大滷麵", name_ko: "우동면", name_en: "Seafood Udon (not spicy)", price: 230, desc_zh: "海鮮麵不辣" },
+    { code: "23", name_zh: "大滷麵", name_ko: "우동면", name_en: "Seafood Udon (not spicy)", price: 230, desc_zh: "海鮮麵不辣", desc_ko: "맵지 않아요", desc_en: "Not spicy" },
     { code: "24", name_zh: "韓式炸醬麵", name_ko: "짜장면", name_en: "Korean Black Bean Noodles", price: 230 },
     { code: "25", name_zh: "韓式炸醬飯", name_ko: "짜장밥", name_en: "Korean Black Bean Rice", price: 230 },
     { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1 },
@@ -157,6 +157,8 @@ async function run() {
     store_name_en: process.env.STORE_NAME_EN || "Hangukgwan Korean Restaurant",
     store_phone: process.env.STORE_PHONE || "03-656-7994",
     store_address_zh: process.env.STORE_ADDRESS_ZH || "新竹縣竹北市縣政九路135巷32號",
+    store_address_ko: process.env.STORE_ADDRESS_KO || "",
+    store_address_en: process.env.STORE_ADDRESS_EN || "",
     store_hours: process.env.STORE_HOURS || "11:00-14:00, 17:00-21:00",
     store_min_spend: process.env.STORE_MIN_SPEND || "200",
     store_notice: process.env.STORE_NOTICE || "",

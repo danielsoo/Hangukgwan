@@ -1,6 +1,10 @@
 (function () {
   const tableNumber = decodeURIComponent(location.pathname.split("/t/")[1] || "").trim();
-  let lang = localStorage.getItem("hgk_lang") || "zh";
+  // Always defaults to Chinese (this is a Taiwan restaurant) — not persisted
+  // across page loads, so every fresh scan starts back at the default. A
+  // fresh load happens naturally once a table is settled and re-scanned by
+  // the next party (see the inactivity lock + party-size prompt above).
+  let lang = "zh";
   let categories = [];
   let cart = []; // { itemId, qty, option, note, item }
   let currentItem = null;
@@ -68,7 +72,7 @@
     $("#storeInfoName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#infoHours").textContent = s.store_hours || "-";
     $("#infoPhone").textContent = s.store_phone || "-";
-    $("#infoAddress").textContent = s.store_address_zh || "-";
+    $("#infoAddress").textContent = s[`store_address_${lang}`] || s.store_address_zh || "-";
     $("#infoMinSpend").textContent = s.store_min_spend ? `$${s.store_min_spend}` : "-";
     if (s.store_cover_photo) {
       $("#hero").style.backgroundImage = `url('${s.store_cover_photo}')`;
@@ -507,7 +511,6 @@
   document.querySelectorAll(".lang-option").forEach((b) => {
     b.onclick = () => {
       lang = b.dataset.lang;
-      localStorage.setItem("hgk_lang", lang);
       applyStaticI18n();
       loadSettings();
       renderTabs();
