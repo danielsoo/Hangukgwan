@@ -650,30 +650,41 @@
     });
   }
 
-  async function addTableToZone(zone) {
+  function addTableToZone(zone) {
     const unplaced = tables.filter((t) => t.zone_id == null);
+    $("#addTableToZoneTitle").textContent = `"${zone.name}"에 테이블 추가`;
+    const grid = $("#addTableToZoneGrid");
+    grid.innerHTML = "";
     if (unplaced.length === 0) {
-      alert("배치할 수 있는 테이블이 없습니다. 먼저 위에서 새 테이블을 추가해주세요.");
-      return;
+      grid.innerHTML = `<div class="table-picker-empty">배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.</div>`;
+    } else {
+      unplaced
+        .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10))
+        .forEach((t) => {
+          const btn = document.createElement("button");
+          btn.className = "table-picker-btn";
+          btn.textContent = t.label || t.number;
+          btn.onclick = async () => {
+            await fetch(`/api/tables/${t.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ zoneId: zone.id, x: 10, y: 10 }),
+            });
+            t.zone_id = zone.id;
+            t.x = 10;
+            t.y = 10;
+            $("#addTableToZoneBackdrop").hidden = true;
+            renderFloorPlan();
+          };
+          grid.appendChild(btn);
+        });
     }
-    const list = unplaced.map((t) => t.label || t.number).join(", ");
-    const input = prompt(`이 구역에 추가할 테이블 번호를 입력하세요.\n배치 가능한 테이블: ${list}`);
-    if (!input) return;
-    const target = unplaced.find((t) => String(t.label) === input.trim() || String(t.number) === input.trim());
-    if (!target) {
-      alert("해당 번호의 배치 가능한 테이블을 찾을 수 없습니다.");
-      return;
-    }
-    await fetch(`/api/tables/${target.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ zoneId: zone.id, x: 10, y: 10 }),
-    });
-    target.zone_id = zone.id;
-    target.x = 10;
-    target.y = 10;
-    renderFloorPlan();
+    $("#addTableToZoneBackdrop").hidden = false;
   }
+  $("#addTableToZoneClose").onclick = () => ($("#addTableToZoneBackdrop").hidden = true);
+  $("#addTableToZoneBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "addTableToZoneBackdrop") $("#addTableToZoneBackdrop").hidden = true;
+  });
 
   function renderFloorPlan() {
     const wrap = $("#floorPlan");

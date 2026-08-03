@@ -179,6 +179,15 @@ input, select, button, textarea { font-family: inherit; }
 .danger-btn { background: #fff; color: var(--red); border: 1px solid var(--red); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
 
 .order-detail-modal { max-width: 420px; }
+.add-table-zone-modal { max-width: 420px; }
+.add-table-zone-modal h2 { margin: 0 0 4px; }
+.table-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; margin-top: 14px; }
+.table-picker-btn {
+  padding: 10px 4px; border: 1px solid var(--line); border-radius: 8px; background: #fff; cursor: pointer;
+  font-weight: 700; font-size: 14px; color: var(--ink);
+}
+.table-picker-btn:hover { border-color: var(--red); color: var(--red); background: #fdf3f2; }
+.table-picker-empty { color: var(--muted); font-size: 13px; padding: 16px 0; text-align: center; }
 
 @media (max-width: 900px) {
   .orders-board { grid-template-columns: 1fr 1fr; }
