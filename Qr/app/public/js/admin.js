@@ -117,7 +117,7 @@
     knownOrderIds = new Set(fresh.map((o) => o.id));
     renderOrders();
     renderTables();
-    if (!$("#floorPlanWrap").hidden) renderFloorPlan();
+    if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber);
 
     if (!isFirstLoad && newlyArrived.length > 0) {
@@ -510,6 +510,12 @@
   // Height reserved at the top of every zone for its label / "+ 테이블" / ✕
   // buttons — tables can never be dragged or placed up into this strip.
   const ZONE_HEADER_HEIGHT = 34;
+  // True while any zone/table drag or resize is in progress. The live poll
+  // rebuilds the whole floor plan from scratch (see loadOrders below) —
+  // doing that mid-drag would rip out the element being dragged and make it
+  // look like it teleports back to its last saved spot, so we skip that
+  // rebuild until the interaction finishes.
+  let floorPlanDragging = false;
   // Generic drag helper: mousedown+drag moves the element (position: absolute
   // inside a position: relative parent); a small movement threshold tells a
   // real drag apart from a plain click, so tapping a table still opens its
@@ -522,6 +528,11 @@
     el.addEventListener("mousedown", (e) => {
       if (e.target.closest(".resize-handle") || e.target.closest(".zone-label") || e.target.closest(".zone-del") || e.target.closest(".zone-add-btn") || e.target.closest(".table-unassign")) return;
       e.preventDefault();
+      // A table sits inside its zone's DOM element, which has its own drag
+      // handler for moving the zone — without this, starting a table drag
+      // would bubble up and start dragging the zone underneath it too.
+      e.stopPropagation();
+      floorPlanDragging = true;
       moved = false;
       const startMouseX = e.clientX;
       const startMouseY = e.clientY;
@@ -543,6 +554,7 @@
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         if (moved) opts.onEnd(parseFloat(el.style.left), parseFloat(el.style.top));
+        floorPlanDragging = false;
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
@@ -569,6 +581,7 @@
       // mousedown from bubbling) — suppress that one click so resizing a
       // table doesn't also pop open its detail modal.
       el._suppressClick = true;
+      floorPlanDragging = true;
       const startMouseX = e.clientX;
       const startMouseY = e.clientY;
       const rect = el.getBoundingClientRect();
@@ -588,6 +601,7 @@
         document.removeEventListener("mouseup", onUp);
         opts.onEnd(parseFloat(el.style.width), parseFloat(el.style.height));
         setTimeout(() => (el._suppressClick = false), 0);
+        floorPlanDragging = false;
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
