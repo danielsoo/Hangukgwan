@@ -138,11 +138,18 @@ async function run() {
 
   if (store.tables.length === 0) {
     const DEFAULT_TABLE_COUNT = parseInt(process.env.DEFAULT_TABLE_COUNT || "40", 10);
-    for (let i = 1; i <= DEFAULT_TABLE_COUNT; i++) {
+    // Skip any table number containing the digit 4 (死 homophone — avoided
+    // in Taiwan the way many buildings skip the 4th/14th/24th floor).
+    let n = 0;
+    let created = 0;
+    while (created < DEFAULT_TABLE_COUNT) {
+      n++;
+      if (String(n).includes("4")) continue;
       const id = nextId("tables");
-      store.tables.push({ id, number: String(i), label: null, sort_order: i });
+      store.tables.push({ id, number: String(n), label: null, sort_order: n });
+      created++;
     }
-    console.log(`Seeded ${DEFAULT_TABLE_COUNT} tables.`);
+    console.log(`Seeded ${DEFAULT_TABLE_COUNT} tables (skipping numbers containing "4").`);
   }
 
   if (!store.settings.admin_password_hash) {

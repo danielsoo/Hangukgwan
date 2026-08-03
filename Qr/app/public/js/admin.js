@@ -509,7 +509,12 @@
       $("#newTableLabel").value = "";
       loadTables();
     } else {
-      alert("이미 존재하는 테이블 번호입니다");
+      const body = await res.json().catch(() => ({}));
+      if (body.error === "unlucky_number") {
+        alert("숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).");
+      } else {
+        alert("이미 존재하는 테이블 번호입니다");
+      }
     }
   };
 

@@ -12,6 +12,7 @@ router.get("/", requireAdmin, (req, res) => {
 router.post("/", requireAdmin, async (req, res) => {
   const { number, label } = req.body || {};
   if (!number) return res.status(400).json({ error: "number_required" });
+  if (String(number).includes("4")) return res.status(400).json({ error: "unlucky_number" });
   if (store.tables.some((t) => t.number === String(number))) {
     return res.status(400).json({ error: "table_exists" });
   }
