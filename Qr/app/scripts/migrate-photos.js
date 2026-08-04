@@ -12,7 +12,7 @@
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
-const { connectDB, store, save, savePhoto } = require("../src/db");
+const { refreshStore, store, save, savePhoto } = require("../src/db");
 
 // Codes whose dish photo was extracted and saved as public/uploads/dish-{code}.jpg
 const CODES_WITH_PHOTOS = [
@@ -29,7 +29,7 @@ async function run() {
     process.exit(1);
   }
 
-  await connectDB();
+  await refreshStore();
   const uploadsDir = path.join(__dirname, "..", "public", "uploads");
 
   const codeToFile = {};

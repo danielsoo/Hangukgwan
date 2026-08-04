@@ -34,7 +34,7 @@ const store = defaultStore();
 
 let db = null;
 let clientPromise = null;
-let readyPromise = null;
+let clientReadyPromise = null;
 
 function getClient() {
   if (!uri) {
@@ -49,26 +49,39 @@ function getClient() {
   return clientPromise;
 }
 
-// Call this before touching `store` or the database. Safe to call many
-// times — the actual connect + load only happens once per running process.
+// Ensures the Mongo client + db handle are ready. Cheap to call repeatedly
+// (memoized for the life of this process) — this does NOT load `store`'s
+// contents; call refreshStore() for that.
 async function connectDB() {
-  if (readyPromise) return readyPromise;
-  readyPromise = (async () => {
+  if (clientReadyPromise) return clientReadyPromise;
+  clientReadyPromise = (async () => {
     const client = await getClient();
     db = client.db(process.env.MONGODB_DB || "hangukgwan");
-
-    const existing = await db.collection("store").findOne({ _id: "main" });
-    if (existing) {
-      Object.assign(store, existing);
-      // Backfill any keys missing (lets us evolve the schema safely later)
-      const defaults = defaultStore();
-      for (const k of Object.keys(defaults)) if (!(k in store)) store[k] = defaults[k];
-      for (const k of Object.keys(defaults.nextId)) if (!(k in store.nextId)) store.nextId[k] = 1;
-    } else {
-      await db.collection("store").insertOne(store);
-    }
   })();
-  return readyPromise;
+  return clientReadyPromise;
+}
+
+// Re-fetches the latest store document from Mongo into the in-memory
+// `store` object. Vercel can keep several separate warm server instances
+// alive at once, each with its own copy of `store` in memory — if an
+// instance only loaded it once at cold-start and never refreshed, a save()
+// from that instance would overwrite newer changes another instance wrote
+// in the meantime with its own stale snapshot (this was the cause of data
+// randomly "resetting"). Call this once at the start of every request (see
+// server.js) so every request always works from the current data before
+// mutating and saving it.
+async function refreshStore() {
+  await connectDB();
+  const existing = await db.collection("store").findOne({ _id: "main" });
+  if (existing) {
+    Object.assign(store, existing);
+    // Backfill any keys missing (lets us evolve the schema safely later)
+    const defaults = defaultStore();
+    for (const k of Object.keys(defaults)) if (!(k in store)) store[k] = defaults[k];
+    for (const k of Object.keys(defaults.nextId)) if (!(k in store.nextId)) store.nextId[k] = 1;
+  } else {
+    await db.collection("store").insertOne(store);
+  }
 }
 
 async function save() {
@@ -104,4 +117,4 @@ async function deletePhoto(id) {
   await db.collection("photos").deleteOne({ _id: new ObjectId(id) });
 }
 
-module.exports = { connectDB, store, save, nextId, savePhoto, getPhoto, deletePhoto };
+module.exports = { connectDB, refreshStore, store, save, nextId, savePhoto, getPhoto, deletePhoto };

@@ -8,7 +8,7 @@
 // After running this, reprint the QR sheet from Admin > 테이블 / QR 코드,
 // since the renumbered tables now point at different URLs.
 require("dotenv").config();
-const { connectDB, store, save } = require("../src/db");
+const { refreshStore, store, save } = require("../src/db");
 
 function isLucky(n) {
   return !String(n).includes("4");
@@ -20,7 +20,7 @@ async function run() {
     process.exit(1);
   }
 
-  await connectDB();
+  await refreshStore();
 
   const usedNumbers = new Set(
     store.tables.map((t) => parseInt(t.number, 10)).filter((n) => !Number.isNaN(n))

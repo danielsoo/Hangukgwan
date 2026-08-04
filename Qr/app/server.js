@@ -4,7 +4,7 @@ const path = require("path");
 const express = require("express");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
-const { connectDB } = require("./src/db");
+const { refreshStore } = require("./src/db");
 const seed = require("./src/seed");
 
 const app = express();
@@ -12,19 +12,22 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json());
 
-// Make sure the database is connected (and seeded on first run) before any
-// route handler touches `store`. This runs once per warm process and is
-// cheap on every request after that.
-let initPromise = null;
-function ensureInit() {
-  if (!initPromise) {
-    initPromise = connectDB().then(() => seed());
-  }
-  return initPromise;
-}
+// Refresh `store` from Mongo before every single request (not just once per
+// warm process) — Vercel can keep multiple separate server instances alive
+// at the same time, each with its own in-memory copy of `store`. Without a
+// per-request refresh, an instance that loaded the data a while ago could
+// save() its stale snapshot over another instance's more recent changes,
+// which is what caused data to randomly appear to "reset". seed() only
+// needs to actually run its first-time setup once per process (its own
+// internal checks make repeat calls cheap no-ops either way).
+let seededOnce = false;
 app.use(async (req, res, next) => {
   try {
-    await ensureInit();
+    await refreshStore();
+    if (!seededOnce) {
+      await seed();
+      seededOnce = true;
+    }
     next();
   } catch (e) {
     console.error("Startup / DB connection failed:", e);
