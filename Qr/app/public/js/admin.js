@@ -588,7 +588,7 @@
                 const d = Math.abs(mine - sx);
                 if (d < bestXDelta) {
                   bestXDelta = d;
-                  bestX = { value: sx, offset: xOffsets[i] };
+                  bestX = { value: sx, offset: xOffsets[i], sib: s };
                 }
               });
             });
@@ -598,23 +598,35 @@
                 const d = Math.abs(mine - sy);
                 if (d < bestYDelta) {
                   bestYDelta = d;
-                  bestY = { value: sy, offset: yOffsets[i] };
+                  bestY = { value: sy, offset: yOffsets[i], sib: s };
                 }
               });
             });
           });
+          // The guide line only runs between the dragged table and the
+          // sibling it snapped to — not all the way across the zone.
           if (bestX && bestXDelta <= SNAP) {
             newX = Math.min(maxX, Math.max(0, bestX.value - bestX.offset));
+            const s = bestX.sib;
+            const spanTop = Math.min(newY, s.top);
+            const spanBottom = Math.max(newY + h, s.top + s.height);
             guideV = document.createElement("div");
             guideV.className = "align-guide align-guide-v";
             guideV.style.left = bestX.value + "px";
+            guideV.style.top = spanTop + "px";
+            guideV.style.height = spanBottom - spanTop + "px";
             el.parentElement.appendChild(guideV);
           }
           if (bestY && bestYDelta <= SNAP) {
             newY = Math.min(maxY, Math.max(minY, bestY.value - bestY.offset));
+            const s = bestY.sib;
+            const spanLeft = Math.min(newX, s.left);
+            const spanRight = Math.max(newX + w, s.left + s.width);
             guideH = document.createElement("div");
             guideH.className = "align-guide align-guide-h";
             guideH.style.top = bestY.value + "px";
+            guideH.style.left = spanLeft + "px";
+            guideH.style.width = spanRight - spanLeft + "px";
             el.parentElement.appendChild(guideH);
           }
         }
@@ -690,49 +702,73 @@
 
         clearGuides();
         if (siblings.length) {
+          // Two kinds of snap: matching another table's exact size (no
+          // natural line to draw), or the growing edge lining up with a
+          // sibling's edge (drawn as a short guide between the two tables
+          // only, not stretched across the whole zone).
           let bestW = null;
+          let bestWGuide = null;
           let bestWDelta = SNAP + 1;
           let bestH = null;
+          let bestHGuide = null;
           let bestHDelta = SNAP + 1;
           siblings.forEach((s) => {
             const dW = Math.abs(w - s.width);
             if (dW < bestWDelta) {
               bestWDelta = dW;
               bestW = s.width;
+              bestWGuide = null;
             }
             [s.left, s.left + s.width / 2, s.left + s.width].forEach((tx) => {
               const d = Math.abs(myLeft + w - tx);
               if (d < bestWDelta) {
                 bestWDelta = d;
                 bestW = tx - myLeft;
+                bestWGuide = { x: tx, sib: s };
               }
             });
             const dH = Math.abs(h - s.height);
             if (dH < bestHDelta) {
               bestHDelta = dH;
               bestH = s.height;
+              bestHGuide = null;
             }
             [s.top, s.top + s.height / 2, s.top + s.height].forEach((ty) => {
               const d = Math.abs(myTop + h - ty);
               if (d < bestHDelta) {
                 bestHDelta = d;
                 bestH = ty - myTop;
+                bestHGuide = { y: ty, sib: s };
               }
             });
           });
           if (bestW != null && bestWDelta <= SNAP) {
             w = Math.min(maxW, Math.max(opts.minWidth || 60, bestW));
-            guideV = document.createElement("div");
-            guideV.className = "align-guide align-guide-v";
-            guideV.style.left = myLeft + w + "px";
-            el.parentElement.appendChild(guideV);
+            if (bestWGuide) {
+              const s = bestWGuide.sib;
+              const spanTop = Math.min(myTop, s.top);
+              const spanBottom = Math.max(myTop + h, s.top + s.height);
+              guideV = document.createElement("div");
+              guideV.className = "align-guide align-guide-v";
+              guideV.style.left = bestWGuide.x + "px";
+              guideV.style.top = spanTop + "px";
+              guideV.style.height = spanBottom - spanTop + "px";
+              el.parentElement.appendChild(guideV);
+            }
           }
           if (bestH != null && bestHDelta <= SNAP) {
             h = Math.min(maxH, Math.max(opts.minHeight || 60, bestH));
-            guideH = document.createElement("div");
-            guideH.className = "align-guide align-guide-h";
-            guideH.style.top = myTop + h + "px";
-            el.parentElement.appendChild(guideH);
+            if (bestHGuide) {
+              const s = bestHGuide.sib;
+              const spanLeft = Math.min(myLeft, s.left);
+              const spanRight = Math.max(myLeft + w, s.left + s.width);
+              guideH = document.createElement("div");
+              guideH.className = "align-guide align-guide-h";
+              guideH.style.top = bestHGuide.y + "px";
+              guideH.style.left = spanLeft + "px";
+              guideH.style.width = spanRight - spanLeft + "px";
+              el.parentElement.appendChild(guideH);
+            }
           }
         }
 
