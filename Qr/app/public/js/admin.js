@@ -663,15 +663,86 @@
       // opts.bounded: clamp so the table can't be resized past its zone's edge.
       const maxW = opts.bounded ? el.parentElement.clientWidth - el.offsetLeft : Infinity;
       const maxH = opts.bounded ? el.parentElement.clientHeight - el.offsetTop : Infinity;
+
+      // Snap while resizing too: match another table's width/height exactly
+      // (so a row ends up the same size), or line the growing right/bottom
+      // edge up with another table's edge (so gaps stay even).
+      const SNAP = 6;
+      const siblings = opts.snapEnabled ? opts.getSnapSiblings() : [];
+      const myLeft = el.offsetLeft;
+      const myTop = el.offsetTop;
+      let guideV = null;
+      let guideH = null;
+      function clearGuides() {
+        if (guideV) {
+          guideV.remove();
+          guideV = null;
+        }
+        if (guideH) {
+          guideH.remove();
+          guideH = null;
+        }
+      }
+
       function onMove(e2) {
-        const w = Math.min(maxW, Math.max(opts.minWidth || 60, startW + (e2.clientX - startMouseX)));
-        const h = Math.min(maxH, Math.max(opts.minHeight || 60, startH + (e2.clientY - startMouseY)));
+        let w = Math.min(maxW, Math.max(opts.minWidth || 60, startW + (e2.clientX - startMouseX)));
+        let h = Math.min(maxH, Math.max(opts.minHeight || 60, startH + (e2.clientY - startMouseY)));
+
+        clearGuides();
+        if (siblings.length) {
+          let bestW = null;
+          let bestWDelta = SNAP + 1;
+          let bestH = null;
+          let bestHDelta = SNAP + 1;
+          siblings.forEach((s) => {
+            const dW = Math.abs(w - s.width);
+            if (dW < bestWDelta) {
+              bestWDelta = dW;
+              bestW = s.width;
+            }
+            [s.left, s.left + s.width / 2, s.left + s.width].forEach((tx) => {
+              const d = Math.abs(myLeft + w - tx);
+              if (d < bestWDelta) {
+                bestWDelta = d;
+                bestW = tx - myLeft;
+              }
+            });
+            const dH = Math.abs(h - s.height);
+            if (dH < bestHDelta) {
+              bestHDelta = dH;
+              bestH = s.height;
+            }
+            [s.top, s.top + s.height / 2, s.top + s.height].forEach((ty) => {
+              const d = Math.abs(myTop + h - ty);
+              if (d < bestHDelta) {
+                bestHDelta = d;
+                bestH = ty - myTop;
+              }
+            });
+          });
+          if (bestW != null && bestWDelta <= SNAP) {
+            w = Math.min(maxW, Math.max(opts.minWidth || 60, bestW));
+            guideV = document.createElement("div");
+            guideV.className = "align-guide align-guide-v";
+            guideV.style.left = myLeft + w + "px";
+            el.parentElement.appendChild(guideV);
+          }
+          if (bestH != null && bestHDelta <= SNAP) {
+            h = Math.min(maxH, Math.max(opts.minHeight || 60, bestH));
+            guideH = document.createElement("div");
+            guideH.className = "align-guide align-guide-h";
+            guideH.style.top = myTop + h + "px";
+            el.parentElement.appendChild(guideH);
+          }
+        }
+
         el.style.width = w + "px";
         el.style.height = h + "px";
       }
       function onUp() {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        clearGuides();
         opts.onEnd(parseFloat(el.style.width), parseFloat(el.style.height));
         setTimeout(() => (el._suppressClick = false), 0);
         floorPlanDragging = false;
@@ -722,14 +793,16 @@
       renderFloorPlan();
     };
 
+    const getSnapSiblings = () =>
+      [...container.querySelectorAll(".table-block")]
+        .filter((sib) => sib !== el)
+        .map((sib) => ({ left: sib.offsetLeft, top: sib.offsetTop, width: sib.offsetWidth, height: sib.offsetHeight }));
+
     makeDraggable(el, {
       bounded: true,
       minY: ZONE_HEADER_HEIGHT,
       snapEnabled: true,
-      getSnapSiblings: () =>
-        [...container.querySelectorAll(".table-block")]
-          .filter((sib) => sib !== el)
-          .map((sib) => ({ left: sib.offsetLeft, top: sib.offsetTop, width: sib.offsetWidth, height: sib.offsetHeight })),
+      getSnapSiblings,
       onEnd: async (x, y) => {
         t.x = x;
         t.y = y;
@@ -745,6 +818,8 @@
       bounded: true,
       minWidth: 44,
       minHeight: 44,
+      snapEnabled: true,
+      getSnapSiblings,
       onEnd: async (width, height) => {
         t.width = width;
         t.height = height;
