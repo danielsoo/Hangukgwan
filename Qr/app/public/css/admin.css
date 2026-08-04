@@ -148,6 +148,9 @@ input, select, button, textarea { font-family: inherit; }
 .table-block.has-order { border-color: var(--red); background: #fdf3f2; }
 .table-block .tb-party { font-size: 9px; font-weight: 600; color: var(--muted); margin-top: 1px; }
 .table-block .resize-handle { background: linear-gradient(135deg, transparent 50%, var(--red) 50%); }
+.align-guide { position: absolute; background: #2f80ed; pointer-events: none; z-index: 50; }
+.align-guide-v { top: 0; bottom: 0; width: 1px; }
+.align-guide-h { left: 0; right: 0; height: 1px; }
 
 /* Settings */
 .settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 480px; margin-bottom: 20px; }

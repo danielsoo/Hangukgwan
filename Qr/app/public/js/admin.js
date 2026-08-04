@@ -543,16 +543,89 @@
       const maxX = opts.bounded ? Math.max(0, el.parentElement.clientWidth - rect.width) : Infinity;
       const maxY = opts.bounded ? Math.max(0, el.parentElement.clientHeight - rect.height) : Infinity;
       const minY = opts.minY || 0;
+
+      // Alignment guides: snap to other tables' left/center/right edges (and
+      // top/center/bottom) when close, like Figma/PowerPoint's smart guides
+      // — so lining up a row of tables just clicks into place.
+      const SNAP = 6;
+      const siblings = opts.snapEnabled ? opts.getSnapSiblings() : [];
+      let guideV = null;
+      let guideH = null;
+      function clearGuides() {
+        if (guideV) {
+          guideV.remove();
+          guideV = null;
+        }
+        if (guideH) {
+          guideH.remove();
+          guideH = null;
+        }
+      }
+
       function onMove(e2) {
         const dx = e2.clientX - startMouseX;
         const dy = e2.clientY - startMouseY;
         if (Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
-        el.style.left = Math.min(maxX, Math.max(0, startX + dx)) + "px";
-        el.style.top = Math.min(maxY, Math.max(minY, startY + dy)) + "px";
+        let newX = Math.min(maxX, Math.max(0, startX + dx));
+        let newY = Math.min(maxY, Math.max(minY, startY + dy));
+
+        clearGuides();
+        if (siblings.length) {
+          const w = rect.width;
+          const h = rect.height;
+          const xOffsets = [0, w / 2, w]; // left, center, right
+          const yOffsets = [0, h / 2, h]; // top, center, bottom
+          let bestX = null;
+          let bestXDelta = SNAP + 1;
+          let bestY = null;
+          let bestYDelta = SNAP + 1;
+          siblings.forEach((s) => {
+            const sXs = [s.left, s.left + s.width / 2, s.left + s.width];
+            const sYs = [s.top, s.top + s.height / 2, s.top + s.height];
+            xOffsets.forEach((offset, i) => {
+              const mine = newX + offset;
+              sXs.forEach((sx) => {
+                const d = Math.abs(mine - sx);
+                if (d < bestXDelta) {
+                  bestXDelta = d;
+                  bestX = { value: sx, offset: xOffsets[i] };
+                }
+              });
+            });
+            yOffsets.forEach((offset, i) => {
+              const mine = newY + offset;
+              sYs.forEach((sy) => {
+                const d = Math.abs(mine - sy);
+                if (d < bestYDelta) {
+                  bestYDelta = d;
+                  bestY = { value: sy, offset: yOffsets[i] };
+                }
+              });
+            });
+          });
+          if (bestX && bestXDelta <= SNAP) {
+            newX = Math.min(maxX, Math.max(0, bestX.value - bestX.offset));
+            guideV = document.createElement("div");
+            guideV.className = "align-guide align-guide-v";
+            guideV.style.left = bestX.value + "px";
+            el.parentElement.appendChild(guideV);
+          }
+          if (bestY && bestYDelta <= SNAP) {
+            newY = Math.min(maxY, Math.max(minY, bestY.value - bestY.offset));
+            guideH = document.createElement("div");
+            guideH.className = "align-guide align-guide-h";
+            guideH.style.top = bestY.value + "px";
+            el.parentElement.appendChild(guideH);
+          }
+        }
+
+        el.style.left = newX + "px";
+        el.style.top = newY + "px";
       }
       function onUp() {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        clearGuides();
         if (moved) opts.onEnd(parseFloat(el.style.left), parseFloat(el.style.top));
         floorPlanDragging = false;
       }
@@ -652,6 +725,11 @@
     makeDraggable(el, {
       bounded: true,
       minY: ZONE_HEADER_HEIGHT,
+      snapEnabled: true,
+      getSnapSiblings: () =>
+        [...container.querySelectorAll(".table-block")]
+          .filter((sib) => sib !== el)
+          .map((sib) => ({ left: sib.offsetLeft, top: sib.offsetTop, width: sib.offsetWidth, height: sib.offsetHeight })),
       onEnd: async (x, y) => {
         t.x = x;
         t.y = y;
