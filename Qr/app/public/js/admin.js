@@ -543,6 +543,11 @@
       const maxX = opts.bounded ? Math.max(0, el.parentElement.clientWidth - rect.width) : Infinity;
       const maxY = opts.bounded ? Math.max(0, el.parentElement.clientHeight - rect.height) : Infinity;
       const minY = opts.minY || 0;
+      // Tables must not be able to overlap each other — track the last
+      // position that didn't overlap any sibling, and hold there instead of
+      // passing through when the pointer tries to drag one table into another.
+      let lastValidX = startX;
+      let lastValidY = startY;
 
       // Alignment guides: snap to other tables' left/center/right edges (and
       // top/center/bottom) when close, like Figma/PowerPoint's smart guides
@@ -631,6 +636,22 @@
           }
         }
 
+        // Prevent tables from overlapping each other: if this position
+        // would overlap a sibling, hold at the last position that didn't
+        // (so a table bumps into its neighbor instead of passing through it).
+        if (siblings.length) {
+          const overlapsAny = siblings.some(
+            (s) => newX < s.left + s.width && newX + rect.width > s.left && newY < s.top + s.height && newY + rect.height > s.top
+          );
+          if (overlapsAny) {
+            newX = lastValidX;
+            newY = lastValidY;
+          } else {
+            lastValidX = newX;
+            lastValidY = newY;
+          }
+        }
+
         el.style.left = newX + "px";
         el.style.top = newY + "px";
       }
@@ -685,6 +706,7 @@
       const myTop = el.offsetTop;
       let guideV = null;
       let guideH = null;
+      let sizeMarks = [];
       function clearGuides() {
         if (guideV) {
           guideV.remove();
@@ -694,6 +716,30 @@
           guideH.remove();
           guideH = null;
         }
+        sizeMarks.forEach((m) => m.remove());
+        sizeMarks = [];
+      }
+      // Independent (non-connecting) markers drawn on BOTH tables' edges to
+      // confirm a pure size match (e.g. this table's width now equals a
+      // table beside it) — unlike the alignment guide above, these don't
+      // need to touch since the two tables may not be lined up at all.
+      function markV(x, top, bottom) {
+        const m = document.createElement("div");
+        m.className = "size-match-mark size-match-mark-v";
+        m.style.left = x + "px";
+        m.style.top = top + "px";
+        m.style.height = bottom - top + "px";
+        el.parentElement.appendChild(m);
+        sizeMarks.push(m);
+      }
+      function markH(y, left, right) {
+        const m = document.createElement("div");
+        m.className = "size-match-mark size-match-mark-h";
+        m.style.top = y + "px";
+        m.style.left = left + "px";
+        m.style.width = right - left + "px";
+        el.parentElement.appendChild(m);
+        sizeMarks.push(m);
       }
 
       function onMove(e2) {
@@ -708,9 +754,11 @@
           // only, not stretched across the whole zone).
           let bestW = null;
           let bestWGuide = null;
+          let bestWSizeSib = null;
           let bestWDelta = SNAP + 1;
           let bestH = null;
           let bestHGuide = null;
+          let bestHSizeSib = null;
           let bestHDelta = SNAP + 1;
           siblings.forEach((s) => {
             const dW = Math.abs(w - s.width);
@@ -718,6 +766,7 @@
               bestWDelta = dW;
               bestW = s.width;
               bestWGuide = null;
+              bestWSizeSib = s;
             }
             [s.left, s.left + s.width / 2, s.left + s.width].forEach((tx) => {
               const d = Math.abs(myLeft + w - tx);
@@ -725,6 +774,7 @@
                 bestWDelta = d;
                 bestW = tx - myLeft;
                 bestWGuide = { x: tx, sib: s };
+                bestWSizeSib = null;
               }
             });
             const dH = Math.abs(h - s.height);
@@ -732,6 +782,7 @@
               bestHDelta = dH;
               bestH = s.height;
               bestHGuide = null;
+              bestHSizeSib = s;
             }
             [s.top, s.top + s.height / 2, s.top + s.height].forEach((ty) => {
               const d = Math.abs(myTop + h - ty);
@@ -739,6 +790,7 @@
                 bestHDelta = d;
                 bestH = ty - myTop;
                 bestHGuide = { y: ty, sib: s };
+                bestHSizeSib = null;
               }
             });
           });
@@ -754,6 +806,14 @@
               guideV.style.top = spanTop + "px";
               guideV.style.height = spanBottom - spanTop + "px";
               el.parentElement.appendChild(guideV);
+            } else if (bestWSizeSib) {
+              // Pure size match (widths now equal) — mark both tables' own
+              // left/right edges independently, no connecting line.
+              const s = bestWSizeSib;
+              markV(myLeft, myTop, myTop + h);
+              markV(myLeft + w, myTop, myTop + h);
+              markV(s.left, s.top, s.top + s.height);
+              markV(s.left + s.width, s.top, s.top + s.height);
             }
           }
           if (bestH != null && bestHDelta <= SNAP) {
@@ -768,8 +828,31 @@
               guideH.style.left = spanLeft + "px";
               guideH.style.width = spanRight - spanLeft + "px";
               el.parentElement.appendChild(guideH);
+            } else if (bestHSizeSib) {
+              // Pure size match (heights now equal) — mark both tables' own
+              // top/bottom edges independently, no connecting line.
+              const s = bestHSizeSib;
+              markH(myTop, myLeft, myLeft + w);
+              markH(myTop + h, myLeft, myLeft + w);
+              markH(s.top, s.left, s.left + s.width);
+              markH(s.top + s.height, s.left, s.left + s.width);
             }
           }
+        }
+
+        // Prevent tables from overlapping each other while resizing — stop
+        // growing right where a table to the right/below already sits.
+        if (siblings.length) {
+          siblings.forEach((s) => {
+            const vOverlap = myTop < s.top + s.height && myTop + h > s.top;
+            if (vOverlap && s.left >= myLeft) w = Math.min(w, s.left - myLeft);
+          });
+          siblings.forEach((s) => {
+            const hOverlap = myLeft < s.left + w && myLeft + w > s.left;
+            if (hOverlap && s.top >= myTop) h = Math.min(h, s.top - myTop);
+          });
+          w = Math.max(opts.minWidth || 60, w);
+          h = Math.max(opts.minHeight || 60, h);
         }
 
         el.style.width = w + "px";

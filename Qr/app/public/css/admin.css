@@ -152,6 +152,13 @@ input, select, button, textarea { font-family: inherit; }
 .align-guide-v { width: 0; border-left: 1.5px dashed #2f80ed; }
 .align-guide-h { height: 0; border-top: 1.5px dashed #2f80ed; }
 
+/* Size-match markers: drawn independently on both tables' edges when a
+   resize makes their width/height equal — solid, and deliberately not
+   connected to each other (unlike the dashed alignment guide above). */
+.size-match-mark { position: absolute; pointer-events: none; z-index: 50; }
+.size-match-mark-v { width: 0; border-left: 2px solid #2f80ed; }
+.size-match-mark-h { height: 0; border-top: 2px solid #2f80ed; }
+
 /* Settings */
 .settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 480px; margin-bottom: 20px; }
 .settings-card h3 { margin-top: 0; }
