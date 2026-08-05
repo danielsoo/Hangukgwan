@@ -704,6 +704,14 @@
       const siblings = opts.snapEnabled ? opts.getSnapSiblings() : [];
       const myLeft = el.offsetLeft;
       const myTop = el.offsetTop;
+      // Only match/snap against tables that are actually nearby — matching
+      // sizes or edges with something clear across the zone looks wrong.
+      const PROXIMITY = 150;
+      function isNearby(s, w, h) {
+        const dx = Math.max(myLeft - (s.left + s.width), s.left - (myLeft + w), 0);
+        const dy = Math.max(myTop - (s.top + s.height), s.top - (myTop + h), 0);
+        return Math.sqrt(dx * dx + dy * dy) <= PROXIMITY;
+      }
       let guideV = null;
       let guideH = null;
       let sizeMarks = [];
@@ -760,7 +768,7 @@
           let bestHGuide = null;
           let bestHSizeSib = null;
           let bestHDelta = SNAP + 1;
-          siblings.forEach((s) => {
+          siblings.filter((s) => isNearby(s, w, h)).forEach((s) => {
             const dW = Math.abs(w - s.width);
             if (dW < bestWDelta) {
               bestWDelta = dW;
