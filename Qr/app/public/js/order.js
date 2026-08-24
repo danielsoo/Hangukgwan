@@ -5,6 +5,10 @@
   // fresh load happens naturally once a table is settled and re-scanned by
   // the next party (see the inactivity lock + party-size prompt above).
   let lang = "zh";
+  // Defaults to Taiwan dollars (this is a Taiwan restaurant) — same
+  // reset-on-fresh-load behavior as language, in case a customer changed it
+  // and moved on before the next party scans the QR code.
+  let currency = "TWD";
   let categories = [];
   let cart = []; // { itemId, qty, option, note, item }
   let currentItem = null;
@@ -26,6 +30,7 @@
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
   const LANG_PILL_LABEL = { zh: "中文", ko: "한국어", en: "English" };
+  const CURRENCY_SYMBOL = { TWD: "NT$", KRW: "₩", USD: "US$" };
 
   function nameFor(obj) {
     return obj[`name_${lang}`] || obj.name_zh || obj.name_en || obj.name_ko || "";
@@ -44,12 +49,14 @@
     $("#tableBadge").textContent = `${t("table")} ${tableNumber}`;
     $("#langPillLabel").textContent = LANG_PILL_LABEL[lang] || "Language";
     document.querySelectorAll(".lang-option").forEach((b) => {
-      b.classList.toggle("active", b.dataset.lang === lang);
+      if (b.dataset.lang) b.classList.toggle("active", b.dataset.lang === lang);
+      if (b.dataset.currency) b.classList.toggle("active", b.dataset.currency === currency);
     });
+    $("#currencyPillLabel").textContent = CURRENCY_SYMBOL[currency] || "NT$";
   }
 
   function money(n) {
-    return `$${n}`;
+    return `${CURRENCY_SYMBOL[currency] || "NT$"}${n}`;
   }
 
   let toastTimer = null;
@@ -508,7 +515,7 @@
   $("#langBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "langBackdrop") $("#langBackdrop").hidden = true;
   });
-  document.querySelectorAll(".lang-option").forEach((b) => {
+  document.querySelectorAll(".lang-option[data-lang]").forEach((b) => {
     b.onclick = () => {
       lang = b.dataset.lang;
       applyStaticI18n();
@@ -517,6 +524,23 @@
       renderMenu();
       renderCartFab();
       $("#langBackdrop").hidden = true;
+    };
+  });
+
+  // Currency sheet — just swaps the displayed symbol (no exchange-rate
+  // conversion), same reset-per-load behavior as the language picker above.
+  $("#currencyPillBtn").onclick = () => ($("#currencyBackdrop").hidden = false);
+  $("#currencySheetClose").onclick = () => ($("#currencyBackdrop").hidden = true);
+  $("#currencyBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "currencyBackdrop") $("#currencyBackdrop").hidden = true;
+  });
+  document.querySelectorAll(".lang-option[data-currency]").forEach((b) => {
+    b.onclick = () => {
+      currency = b.dataset.currency;
+      applyStaticI18n();
+      renderMenu();
+      renderCartFab();
+      $("#currencyBackdrop").hidden = true;
     };
   });
 

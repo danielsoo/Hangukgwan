@@ -168,7 +168,7 @@
     card.innerHTML = `
       <div class="order-card-top"><span>테이블 ${o.table_number}</span><span class="order-card-time">${time}</span></div>
       <div class="order-card-items">${itemsHtml}</div>
-      <div class="order-card-total">$${o.total}</div>
+      <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
     `;
     const actions = card.querySelector(`#actions-${o.id}`);
@@ -217,7 +217,7 @@
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
             <span>${it.name_ko || it.name_zh} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">메모: ${it.note}</small>` : ""}</span>
-            <span>$${it.unit_price * it.qty}</span>
+            <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
       .join("");
@@ -226,7 +226,7 @@
       <p style="color:#999;font-size:13px;">${time} · 상태: ${STATUS_LABEL[o.status]}</p>
       ${itemsHtml}
       ${o.note ? `<p style="margin-top:10px;"><strong>메모:</strong>${o.note}</p>` : ""}
-      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">합계 $${o.total}</div>
+      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">합계 NT$${o.total}</div>
     `;
     $("#orderDetailBackdrop").hidden = false;
   }
@@ -263,7 +263,7 @@
           <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="사진을 추가해주세요">사진<br>없음</span>`}</td>
           <td>${item.code || ""}</td>
           <td>${item.name_ko || item.name_zh}</td>
-          <td>$${item.price}</td>
+          <td>NT$${item.price}</td>
           <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? "판매 중" : "품절"}</span></td>
         `;
         tr.onclick = () => openItemModal(item);
@@ -403,7 +403,7 @@
       const chip = document.createElement("div");
       chip.className = "table-chip" + (unpaid.length > 0 ? " has-order" : "");
       const badge = unpaid.length > 0
-        ? `<div class="table-order-badge active">주문 ${unpaid.length}건 · $${unpaid.reduce((s, o) => s + o.total, 0)}</div>`
+        ? `<div class="table-order-badge active">주문 ${unpaid.length}건 · NT$${unpaid.reduce((s, o) => s + o.total, 0)}</div>`
         : `<div class="table-order-badge empty">비어있음</div>`;
       const partyBadge = t.party_size ? `<div class="table-party-badge">👥 ${t.party_size}인</div>` : "";
       chip.innerHTML = `<button class="del-btn" title="삭제">✕</button><div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
@@ -431,7 +431,7 @@
     const header = `
       <h2>테이블 ${label || tableNumber}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
-        <p style="color:var(--muted);font-size:13px;margin:0;">현재 미결제 합계: <strong>$${unpaidTotal}</strong></p>
+        <p style="color:var(--muted);font-size:13px;margin:0;">현재 미결제 합계: <strong>NT$${unpaidTotal}</strong></p>
         ${payAllBtn}
       </div>
     `;
@@ -441,7 +441,7 @@
     const footer = tableOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          <p style="font-size:15px;margin:0;">미결제 합계: <strong>$${unpaidTotal}</strong></p>
+          <p style="font-size:15px;margin:0;">미결제 합계: <strong>NT$${unpaidTotal}</strong></p>
           ${payAllBtn}
         </div>
       `
@@ -476,7 +476,7 @@
         (it) =>
           `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
             <span>${it.name_ko || it.name_zh}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">메모: ${it.note}</small>` : ""}</span>
-            <span>$${it.unit_price * it.qty}</span>
+            <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
       .join("");
@@ -491,7 +491,7 @@
         </div>
         ${itemsHtml}
         ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">주문 메모: ${o.note}</p>` : ""}
-        <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">소계 $${o.total}</div>
+        <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">소계 NT$${o.total}</div>
       </div>
     `;
   }

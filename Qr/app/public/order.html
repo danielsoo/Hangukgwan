@@ -13,6 +13,7 @@
 
   <div class="hero" id="hero">
     <button class="history-pill" id="historyBtn" aria-label="Order history">🧾</button>
+    <button class="lang-pill" id="currencyPillBtn"><span id="currencyPillLabel">NT$</span></button>
     <button class="lang-pill" id="langPillBtn"><span id="langPillLabel">Language</span></button>
   </div>
 
@@ -162,6 +163,19 @@
         <button data-lang="zh" class="lang-option">中文</button>
         <button data-lang="ko" class="lang-option">한국어</button>
         <button data-lang="en" class="lang-option">English</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Currency sheet -->
+  <div class="sheet-backdrop" id="currencyBackdrop" hidden>
+    <div class="sheet lang-sheet">
+      <button class="sheet-close" id="currencySheetClose">✕</button>
+      <h2 data-i18n="chooseCurrency">選擇幣別</h2>
+      <div class="lang-options">
+        <button data-currency="TWD" class="lang-option">NT$ 台幣</button>
+        <button data-currency="KRW" class="lang-option">₩ 원화</button>
+        <button data-currency="USD" class="lang-option">US$ 美金</button>
       </div>
     </div>
   </div>
