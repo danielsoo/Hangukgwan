@@ -1,7 +1,8 @@
 const express = require("express");
 const multer = require("multer");
 const { store, save, nextId, savePhoto, deletePhoto } = require("../db");
-const { requireAdmin } = require("../auth");
+const { requireAdmin, requirePermission } = require("../auth");
+const canEditMenu = requirePermission("menuEdit");
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ router.get("/admin/categories", requireAdmin, (req, res) => {
   res.json([...store.categories].sort((a, b) => a.sort_order - b.sort_order));
 });
 
-router.post("/admin/items", requireAdmin, async (req, res) => {
+router.post("/admin/items", canEditMenu, async (req, res) => {
   const b = req.body || {};
   if (!b.category_id || !b.name_zh || b.price == null) {
     return res.status(400).json({ error: "missing_fields" });
@@ -77,7 +78,7 @@ router.post("/admin/items", requireAdmin, async (req, res) => {
   res.status(201).json(item);
 });
 
-router.put("/admin/items/:id", requireAdmin, async (req, res) => {
+router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const item = store.menuItems.find((i) => i.id === id);
   if (!item) return res.status(404).json({ error: "not_found" });
@@ -95,14 +96,14 @@ router.put("/admin/items/:id", requireAdmin, async (req, res) => {
   res.json(item);
 });
 
-router.delete("/admin/items/:id", requireAdmin, async (req, res) => {
+router.delete("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.menuItems = store.menuItems.filter((i) => i.id !== id);
   await save();
   res.json({ ok: true });
 });
 
-router.post("/admin/items/:id/photo", requireAdmin, upload.single("photo"), async (req, res) => {
+router.post("/admin/items/:id/photo", canEditMenu, upload.single("photo"), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const item = store.menuItems.find((i) => i.id === id);
   if (!item) return res.status(404).json({ error: "not_found" });
@@ -120,7 +121,7 @@ router.post("/admin/items/:id/photo", requireAdmin, upload.single("photo"), asyn
 });
 
 // Admin: categories management
-router.post("/admin/categories", requireAdmin, async (req, res) => {
+router.post("/admin/categories", canEditMenu, async (req, res) => {
   const { key, name_zh, name_ko, name_en } = req.body || {};
   if (!key || !name_zh) return res.status(400).json({ error: "missing_fields" });
   const maxSort = store.categories.reduce((m, c) => Math.max(m, c.sort_order), 0);

@@ -1,7 +1,8 @@
 const express = require("express");
 const QRCode = require("qrcode");
 const { store, save, nextId, getPhoto } = require("../db");
-const { requireAdmin } = require("../auth");
+const { requireAdmin, requirePermission } = require("../auth");
+const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
 
@@ -33,7 +34,7 @@ router.get("/", requireAdmin, (req, res) => {
   res.json([...store.tables].sort((a, b) => a.sort_order - b.sort_order));
 });
 
-router.post("/", requireAdmin, async (req, res) => {
+router.post("/", canEditTables, async (req, res) => {
   const { number, label } = req.body || {};
   if (!number) return res.status(400).json({ error: "number_required" });
   if (String(number).includes("4")) return res.status(400).json({ error: "unlucky_number" });
@@ -62,7 +63,7 @@ router.post("/", requireAdmin, async (req, res) => {
 // Admin: move/resize a table within its zone on the floor-plan canvas (or
 // assign/unassign it to a zone, or rename its label). x/y are relative to
 // the zone the table belongs to, not the overall canvas.
-router.patch("/:id", requireAdmin, async (req, res) => {
+router.patch("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const table = store.tables.find((t) => t.id === id);
   if (!table) return res.status(404).json({ error: "not_found" });
@@ -103,7 +104,7 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   res.json({ party_size: table.party_size });
 });
 
-router.delete("/:id", requireAdmin, async (req, res) => {
+router.delete("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.tables = store.tables.filter((t) => t.id !== id);
   await save();

@@ -15,6 +15,18 @@
   let knownOrderIds = new Set();
   let openTableNumber = null;
 
+  // ---------- Role / permissions ----------
+  // "owner" (사장) always has every permission; "staff" (직원) only has
+  // whatever the owner has switched on below. Populated from /api/auth/me
+  // after login — the server enforces the same boundaries independently
+  // (see requirePermission in src/auth.js), this is just for the UI.
+  let currentRole = "owner";
+  let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true };
+  const canMenuEdit = () => currentRole === "owner" || staffPermissions.menuEdit;
+  const canTableEdit = () => currentRole === "owner" || staffPermissions.tableEdit;
+  const canSettingsEdit = () => currentRole === "owner" || staffPermissions.settingsEdit;
+  const canCancelOrder = () => currentRole === "owner" || staffPermissions.orderCancel;
+
   // ---------- Admin UI language (Korean / Traditional Chinese) ----------
   // Unlike the customer order page (which always resets to Chinese on a
   // fresh scan), this is a staff tool — whichever language a staff member
@@ -122,7 +134,7 @@
       locationChecking: "위치 확인 중…",
       locationSaved: "매장 위치가 저장되었습니다.",
       locationFailed: "위치 확인 실패: 브라우저 위치 권한을 허용해주세요.",
-      settingsPwTitle: "관리자 비밀번호 변경",
+      settingsPwTitle: "비밀번호 변경",
       labelPwCurrent: "현재 비밀번호",
       labelPwNew: "새 비밀번호 (6자 이상)",
       changePwBtn: "비밀번호 변경",
@@ -148,6 +160,21 @@
       itemPhotoLabel: "사진",
       deleteItemBtn: "메뉴 삭제",
       saveBtn: "저장",
+      staffPermTitle: "직원 권한 관리",
+      staffPermHint: "직원 계정으로 로그인하면 아래에서 켠 항목만 추가/삭제/변경할 수 있어요. 주문 확인, 상태 변경(조리 시작/서빙/결제 완료), 인쇄는 항상 가능합니다.",
+      permMenuEdit: "메뉴 추가/수정/삭제",
+      permTableEdit: "테이블/배치도 추가·삭제·편집",
+      permSettingsEdit: "매장 설정 변경",
+      permOrderCancel: "주문 취소",
+      staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
+      staffPasswordSaveBtn: "직원 비밀번호 저장",
+      staffPermSaved: "저장되었습니다",
+      staffPasswordSaved: "직원 비밀번호가 변경되었습니다",
+      staffPasswordTooShort: "6자 이상 입력하세요",
+      staffPasswordFailed: "저장 실패. 다시 시도해주세요",
+      loginAsStaffBadge: "직원 계정으로 로그인함",
+      loginAsOwnerBadge: "사장 계정으로 로그인함",
+      permissionDeniedMsg: "이 작업은 사장님의 허락이 필요해요. 사장님께 문의해주세요.",
     },
     zh: {
       pageTitle: "韓國館 管理後台",
@@ -248,7 +275,7 @@
       locationChecking: "正在確認位置…",
       locationSaved: "店家位置已儲存。",
       locationFailed: "定位失敗：請允許瀏覽器的位置權限。",
-      settingsPwTitle: "變更管理員密碼",
+      settingsPwTitle: "變更密碼",
       labelPwCurrent: "目前密碼",
       labelPwNew: "新密碼（至少 6 碼）",
       changePwBtn: "變更密碼",
@@ -274,6 +301,21 @@
       itemPhotoLabel: "照片",
       deleteItemBtn: "刪除菜品",
       saveBtn: "儲存",
+      staffPermTitle: "員工權限管理",
+      staffPermHint: "以員工帳號登入時，只能執行下方開啟的項目（新增/刪除/修改）。確認訂單、變更狀態（開始製作/出餐/結帳）、列印永遠都可以操作。",
+      permMenuEdit: "新增/修改/刪除菜品",
+      permTableEdit: "新增・刪除・編輯桌號/平面圖",
+      permSettingsEdit: "變更店家設定",
+      permOrderCancel: "取消訂單",
+      staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
+      staffPasswordSaveBtn: "儲存員工密碼",
+      staffPermSaved: "已儲存",
+      staffPasswordSaved: "員工密碼已變更",
+      staffPasswordTooShort: "請輸入至少 6 碼",
+      staffPasswordFailed: "儲存失敗，請再試一次",
+      loginAsStaffBadge: "以員工帳號登入",
+      loginAsOwnerBadge: "以老闆帳號登入",
+      permissionDeniedMsg: "這項操作需要老闆的授權，請洽詢老闆。",
     },
   };
   const T = (key) => (ADMIN_I18N[adminLang] && ADMIN_I18N[adminLang][key]) || ADMIN_I18N.ko[key] || key;
@@ -335,8 +377,13 @@
   async function checkAuth() {
     const res = await fetch("/api/auth/me");
     const data = await res.json();
-    if (data.isAdmin) showDashboard();
-    else showLogin();
+    if (data.isAdmin) {
+      currentRole = data.role || "owner";
+      staffPermissions = data.permissions || staffPermissions;
+      showDashboard();
+    } else {
+      showLogin();
+    }
   }
 
   function showLogin() {
@@ -344,10 +391,23 @@
     $("#dashboard").hidden = true;
   }
 
+  // Hides/disables controls a staff session isn't allowed to use. The real
+  // security boundary is server-side (requirePermission middleware) — this
+  // is just so staff aren't shown buttons that would 403 if pressed.
+  function applyRoleUI() {
+    document.body.classList.toggle("role-staff", currentRole !== "owner");
+    document.body.classList.toggle("perm-no-menuEdit", !canMenuEdit());
+    document.body.classList.toggle("perm-no-tableEdit", !canTableEdit());
+    document.body.classList.toggle("perm-no-settingsEdit", !canSettingsEdit());
+    document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
+  }
+
   async function showDashboard() {
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
+    applyRoleUI();
     await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings()]);
+    if (currentRole === "owner") loadStaffPermissions();
     startPolling();
   }
 
@@ -365,7 +425,7 @@
     if (res.ok) {
       $("#loginError").hidden = true;
       $("#loginPassword").value = "";
-      showDashboard();
+      await checkAuth();
     } else {
       $("#loginError").textContent = T("loginError");
       $("#loginError").hidden = false;
@@ -502,7 +562,7 @@
       };
       actions.appendChild(btn);
     }
-    if (o.status !== "cancelled" && o.status !== "paid") {
+    if (o.status !== "cancelled" && o.status !== "paid" && canCancelOrder()) {
       const cancelBtn = document.createElement("button");
       cancelBtn.textContent = T("cancelBtn");
       cancelBtn.onclick = (e) => {
@@ -688,7 +748,11 @@
           <td>NT$${item.price}</td>
           <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span></td>
         `;
-        tr.onclick = () => openItemModal(item);
+        // Staff without menuEdit can look at the menu but not open the edit
+        // modal (server would 403 the save/delete anyway; this just avoids
+        // showing a form they can't actually use).
+        if (canMenuEdit()) tr.onclick = () => openItemModal(item);
+        else tr.style.cursor = "default";
         tbody.appendChild(tr);
       });
       block.appendChild(table);
@@ -828,13 +892,16 @@
         ? `<div class="table-order-badge active">${fmtOrderCount(unpaid.length, unpaid.reduce((s, o) => s + o.total, 0))}</div>`
         : `<div class="table-order-badge empty">${T("tableEmptyBadge")}</div>`;
       const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
-      chip.innerHTML = `<button class="del-btn" title="${T("tableDelTitle")}">✕</button><div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
-      chip.querySelector(".del-btn").onclick = async (e) => {
-        e.stopPropagation();
-        if (!confirm(fmtConfirmDeleteTable(t.number))) return;
-        await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
-        loadTables();
-      };
+      const delBtn = canTableEdit() ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
+      chip.innerHTML = `${delBtn}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
+      if (canTableEdit()) {
+        chip.querySelector(".del-btn").onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm(fmtConfirmDeleteTable(t.number))) return;
+          await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
+          loadTables();
+        };
+      }
       chip.onclick = () => openTableDetail(t.number, t.label);
       wrap.appendChild(chip);
     });
@@ -1324,61 +1391,71 @@
     el.style.top = t.y + "px";
     el.style.width = (t.width || 70) + "px";
     el.style.height = (t.height || 70) + "px";
+    const unassignBtn = canTableEdit() ? `<button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>` : "";
     el.innerHTML = `
-      <button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>
+      ${unassignBtn}
       <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
     `;
     container.appendChild(el);
 
-    el.querySelector(".table-unassign").onclick = async (e) => {
-      e.stopPropagation();
-      if (!confirm(fmtConfirmUnassignTable(t.label || t.number))) return;
-      await fetch(`/api/tables/${t.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ zoneId: null }),
-      });
-      t.zone_id = null;
-      renderFloorPlan();
-    };
+    if (canTableEdit()) {
+      el.querySelector(".table-unassign").onclick = async (e) => {
+        e.stopPropagation();
+        if (!confirm(fmtConfirmUnassignTable(t.label || t.number))) return;
+        await fetch(`/api/tables/${t.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ zoneId: null }),
+        });
+        t.zone_id = null;
+        renderFloorPlan();
+      };
+    }
 
     const getSnapSiblings = () =>
       [...container.querySelectorAll(".table-block")]
         .filter((sib) => sib !== el)
         .map((sib) => ({ left: sib.offsetLeft, top: sib.offsetTop, width: sib.offsetWidth, height: sib.offsetHeight }));
 
-    makeDraggable(el, {
-      bounded: true,
-      minY: ZONE_HEADER_HEIGHT,
-      snapEnabled: true,
-      getSnapSiblings,
-      onEnd: async (x, y) => {
-        t.x = x;
-        t.y = y;
-        await fetch(`/api/tables/${t.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ x, y }),
-        });
-      },
-      onClick: () => openTableDetail(t.number, t.label),
-    });
-    makeResizable(el, {
-      bounded: true,
-      minWidth: 44,
-      minHeight: 44,
-      snapEnabled: true,
-      getSnapSiblings,
-      onEnd: async (width, height) => {
-        t.width = width;
-        t.height = height;
-        await fetch(`/api/tables/${t.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ width, height }),
-        });
-      },
-    });
+    // Staff without tableEdit can still see the floor plan and tap a table
+    // to open its order detail, but can't drag/resize it around (the PATCH
+    // would be rejected server-side anyway) or pull it out of the zone.
+    if (canTableEdit()) {
+      makeDraggable(el, {
+        bounded: true,
+        minY: ZONE_HEADER_HEIGHT,
+        snapEnabled: true,
+        getSnapSiblings,
+        onEnd: async (x, y) => {
+          t.x = x;
+          t.y = y;
+          await fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x, y }),
+          });
+        },
+        onClick: () => openTableDetail(t.number, t.label),
+      });
+      makeResizable(el, {
+        bounded: true,
+        minWidth: 44,
+        minHeight: 44,
+        snapEnabled: true,
+        getSnapSiblings,
+        onEnd: async (width, height) => {
+          t.width = width;
+          t.height = height;
+          await fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ width, height }),
+          });
+        },
+      });
+    } else {
+      el.onclick = () => openTableDetail(t.number, t.label);
+    }
   }
 
   // Lays newly-added tables out into empty grid cells inside the zone,
@@ -1500,68 +1577,78 @@
       el.style.top = z.y + "px";
       el.style.width = z.width + "px";
       el.style.height = z.height + "px";
+      const zoneButtons = canTableEdit()
+        ? `<button class="zone-add-btn" title="${T("zoneAddBtnTitle")}">${T("zoneAddBtnLabel")}</button>
+           <button class="zone-del" title="${T("zoneDelTitle")}">✕</button>`
+        : "";
       el.innerHTML = `
         <span class="zone-label">${z.name}</span>
-        <button class="zone-add-btn" title="${T("zoneAddBtnTitle")}">${T("zoneAddBtnLabel")}</button>
-        <button class="zone-del" title="${T("zoneDelTitle")}">✕</button>
+        ${zoneButtons}
       `;
       wrap.appendChild(el);
 
-      el.querySelector(".zone-label").onclick = async () => {
-        const name = prompt(T("promptZoneName"), z.name);
-        if (name && name.trim() && name.trim() !== z.name) {
-          z.name = name.trim();
-          el.querySelector(".zone-label").textContent = z.name;
-          await fetch(`/api/zones/${z.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name: z.name }),
-          });
-        }
-      };
-      el.querySelector(".zone-add-btn").onclick = (e) => {
-        e.stopPropagation();
-        addTableToZone(z);
-      };
-      el.querySelector(".zone-del").onclick = async (e) => {
-        e.stopPropagation();
-        if (!confirm(fmtConfirmDeleteZone(z.name))) return;
-        await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
-        tables.filter((t) => t.zone_id === z.id).forEach((t) => (t.zone_id = null));
-        await loadZones();
-        renderFloorPlan();
-      };
+      // Everything below (renaming, adding/removing tables, deleting the
+      // zone, dragging/resizing it) is floor-plan editing — gated the same
+      // way as the table controls above.
+      if (canTableEdit()) {
+        el.querySelector(".zone-label").onclick = async () => {
+          const name = prompt(T("promptZoneName"), z.name);
+          if (name && name.trim() && name.trim() !== z.name) {
+            z.name = name.trim();
+            el.querySelector(".zone-label").textContent = z.name;
+            await fetch(`/api/zones/${z.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ name: z.name }),
+            });
+          }
+        };
+        el.querySelector(".zone-add-btn").onclick = (e) => {
+          e.stopPropagation();
+          addTableToZone(z);
+        };
+        el.querySelector(".zone-del").onclick = async (e) => {
+          e.stopPropagation();
+          if (!confirm(fmtConfirmDeleteZone(z.name))) return;
+          await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
+          tables.filter((t) => t.zone_id === z.id).forEach((t) => (t.zone_id = null));
+          await loadZones();
+          renderFloorPlan();
+        };
 
-      makeDraggable(el, {
-        onEnd: async (x, y) => {
-          z.x = x;
-          z.y = y;
-          await fetch(`/api/zones/${z.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x, y }),
-          });
-        },
-      });
+        makeDraggable(el, {
+          onEnd: async (x, y) => {
+            z.x = x;
+            z.y = y;
+            await fetch(`/api/zones/${z.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ x, y }),
+            });
+          },
+        });
+      }
       // A zone can never be shrunk smaller than the tables already sitting
       // inside it — the floor for the resize is whichever is bigger: the
       // fixed minimum, or the bounding box of its current tables.
       const tablesInThisZone = tables.filter((t) => t.zone_id === z.id);
-      const requiredWidth = tablesInThisZone.reduce((m, t) => Math.max(m, (t.x || 0) + (t.width || 70) + 10), 120);
-      const requiredHeight = tablesInThisZone.reduce((m, t) => Math.max(m, (t.y || 0) + (t.height || 70) + 10), 100);
-      makeResizable(el, {
-        minWidth: requiredWidth,
-        minHeight: requiredHeight,
-        onEnd: async (width, height) => {
-          z.width = width;
-          z.height = height;
-          await fetch(`/api/zones/${z.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ width, height }),
-          });
-        },
-      });
+      if (canTableEdit()) {
+        const requiredWidth = tablesInThisZone.reduce((m, t) => Math.max(m, (t.x || 0) + (t.width || 70) + 10), 120);
+        const requiredHeight = tablesInThisZone.reduce((m, t) => Math.max(m, (t.y || 0) + (t.height || 70) + 10), 100);
+        makeResizable(el, {
+          minWidth: requiredWidth,
+          minHeight: requiredHeight,
+          onEnd: async (width, height) => {
+            z.width = width;
+            z.height = height;
+            await fetch(`/api/zones/${z.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ width, height }),
+            });
+          },
+        });
+      }
 
       tablesInThisZone.forEach((t) => renderTableBlock(el, t));
     });
@@ -1791,6 +1878,67 @@
       msg.textContent = T("pwChangeFailed");
     }
     msg.hidden = false;
+  };
+
+  // ---------- Staff permission management (owner only) ----------
+  const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel"];
+
+  async function loadStaffPermissions() {
+    const res = await fetch("/api/settings/staff-permissions");
+    if (!res.ok) return;
+    const perms = await res.json();
+    PERMISSION_KEYS.forEach((k) => {
+      const box = $(`#perm_${k}`);
+      if (box) box.checked = !!perms[k];
+    });
+  }
+
+  PERMISSION_KEYS.forEach((k) => {
+    const box = $(`#perm_${k}`);
+    if (!box) return;
+    box.onchange = async () => {
+      const payload = {};
+      PERMISSION_KEYS.forEach((key) => {
+        const b = $(`#perm_${key}`);
+        if (b) payload[key] = b.checked;
+      });
+      await fetch("/api/settings/staff-permissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const msg = $("#staffPermMsg");
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("staffPermSaved");
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2000);
+    };
+  });
+
+  $("#setStaffPasswordBtn").onclick = async () => {
+    const newPassword = $("#staff_new_password").value;
+    const msg = $("#staffPwMsg");
+    if (!newPassword || newPassword.length < 6) {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordTooShort");
+      msg.hidden = false;
+      return;
+    }
+    const res = await fetch("/api/auth/set-staff-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ newPassword }),
+    });
+    if (res.ok) {
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("staffPasswordSaved");
+      $("#staff_new_password").value = "";
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordFailed");
+    }
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
   };
 
   applyAdminI18n();

@@ -191,6 +191,26 @@ async function run() {
     console.log("Seeded admin password from ADMIN_PASSWORD env (change it in Admin > Settings).");
   }
 
+  // Separate lower-privilege login for staff — same admin page, but the
+  // owner controls what a staff session is allowed to do (see
+  // staff_permissions below, toggled from Admin > 설정 > 직원 권한 관리).
+  if (!store.settings.staff_password_hash) {
+    const pw = process.env.STAFF_PASSWORD || "staff1234";
+    store.settings.staff_password_hash = bcrypt.hashSync(pw, 10);
+    console.log("Seeded staff password from STAFF_PASSWORD env (change it in Admin > Settings > 직원 권한 관리).");
+  }
+  if (!store.settings.staff_permissions) {
+    // Everything defaults to OFF — the owner opts staff into each area
+    // individually. Advancing/viewing orders and printing tickets are
+    // always allowed regardless of these toggles (core day-to-day work).
+    store.settings.staff_permissions = {
+      menuEdit: false,
+      tableEdit: false,
+      settingsEdit: false,
+      orderCancel: false,
+    };
+  }
+
   const storeDefaults = {
     store_name_zh: process.env.STORE_NAME_ZH || "韓國館",
     store_name_ko: process.env.STORE_NAME_KO || "한국관",

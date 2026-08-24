@@ -1,7 +1,8 @@
 const express = require("express");
 const multer = require("multer");
 const { store, save, savePhoto, deletePhoto } = require("../db");
-const { requireAdmin } = require("../auth");
+const { requireAdmin, requirePermission, requireOwner } = require("../auth");
+const canEditSettings = requirePermission("settingsEdit");
 
 const router = express.Router();
 const PUBLIC_KEYS = [
@@ -38,7 +39,7 @@ router.get("/", (req, res) => {
   res.json(publicSettings());
 });
 
-router.put("/", requireAdmin, async (req, res) => {
+router.put("/", canEditSettings, async (req, res) => {
   const b = req.body || {};
   for (const key of PUBLIC_KEYS) {
     if (key === "store_cover_photo" || key === "store_logo") continue; // set only via the photo upload routes
@@ -57,7 +58,7 @@ const upload = multer({
   },
 });
 
-router.post("/cover-photo", requireAdmin, upload.single("photo"), async (req, res) => {
+router.post("/cover-photo", canEditSettings, upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no_file" });
   const oldPhotoId = photoIdFromUrl(store.settings.store_cover_photo);
 
@@ -72,7 +73,7 @@ router.post("/cover-photo", requireAdmin, upload.single("photo"), async (req, re
 
 // Small square-ish logo, used as the center overlay on printed QR codes
 // (Admin > 테이블 / QR 코드 > 전체 QR 코드 인쇄).
-router.post("/logo", requireAdmin, upload.single("photo"), async (req, res) => {
+router.post("/logo", canEditSettings, upload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "no_file" });
   const oldPhotoId = photoIdFromUrl(store.settings.store_logo);
 
@@ -83,6 +84,29 @@ router.post("/logo", requireAdmin, upload.single("photo"), async (req, res) => {
   if (oldPhotoId) await deletePhoto(oldPhotoId);
 
   res.json({ store_logo: store.settings.store_logo });
+});
+
+// Staff permission toggles — only the owner can view/change these (staff
+// obviously shouldn't be able to grant permissions to themselves).
+const STAFF_PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel"];
+
+router.get("/staff-permissions", requireOwner, (req, res) => {
+  const perms = store.settings.staff_permissions || {};
+  const out = {};
+  for (const k of STAFF_PERMISSION_KEYS) out[k] = !!perms[k];
+  res.json(out);
+});
+
+router.put("/staff-permissions", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  store.settings.staff_permissions = store.settings.staff_permissions || {};
+  for (const k of STAFF_PERMISSION_KEYS) {
+    if (typeof b[k] === "boolean") store.settings.staff_permissions[k] = b[k];
+  }
+  await save();
+  const out = {};
+  for (const k of STAFF_PERMISSION_KEYS) out[k] = !!store.settings.staff_permissions[k];
+  res.json(out);
 });
 
 module.exports = router;

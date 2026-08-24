@@ -117,11 +117,19 @@ router.get("/", requireAdmin, (req, res) => {
   res.json(list.slice(0, 500));
 });
 
-// Admin: update order status
+// Admin: update order status. Advancing an order forward (조리 시작 /
+// 서빙 완료 / 결제 완료) is core day-to-day staff work and always allowed for
+// any logged-in staff member; cancelling an order is gated behind the
+// owner's "주문 취소" toggle, since it can hide mistakes or make food/money
+// disappear from the books without a trace.
 router.patch("/:id", requireAdmin, async (req, res) => {
   const { status } = req.body || {};
   const valid = ["new", "preparing", "served", "paid", "cancelled"];
   if (!valid.includes(status)) return res.status(400).json({ error: "invalid_status" });
+  if (status === "cancelled" && req.session.role !== "owner") {
+    const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderCancel);
+    if (!allowed) return res.status(403).json({ error: "permission_denied" });
+  }
   const id = parseInt(req.params.id, 10);
   const order = store.orders.find((o) => o.id === id);
   if (!order) return res.status(404).json({ error: "not_found" });
