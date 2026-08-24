@@ -36,6 +36,9 @@ input, select, button, textarea { font-family: inherit; }
 .admin-tabs button.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 700; }
 .badge-count { background: var(--red); color: #fff; border-radius: 999px; font-size: 11px; padding: 1px 7px; }
 .logout-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+.admin-lang-switch { display: flex; gap: 4px; }
+.admin-lang-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #cfd3e0; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+.admin-lang-btn.active { background: rgba(255,255,255,0.16); color: #fff; font-weight: 700; }
 
 .admin-main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .tab-panel { }

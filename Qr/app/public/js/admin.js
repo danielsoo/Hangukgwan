@@ -15,6 +15,322 @@
   let knownOrderIds = new Set();
   let openTableNumber = null;
 
+  // ---------- Admin UI language (Korean / Traditional Chinese) ----------
+  // Unlike the customer order page (which always resets to Chinese on a
+  // fresh scan), this is a staff tool — whichever language a staff member
+  // picks should stick around the next time they open it, so it's saved
+  // in localStorage instead of resetting.
+  let adminLang = localStorage.getItem("hgk_admin_lang") || "ko";
+
+  const ADMIN_I18N = {
+    ko: {
+      pageTitle: "한국관 관리자 페이지",
+      loginTitle: "관리자 로그인",
+      loginPasswordPlaceholder: "관리자 비밀번호",
+      loginBtn: "로그인",
+      loginError: "비밀번호가 올바르지 않습니다. 다시 시도해주세요",
+      brand: "☯ 한국관 관리자",
+      tabOrders: "실시간 주문",
+      tabMenu: "메뉴 관리",
+      tabTables: "테이블 / QR 코드",
+      tabSettings: "설정",
+      logoutBtn: "로그아웃",
+      soundToggleLabel: "🔔 신규 주문 알림음",
+      autoPrintToggleLabel: "🖨️ 신규 주문 자동 인쇄",
+      refreshBtn: "새로고침",
+      statusNew: "신규 주문",
+      statusPreparing: "조리 중",
+      statusServed: "서빙 완료",
+      statusPaid: "결제 완료",
+      statusCancelled: "취소됨",
+      nextNew: "조리 시작",
+      nextPreparing: "서빙 완료로 변경",
+      nextServed: "결제 완료로 변경",
+      cancelBtn: "취소",
+      printBtn: "🖨️ 인쇄",
+      confirmCancelOrder: "이 주문을 취소하시겠습니까?",
+      tableLabel: "테이블",
+      memoLabel: "메모",
+      orderMemoLabel: "주문 메모",
+      totalLabel: "합계",
+      subtotalLabel: "소계",
+      addItemBtn: "+ 메뉴 추가",
+      codeTh: "코드",
+      nameTh: "이름",
+      priceTh: "가격",
+      statusTh: "상태",
+      photoMissing: "사진<br>없음",
+      photoMissingTitle: "사진을 추가해주세요",
+      onSale: "판매 중",
+      soldOut: "품절",
+      itemModalAddTitle: "메뉴 추가",
+      itemModalEditTitle: "메뉴 수정",
+      alertMenuNameRequired: "메뉴 이름을 입력하세요",
+      confirmDeleteItem: "이 메뉴를 삭제하시겠습니까? 되돌릴 수 없습니다.",
+      newTableNumberPlaceholder: "테이블 번호 (예: 12)",
+      newTableLabelPlaceholder: "표시 이름 (선택사항)",
+      addTableBtn: "+ 테이블 추가",
+      printQrBtn: "🖨️ 전체 QR 코드 인쇄",
+      viewListBtn: "📋 목록 보기",
+      viewFloorBtn: "🗺️ 배치도 보기",
+      addZoneBtn: "+ 구역 추가",
+      floorPlanHint: "구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요.",
+      alertTableNumberRequired: "테이블 번호를 입력하세요",
+      alertUnluckyNumber: "숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).",
+      alertTableExists: "이미 존재하는 테이블 번호입니다",
+      tableEmptyBadge: "비어있음",
+      tableDelTitle: "삭제",
+      noOrdersYetAdmin: "아직 주문이 없습니다.",
+      unpaidTotalLabel: "현재 미결제 합계:",
+      unpaidTotalLabel2: "미결제 합계:",
+      payAllBtn: "전체 결제 완료",
+      zoneAddBtnTitle: "테이블 추가",
+      zoneAddBtnLabel: "+ 테이블",
+      zoneDelTitle: "구역 삭제",
+      tableUnassignTitle: "구역에서 빼기",
+      promptZoneName: "구역 이름",
+      addTableToZoneModalTitle: "테이블 추가",
+      addTableToZoneHint: "추가할 테이블을 모두 선택하세요 (여러 개 선택 가능).",
+      addTableToZoneEmpty: "배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.",
+      addTableToZoneCancel: "취소",
+      addTableToZoneConfirm: "확인",
+      settingsCoverTitle: "손님 화면 상단 사진",
+      settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
+      settingsLogoTitle: "매장 로고 (QR 코드 중앙에 표시)",
+      settingsLogoHint: "정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.",
+      settingsNoticeTitle: "공지 배너",
+      settingsNoticeHint: "손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).",
+      noticeLabel: "공지 문구",
+      saveNoticeBtn: "공지 저장",
+      settingsInfoTitle: "매장 정보",
+      labelNameZh: "상호명 (중국어)",
+      labelNameKo: "상호명 (한국어)",
+      labelPhone: "전화번호",
+      labelAddressZh: "주소 (중국어)",
+      labelAddressKo: "주소 (한국어, 선택사항)",
+      addressKoPlaceholder: "비워두면 중국어 주소로 표시됩니다",
+      labelHours: "영업시간",
+      labelMinSpend: "1인당 최소 주문 금액 (NT$)",
+      saveSettingsBtn: "설정 저장",
+      savedMsg: "저장되었습니다",
+      settingsLocationTitle: "위치 기반 주문 제한",
+      settingsLocationHint: "매장 위치를 설정하면, 설정한 반경 밖에서는 주문이 접수되지 않습니다. QR 코드를 사진으로 찍어 다른 곳에서 사용하는 것을 막기 위한 기능입니다. <strong>매장 안에 계실 때</strong> 아래 버튼을 눌러주세요.",
+      captureLocationBtn: "📍 지금 위치를 매장 위치로 저장",
+      labelRadius: "허용 반경 (미터)",
+      locationNotSet: "아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)",
+      locationNoBrowserSupport: "이 브라우저는 위치 정보를 지원하지 않습니다.",
+      locationChecking: "위치 확인 중…",
+      locationSaved: "매장 위치가 저장되었습니다.",
+      locationFailed: "위치 확인 실패: 브라우저 위치 권한을 허용해주세요.",
+      settingsPwTitle: "관리자 비밀번호 변경",
+      labelPwCurrent: "현재 비밀번호",
+      labelPwNew: "새 비밀번호 (6자 이상)",
+      changePwBtn: "비밀번호 변경",
+      pwChanged: "비밀번호가 변경되었습니다",
+      pwChangeFailed: "변경 실패. 현재 비밀번호가 맞는지 확인하세요 (새 비밀번호는 6자 이상)",
+      uploadFailed: "업로드 실패. 다시 시도해주세요",
+      logoUpdated: "로고가 업데이트되었습니다",
+      coverUpdated: "사진이 업데이트되었습니다",
+      itemCategoryLabel: "카테고리",
+      itemCodeLabel: "코드 (선택사항)",
+      itemNameZh: "이름 (중국어)",
+      itemNameKo: "이름 (한국어)",
+      itemDescZh: "설명 (중국어)",
+      itemDescKo: "설명 (한국어)",
+      itemPriceLabel: "가격 (NT$)",
+      itemPriceNoteLabel: "가격 비고",
+      itemPriceNotePlaceholder: "예: 2인분",
+      itemOptionsLabel: "옵션 (쉼표로 구분, 예: 소고기,돼지고기)",
+      itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
+      itemSpicyLabel: "매운맛 🌶",
+      itemSignatureLabel: "대표 메뉴 ★",
+      itemAvailableLabel: "판매 중",
+      itemPhotoLabel: "사진",
+      deleteItemBtn: "메뉴 삭제",
+      saveBtn: "저장",
+    },
+    zh: {
+      pageTitle: "韓國館 管理後台",
+      loginTitle: "管理員登入",
+      loginPasswordPlaceholder: "管理員密碼",
+      loginBtn: "登入",
+      loginError: "密碼錯誤，請重新輸入",
+      brand: "☯ 韓國館 管理後台",
+      tabOrders: "即時訂單",
+      tabMenu: "菜單管理",
+      tabTables: "桌號 / QR Code",
+      tabSettings: "設定",
+      logoutBtn: "登出",
+      soundToggleLabel: "🔔 新訂單提示音",
+      autoPrintToggleLabel: "🖨️ 新訂單自動列印",
+      refreshBtn: "重新整理",
+      statusNew: "新訂單",
+      statusPreparing: "製作中",
+      statusServed: "已出餐",
+      statusPaid: "已結帳",
+      statusCancelled: "已取消",
+      nextNew: "開始製作",
+      nextPreparing: "標記為已出餐",
+      nextServed: "標記為已結帳",
+      cancelBtn: "取消",
+      printBtn: "🖨️ 列印",
+      confirmCancelOrder: "確定要取消這筆訂單嗎？",
+      tableLabel: "桌號",
+      memoLabel: "備註",
+      orderMemoLabel: "訂單備註",
+      totalLabel: "合計",
+      subtotalLabel: "小計",
+      addItemBtn: "+ 新增菜品",
+      codeTh: "代號",
+      nameTh: "名稱",
+      priceTh: "價格",
+      statusTh: "狀態",
+      photoMissing: "尚無<br>照片",
+      photoMissingTitle: "請新增照片",
+      onSale: "供應中",
+      soldOut: "已售完",
+      itemModalAddTitle: "新增菜品",
+      itemModalEditTitle: "編輯菜品",
+      alertMenuNameRequired: "請輸入菜品名稱",
+      confirmDeleteItem: "確定要刪除這個菜品嗎？此操作無法復原。",
+      newTableNumberPlaceholder: "桌號（例如：12）",
+      newTableLabelPlaceholder: "顯示名稱（選填）",
+      addTableBtn: "+ 新增桌號",
+      printQrBtn: "🖨️ 列印全部 QR Code",
+      viewListBtn: "📋 清單檢視",
+      viewFloorBtn: "🗺️ 平面圖檢視",
+      addZoneBtn: "+ 新增區域",
+      floorPlanHint: "拖曳區域和桌號即可移動位置，拖曳右下角可調整大小。點擊區域名稱可以修改名稱。",
+      alertTableNumberRequired: "請輸入桌號",
+      alertUnluckyNumber: "桌號不能包含數字「4」（在台灣被視為不吉利的數字）。",
+      alertTableExists: "此桌號已經存在",
+      tableEmptyBadge: "空桌",
+      tableDelTitle: "刪除",
+      noOrdersYetAdmin: "目前尚無訂單。",
+      unpaidTotalLabel: "目前未結帳金額：",
+      unpaidTotalLabel2: "未結帳金額：",
+      payAllBtn: "全部結帳完成",
+      zoneAddBtnTitle: "新增桌號",
+      zoneAddBtnLabel: "+ 桌號",
+      zoneDelTitle: "刪除區域",
+      tableUnassignTitle: "移出此區域",
+      promptZoneName: "區域名稱",
+      addTableToZoneModalTitle: "新增桌號",
+      addTableToZoneHint: "請選擇要加入的桌號（可多選）。",
+      addTableToZoneEmpty: "沒有可配置的桌號。<br/>請先在上方新增桌號。",
+      addTableToZoneCancel: "取消",
+      addTableToZoneConfirm: "確定",
+      settingsCoverTitle: "顧客畫面頂部照片",
+      settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
+      settingsLogoTitle: "店家標誌（顯示於 QR Code 中央）",
+      settingsLogoHint: "建議使用接近正方形的圖片，會小尺寸置中顯示在列印用 QR Code 上。",
+      settingsNoticeTitle: "公告橫幅",
+      settingsNoticeHint: "顯示在顧客點餐頁面上方的公告文字（留空則不顯示）。",
+      noticeLabel: "公告文字",
+      saveNoticeBtn: "儲存公告",
+      settingsInfoTitle: "店家資訊",
+      labelNameZh: "店名（中文）",
+      labelNameKo: "店名（韓文）",
+      labelPhone: "電話號碼",
+      labelAddressZh: "地址（中文）",
+      labelAddressKo: "地址（韓文，選填）",
+      addressKoPlaceholder: "留空則顯示中文地址",
+      labelHours: "營業時間",
+      labelMinSpend: "每人低消金額（NT$）",
+      saveSettingsBtn: "儲存設定",
+      savedMsg: "已儲存",
+      settingsLocationTitle: "位置限制點餐",
+      settingsLocationHint: "設定店家位置後，超出範圍就無法送出訂單。此功能可防止有人拍下 QR Code 在別處使用。<strong>請在店內時</strong>按下方按鈕。",
+      captureLocationBtn: "📍 將目前位置設為店家位置",
+      labelRadius: "允許範圍（公尺）",
+      locationNotSet: "尚未設定店家位置（位置限制已關閉）",
+      locationNoBrowserSupport: "此瀏覽器不支援定位功能。",
+      locationChecking: "正在確認位置…",
+      locationSaved: "店家位置已儲存。",
+      locationFailed: "定位失敗：請允許瀏覽器的位置權限。",
+      settingsPwTitle: "變更管理員密碼",
+      labelPwCurrent: "目前密碼",
+      labelPwNew: "新密碼（至少 6 碼）",
+      changePwBtn: "變更密碼",
+      pwChanged: "密碼已變更",
+      pwChangeFailed: "變更失敗，請確認目前密碼是否正確（新密碼需至少 6 碼）",
+      uploadFailed: "上傳失敗，請再試一次",
+      logoUpdated: "標誌已更新",
+      coverUpdated: "照片已更新",
+      itemCategoryLabel: "分類",
+      itemCodeLabel: "代號（選填）",
+      itemNameZh: "名稱（中文）",
+      itemNameKo: "名稱（韓文）",
+      itemDescZh: "說明（中文）",
+      itemDescKo: "說明（韓文）",
+      itemPriceLabel: "價格（NT$）",
+      itemPriceNoteLabel: "價格備註",
+      itemPriceNotePlaceholder: "例如：2人份",
+      itemOptionsLabel: "選項（用逗號分隔，例如：牛肉,豬肉）",
+      itemOptionsPlaceholder: "沒有選項請留空",
+      itemSpicyLabel: "辣 🌶",
+      itemSignatureLabel: "招牌菜 ★",
+      itemAvailableLabel: "供應中",
+      itemPhotoLabel: "照片",
+      deleteItemBtn: "刪除菜品",
+      saveBtn: "儲存",
+    },
+  };
+  const T = (key) => (ADMIN_I18N[adminLang] && ADMIN_I18N[adminLang][key]) || ADMIN_I18N.ko[key] || key;
+  // Menu item/category names are stored bilingually per-record already
+  // (name_ko/name_zh) — show whichever matches the current admin language.
+  const itemName = (item) => (adminLang === "zh" ? item.name_zh || item.name_ko : item.name_ko || item.name_zh);
+  const catName = (cat) => (adminLang === "zh" ? cat.name_zh || cat.name_ko : cat.name_ko || cat.name_zh);
+  // A few messages interpolate a count/name in a spot whose word order
+  // differs between Korean and Chinese, so these are built directly per
+  // language rather than through the flat T() dictionary above.
+  const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
+  const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
+  const fmtConfirmDeleteTable = (n) => (adminLang === "zh" ? `確定要刪除桌號 ${n} 嗎？` : `테이블 ${n}을(를) 삭제하시겠습니까?`);
+  const fmtConfirmPayAll = (label, n) =>
+    adminLang === "zh"
+      ? `確定要將桌號 ${label} 的 ${n} 筆未結帳訂單全部標記為已結帳嗎？`
+      : `테이블 ${label}의 미결제 주문 ${n}건을 모두 결제 완료로 처리하시겠습니까?`;
+  const fmtConfirmUnassignTable = (n) =>
+    adminLang === "zh" ? `確定要將桌號 ${n} 移出此區域嗎？（桌號本身不會被刪除）` : `테이블 ${n}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`;
+  const fmtConfirmDeleteZone = (name) =>
+    adminLang === "zh" ? `確定要刪除「${name}」這個區域嗎？（區域內的桌號不會被刪除，只會取消配置）` : `"${name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`;
+  const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
+  const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
+  const fmtLocationSetStatus = (lat, lng) =>
+    adminLang === "zh"
+      ? `已設定店家位置（${lat}, ${lng}）— 超出此範圍將無法送出訂單。`
+      : `매장 위치 설정됨 (${lat}, ${lng}) — 이 반경 밖에서는 주문이 차단됩니다.`;
+
+  function applyAdminI18n() {
+    document.querySelectorAll("[data-i18n]").forEach((el) => {
+      el.innerHTML = T(el.dataset.i18n);
+    });
+    document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+      el.placeholder = T(el.dataset.i18nPlaceholder);
+    });
+    document.querySelectorAll(".admin-lang-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.adminLang === adminLang);
+    });
+    renderLocationStatus();
+  }
+
+  document.querySelectorAll(".admin-lang-btn").forEach((b) => {
+    b.onclick = () => {
+      adminLang = b.dataset.adminLang;
+      localStorage.setItem("hgk_admin_lang", adminLang);
+      applyAdminI18n();
+      // Re-render everything that has its own JS-generated (non data-i18n)
+      // text, so the language change takes effect immediately everywhere.
+      renderOrders();
+      renderTables();
+      renderMenuAdmin();
+      populateCategorySelect();
+      if ($("#dashboard") && !$("#dashboard").hidden && !$("#floorPlanWrap").hidden) renderFloorPlan();
+      if (openTableNumber) openTableDetail(openTableNumber);
+    };
+  });
+
   // ---------- Auth ----------
   async function checkAuth() {
     const res = await fetch("/api/auth/me");
@@ -51,7 +367,7 @@
       $("#loginPassword").value = "";
       showDashboard();
     } else {
-      $("#loginError").textContent = "비밀번호가 올바르지 않습니다. 다시 시도해주세요";
+      $("#loginError").textContent = T("loginError");
       $("#loginError").hidden = false;
     }
   }
@@ -130,9 +446,9 @@
     }
   }
 
-  const STATUS_LABEL = { new: "신규 주문", preparing: "조리 중", served: "서빙 완료", paid: "결제 완료", cancelled: "취소됨" };
   const NEXT_STATUS = { new: "preparing", preparing: "served", served: "paid" };
-  const NEXT_LABEL = { new: "조리 시작", preparing: "서빙 완료로 변경", served: "결제 완료로 변경" };
+  const statusLabel = (s) => T("status" + s.charAt(0).toUpperCase() + s.slice(1));
+  const nextLabel = (s) => T("next" + s.charAt(0).toUpperCase() + s.slice(1));
 
   function renderOrders() {
     const cols = { new: [], preparing: [], served: [], paid: [] };
@@ -167,10 +483,10 @@
       minute: "2-digit",
     });
     const itemsHtml = o.items
-      .map((it) => `${it.name_ko || it.name_zh} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
+      .map((it) => `${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
       .join("<br/>");
     card.innerHTML = `
-      <div class="order-card-top"><span>테이블 ${o.table_number}</span><span class="order-card-time">${time}</span></div>
+      <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}</span><span class="order-card-time">${time}</span></div>
       <div class="order-card-items">${itemsHtml}</div>
       <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
@@ -179,7 +495,7 @@
     if (NEXT_STATUS[o.status]) {
       const btn = document.createElement("button");
       btn.className = "primary";
-      btn.textContent = NEXT_LABEL[o.status];
+      btn.textContent = nextLabel(o.status);
       btn.onclick = (e) => {
         e.stopPropagation();
         updateOrderStatus(o.id, NEXT_STATUS[o.status]);
@@ -188,15 +504,15 @@
     }
     if (o.status !== "cancelled" && o.status !== "paid") {
       const cancelBtn = document.createElement("button");
-      cancelBtn.textContent = "취소";
+      cancelBtn.textContent = T("cancelBtn");
       cancelBtn.onclick = (e) => {
         e.stopPropagation();
-        if (confirm("이 주문을 취소하시겠습니까?")) updateOrderStatus(o.id, "cancelled");
+        if (confirm(T("confirmCancelOrder"))) updateOrderStatus(o.id, "cancelled");
       };
       actions.appendChild(cancelBtn);
     }
     const printBtn = document.createElement("button");
-    printBtn.textContent = "🖨️ 인쇄";
+    printBtn.textContent = T("printBtn");
     printBtn.onclick = (e) => {
       e.stopPropagation();
       printKitchenTicket(o);
@@ -322,17 +638,17 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.name_ko || it.name_zh} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">메모: ${it.note}</small>` : ""}</span>
+            <span>${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
       .join("");
     $("#orderDetailBody").innerHTML = `
-      <h2>테이블 ${o.table_number}</h2>
-      <p style="color:#999;font-size:13px;">${time} · 상태: ${STATUS_LABEL[o.status]}</p>
+      <h2>${T("tableLabel")} ${o.table_number}</h2>
+      <p style="color:#999;font-size:13px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
       ${itemsHtml}
-      ${o.note ? `<p style="margin-top:10px;"><strong>메모:</strong>${o.note}</p>` : ""}
-      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">합계 NT$${o.total}</div>
+      ${o.note ? `<p style="margin-top:10px;"><strong>${T("memoLabel")}:</strong>${o.note}</p>` : ""}
+      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">${T("totalLabel")} NT$${o.total}</div>
     `;
     $("#orderDetailBackdrop").hidden = false;
   }
@@ -355,22 +671,22 @@
     categories.forEach((c) => {
       const block = document.createElement("div");
       block.className = "cat-block";
-      block.innerHTML = `<h3>${c.name_ko || c.name_zh}</h3>`;
+      block.innerHTML = `<h3>${catName(c)}</h3>`;
       const table = document.createElement("table");
       table.className = "item-table";
       table.innerHTML = `
-        <thead><tr><th></th><th>코드</th><th>이름</th><th>가격</th><th>상태</th></tr></thead>
+        <thead><tr><th></th><th>${T("codeTh")}</th><th>${T("nameTh")}</th><th>${T("priceTh")}</th><th>${T("statusTh")}</th></tr></thead>
         <tbody></tbody>
       `;
       const tbody = table.querySelector("tbody");
       c.items.forEach((item) => {
         const tr = document.createElement("tr");
         tr.innerHTML = `
-          <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="사진을 추가해주세요">사진<br>없음</span>`}</td>
+          <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="${T("photoMissingTitle")}">${T("photoMissing")}</span>`}</td>
           <td>${item.code || ""}</td>
-          <td>${item.name_ko || item.name_zh}</td>
+          <td>${itemName(item)}</td>
           <td>NT$${item.price}</td>
-          <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? "판매 중" : "품절"}</span></td>
+          <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span></td>
         `;
         tr.onclick = () => openItemModal(item);
         tbody.appendChild(tr);
@@ -382,7 +698,7 @@
 
   function populateCategorySelect() {
     const sel = $("#f_category_id");
-    sel.innerHTML = categories.map((c) => `<option value="${c.id}">${c.name_ko || c.name_zh}</option>`).join("");
+    sel.innerHTML = categories.map((c) => `<option value="${c.id}">${catName(c)}</option>`).join("");
   }
 
   $("#addItemBtn").onclick = () => openItemModal(null);
@@ -391,7 +707,7 @@
     editingItemId = item ? item.id : null;
     editingItemPhotoUrl = item ? item.photo_url : null;
     selectedPhotoFile = null;
-    $("#itemModalTitle").textContent = item ? "메뉴 수정" : "메뉴 추가";
+    $("#itemModalTitle").textContent = item ? T("itemModalEditTitle") : T("itemModalAddTitle");
     $("#f_category_id").value = item ? item.category_id : categories[0] ? categories[0].id : "";
     $("#f_code").value = item?.code || "";
     $("#f_name_zh").value = item?.name_zh || "";
@@ -451,7 +767,7 @@
       available: $("#f_available").checked,
     };
     if (!payload.name_zh) {
-      alert("메뉴 이름을 입력하세요");
+      alert(T("alertMenuNameRequired"));
       return;
     }
     let itemId = editingItemId;
@@ -481,7 +797,7 @@
 
   $("#deleteItemBtn").onclick = async () => {
     if (!editingItemId) return;
-    if (!confirm("이 메뉴를 삭제하시겠습니까? 되돌릴 수 없습니다.")) return;
+    if (!confirm(T("confirmDeleteItem"))) return;
     await fetch(`/api/menu/admin/items/${editingItemId}`, { method: "DELETE" });
     $("#itemModalBackdrop").hidden = true;
     loadMenu();
@@ -509,13 +825,13 @@
       const chip = document.createElement("div");
       chip.className = "table-chip" + (unpaid.length > 0 ? " has-order" : "");
       const badge = unpaid.length > 0
-        ? `<div class="table-order-badge active">주문 ${unpaid.length}건 · NT$${unpaid.reduce((s, o) => s + o.total, 0)}</div>`
-        : `<div class="table-order-badge empty">비어있음</div>`;
-      const partyBadge = t.party_size ? `<div class="table-party-badge">👥 ${t.party_size}인</div>` : "";
-      chip.innerHTML = `<button class="del-btn" title="삭제">✕</button><div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
+        ? `<div class="table-order-badge active">${fmtOrderCount(unpaid.length, unpaid.reduce((s, o) => s + o.total, 0))}</div>`
+        : `<div class="table-order-badge empty">${T("tableEmptyBadge")}</div>`;
+      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
+      chip.innerHTML = `<button class="del-btn" title="${T("tableDelTitle")}">✕</button><div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
       chip.querySelector(".del-btn").onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm(`테이블 ${t.number}을(를) 삭제하시겠습니까?`)) return;
+        if (!confirm(fmtConfirmDeleteTable(t.number))) return;
         await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
         loadTables();
       };
@@ -530,24 +846,24 @@
     const tableOrders = activeOrdersForTable(tableNumber);
     const unpaidOrders = tableOrders.filter((o) => o.status !== "paid");
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
-    const partyText = table && table.party_size ? ` · 👥 ${table.party_size}인` : "";
+    const partyText = table && table.party_size ? ` · ${fmtPartyCount(table.party_size)}` : "";
     const payAllBtn = unpaidOrders.length
-      ? `<button class="primary-btn pay-all-btn" style="padding:6px 14px;font-size:12px;">전체 결제 완료</button>`
+      ? `<button class="primary-btn pay-all-btn" style="padding:6px 14px;font-size:12px;">${T("payAllBtn")}</button>`
       : "";
     const header = `
-      <h2>테이블 ${label || tableNumber}${partyText}</h2>
+      <h2>${T("tableLabel")} ${label || tableNumber}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
-        <p style="color:var(--muted);font-size:13px;margin:0;">현재 미결제 합계: <strong>NT$${unpaidTotal}</strong></p>
+        <p style="color:var(--muted);font-size:13px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
         ${payAllBtn}
       </div>
     `;
     const body = tableOrders.length
       ? tableOrders.map((o) => renderTableOrderBlock(o)).join("")
-      : `<p style="color:var(--muted);padding:20px 0;text-align:center;">아직 주문이 없습니다.</p>`;
+      : `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("noOrdersYetAdmin")}</p>`;
     const footer = tableOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          <p style="font-size:15px;margin:0;">미결제 합계: <strong>NT$${unpaidTotal}</strong></p>
+          <p style="font-size:15px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
           ${payAllBtn}
         </div>
       `
@@ -566,7 +882,7 @@
       .querySelectorAll(".pay-all-btn")
       .forEach((btn) => {
         btn.onclick = async () => {
-          if (!confirm(`테이블 ${label || tableNumber}의 미결제 주문 ${unpaidOrders.length}건을 모두 결제 완료로 처리하시겠습니까?`)) return;
+          if (!confirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length))) return;
           await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
           await loadOrders();
           openTableDetail(tableNumber, label);
@@ -581,23 +897,23 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-            <span>${it.name_ko || it.name_zh}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">메모: ${it.note}</small>` : ""}</span>
+            <span>${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
       .join("");
     const nextBtn = NEXT_STATUS[o.status]
-      ? `<button class="primary-btn" style="padding:6px 12px;font-size:12px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${NEXT_LABEL[o.status]}</button>`
+      ? `<button class="primary-btn" style="padding:6px 12px;font-size:12px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
       : "";
     return `
       <div style="border-top:1px solid var(--line);padding:12px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-weight:700;font-size:13px;">${time} · ${STATUS_LABEL[o.status]}</span>
+          <span style="font-weight:700;font-size:13px;">${time} · ${statusLabel(o.status)}</span>
           ${nextBtn}
         </div>
         ${itemsHtml}
-        ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">주문 메모: ${o.note}</p>` : ""}
-        <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">소계 NT$${o.total}</div>
+        ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
+        <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">${T("subtotalLabel")} NT$${o.total}</div>
       </div>
     `;
   }
@@ -1009,14 +1325,14 @@
     el.style.width = (t.width || 70) + "px";
     el.style.height = (t.height || 70) + "px";
     el.innerHTML = `
-      <button class="table-unassign" title="구역에서 빼기">✕</button>
+      <button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>
       <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
     `;
     container.appendChild(el);
 
     el.querySelector(".table-unassign").onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`테이블 ${t.label || t.number}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`)) return;
+      if (!confirm(fmtConfirmUnassignTable(t.label || t.number))) return;
       await fetch(`/api/tables/${t.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -1106,11 +1422,11 @@
   function addTableToZone(zone) {
     const unplaced = tables.filter((t) => t.zone_id == null);
     const selected = new Set();
-    $("#addTableToZoneTitle").textContent = `"${zone.name}"에 테이블 추가`;
+    $("#addTableToZoneTitle").textContent = fmtAddTableToZoneTitle(zone.name);
     const grid = $("#addTableToZoneGrid");
     grid.innerHTML = "";
     if (unplaced.length === 0) {
-      grid.innerHTML = `<div class="table-picker-empty">배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.</div>`;
+      grid.innerHTML = `<div class="table-picker-empty">${T("addTableToZoneEmpty")}</div>`;
     } else {
       unplaced
         .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10))
@@ -1186,13 +1502,13 @@
       el.style.height = z.height + "px";
       el.innerHTML = `
         <span class="zone-label">${z.name}</span>
-        <button class="zone-add-btn" title="테이블 추가">+ 테이블</button>
-        <button class="zone-del" title="구역 삭제">✕</button>
+        <button class="zone-add-btn" title="${T("zoneAddBtnTitle")}">${T("zoneAddBtnLabel")}</button>
+        <button class="zone-del" title="${T("zoneDelTitle")}">✕</button>
       `;
       wrap.appendChild(el);
 
       el.querySelector(".zone-label").onclick = async () => {
-        const name = prompt("구역 이름", z.name);
+        const name = prompt(T("promptZoneName"), z.name);
         if (name && name.trim() && name.trim() !== z.name) {
           z.name = name.trim();
           el.querySelector(".zone-label").textContent = z.name;
@@ -1209,7 +1525,7 @@
       };
       el.querySelector(".zone-del").onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm(`"${z.name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`)) return;
+        if (!confirm(fmtConfirmDeleteZone(z.name))) return;
         await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
         tables.filter((t) => t.zone_id === z.id).forEach((t) => (t.zone_id = null));
         await loadZones();
@@ -1271,7 +1587,7 @@
     const res = await fetch("/api/zones", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: `구역 ${zones.length + 1}`, x: 20, y: 20, width: 300, height: 240 }),
+      body: JSON.stringify({ name: fmtDefaultZoneName(zones.length + 1), x: 20, y: 20, width: 300, height: 240 }),
     });
     const zone = await res.json();
     zones.push(zone);
@@ -1281,7 +1597,7 @@
   $("#addTableBtn").onclick = async () => {
     const number = $("#newTableNumber").value.trim();
     const label = $("#newTableLabel").value.trim();
-    if (!number) return alert("테이블 번호를 입력하세요");
+    if (!number) return alert(T("alertTableNumberRequired"));
     const res = await fetch("/api/tables", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1294,9 +1610,9 @@
     } else {
       const body = await res.json().catch(() => ({}));
       if (body.error === "unlucky_number") {
-        alert("숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).");
+        alert(T("alertUnluckyNumber"));
       } else {
-        alert("이미 존재하는 테이블 번호입니다");
+        alert(T("alertTableExists"));
       }
     }
   };
@@ -1307,10 +1623,11 @@
 
   function renderLocationStatus() {
     const text = $("#locationStatusText");
+    if (!text) return;
     if (currentStoreLat && currentStoreLng) {
-      text.textContent = `매장 위치 설정됨 (${parseFloat(currentStoreLat).toFixed(5)}, ${parseFloat(currentStoreLng).toFixed(5)}) — 이 반경 밖에서는 주문이 차단됩니다.`;
+      text.textContent = fmtLocationSetStatus(parseFloat(currentStoreLat).toFixed(5), parseFloat(currentStoreLng).toFixed(5));
     } else {
-      text.textContent = "아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)";
+      text.textContent = T("locationNotSet");
     }
   }
 
@@ -1367,12 +1684,12 @@
     const msg = $("#locationMsg");
     if (!navigator.geolocation) {
       msg.style.color = "#b3261e";
-      msg.textContent = "이 브라우저는 위치 정보를 지원하지 않습니다.";
+      msg.textContent = T("locationNoBrowserSupport");
       msg.hidden = false;
       return;
     }
     msg.style.color = "#6b6357";
-    msg.textContent = "위치 확인 중…";
+    msg.textContent = T("locationChecking");
     msg.hidden = false;
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -1391,12 +1708,12 @@
         currentStoreLng = String(lng);
         renderLocationStatus();
         msg.style.color = "#1a8a44";
-        msg.textContent = "매장 위치가 저장되었습니다.";
+        msg.textContent = T("locationSaved");
         setTimeout(() => (msg.hidden = true), 3000);
       },
       (err) => {
         msg.style.color = "#b3261e";
-        msg.textContent = "위치 확인 실패: 브라우저 위치 권한을 허용해주세요.";
+        msg.textContent = T("locationFailed");
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -1410,7 +1727,7 @@
     });
     const msg = $("#noticeMsg");
     msg.style.color = "#1a8a44";
-    msg.textContent = "저장되었습니다";
+    msg.textContent = T("savedMsg");
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
   };
@@ -1426,10 +1743,10 @@
       const data = await res.json();
       $("#logoPreview").style.backgroundImage = `url('${data.store_logo}')`;
       msg.style.color = "#1a8a44";
-      msg.textContent = "로고가 업데이트되었습니다";
+      msg.textContent = T("logoUpdated");
     } else {
       msg.style.color = "#b5232c";
-      msg.textContent = "업로드 실패. 다시 시도해주세요";
+      msg.textContent = T("uploadFailed");
     }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
@@ -1446,10 +1763,10 @@
       const data = await res.json();
       $("#coverPreview").style.backgroundImage = `url('${data.store_cover_photo}')`;
       msg.style.color = "#1a8a44";
-      msg.textContent = "사진이 업데이트되었습니다";
+      msg.textContent = T("coverUpdated");
     } else {
       msg.style.color = "#b5232c";
-      msg.textContent = "업로드 실패. 다시 시도해주세요";
+      msg.textContent = T("uploadFailed");
     }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
@@ -1466,15 +1783,16 @@
     });
     if (res.ok) {
       msg.style.color = "#1a8a44";
-      msg.textContent = "비밀번호가 변경되었습니다";
+      msg.textContent = T("pwChanged");
       $("#pw_current").value = "";
       $("#pw_new").value = "";
     } else {
       msg.style.color = "#b5232c";
-      msg.textContent = "변경 실패. 현재 비밀번호가 맞는지 확인하세요 (새 비밀번호는 6자 이상)";
+      msg.textContent = T("pwChangeFailed");
     }
     msg.hidden = false;
   };
 
+  applyAdminI18n();
   checkAuth();
 })();
