@@ -135,6 +135,7 @@
       locationSaved: "매장 위치가 저장되었습니다.",
       locationFailed: "위치 확인 실패: 브라우저 위치 권한을 허용해주세요.",
       settingsPwTitle: "비밀번호 변경",
+      ownerPwTitle: "사장 비밀번호 변경",
       labelPwCurrent: "현재 비밀번호",
       labelPwNew: "새 비밀번호 (6자 이상)",
       changePwBtn: "비밀번호 변경",
@@ -276,6 +277,7 @@
       locationSaved: "店家位置已儲存。",
       locationFailed: "定位失敗：請允許瀏覽器的位置權限。",
       settingsPwTitle: "變更密碼",
+      ownerPwTitle: "變更老闆密碼",
       labelPwCurrent: "目前密碼",
       labelPwNew: "新密碼（至少 6 碼）",
       changePwBtn: "變更密碼",
@@ -1859,10 +1861,13 @@
     setTimeout(() => (msg.hidden = true), 2000);
   };
 
-  $("#changePwBtn").onclick = async () => {
-    const currentPassword = $("#pw_current").value;
-    const newPassword = $("#pw_new").value;
-    const msg = $("#pwMsg");
+  // Same endpoint for both cards below — the server changes whichever
+  // account (owner or staff) the current session actually belongs to, so
+  // the "사장 비밀번호 변경" card just needs to be owner-only in the UI.
+  async function changeOwnPassword(curId, newId, msgId) {
+    const currentPassword = $(`#${curId}`).value;
+    const newPassword = $(`#${newId}`).value;
+    const msg = $(`#${msgId}`);
     const res = await fetch("/api/auth/change-password", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1871,14 +1876,17 @@
     if (res.ok) {
       msg.style.color = "#1a8a44";
       msg.textContent = T("pwChanged");
-      $("#pw_current").value = "";
-      $("#pw_new").value = "";
+      $(`#${curId}`).value = "";
+      $(`#${newId}`).value = "";
     } else {
       msg.style.color = "#b5232c";
       msg.textContent = T("pwChangeFailed");
     }
     msg.hidden = false;
-  };
+  }
+
+  $("#changePwBtn").onclick = () => changeOwnPassword("pw_current", "pw_new", "pwMsg");
+  $("#changeOwnerPwBtn").onclick = () => changeOwnPassword("owner_pw_current", "owner_pw_new", "ownerPwMsg");
 
   // ---------- Staff permission management (owner only) ----------
   const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel"];

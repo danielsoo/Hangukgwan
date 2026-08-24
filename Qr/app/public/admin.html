@@ -138,12 +138,19 @@
         <label><span data-i18n="labelRadius">허용 반경 (미터)</span><input id="s_order_radius_m" type="number" min="20" step="10" /></label>
         <p class="settings-hint" id="locationStatusText" data-i18n="locationNotSet">아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)</p>
       </div>
-      <div class="settings-card">
+      <div class="settings-card staff-only">
         <h3 data-i18n="settingsPwTitle">비밀번호 변경</h3>
         <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="pw_current" type="password" /></label>
         <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="pw_new" type="password" /></label>
         <button id="changePwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
         <div class="save-msg" id="pwMsg" hidden></div>
+      </div>
+      <div class="settings-card owner-only">
+        <h3 data-i18n="ownerPwTitle">사장 비밀번호 변경</h3>
+        <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="owner_pw_current" type="password" /></label>
+        <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="owner_pw_new" type="password" /></label>
+        <button id="changeOwnerPwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
+        <div class="save-msg" id="ownerPwMsg" hidden></div>
       </div>
       <div class="settings-card owner-only">
         <h3 data-i18n="staffPermTitle">직원 권한 관리</h3>

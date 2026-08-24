@@ -176,6 +176,7 @@ input, select, button, textarea { font-family: inherit; }
    this is purely about not showing controls a staff session can't use;
    hiding it client-side isn't the actual security boundary. */
 .role-staff .owner-only { display: none !important; }
+body:not(.role-staff) .staff-only { display: none !important; }
 .perm-no-menuEdit .need-menuEdit { display: none !important; }
 .perm-no-tableEdit .need-tableEdit { display: none !important; }
 .perm-no-settingsEdit .need-settingsEdit { display: none !important; }
