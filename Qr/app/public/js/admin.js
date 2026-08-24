@@ -9,6 +9,8 @@
   let editingItemPhotoUrl = null;
   let selectedPhotoFile = null;
   let soundOn = true;
+  let autoPrintOn = false;
+  let storeSettings = {};
   let pollTimer = null;
   let knownOrderIds = new Set();
   let openTableNumber = null;
@@ -102,6 +104,7 @@
   }
 
   $("#soundToggle").onchange = (e) => (soundOn = e.target.checked);
+  $("#autoPrintToggle").onchange = (e) => (autoPrintOn = e.target.checked);
   $("#refreshOrders").onclick = loadOrders;
 
   // ---------- Orders ----------
@@ -123,6 +126,7 @@
     if (!isFirstLoad && newlyArrived.length > 0) {
       newlyArrived.forEach((o) => flashNewOrder(o.id));
       if (soundOn) playBeep();
+      if (autoPrintOn) newlyArrived.forEach((o) => printKitchenTicket(o));
     }
   }
 
@@ -191,6 +195,13 @@
       };
       actions.appendChild(cancelBtn);
     }
+    const printBtn = document.createElement("button");
+    printBtn.textContent = "🖨️ 인쇄";
+    printBtn.onclick = (e) => {
+      e.stopPropagation();
+      printKitchenTicket(o);
+    };
+    actions.appendChild(printBtn);
     card.onclick = () => openOrderDetail(o);
     return card;
   }
@@ -200,6 +211,101 @@
       const el = document.querySelector(`.order-card[data-order-id="${id}"]`);
       if (el) el.classList.add("flash");
     }, 50);
+  }
+
+  // ---------- Kitchen ticket printing ----------
+  // Replicates the restaurant's existing paper order slip: the full menu,
+  // grouped by category with black header bars, and only the ordered
+  // items' quantity boxes filled in. Printed via a hidden iframe so it
+  // doesn't disturb the admin page itself — whatever printer is set as
+  // the default on this computer/tablet receives it, same as any normal
+  // browser print. Sized for an 80mm thermal receipt printer (the common
+  // standard); the width can be tuned later in the @page/body CSS below
+  // once the actual printer is known.
+  function buildTicketHtml(o) {
+    const table = tables.find((t) => t.number === o.table_number);
+    const partySize = table && table.party_size ? table.party_size : "";
+    const orderedMap = {};
+    o.items.forEach((it) => {
+      if (!orderedMap[it.item_id]) orderedMap[it.item_id] = { qty: 0, notes: [] };
+      orderedMap[it.item_id].qty += it.qty;
+      if (it.option_choice) orderedMap[it.item_id].notes.push(it.option_choice);
+      if (it.note) orderedMap[it.item_id].notes.push(it.note);
+    });
+
+    const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
+    const storeName = storeSettings.store_name_zh || "韓國館";
+    const phone = storeSettings.store_phone ? `TEL：${storeSettings.store_phone}` : "";
+
+    let rows = "";
+    categories.forEach((c) => {
+      if (!c.items || !c.items.length) return;
+      rows += `<tr class="cat-row"><td colspan="4">${c.name_zh || c.name_ko}</td></tr>`;
+      c.items.forEach((item) => {
+        const ord = orderedMap[item.id];
+        const noteHtml = ord && ord.notes.length ? `<div class="row-note">${ord.notes.join(", ")}</div>` : "";
+        rows += `
+          <tr class="${ord ? "ordered" : ""}">
+            <td class="code">${item.code || ""}</td>
+            <td class="name">${item.name_zh || item.name_ko}${noteHtml}</td>
+            <td class="price">${item.price}</td>
+            <td class="qty">${ord ? ord.qty : ""}</td>
+          </tr>`;
+      });
+    });
+
+    return `<!DOCTYPE html>
+<html><head><meta charset="utf-8" />
+<style>
+  @page { size: 80mm auto; margin: 2mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; width: 76mm; margin: 0; padding: 0; font-size: 11px; color: #000; }
+  .store-name { text-align: center; font-size: 18px; font-weight: 900; margin: 1mm 0 0; }
+  .store-sub { text-align: center; font-size: 10px; margin-bottom: 2mm; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 1mm 0; margin-bottom: 1mm; }
+  table { width: 100%; border-collapse: collapse; }
+  td { border: 1px solid #000; padding: 0.8mm 1mm; font-size: 10px; vertical-align: middle; }
+  .cat-row td { background: #000; color: #fff; text-align: center; font-weight: 900; font-size: 11px; padding: 1mm; }
+  .code { width: 8mm; text-align: center; font-weight: 700; }
+  .price { width: 10mm; text-align: right; }
+  .qty { width: 9mm; text-align: center; font-weight: 900; }
+  tr.ordered td { background: #ffe9a8; }
+  .row-note { font-size: 8.5px; color: #333; }
+  .footer { text-align: right; font-weight: 900; font-size: 14px; margin-top: 2mm; border-top: 2px solid #000; padding-top: 1mm; }
+  .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 2mm; }
+</style>
+</head><body>
+  <div class="store-name">${storeName}</div>
+  ${phone ? `<div class="store-sub">${phone}</div>` : ""}
+  <div class="meta-row"><span>桌號：${o.table_number}</span><span>人數：${partySize || "-"}</span></div>
+  <table>${rows}</table>
+  ${o.note ? `<div class="row-note" style="margin-top:1mm;">주문 메모: ${o.note}</div>` : ""}
+  <div class="footer">金額合計：NT$${o.total}</div>
+  <div class="print-time">${time}</div>
+</body></html>`;
+  }
+
+  function printKitchenTicket(o) {
+    let iframe = document.getElementById("ticketPrintFrame");
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "ticketPrintFrame";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(buildTicketHtml(o));
+    doc.close();
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }, 150);
   }
 
   async function updateOrderStatus(id, status) {
@@ -1211,6 +1317,7 @@
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
+    storeSettings = s;
     $("#s_store_name_zh").value = s.store_name_zh || "";
     $("#s_store_name_ko").value = s.store_name_ko || "";
     $("#s_store_name_en").value = s.store_name_en || "";
