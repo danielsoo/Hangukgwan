@@ -42,6 +42,20 @@
 
   <div class="toast-banner" id="toastBanner"></div>
 
+  <!-- Shown once, 1 minute before the 3-minute inactivity auto-lock. "연장"
+       resets the timer back to a fresh 3 minutes; "확인" just dismisses this
+       banner and lets the existing countdown keep running toward the lock.
+       Any other normal interaction with the page (browsing the menu, etc.)
+       still resets the countdown as always — this banner doesn't change
+       that, it just also gives an explicit way to extend right here. -->
+  <div class="idle-warning-banner" id="idleWarningBanner" hidden>
+    <p id="idleWarningText"></p>
+    <div class="idle-warning-actions">
+      <button id="idleExtendBtn" data-i18n="idleExtendBtn">연장</button>
+      <button id="idleAckBtn" data-idle-ignore data-i18n="idleAckBtn">확인</button>
+    </div>
+  </div>
+
   <button class="cart-fab" id="cartFab" hidden>
     <span id="cartCount">0</span>
     <span class="cart-fab-label" data-i18n="viewCart">查看購物車</span>

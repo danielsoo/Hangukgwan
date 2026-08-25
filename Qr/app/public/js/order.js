@@ -351,6 +351,13 @@
     if (cart.length === 0) return;
     const btn = $("#submitOrderBtn");
 
+    // Belt-and-suspenders: party size is required before an order can go
+    // through, even if something let the modal get skipped/dismissed.
+    if (!partySize) {
+      showPartySizeModal();
+      return;
+    }
+
     if (partySize && cartCount() < partySize) {
       showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
     }
@@ -383,6 +390,7 @@
         const body = await res.json().catch(() => ({}));
         if (body.error === "out_of_range") throw new Error("out_of_range");
         if (body.error === "location_required") throw new Error("location_required");
+        if (body.error === "party_size_required") throw new Error("party_size_required");
         throw new Error("submit_failed");
       }
       const order = await res.json();
@@ -395,6 +403,7 @@
     } catch (e) {
       if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
+      else if (e.message === "party_size_required") showPartySizeModal();
       else alert(t("submitFailed"));
     } finally {
       btn.disabled = false;
@@ -552,15 +561,37 @@
     };
   });
 
-  // Party size: asked once per fresh page load, before ordering. Kept on the
-  // table itself (server side) since until payment everyone ordering from a
-  // table is treated as the same party — this also feeds the soft "1인
-  // 1메뉴" reminder at checkout and shows up on the kitchen ticket in admin.
+  // Party size: required before ordering. Kept on the table itself (server
+  // side) since until payment everyone ordering from a table is treated as
+  // the same party — this also feeds the soft "1인 1메뉴" reminder at
+  // checkout and shows up on the kitchen ticket in admin.
+  //
+  // It must survive a page refresh / re-scan mid-visit (the same party
+  // shouldn't be asked again just because their phone reloaded the page),
+  // so on every load we first ask the server whether this table already
+  // has one registered. It only gets cleared once the table is actually
+  // settled (admin's "전체 결제 완료" or a completed online payment — see
+  // src/routes/tables.js's DELETE /party-size, called from those two
+  // places), which is the real signal that this party is done and the
+  // table is free for whoever scans it next.
   let partySizeStep = 1;
   function showPartySizeModal() {
     partySizeStep = 1;
     $("#partySizeVal").textContent = partySizeStep;
     $("#partySizeBackdrop").hidden = false;
+  }
+  async function initPartySize() {
+    try {
+      const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
+      const data = await res.json();
+      if (res.ok && data.party_size) {
+        partySize = data.party_size;
+        return; // already registered for this table's current party — don't ask again
+      }
+    } catch (e) {
+      /* network error — fall through and ask, same as if none was registered */
+    }
+    showPartySizeModal();
   }
   $("#partySizeMinus").onclick = () => {
     partySizeStep = Math.max(1, partySizeStep - 1);
@@ -595,22 +626,48 @@
   // orders onto a table long after the fact — re-scanning is trivial for an
   // actual customer, so there's no real cost to being strict about it.
   const IDLE_LIMIT_MS = 3 * 60 * 1000;
+  const IDLE_WARNING_MS = IDLE_LIMIT_MS - 60 * 1000; // warn 1 minute before it locks
   let idleTimer = null;
+  let idleWarningTimer = null;
   function lockSession() {
+    hideIdleWarning();
     stopStatusPolling();
     $("#sessionLockBackdrop").hidden = false;
   }
+  function showIdleWarning() {
+    $("#idleWarningText").textContent = t("idleWarningMsg");
+    $("#idleWarningBanner").hidden = false;
+  }
+  function hideIdleWarning() {
+    $("#idleWarningBanner").hidden = true;
+  }
   function resetIdleTimer() {
+    hideIdleWarning();
     clearTimeout(idleTimer);
+    clearTimeout(idleWarningTimer);
+    idleWarningTimer = setTimeout(showIdleWarning, IDLE_WARNING_MS);
     idleTimer = setTimeout(lockSession, IDLE_LIMIT_MS);
   }
+  // "확인" is marked [data-idle-ignore] so tapping it doesn't itself count as
+  // activity — the countdown keeps running toward the lock exactly as it
+  // was. "연장" (and any other normal interaction with the page) resets it
+  // back to a fresh 3 minutes as usual.
   ["click", "touchstart", "keydown", "scroll", "input"].forEach((evt) => {
-    document.addEventListener(evt, resetIdleTimer, { passive: true });
+    document.addEventListener(
+      evt,
+      (e) => {
+        if (e.target && e.target.closest && e.target.closest("[data-idle-ignore]")) return;
+        resetIdleTimer();
+      },
+      { passive: true }
+    );
   });
+  $("#idleExtendBtn").onclick = () => resetIdleTimer();
+  $("#idleAckBtn").onclick = () => hideIdleWarning();
   resetIdleTimer();
 
   applyStaticI18n();
   loadSettings();
   loadMenu();
-  showPartySizeModal();
+  initPartySize();
 })();

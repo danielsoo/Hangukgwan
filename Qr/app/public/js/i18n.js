@@ -47,6 +47,9 @@ const I18N = {
     orderNotePlaceholder: "整單備註（選填）",
     payOnlineBtn: "線上付款",
     payOnlineConfirm: "要用信用卡/LINE Pay/JKOPay 等方式付清這桌的未結帳金額嗎？",
+    idleWarningMsg: "1 分鐘後畫面將自動鎖定，需要重新掃描 QR Code 才能繼續。",
+    idleExtendBtn: "延長",
+    idleAckBtn: "知道了",
   },
   ko: {
     viewCart: "장바구니 보기",
@@ -95,6 +98,9 @@ const I18N = {
     orderNotePlaceholder: "전체 요청 사항 (선택)",
     payOnlineBtn: "온라인 결제",
     payOnlineConfirm: "이 테이블의 미결제 금액을 신용카드/LINE Pay/JKOPay 등으로 결제할까요?",
+    idleWarningMsg: "1분 후 화면이 자동으로 잠깁니다. 계속하려면 QR 코드를 다시 스캔해야 해요.",
+    idleExtendBtn: "연장",
+    idleAckBtn: "확인",
   },
   en: {
     viewCart: "View Cart",
@@ -143,5 +149,8 @@ const I18N = {
     orderNotePlaceholder: "Note for the whole order (optional)",
     payOnlineBtn: "Pay Online",
     payOnlineConfirm: "Pay this table's outstanding balance now by credit card / LINE Pay / JKOPay?",
+    idleWarningMsg: "The screen will lock automatically in 1 minute — you'll need to rescan the QR code to continue.",
+    idleExtendBtn: "Extend",
+    idleAckBtn: "Got it",
   },
 };

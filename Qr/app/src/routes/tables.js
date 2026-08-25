@@ -80,6 +80,29 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   res.json({ party_size: table.party_size });
 });
 
+// Public: lets the customer page check whether this table already has a
+// party size registered — so a page refresh (or re-scanning the QR code
+// mid-visit) doesn't ask again for the same party. Only exposes the one
+// field (not the rest of the table record).
+router.get("/:tableNumber/party-size", (req, res) => {
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  res.json({ party_size: table.party_size || null });
+});
+
+// Clears the registered party size — called once a table is fully settled
+// (admin's "전체 결제 완료" and the online-payment callback both call this),
+// so the *next* party that scans this table's QR code is asked fresh
+// instead of silently inheriting the previous party's headcount.
+router.delete("/:tableNumber/party-size", async (req, res) => {
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  table.party_size = null;
+  table.party_size_updated_at = null;
+  await save();
+  res.json({ ok: true });
+});
+
 router.delete("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.tables = store.tables.filter((t) => t.id !== id);

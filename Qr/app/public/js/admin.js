@@ -1474,7 +1474,12 @@
         btn.onclick = async () => {
           if (!confirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length))) return;
           await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
+          // Table is fully settled — clear its registered party size so the
+          // next party that scans this table's QR code is asked fresh
+          // instead of silently inheriting this party's headcount.
+          await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, { method: "DELETE" });
           await loadOrders();
+          await loadTables();
           openTableDetail(tableNumber, label);
         };
       });

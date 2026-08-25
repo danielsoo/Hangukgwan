@@ -109,6 +109,19 @@ router.post("/callback", async (req, res) => {
         order.updated_at = nowLocal();
       }
     }
+    // If this payment cleared every remaining unpaid order for the table,
+    // it's fully settled — clear the registered party size so the next
+    // party that scans this table's QR code is asked fresh instead of
+    // silently inheriting this party's headcount. (If a new order came in
+    // for this table after checkout started, this stays untouched — the
+    // party is evidently still there.)
+    if (unpaidOrdersForTable(payment.table_number).length === 0) {
+      const table = store.tables.find((t) => String(t.number) === String(payment.table_number));
+      if (table) {
+        table.party_size = null;
+        table.party_size_updated_at = null;
+      }
+    }
     await save();
   } else if (!success && payment.status === "pending") {
     payment.status = "failed";

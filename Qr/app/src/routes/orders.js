@@ -43,6 +43,14 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "invalid_order" });
   }
 
+  // Party size is required before a table can order at all (see the
+  // party-size modal in public/js/order.js) — enforced here too so it can
+  // never be bypassed by a direct API call, not just hidden in the UI.
+  const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
+  if (!orderingTable || !orderingTable.party_size) {
+    return res.status(400).json({ error: "party_size_required" });
+  }
+
   const locationError = checkLocation(lat, lng);
   if (locationError) return res.status(403).json({ error: locationError });
 
