@@ -25,10 +25,13 @@ router.post("/", async (req, res) => {
     return res.status(401).json({ error: "invalid_signature" });
   }
 
-  // Respond fast — LINE expects a quick 200 and will retry if it doesn't
-  // get one, which could otherwise process the same event twice.
-  res.status(200).json({ ok: true });
-
+  // NOTE: this must await all processing (profile lookup, DB save) BEFORE
+  // responding — sending res.json() early and continuing work afterward
+  // (the usual "ack fast" pattern) doesn't work on Vercel's serverless
+  // functions: the function instance can be frozen/torn down the moment the
+  // response is flushed, silently killing any pending awaits. That's why
+  // people friending the account weren't showing up in the pending list —
+  // the response was going out before the profile fetch + save() ever ran.
   const token = store.settings.line_channel_access_token;
   const events = (req.body && req.body.events) || [];
   let changed = false;
@@ -75,6 +78,8 @@ router.post("/", async (req, res) => {
   }
 
   if (changed) await save();
+
+  res.status(200).json({ ok: true });
 });
 
 module.exports = router;
