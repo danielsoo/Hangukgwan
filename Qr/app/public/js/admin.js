@@ -924,7 +924,7 @@
       const reserved = TEMPLATE_SLOTS[key] || 0;
       const items = (cat && cat.items) || [];
       for (let i = 0; i < reserved; i++) {
-        slots.push({ rect: rowRect(rowCursor++), type: "item", item: items[i] || null });
+        slots.push({ rect: rowRect(rowCursor++), type: "item", item: items[i] || null, catKey: key });
       }
       if (items.length > reserved) extra.push(...items.slice(reserved));
     });
@@ -935,11 +935,26 @@
     return (px / total) * 100;
   }
 
-  function tallyOverlayForSlot(rect, side, item, orderedMap) {
+  // Four independently-tunable tally style groups (per owner's explicit
+  // grouping, not just "option vs regular"):
+  //   1) tally-overlay-option   — 11,15,17,51 (牛/豬, 鮪魚/蝦仁 등 옵션 분할 칸)
+  //   2) tally-overlay-rice     — 12,13,14,16,18 (rice의 나머지, 옵션 없음)
+  //   3) tally-overlay-leftrest — 21~45 (noodle 전체 + hotpot 전체)
+  //   4) tally-overlay-rightrest— 52~94 및 그 뒤 사진에 번호 없는 추가 항목까지
+  //                                (bbq의 나머지 + other 전체 + drink 전체)
+  function tallyGroupClass(catKey, item) {
+    if (item.options && item.options.trim()) return "tally-overlay-option";
+    if (catKey === "rice") return "tally-overlay-rice";
+    if (catKey === "noodle" || catKey === "hotpot") return "tally-overlay-leftrest";
+    return "tally-overlay-rightrest"; // bbq(옵션 제외)/other/drink
+  }
+
+  function tallyOverlayForSlot(rect, side, catKey, item, orderedMap) {
     if (!item) return "";
     const ord = orderedMap[item.id];
     if (!ord) return "";
     const colX = COLS[side].qty;
+    const groupClass = tallyGroupClass(catKey, item);
     const optsArr = item.options ? item.options.split(",").map((s) => s.trim()).filter(Boolean) : null;
     if (optsArr && optsArr.length) {
       const subW = (colX[1] - colX[0]) / optsArr.length;
@@ -955,14 +970,14 @@
           // border reads as "belongs to the row below" at a glance.
           const top = rect.top + (rect.bottom - rect.top) * 0.5;
           const height = (rect.bottom - rect.top) * 0.4;
-          return `<div class="tally-overlay tally-overlay-option" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
+          return `<div class="tally-overlay ${groupClass}" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
             subW,
             TICKET_IMG_W
           )}%;height:${pct(height, TICKET_IMG_H)}%;">${tallyMark(qty)}</div>`;
         })
         .join("");
     }
-    return `<div class="tally-overlay tally-overlay-regular" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(
+    return `<div class="tally-overlay ${groupClass}" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(
       rect.top,
       TICKET_IMG_H
     )}%;width:${pct(colX[1] - colX[0], TICKET_IMG_W)}%;height:${pct(rect.bottom - rect.top, TICKET_IMG_H)}%;">${tallyMark(
@@ -990,10 +1005,10 @@
 
     let overlays = "";
     leftBuild.slots.forEach((s) => {
-      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "left", s.item, orderedMap);
+      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "left", s.catKey, s.item, orderedMap);
     });
     rightBuild.slots.forEach((s) => {
-      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "right", s.item, orderedMap);
+      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "right", s.catKey, s.item, orderedMap);
     });
 
     // 桌號 / 人數 values, in the blank cell of the top header box (y249-301).
@@ -1064,10 +1079,18 @@
   .tally-overlay-option .tally-glyph { width: 5.2vw; height: 2.2vw; }
   .tally-overlay-option .tally-glyph-single { height: 1.1vw; }
 
-  /* ── 그룹 2: 나머지 일반 항목 (옵션 없는 모든 수량 칸) ──
-     칸을 혼자 다 쓰므로 획(막대) 길이를 옵션 항목의 2배로. */
-  .tally-overlay-regular .tally-glyph { width: 10.4vw; height: 2.2vw; }
-  .tally-overlay-regular .tally-glyph-single { height: 1.1vw; }
+  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
+  .tally-overlay-rice .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-rice .tally-glyph-single { height: 1.1vw; }
+
+  /* ── 그룹 3: 왼쪽 나머지 (21~45 — noodle 전체 + hotpot 전체) ── */
+  .tally-overlay-leftrest .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-leftrest .tally-glyph-single { height: 1.1vw; }
+
+  /* ── 그룹 4: 오른쪽 나머지 (52~94 및 사진에 번호 없는 추가 항목까지 —
+     bbq 중 옵션 없는 항목 + other 전체 + drink 전체) ── */
+  .tally-overlay-rightrest .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-rightrest .tally-glyph-single { height: 1.1vw; }
 
   /* ── 그룹 3: 桌號 (테이블 번호) ── */
   .header-value-table { font-size: 3.6vw; }
