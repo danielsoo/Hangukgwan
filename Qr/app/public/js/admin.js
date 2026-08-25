@@ -955,17 +955,19 @@
           // border reads as "belongs to the row below" at a glance.
           const top = rect.top + (rect.bottom - rect.top) * 0.5;
           const height = (rect.bottom - rect.top) * 0.4;
-          return `<div class="tally-overlay" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
+          return `<div class="tally-overlay tally-overlay-option" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
             subW,
             TICKET_IMG_W
           )}%;height:${pct(height, TICKET_IMG_H)}%;">${tallyMark(qty)}</div>`;
         })
         .join("");
     }
-    return `<div class="tally-overlay" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(rect.top, TICKET_IMG_H)}%;width:${pct(
-      colX[1] - colX[0],
-      TICKET_IMG_W
-    )}%;height:${pct(rect.bottom - rect.top, TICKET_IMG_H)}%;">${tallyMark(ord.qty)}</div>`;
+    return `<div class="tally-overlay tally-overlay-regular" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(
+      rect.top,
+      TICKET_IMG_H
+    )}%;width:${pct(colX[1] - colX[0], TICKET_IMG_W)}%;height:${pct(rect.bottom - rect.top, TICKET_IMG_H)}%;">${tallyMark(
+      ord.qty
+    )}</div>`;
   }
 
   function buildTicketHtml(o) {
@@ -999,11 +1001,11 @@
     // toward the left side of its blank area (closer to its own label).
     const headerTop = 249;
     const headerBottom = 301;
-    overlays += `<div class="value-overlay header-value" style="left:${pct(330, TICKET_IMG_W)}%;top:${pct(
+    overlays += `<div class="value-overlay header-value-table" style="left:${pct(330, TICKET_IMG_W)}%;top:${pct(
       headerTop,
       TICKET_IMG_H
     )}%;width:${pct(110, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
-    overlays += `<div class="value-overlay header-value" style="left:${pct(674, TICKET_IMG_W)}%;top:${pct(
+    overlays += `<div class="value-overlay header-value-party" style="left:${pct(674, TICKET_IMG_W)}%;top:${pct(
       headerTop,
       TICKET_IMG_H
     )}%;width:${pct(140, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
@@ -1046,19 +1048,37 @@
   body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; color: #000; }
   .ticket-photo-wrap { position: relative; width: 100%; }
   .ticket-photo-wrap img { width: 100%; display: block; }
+  /* Shared base only — every group below overrides on top of this, and
+     each group is independently tunable: touching one never moves another.
+     Sized in vw (relative to the printed page width) rather than a fixed
+     px, so they scale with the photo the same way regardless of paper size. */
   .value-overlay, .tally-overlay {
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-weight: 900; color: #c0161f; line-height: 1;
   }
-  /* Sized in vw (relative to the printed page width) rather than a fixed
-     px, so they scale with the photo the same way regardless of paper
-     size — 3.76vw was measured directly off the "金額合計" label's own
-     printed character height, so the total lines up with it exactly. */
-  .value-overlay { font-size: 3.6vw; justify-content: center; }
+  .tally-overlay { gap: 1px; flex-wrap: wrap; transform: translateX(-10px); }
+  .tally-glyph { overflow: visible; }
+
+  /* ── 그룹 1: 옵션 항목 (11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯, 51 銅盤烤肉) ──
+     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 원래 크기 유지. */
+  .tally-overlay-option .tally-glyph { width: 5.2vw; height: 2.2vw; }
+  .tally-overlay-option .tally-glyph-single { height: 1.1vw; }
+
+  /* ── 그룹 2: 나머지 일반 항목 (옵션 없는 모든 수량 칸) ──
+     칸을 혼자 다 쓰므로 획(막대) 길이를 옵션 항목의 2배로. */
+  .tally-overlay-regular .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-regular .tally-glyph-single { height: 1.1vw; }
+
+  /* ── 그룹 3: 桌號 (테이블 번호) ── */
+  .header-value-table { font-size: 3.6vw; }
+
+  /* ── 그룹 4: 人數 (인원수) ── */
+  .header-value-party { font-size: 3.6vw; }
+
+  /* ── 그룹 5: 金額合計 (총 금액) ──
+     3.76vw는 "金額合計" 라벨 자체의 인쇄 글자 높이를 실측한 값 — 라벨과
+     숫자 크기가 딱 맞도록. */
   .total-overlay { font-size: 3.76vw; }
-  .tally-overlay { display: flex; align-items: center; justify-content: center; gap: 1px; flex-wrap: wrap; transform: translateX(-10px); }
-  .tally-glyph { width: 5.2vw; height: 2.2vw; overflow: visible; }
-  .tally-glyph-single { height: 1.1vw; }
   .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
   .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
   .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
