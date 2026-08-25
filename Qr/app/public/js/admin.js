@@ -972,7 +972,10 @@
           // border reads as "belongs to the row below" at a glance.
           const top = rect.top + (rect.bottom - rect.top) * 0.5;
           const height = (rect.bottom - rect.top) * 0.4;
-          return `<div class="tally-overlay ${groupClass}" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
+          // Group 1 (11/15/17) needs its left (牛/鮪魚) and right (豬/蝦仁)
+          // sub-cells independently movable — 51 stays a single unit.
+          const posClass = groupClass === "tally-overlay-group1" ? (i === 0 ? "tally-overlay-group1-left" : "tally-overlay-group1-right") : "";
+          return `<div class="tally-overlay ${groupClass} ${posClass}" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
             subW,
             TICKET_IMG_W
           )}%;height:${pct(height, TICKET_IMG_H)}%;">${tallyMark(qty)}</div>`;
@@ -1081,21 +1084,22 @@
   .tally-overlay-option-51 .tally-glyph-single { height: 1.1vw; }
 
   /* ── 그룹 1: 11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯 (51 제외) ──
-     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 크기는 원래 그대로,
-     위치만 기본(-10px)보다 5px 더 왼쪽으로. */
+     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 크기는 원래 그대로.
+     좌/우 칸(牛|豬, 鮪魚|蝦仁)을 따로 움직일 수 있도록 위치는 -left/-right에서 지정. */
   .tally-overlay-group1 .tally-glyph { width: 5.2vw; height: 2.2vw; }
   .tally-overlay-group1 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group1 { transform: translateX(-15px); }
+  .tally-overlay-group1-left { transform: translateX(-15px); } /* 왼쪽 칸: -14px에서 1px 더 왼쪽 */
+  .tally-overlay-group1-right { transform: translateX(-12px); } /* 오른쪽 칸: -14px에서 2px 오른쪽 */
 
-  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ──
-     기본(-10px)보다 5px 더 왼쪽으로. */
+  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
   .tally-overlay-group2 .tally-glyph { width: 10.4vw; height: 2.2vw; }
   .tally-overlay-group2 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group2 { transform: translateX(-15px); }
+  .tally-overlay-group2 { transform: translateX(-13px); } /* -15px에서 오른쪽으로 2px */
 
   /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
   .tally-overlay-group3 .tally-glyph { width: 10.4vw; height: 2.2vw; }
   .tally-overlay-group3 .tally-glyph-single { height: 1.1vw; }
+  .tally-overlay-group3 { transform: translateX(-8px); } /* 기본(-10px)에서 오른쪽으로 2px */
 
   /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
      bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
