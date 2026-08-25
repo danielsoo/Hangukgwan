@@ -2,7 +2,7 @@ const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireOwner } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
-const { sendLineBroadcast, formatSettlementSummary } = require("../line");
+const { sendLineMessage, formatSettlementSummary } = require("../line");
 
 const router = express.Router();
 
@@ -55,7 +55,7 @@ router.post("/close", requireOwner, async (req, res) => {
 // saved, so the owner can confirm the channel access token actually works
 // right after entering it, instead of waiting until the next cron run.
 router.post("/line-test", requireOwner, async (req, res) => {
-  const result = await sendLineBroadcast(store, "✅ 한국관 어드민 LINE 알림 테스트입니다. 이 메시지가 보이면 마감 자동 알림이 정상적으로 연결된 거예요!");
+  const result = await sendLineMessage(store, "✅ 한국관 어드민 LINE 알림 테스트입니다. 이 메시지가 보이면 마감 자동 알림이 정상적으로 연결된 거예요!");
   if (!result.ok) return res.status(400).json(result);
   res.json({ ok: true });
 });
@@ -79,7 +79,7 @@ router.get("/cron-close", async (req, res) => {
   await save();
 
   if (store.settings.line_notify_enabled) {
-    await sendLineBroadcast(store, formatSettlementSummary(snapshot));
+    await sendLineMessage(store, formatSettlementSummary(snapshot));
   }
 
   res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count });

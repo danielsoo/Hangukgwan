@@ -308,13 +308,21 @@
         </div>
         <div class="settings-card">
           <h3 data-i18n="lineSettingsTitle">마감 자동 알림 (LINE)</h3>
-          <p class="settings-hint" data-i18n="lineSettingsHint">매일 밤 마감 시간 이후 그날 매출/미결제 요약을 사장님 LINE으로 자동 전송해요. LINE 공식계정(Messaging API) 채널 액세스 토큰이 필요합니다.</p>
+          <p class="settings-hint" data-i18n="lineSettingsHint">매일 밤 마감 시간 이후 그날 매출/미결제 요약을, 아래 등록된 사람에게만 개별로 전송해요 (친구 추가한 모두에게 보내는 게 아니에요).</p>
           <label class="perm-toggle-row"><span data-i18n="lineEnableLabel">마감 알림 사용</span><input type="checkbox" id="lineEnabledToggle" /></label>
           <label><span data-i18n="lineTokenLabel">채널 액세스 토큰</span><input id="lineTokenInput" type="password" data-i18n-placeholder="lineTokenPlaceholder" placeholder="저장된 토큰이 있으면 비워두면 유지됩니다" /></label>
           <div id="lineTokenStatus" class="settings-hint"></div>
+          <label><span data-i18n="lineSecretLabel">채널 시크릿 (Webhook 인증용)</span><input id="lineSecretInput" type="password" data-i18n-placeholder="lineSecretPlaceholder" placeholder="저장된 값이 있으면 비워두면 유지됩니다" /></label>
+          <div id="lineSecretStatus" class="settings-hint"></div>
           <button id="saveLineSettingsBtn" data-i18n="saveLineSettingsBtn">저장</button>
           <button id="testLineBtn" type="button" data-i18n="testLineBtn">📩 지금 테스트 메시지 보내기</button>
           <div class="save-msg" id="lineMsg" hidden></div>
+          <hr style="margin:16px 0;border:none;border-top:1px solid var(--line);" />
+          <p class="settings-hint" data-i18n="linePendingHint">누군가 이 공식계정을 친구 추가하면 여기 대기 목록에 이름/사진과 함께 나타나요. 본인이 맞는지 확인하고 승인해야 실제로 알림을 받기 시작해요.</p>
+          <h4 data-i18n="linePendingTitle">승인 대기 중</h4>
+          <div id="linePendingList" class="line-people-list"></div>
+          <h4 data-i18n="lineApprovedTitle">알림 받는 사람</h4>
+          <div id="lineApprovedList" class="line-people-list"></div>
         </div>
       </div>
     </section>

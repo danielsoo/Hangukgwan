@@ -128,25 +128,72 @@ router.put("/staff-permissions", requireOwner, async (req, res) => {
   res.json(out);
 });
 
-// LINE closing-summary settings — owner-only, and the channel access token
-// is never sent back to the browser once saved (same idea as a password
-// field): the GET only reports whether one is currently set, not its value.
-router.get("/line", requireOwner, (req, res) => {
-  res.json({
+// LINE closing-summary settings — owner-only. The channel access token and
+// channel secret are never sent back to the browser once saved (same idea
+// as a password field): GET only reports whether each is currently set.
+//
+// Friending the Official Account does NOT by itself start sending someone
+// the closing summary — LINE has no way to look a person up by their
+// personal @ID or phone number, so instead each new follower shows up in
+// `line_pending_followers` with their LINE display name + photo (fetched
+// via the Profile API in src/routes/lineWebhook.js), and the owner
+// approves specific people by name into `line_targets`, which is what
+// sendLineMessage() actually sends to.
+function lineStatus() {
+  return {
     enabled: !!store.settings.line_notify_enabled,
     hasToken: !!store.settings.line_channel_access_token,
-  });
+    hasSecret: !!store.settings.line_channel_secret,
+    targets: (store.settings.line_targets || []).map((t) => ({ userId: t.userId, displayName: t.displayName, pictureUrl: t.pictureUrl })),
+    pending: (store.settings.line_pending_followers || []).map((p) => ({ userId: p.userId, displayName: p.displayName, pictureUrl: p.pictureUrl })),
+  };
+}
+
+router.get("/line", requireOwner, (req, res) => {
+  res.json(lineStatus());
 });
 
 router.put("/line", requireOwner, async (req, res) => {
   const b = req.body || {};
   if (typeof b.enabled === "boolean") store.settings.line_notify_enabled = b.enabled;
   if (typeof b.token === "string" && b.token.trim()) store.settings.line_channel_access_token = b.token.trim();
+  if (typeof b.secret === "string" && b.secret.trim()) store.settings.line_channel_secret = b.secret.trim();
   await save();
-  res.json({
-    enabled: !!store.settings.line_notify_enabled,
-    hasToken: !!store.settings.line_channel_access_token,
-  });
+  res.json(lineStatus());
+});
+
+// Moves a pending follower (identified by name/photo) into the approved
+// target list — this is the actual "register this specific person" action.
+router.post("/line/approve", requireOwner, async (req, res) => {
+  const userId = (req.body || {}).userId;
+  store.settings.line_pending_followers = store.settings.line_pending_followers || [];
+  store.settings.line_targets = store.settings.line_targets || [];
+  const pending = store.settings.line_pending_followers.find((p) => p.userId === userId);
+  if (!pending) return res.status(404).json({ error: "not_found" });
+
+  store.settings.line_pending_followers = store.settings.line_pending_followers.filter((p) => p.userId !== userId);
+  if (!store.settings.line_targets.some((t) => t.userId === userId)) {
+    store.settings.line_targets.push({ ...pending, approved_at: new Date().toISOString() });
+  }
+  await save();
+  res.json(lineStatus());
+});
+
+// Dismisses a pending follower without registering them (they stay
+// friended, just never receive anything).
+router.post("/line/reject", requireOwner, async (req, res) => {
+  const userId = (req.body || {}).userId;
+  store.settings.line_pending_followers = (store.settings.line_pending_followers || []).filter((p) => p.userId !== userId);
+  await save();
+  res.json(lineStatus());
+});
+
+// Revokes one specific already-approved person (e.g. added by mistake, or
+// should no longer receive it) without affecting anyone else.
+router.delete("/line/targets/:userId", requireOwner, async (req, res) => {
+  store.settings.line_targets = (store.settings.line_targets || []).filter((t) => t.userId !== req.params.userId);
+  await save();
+  res.json(lineStatus());
 });
 
 module.exports = router;

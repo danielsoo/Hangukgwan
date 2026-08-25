@@ -241,9 +241,15 @@ async function run() {
     order_radius_m: "200",
     // Nightly closing-summary LINE notification — off until the owner sets
     // up a LINE Official Account channel access token in Admin > 설정 >
-    // 관리자 전용.
+    // 관리자 전용. Friending the OA only adds someone to line_pending_followers
+    // (with their LINE display name/photo); the owner explicitly approves
+    // specific people by name into line_targets, which is what actually
+    // receives messages — see src/routes/lineWebhook.js.
     line_notify_enabled: false,
     line_channel_access_token: "",
+    line_channel_secret: "",
+    line_targets: [],
+    line_pending_followers: [],
   };
   for (const [k, v] of Object.entries(storeDefaults)) {
     if (!(k in store.settings)) store.settings[k] = v;

@@ -226,7 +226,7 @@
       cancelReservationBtn: "예약 취소 처리",
       reservationDeleteConfirm: "이 예약을 삭제하시겠습니까?",
       lineSettingsTitle: "마감 자동 알림 (LINE)",
-      lineSettingsHint: "매일 밤 마감 시간 이후 그날 매출/미결제 요약을 사장님 LINE으로 자동 전송해요. LINE 공식계정(Messaging API) 채널 액세스 토큰이 필요합니다.",
+      lineSettingsHint: "매일 밤 마감 시간 이후 그날 매출/미결제 요약을, 아래 등록된 사람에게만 개별로 전송해요 (친구 추가한 모두에게 보내는 게 아니에요).",
       lineEnableLabel: "마감 알림 사용",
       lineTokenLabel: "채널 액세스 토큰",
       lineTokenPlaceholder: "저장된 토큰이 있으면 비워두면 유지됩니다",
@@ -234,10 +234,23 @@
       testLineBtn: "📩 지금 테스트 메시지 보내기",
       lineTokenSetStatus: "✔ 토큰이 저장되어 있습니다",
       lineTokenNotSetStatus: "토큰이 아직 저장되지 않았습니다",
+      lineSecretLabel: "채널 시크릿 (Webhook 인증용)",
+      lineSecretPlaceholder: "저장된 값이 있으면 비워두면 유지됩니다",
+      lineSecretSetStatus: "✔ 채널 시크릿이 저장되어 있습니다",
+      lineSecretNotSetStatus: "채널 시크릿이 아직 저장되지 않았습니다",
+      linePendingHint: "누군가 이 공식계정을 친구 추가하면 여기 대기 목록에 이름/사진과 함께 나타나요. 본인이 맞는지 확인하고 승인해야 실제로 알림을 받기 시작해요.",
+      linePendingTitle: "승인 대기 중",
+      lineApprovedTitle: "알림 받는 사람",
+      linePendingEmpty: "대기 중인 사람이 없습니다.",
+      lineApprovedEmpty: "아직 등록된 사람이 없습니다.",
+      lineApproveBtn: "승인",
+      lineRejectBtn: "거절",
+      lineRemoveBtn: "삭제",
+      lineRemoveConfirm: "이 사람에게 더 이상 알림을 보내지 않을까요?",
       lineSavedMsg: "저장되었습니다",
       lineTestSending: "전송 중...",
       lineTestSuccess: "✔ 테스트 메시지를 보냈어요. LINE 앱을 확인해보세요.",
-      lineTestFailed: "전송 실패 — 토큰이나 공식계정 친구 추가 상태를 확인해주세요.",
+      lineTestFailed: "전송 실패 — 등록된 사람이 없거나 토큰을 확인해주세요.",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
@@ -438,7 +451,7 @@
       cancelReservationBtn: "標記為取消",
       reservationDeleteConfirm: "確定要刪除這筆訂位嗎？",
       lineSettingsTitle: "打烊自動通知（LINE）",
-      lineSettingsHint: "每天打烊時間後，會把當天營業額/未結帳摘要自動傳送到老闆的 LINE。需要 LINE 官方帳號（Messaging API）的頻道存取權杖。",
+      lineSettingsHint: "每天打烊時間後，只會把當天營業額/未結帳摘要傳送給下方已註冊的人（不是傳送給所有加好友的人）。",
       lineEnableLabel: "啟用打烊通知",
       lineTokenLabel: "頻道存取權杖",
       lineTokenPlaceholder: "若已儲存權杖，留空即可保留原本設定",
@@ -446,10 +459,23 @@
       testLineBtn: "📩 立即傳送測試訊息",
       lineTokenSetStatus: "✔ 已儲存權杖",
       lineTokenNotSetStatus: "尚未儲存權杖",
+      lineSecretLabel: "頻道密鑰（Webhook 驗證用）",
+      lineSecretPlaceholder: "若已儲存密鑰，留空即可保留原本設定",
+      lineSecretSetStatus: "✔ 已儲存頻道密鑰",
+      lineSecretNotSetStatus: "尚未儲存頻道密鑰",
+      linePendingHint: "只要有人將這個官方帳號加為好友，就會出現在下方待審核名單，附上姓名/照片。請確認是本人後再核准，核准後才會真正開始收到通知。",
+      linePendingTitle: "待審核",
+      lineApprovedTitle: "接收通知的人",
+      linePendingEmpty: "目前沒有待審核的人。",
+      lineApprovedEmpty: "尚未有人被核准接收通知。",
+      lineApproveBtn: "核准",
+      lineRejectBtn: "拒絕",
+      lineRemoveBtn: "移除",
+      lineRemoveConfirm: "確定不再傳送通知給這個人嗎？",
       lineSavedMsg: "已儲存",
       lineTestSending: "傳送中...",
       lineTestSuccess: "✔ 已傳送測試訊息，請確認 LINE App。",
-      lineTestFailed: "傳送失敗 — 請確認權杖或是否已加官方帳號為好友。",
+      lineTestFailed: "傳送失敗 — 請確認尚未有註冊的接收者，或檢查權杖設定。",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
@@ -2121,18 +2147,95 @@
   // sent back from the server once saved — only whether one is set — so
   // the input is left blank on load and only overwrites the saved token if
   // the owner actually types a new one in.
+  // Renders one row in either the pending or approved list — avatar photo
+  // (or a initial-letter fallback circle if LINE didn't give us one) plus
+  // name plus an action button (approve/reject, or remove).
+  function renderLinePersonRow(person, actionLabel, actionClass, onAction) {
+    const row = document.createElement("div");
+    row.className = "line-person-row";
+    const avatar = person.pictureUrl
+      ? `<img class="line-person-avatar" src="${person.pictureUrl}" alt="" />`
+      : `<div class="line-person-avatar-fallback">${(person.displayName || "?").charAt(0)}</div>`;
+    row.innerHTML = `${avatar}<span class="line-person-name">${person.displayName}</span>`;
+    const btn = document.createElement("button");
+    btn.className = actionClass;
+    btn.textContent = actionLabel;
+    btn.onclick = onAction;
+    row.appendChild(btn);
+    return row;
+  }
+
+  function renderLineStatus(data) {
+    $("#lineEnabledToggle").checked = !!data.enabled;
+    $("#lineTokenStatus").textContent = data.hasToken ? T("lineTokenSetStatus") : T("lineTokenNotSetStatus");
+    $("#lineSecretStatus").textContent = data.hasSecret ? T("lineSecretSetStatus") : T("lineSecretNotSetStatus");
+
+    const pendingEl = $("#linePendingList");
+    pendingEl.innerHTML = "";
+    if ((data.pending || []).length === 0) {
+      pendingEl.innerHTML = `<div class="line-people-empty">${T("linePendingEmpty")}</div>`;
+    } else {
+      data.pending.forEach((p) => {
+        pendingEl.appendChild(
+          renderLinePersonRow(p, T("lineApproveBtn"), "line-approve-btn", () => approveLineFollower(p.userId))
+        );
+        const rejectBtn = document.createElement("button");
+        rejectBtn.className = "line-reject-btn";
+        rejectBtn.textContent = T("lineRejectBtn");
+        rejectBtn.onclick = () => rejectLineFollower(p.userId);
+        pendingEl.lastChild.appendChild(rejectBtn);
+      });
+    }
+
+    const approvedEl = $("#lineApprovedList");
+    approvedEl.innerHTML = "";
+    if ((data.targets || []).length === 0) {
+      approvedEl.innerHTML = `<div class="line-people-empty">${T("lineApprovedEmpty")}</div>`;
+    } else {
+      data.targets.forEach((t) => {
+        approvedEl.appendChild(
+          renderLinePersonRow(t, T("lineRemoveBtn"), "line-remove-btn", () => removeLineTarget(t.userId))
+        );
+      });
+    }
+  }
+
   async function loadLineSettings() {
     const res = await fetch("/api/settings/line");
     if (!res.ok) return;
-    const data = await res.json();
-    $("#lineEnabledToggle").checked = !!data.enabled;
-    $("#lineTokenStatus").textContent = data.hasToken ? T("lineTokenSetStatus") : T("lineTokenNotSetStatus");
+    renderLineStatus(await res.json());
+  }
+
+  async function approveLineFollower(userId) {
+    const res = await fetch("/api/settings/line/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    if (res.ok) renderLineStatus(await res.json());
+  }
+
+  async function rejectLineFollower(userId) {
+    const res = await fetch("/api/settings/line/reject", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    if (res.ok) renderLineStatus(await res.json());
+  }
+
+  async function removeLineTarget(userId) {
+    if (!confirm(T("lineRemoveConfirm"))) return;
+    const res = await fetch(`/api/settings/line/targets/${encodeURIComponent(userId)}`, { method: "DELETE" });
+    if (res.ok) renderLineStatus(await res.json());
   }
 
   $("#saveLineSettingsBtn").onclick = async () => {
     const payload = { enabled: $("#lineEnabledToggle").checked };
     const token = $("#lineTokenInput").value.trim();
+    const secret = $("#lineSecretInput").value.trim();
     if (token) payload.token = token;
+    if (secret) payload.secret = secret;
     const res = await fetch("/api/settings/line", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -2140,9 +2243,9 @@
     });
     const msg = $("#lineMsg");
     if (res.ok) {
-      const data = await res.json();
       $("#lineTokenInput").value = "";
-      $("#lineTokenStatus").textContent = data.hasToken ? T("lineTokenSetStatus") : T("lineTokenNotSetStatus");
+      $("#lineSecretInput").value = "";
+      renderLineStatus(await res.json());
       msg.style.color = "#1a8a44";
       msg.textContent = T("lineSavedMsg");
     } else {

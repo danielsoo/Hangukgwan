@@ -10,7 +10,12 @@ const seed = require("./src/seed");
 const app = express();
 
 app.set("trust proxy", 1);
-app.use(express.json());
+// The `verify` hook stashes the raw request body on req.rawBody — needed by
+// the LINE webhook route (src/routes/lineWebhook.js) to check the
+// X-Line-Signature header, which is an HMAC over the exact raw bytes LINE
+// sent (re-serializing req.body wouldn't byte-for-byte match). Harmless for
+// every other route, which just keep using the parsed req.body as before.
+app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 
 // Refresh `store` from Mongo before every single request (not just once per
 // warm process) — Vercel can keep multiple separate server instances alive
@@ -64,6 +69,7 @@ app.use("/api/orders", require("./src/routes/orders"));
 app.use("/api/settings", require("./src/routes/settings"));
 app.use("/api/settlements", require("./src/routes/settlements"));
 app.use("/api/reservations", require("./src/routes/reservations"));
+app.use("/api/line/webhook", require("./src/routes/lineWebhook"));
 app.use("/api/photo", require("./src/routes/photos"));
 
 // Customer ordering page — table number is read client-side from the URL
