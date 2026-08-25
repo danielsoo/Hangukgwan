@@ -17,7 +17,7 @@ const uri = process.env.MONGODB_URI;
 function defaultStore() {
   return {
     _id: "main",
-    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1 },
+    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1, reservations: 1 },
     categories: [],
     menuItems: [],
     tables: [],
@@ -28,6 +28,9 @@ function defaultStore() {
     // orders are later edited/pruned. The 결산 admin tab also computes a
     // live (non-stored) view for "today" on demand.
     daily_settlements: [],
+    // Manually-logged phone/walk-in reservations (name/phone/date/time/party
+    // size), managed from the admin 예약 tab — see src/routes/reservations.js.
+    reservations: [],
     settings: {},
   };
 }

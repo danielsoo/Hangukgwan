@@ -187,6 +187,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .perm-no-tableEdit .need-tableEdit { display: none !important; }
 .perm-no-settingsEdit .need-settingsEdit { display: none !important; }
 .perm-no-orderCancel .need-orderCancel { display: none !important; }
+.perm-no-reservationManage .need-reservationManage { display: none !important; }
 .perm-toggle-row { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; }
 .perm-toggle-row input[type="checkbox"] { width: auto; margin-top: 0; transform: scale(1.3); }
 /* Live "실제 코드 UI" previews next to the logo/cover-photo uploads — shows
@@ -303,6 +304,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .modal-actions { display: flex; justify-content: space-between; margin-top: 10px; }
 .primary-btn { background: var(--red); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .danger-btn { background: #fff; color: var(--red); border: 1px solid var(--red); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
+
+/* Reservations (예약) */
+.reservations-list { display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
+.reservation-row {
+  display: flex; align-items: center; gap: 18px; background: #fff; border-radius: 12px;
+  padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); cursor: pointer;
+}
+.reservation-row:hover { background: #f7f5f1; }
+.reservation-row.reservation-cancelled { opacity: 0.55; }
+.reservation-when { min-width: 90px; text-align: center; }
+.reservation-date { font-size: 12px; color: var(--muted); }
+.reservation-time { font-size: 18px; font-weight: 800; color: var(--ink); }
+.reservation-info { flex: 1; min-width: 0; }
+.reservation-name { font-weight: 700; font-size: 14px; }
+.reservation-party { font-weight: 500; color: var(--muted); font-size: 12px; }
+.reservation-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.reservation-status { font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 999px; background: #eef1f7; color: var(--navy); }
+.reservation-status.status-cancelled { background: #fdecea; color: #b3261e; }
 
 .order-detail-modal { max-width: 420px; }
 .add-table-zone-modal { max-width: 420px; }

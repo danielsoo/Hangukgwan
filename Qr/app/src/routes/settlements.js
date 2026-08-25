@@ -2,8 +2,18 @@ const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireOwner } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
+const { sendLineBroadcast, formatSettlementSummary } = require("../line");
 
 const router = express.Router();
+
+function saveSettlementSnapshot(snapshot) {
+  const existing = store.daily_settlements.find((s) => s.date === snapshot.date);
+  if (existing) {
+    Object.assign(existing, snapshot);
+  } else {
+    store.daily_settlements.push({ id: nextId("daily_settlements"), ...snapshot });
+  }
+}
 
 // Settlement shows real revenue numbers, so — like 주문 취소 — it's treated
 // as sensitive business data and kept owner-only rather than gated behind a
@@ -36,14 +46,18 @@ router.get("/history", requireOwner, (req, res) => {
 router.post("/close", requireOwner, async (req, res) => {
   const date = (req.body && req.body.date) || taipeiDateString();
   const snapshot = computeSettlement(store, date);
-  const existing = store.daily_settlements.find((s) => s.date === date);
-  if (existing) {
-    Object.assign(existing, snapshot);
-  } else {
-    store.daily_settlements.push({ id: nextId("daily_settlements"), ...snapshot });
-  }
+  saveSettlementSnapshot(snapshot);
   await save();
   res.json(snapshot);
+});
+
+// Sends a one-off test message using whatever LINE settings are currently
+// saved, so the owner can confirm the channel access token actually works
+// right after entering it, instead of waiting until the next cron run.
+router.post("/line-test", requireOwner, async (req, res) => {
+  const result = await sendLineBroadcast(store, "✅ 한국관 어드민 LINE 알림 테스트입니다. 이 메시지가 보이면 마감 자동 알림이 정상적으로 연결된 거예요!");
+  if (!result.ok) return res.status(400).json(result);
+  res.json({ ok: true });
 });
 
 // Hit once a day by Vercel Cron (see vercel.json) shortly after closing time
@@ -61,13 +75,13 @@ router.get("/cron-close", async (req, res) => {
   }
   const date = taipeiDateString();
   const snapshot = computeSettlement(store, date);
-  const existing = store.daily_settlements.find((s) => s.date === date);
-  if (existing) {
-    Object.assign(existing, snapshot);
-  } else {
-    store.daily_settlements.push({ id: nextId("daily_settlements"), ...snapshot });
-  }
+  saveSettlementSnapshot(snapshot);
   await save();
+
+  if (store.settings.line_notify_enabled) {
+    await sendLineBroadcast(store, formatSettlementSummary(snapshot));
+  }
+
   res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count });
 });
 

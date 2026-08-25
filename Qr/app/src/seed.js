@@ -208,7 +208,17 @@ async function run() {
       tableEdit: false,
       settingsEdit: false,
       orderCancel: false,
+      reservationManage: false,
     };
+  } else {
+    // Backfill any permission keys added after this install's first seed
+    // (e.g. reservationManage) — same non-destructive pattern as db.js's
+    // refreshStore() backfill, so existing restaurants don't need a manual
+    // migration every time a new toggleable feature is added.
+    const permDefaults = { menuEdit: false, tableEdit: false, settingsEdit: false, orderCancel: false, reservationManage: false };
+    for (const k of Object.keys(permDefaults)) {
+      if (!(k in store.settings.staff_permissions)) store.settings.staff_permissions[k] = permDefaults[k];
+    }
   }
 
   const storeDefaults = {
@@ -229,6 +239,11 @@ async function run() {
     store_lat: "",
     store_lng: "",
     order_radius_m: "200",
+    // Nightly closing-summary LINE notification — off until the owner sets
+    // up a LINE Official Account channel access token in Admin > 설정 >
+    // 관리자 전용.
+    line_notify_enabled: false,
+    line_channel_access_token: "",
   };
   for (const [k, v] of Object.entries(storeDefaults)) {
     if (!(k in store.settings)) store.settings[k] = v;

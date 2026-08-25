@@ -103,8 +103,11 @@ router.get("/logo-preview", requireAdmin, async (req, res) => {
 });
 
 // Staff permission toggles — only the owner can view/change these (staff
-// obviously shouldn't be able to grant permissions to themselves).
-const STAFF_PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel"];
+// obviously shouldn't be able to grant permissions to themselves). New
+// toggle-able features should be added here going forward: the owner always
+// has them on, and separately decides whether to switch each one on for
+// staff too.
+const STAFF_PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "reservationManage"];
 
 router.get("/staff-permissions", requireOwner, (req, res) => {
   const perms = store.settings.staff_permissions || {};
@@ -123,6 +126,27 @@ router.put("/staff-permissions", requireOwner, async (req, res) => {
   const out = {};
   for (const k of STAFF_PERMISSION_KEYS) out[k] = !!store.settings.staff_permissions[k];
   res.json(out);
+});
+
+// LINE closing-summary settings — owner-only, and the channel access token
+// is never sent back to the browser once saved (same idea as a password
+// field): the GET only reports whether one is currently set, not its value.
+router.get("/line", requireOwner, (req, res) => {
+  res.json({
+    enabled: !!store.settings.line_notify_enabled,
+    hasToken: !!store.settings.line_channel_access_token,
+  });
+});
+
+router.put("/line", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  if (typeof b.enabled === "boolean") store.settings.line_notify_enabled = b.enabled;
+  if (typeof b.token === "string" && b.token.trim()) store.settings.line_channel_access_token = b.token.trim();
+  await save();
+  res.json({
+    enabled: !!store.settings.line_notify_enabled,
+    hasToken: !!store.settings.line_channel_access_token,
+  });
 });
 
 module.exports = router;

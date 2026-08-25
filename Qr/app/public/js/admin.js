@@ -21,11 +21,12 @@
   // after login — the server enforces the same boundaries independently
   // (see requirePermission in src/auth.js), this is just for the UI.
   let currentRole = "owner";
-  let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true };
+  let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, reservationManage: true };
   const canMenuEdit = () => currentRole === "owner" || staffPermissions.menuEdit;
   const canTableEdit = () => currentRole === "owner" || staffPermissions.tableEdit;
   const canSettingsEdit = () => currentRole === "owner" || staffPermissions.settingsEdit;
   const canCancelOrder = () => currentRole === "owner" || staffPermissions.orderCancel;
+  const canManageReservations = () => currentRole === "owner" || staffPermissions.reservationManage;
 
   // ---------- Admin UI language (Korean / Traditional Chinese) ----------
   // Unlike the customer order page (which always resets to Chinese on a
@@ -115,6 +116,7 @@
       settlementTodayBtn: "오늘",
       settlementWeekBtn: "최근 7일",
       settlementMonthBtn: "최근 30일",
+      settlementCsvBtn: "⬇️ CSV 다운로드",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
       settlementCloseRangeHint: "하루를 선택했을 때만 저장할 수 있어요 (시작일 = 종료일).",
       settlementSavedMsg: "✔ 저장됨",
@@ -129,6 +131,13 @@
       settlementItemQty: "수량",
       settlementItemSubtotal: "소계",
       settlementTrendTitle: "매출 추이 (선택한 기간)",
+      settlementTurnover: "평균 테이블 회전 시간",
+      settlementTurnoverMinutes: "분",
+      settlementTurnoverNoData: "–",
+      settlementHourlyTitle: "시간대별 방문 & 인기 메뉴",
+      settlementHourlyHint: "막대에 마우스를 올리면 그 시간대에 잘 팔린 메뉴를 볼 수 있어요.",
+      settlementHourlyOrders: "주문 수",
+      settlementHourlyTopItems: "인기 메뉴",
       settlementHistoryTitle: "지난 정산 기록",
       settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).",
       settlementHistoryEmpty: "아직 저장된 정산 기록이 없습니다.",
@@ -196,6 +205,39 @@
       permTableEdit: "테이블/배치도 추가·삭제·편집",
       permSettingsEdit: "매장 설정 변경",
       permOrderCancel: "주문 취소",
+      permReservationManage: "예약 추가/수정/삭제",
+      tabReservations: "예약",
+      reservationDateFilterLabel: "날짜",
+      reservationShowAllBtn: "전체 보기",
+      addReservationBtn: "+ 예약 추가",
+      reservationEmpty: "예약이 없습니다.",
+      reservationNoTable: "테이블 미배정",
+      reservationAddTitle: "예약 추가",
+      reservationEditTitle: "예약 수정",
+      reservationNameLabel: "예약자 이름",
+      reservationPhoneLabel: "전화번호",
+      reservationDateLabel: "날짜",
+      reservationTimeLabel: "시간",
+      reservationPartyLabel: "인원",
+      reservationTableLabel: "테이블 (선택사항)",
+      reservationTablePlaceholder: "비워두면 미배정",
+      reservationNoteLabel: "메모",
+      deleteReservationBtn: "예약 삭제",
+      cancelReservationBtn: "예약 취소 처리",
+      reservationDeleteConfirm: "이 예약을 삭제하시겠습니까?",
+      lineSettingsTitle: "마감 자동 알림 (LINE)",
+      lineSettingsHint: "매일 밤 마감 시간 이후 그날 매출/미결제 요약을 사장님 LINE으로 자동 전송해요. LINE 공식계정(Messaging API) 채널 액세스 토큰이 필요합니다.",
+      lineEnableLabel: "마감 알림 사용",
+      lineTokenLabel: "채널 액세스 토큰",
+      lineTokenPlaceholder: "저장된 토큰이 있으면 비워두면 유지됩니다",
+      saveLineSettingsBtn: "저장",
+      testLineBtn: "📩 지금 테스트 메시지 보내기",
+      lineTokenSetStatus: "✔ 토큰이 저장되어 있습니다",
+      lineTokenNotSetStatus: "토큰이 아직 저장되지 않았습니다",
+      lineSavedMsg: "저장되었습니다",
+      lineTestSending: "전송 중...",
+      lineTestSuccess: "✔ 테스트 메시지를 보냈어요. LINE 앱을 확인해보세요.",
+      lineTestFailed: "전송 실패 — 토큰이나 공식계정 친구 추가 상태를 확인해주세요.",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
@@ -286,6 +328,7 @@
       settlementTodayBtn: "今天",
       settlementWeekBtn: "最近 7 天",
       settlementMonthBtn: "最近 30 天",
+      settlementCsvBtn: "⬇️ 下載 CSV",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
       settlementCloseRangeHint: "只有選擇單一天（開始日期＝結束日期）時才能儲存。",
       settlementSavedMsg: "✔ 已儲存",
@@ -300,6 +343,13 @@
       settlementItemQty: "數量",
       settlementItemSubtotal: "小計",
       settlementTrendTitle: "營業額趨勢（選定期間）",
+      settlementTurnover: "平均翻桌時間",
+      settlementTurnoverMinutes: "分鐘",
+      settlementTurnoverNoData: "–",
+      settlementHourlyTitle: "時段來客數 & 熱門品項",
+      settlementHourlyHint: "將滑鼠移到長條上，可以看到該時段熱賣的品項。",
+      settlementHourlyOrders: "訂單數",
+      settlementHourlyTopItems: "熱門品項",
       settlementHistoryTitle: "過往結算紀錄",
       settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。",
       settlementHistoryEmpty: "尚無已儲存的結算紀錄。",
@@ -367,6 +417,39 @@
       permTableEdit: "新增・刪除・編輯桌號/平面圖",
       permSettingsEdit: "變更店家設定",
       permOrderCancel: "取消訂單",
+      permReservationManage: "新增/修改/刪除訂位",
+      tabReservations: "訂位",
+      reservationDateFilterLabel: "日期",
+      reservationShowAllBtn: "顯示全部",
+      addReservationBtn: "+ 新增訂位",
+      reservationEmpty: "目前沒有訂位。",
+      reservationNoTable: "尚未指定桌號",
+      reservationAddTitle: "新增訂位",
+      reservationEditTitle: "編輯訂位",
+      reservationNameLabel: "訂位姓名",
+      reservationPhoneLabel: "電話號碼",
+      reservationDateLabel: "日期",
+      reservationTimeLabel: "時間",
+      reservationPartyLabel: "人數",
+      reservationTableLabel: "桌號（選填）",
+      reservationTablePlaceholder: "留空表示尚未指定",
+      reservationNoteLabel: "備註",
+      deleteReservationBtn: "刪除訂位",
+      cancelReservationBtn: "標記為取消",
+      reservationDeleteConfirm: "確定要刪除這筆訂位嗎？",
+      lineSettingsTitle: "打烊自動通知（LINE）",
+      lineSettingsHint: "每天打烊時間後，會把當天營業額/未結帳摘要自動傳送到老闆的 LINE。需要 LINE 官方帳號（Messaging API）的頻道存取權杖。",
+      lineEnableLabel: "啟用打烊通知",
+      lineTokenLabel: "頻道存取權杖",
+      lineTokenPlaceholder: "若已儲存權杖，留空即可保留原本設定",
+      saveLineSettingsBtn: "儲存",
+      testLineBtn: "📩 立即傳送測試訊息",
+      lineTokenSetStatus: "✔ 已儲存權杖",
+      lineTokenNotSetStatus: "尚未儲存權杖",
+      lineSavedMsg: "已儲存",
+      lineTestSending: "傳送中...",
+      lineTestSuccess: "✔ 已傳送測試訊息，請確認 LINE App。",
+      lineTestFailed: "傳送失敗 — 請確認權杖或是否已加官方帳號為好友。",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
@@ -432,6 +515,7 @@
       if ($("#dashboard") && !$("#dashboard").hidden && !$("#floorPlanWrap").hidden) renderFloorPlan();
       if (openTableNumber) openTableDetail(openTableNumber);
       if (!$("#tab-settlement").hidden) loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
+      if (!$("#tab-reservations").hidden) renderReservations();
     };
   });
 
@@ -462,6 +546,7 @@
     document.body.classList.toggle("perm-no-tableEdit", !canTableEdit());
     document.body.classList.toggle("perm-no-settingsEdit", !canSettingsEdit());
     document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
+    document.body.classList.toggle("perm-no-reservationManage", !canManageReservations());
     // Staff can never see the 관리자 전용 settings sub-tab — force back to 일반.
     if (currentRole !== "owner") {
       const generalBtn = $('.settings-subtab-btn[data-subtab="general"]');
@@ -490,7 +575,10 @@
     $("#dashboard").hidden = false;
     applyRoleUI();
     await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings()]);
-    if (currentRole === "owner") loadStaffPermissions();
+    if (currentRole === "owner") {
+      loadStaffPermissions();
+      loadLineSettings();
+    }
     startPolling();
   }
 
@@ -530,6 +618,7 @@
       $$(".tab-panel").forEach((p) => (p.hidden = true));
       $(`#tab-${btn.dataset.tab}`).hidden = false;
       if (btn.dataset.tab === "settlement") loadSettlement();
+      if (btn.dataset.tab === "reservations") loadReservations();
     };
   });
 
@@ -2016,7 +2105,7 @@
   $("#changeOwnerPwBtn").onclick = () => changeOwnPassword("owner_pw_current", "owner_pw_new", "ownerPwMsg");
 
   // ---------- Staff permission management (owner only) ----------
-  const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel"];
+  const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "reservationManage"];
 
   async function loadStaffPermissions() {
     const res = await fetch("/api/settings/staff-permissions");
@@ -2027,6 +2116,62 @@
       if (box) box.checked = !!perms[k];
     });
   }
+
+  // LINE closing-summary settings (owner-only). The token itself is never
+  // sent back from the server once saved — only whether one is set — so
+  // the input is left blank on load and only overwrites the saved token if
+  // the owner actually types a new one in.
+  async function loadLineSettings() {
+    const res = await fetch("/api/settings/line");
+    if (!res.ok) return;
+    const data = await res.json();
+    $("#lineEnabledToggle").checked = !!data.enabled;
+    $("#lineTokenStatus").textContent = data.hasToken ? T("lineTokenSetStatus") : T("lineTokenNotSetStatus");
+  }
+
+  $("#saveLineSettingsBtn").onclick = async () => {
+    const payload = { enabled: $("#lineEnabledToggle").checked };
+    const token = $("#lineTokenInput").value.trim();
+    if (token) payload.token = token;
+    const res = await fetch("/api/settings/line", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const msg = $("#lineMsg");
+    if (res.ok) {
+      const data = await res.json();
+      $("#lineTokenInput").value = "";
+      $("#lineTokenStatus").textContent = data.hasToken ? T("lineTokenSetStatus") : T("lineTokenNotSetStatus");
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("lineSavedMsg");
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordFailed");
+    }
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  $("#testLineBtn").onclick = async () => {
+    const btn = $("#testLineBtn");
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = T("lineTestSending");
+    const msg = $("#lineMsg");
+    const res = await fetch("/api/settlements/line-test", { method: "POST" });
+    if (res.ok) {
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("lineTestSuccess");
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("lineTestFailed");
+    }
+    msg.hidden = false;
+    btn.disabled = false;
+    btn.textContent = original;
+    setTimeout(() => (msg.hidden = true), 4000);
+  };
 
   PERMISSION_KEYS.forEach((k) => {
     const box = $(`#perm_${k}`);
@@ -2082,9 +2227,11 @@
   // snapshots it into permanent history, same as the nightly cron does
   // automatically after closing time.
   let currentSettlementDate = null; // only set (non-null) when start === end — used by the manual "저장" button
+  let lastSettlementData = null; // used by the CSV export button
   let settlementItemsChart = null;
   let settlementHistoryChart = null;
   let settlementTrendChart = null;
+  let settlementHourlyChart = null;
 
   function itemDisplayName(it) {
     return adminLang === "zh" ? it.name_zh || it.name_ko : it.name_ko || it.name_zh;
@@ -2165,7 +2312,46 @@
     });
   }
 
+  // Bar chart of order count by hour-of-day (0–23) — "몇 시에 손님이 많이
+  // 오는지". Hovering a bar shows that hour's top-selling items via a custom
+  // tooltip callback, so "그 시간대엔 뭐가 잘 팔리는지" is one hover away
+  // instead of needing a second chart.
+  function renderHourlyChart(hourlyBreakdown) {
+    const canvas = $("#settlementHourlyChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    const byHour = new Map(hourlyBreakdown.map((h) => [h.hour, h]));
+    const hours = Array.from({ length: 24 }, (_, h) => h);
+    const data = hours.map((h) => (byHour.get(h) ? byHour.get(h).order_count : 0));
+    if (settlementHourlyChart) settlementHourlyChart.destroy();
+    settlementHourlyChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: hours.map((h) => `${h}시`),
+        datasets: [{ label: T("settlementHourlyOrders"), data, backgroundColor: "#16213e", borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              afterLabel: (ctx) => {
+                const h = byHour.get(ctx.dataIndex);
+                if (!h || !h.top_items || h.top_items.length === 0) return "";
+                const names = h.top_items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
+                return `${T("settlementHourlyTopItems")}: ${names}`;
+              },
+            },
+          },
+        },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
+      },
+    });
+  }
+
   function renderSettlement(data) {
+    lastSettlementData = data;
     currentSettlementDate = data.date; // null when viewing a multi-day range
     $("#settlementStartDate").value = data.start_date;
     $("#settlementEndDate").value = data.end_date;
@@ -2176,6 +2362,8 @@
     $("#settlementPaidCount").textContent = data.paid_order_count;
     $("#settlementProblemCount").textContent = data.problem_order_count;
     $("#settlementCancelledCount").textContent = data.cancelled_order_count;
+    $("#settlementTurnover").textContent =
+      data.avg_turnover_minutes != null ? `${data.avg_turnover_minutes}${T("settlementTurnoverMinutes")}` : T("settlementTurnoverNoData");
 
     const problemSection = $("#settlementProblemSection");
     const problemCard = $("#settlementProblemCard");
@@ -2215,6 +2403,7 @@
       .join("");
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
+    renderHourlyChart(data.hourly_breakdown || []);
   }
 
   const fmtOrderTableTag = (n) => (adminLang === "zh" ? `桌號 ${n}` : `${n}번 테이블`);
@@ -2295,6 +2484,48 @@
     const today = taipeiTodayString();
     loadSettlement(addDaysToDateString(today, -29), today);
   };
+  // Builds a spreadsheet-friendly CSV from whatever's currently loaded
+  // (summary + item breakdown + unpaid orders) — a UTF-8 BOM is prepended
+  // so Excel opens Korean/Chinese text correctly instead of mojibake.
+  function csvEscape(v) {
+    const s = String(v == null ? "" : v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+  function buildSettlementCsv(data) {
+    const rows = [];
+    rows.push(["결산 기간", data.date || `${data.start_date} ~ ${data.end_date}`]);
+    rows.push(["매출(결제완료)", data.total_revenue]);
+    rows.push(["결제 완료 주문", data.paid_order_count]);
+    rows.push(["취소된 주문", data.cancelled_order_count]);
+    rows.push(["미결제/문제 주문", data.problem_order_count]);
+    rows.push(["평균 테이블 회전 시간(분)", data.avg_turnover_minutes ?? ""]);
+    rows.push([]);
+    rows.push(["품목별 판매 현황"]);
+    rows.push(["메뉴", "수량", "소계"]);
+    data.item_breakdown.forEach((it) => rows.push([itemDisplayName(it), it.qty, it.subtotal]));
+    rows.push([]);
+    rows.push(["미결제 주문 상세"]);
+    rows.push(["시간", "테이블", "상태", "금액", "주문 내역"]);
+    data.problem_orders.forEach((o) =>
+      rows.push([o.created_at, o.table_number, statusLabel(o.status), o.total, o.items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join("; ")])
+    );
+    return "﻿" + rows.map((r) => r.map(csvEscape).join(",")).join("\n");
+  }
+  $("#settlementCsvBtn").onclick = () => {
+    if (!lastSettlementData) return;
+    const csv = buildSettlementCsv(lastSettlementData);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const label = lastSettlementData.date || `${lastSettlementData.start_date}_${lastSettlementData.end_date}`;
+    a.href = url;
+    a.download = `settlement_${label}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   $("#settlementCloseBtn").onclick = async () => {
     if (!currentSettlementDate) return;
     const btn = $("#settlementCloseBtn");
@@ -2307,6 +2538,121 @@
     btn.textContent = T("settlementSavedMsg");
     loadSettlementHistory();
     setTimeout(() => (btn.textContent = original), 2000);
+  };
+
+  // ---------- Reservations (예약) ----------
+  // Visible to any logged-in staff (like the table list) — adding/editing/
+  // deleting is gated behind the owner's "예약 추가/수정/삭제" toggle via
+  // canManageReservations(), same pattern as menu/table editing.
+  let reservations = [];
+  let editingReservationId = null;
+
+  function reservationStatusLabel(status) {
+    if (status === "cancelled") return adminLang === "zh" ? "已取消" : "취소됨";
+    return adminLang === "zh" ? "已確認" : "확정";
+  }
+
+  function renderReservations() {
+    const el = $("#reservationsList");
+    if (!el) return;
+    if (reservations.length === 0) {
+      el.innerHTML = `<p class="settings-hint">${T("reservationEmpty")}</p>`;
+      return;
+    }
+    el.innerHTML = reservations
+      .map((r) => {
+        const tableText = r.table_number ? fmtOrderTableTag(r.table_number) : T("reservationNoTable");
+        return `
+          <div class="reservation-row ${r.status === "cancelled" ? "reservation-cancelled" : ""}" data-id="${r.id}">
+            <div class="reservation-when">
+              <div class="reservation-date">${r.date}</div>
+              <div class="reservation-time">${r.time}</div>
+            </div>
+            <div class="reservation-info">
+              <div class="reservation-name">${r.customer_name} <span class="reservation-party">👥 ${r.party_size}</span></div>
+              <div class="reservation-meta">${r.phone || ""} ${r.phone ? "·" : ""} ${tableText}${r.note ? ` · ${r.note}` : ""}</div>
+            </div>
+            <div class="reservation-status status-${r.status}">${reservationStatusLabel(r.status)}</div>
+          </div>`;
+      })
+      .join("");
+    $$(".reservation-row").forEach((row) => {
+      if (!canManageReservations()) return;
+      row.onclick = () => openReservationModal(parseInt(row.dataset.id, 10));
+    });
+  }
+
+  async function loadReservations(date) {
+    const url = date ? `/api/reservations?date=${encodeURIComponent(date)}` : "/api/reservations";
+    const res = await fetch(url);
+    if (!res.ok) return;
+    reservations = await res.json();
+    renderReservations();
+  }
+
+  $("#reservationDateFilter").onchange = (e) => loadReservations(e.target.value);
+  $("#reservationShowAllBtn").onclick = () => {
+    $("#reservationDateFilter").value = "";
+    loadReservations();
+  };
+
+  function openReservationModal(id) {
+    if (!canManageReservations()) return;
+    editingReservationId = id || null;
+    const r = id ? reservations.find((x) => x.id === id) : null;
+    $("#reservationModalTitle").textContent = r ? T("reservationEditTitle") : T("reservationAddTitle");
+    $("#r_customer_name").value = r ? r.customer_name : "";
+    $("#r_phone").value = r ? r.phone : "";
+    $("#r_date").value = r ? r.date : $("#reservationDateFilter").value || taipeiTodayString();
+    $("#r_time").value = r ? r.time : "";
+    $("#r_party_size").value = r ? r.party_size : "2";
+    $("#r_table_number").value = r ? r.table_number || "" : "";
+    $("#r_note").value = r ? r.note : "";
+    $("#deleteReservationBtn").hidden = !r;
+    $("#cancelReservationBtn").hidden = !r || r.status === "cancelled";
+    $("#reservationModalBackdrop").hidden = false;
+  }
+  $("#addReservationBtn").onclick = () => openReservationModal(null);
+  $("#reservationModalClose").onclick = () => ($("#reservationModalBackdrop").hidden = true);
+
+  $("#saveReservationBtn").onclick = async () => {
+    const payload = {
+      customer_name: $("#r_customer_name").value.trim(),
+      phone: $("#r_phone").value.trim(),
+      date: $("#r_date").value,
+      time: $("#r_time").value,
+      party_size: $("#r_party_size").value,
+      table_number: $("#r_table_number").value.trim() || null,
+      note: $("#r_note").value.trim(),
+    };
+    if (!payload.customer_name || !payload.date || !payload.time) return;
+    const url = editingReservationId ? `/api/reservations/${editingReservationId}` : "/api/reservations";
+    await fetch(url, {
+      method: editingReservationId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    $("#reservationModalBackdrop").hidden = true;
+    loadReservations($("#reservationDateFilter").value || undefined);
+  };
+
+  $("#cancelReservationBtn").onclick = async () => {
+    if (!editingReservationId) return;
+    await fetch(`/api/reservations/${editingReservationId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled" }),
+    });
+    $("#reservationModalBackdrop").hidden = true;
+    loadReservations($("#reservationDateFilter").value || undefined);
+  };
+
+  $("#deleteReservationBtn").onclick = async () => {
+    if (!editingReservationId) return;
+    if (!confirm(T("reservationDeleteConfirm"))) return;
+    await fetch(`/api/reservations/${editingReservationId}`, { method: "DELETE" });
+    $("#reservationModalBackdrop").hidden = true;
+    loadReservations($("#reservationDateFilter").value || undefined);
   };
 
   applyAdminI18n();

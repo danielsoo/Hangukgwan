@@ -48,6 +48,69 @@ function computeSettlement(store, startDate, endDate = startDate) {
     .map(([date, revenue]) => ({ date, revenue }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
+  // Hour-of-day breakdown (0-23), combined across every day in the range —
+  // "몇 시에 손님이 많이 오는지" (order_count counts every order regardless
+  // of status — arriving/ordering is arriving, whether or not it's been
+  // paid yet) and "그 시간대엔 뭐가 잘 팔리는지" (top_items, paid orders
+  // only, same convention as the item breakdown above).
+  const hourMap = new Map();
+  for (const o of rangeOrders) {
+    const hour = parseInt(o.created_at.slice(11, 13), 10);
+    const entry = hourMap.get(hour) || { hour, revenue: 0, order_count: 0, itemMap: new Map() };
+    entry.order_count += 1;
+    if (o.status === "paid") {
+      entry.revenue += o.total || 0;
+      for (const it of o.items || []) {
+        const key = it.item_id != null ? String(it.item_id) : it.name_ko || it.name_zh;
+        const prev = entry.itemMap.get(key) || { name_ko: it.name_ko, name_zh: it.name_zh, name_en: it.name_en, qty: 0 };
+        prev.qty += it.qty;
+        entry.itemMap.set(key, prev);
+      }
+    }
+    hourMap.set(hour, entry);
+  }
+  const hourlyBreakdown = [...hourMap.values()]
+    .map((e) => ({
+      hour: e.hour,
+      revenue: e.revenue,
+      order_count: e.order_count,
+      top_items: [...e.itemMap.values()]
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 3)
+        .map((it) => ({ name_ko: it.name_ko, name_zh: it.name_zh, name_en: it.name_en, qty: it.qty })),
+    }))
+    .sort((a, b) => a.hour - b.hour);
+
+  // Rough table-turnover estimate: for each (table, calendar day) that had
+  // at least one paid order in range, minutes from its first order to its
+  // last order being marked paid. This is an approximation — the data model
+  // has no explicit "party seated/left" event, so a table that gets a second
+  // unrelated party later the same day would still be treated as one block.
+  // Good enough for a general "how long do tables usually take" read, not
+  // meant to be exact to the second.
+  const tableDayMap = new Map();
+  for (const o of rangeOrders) {
+    const day = o.created_at.slice(0, 10);
+    const key = `${o.table_number}|${day}`;
+    const entry = tableDayMap.get(key) || { minCreated: o.created_at, maxPaidUpdated: null };
+    if (o.created_at < entry.minCreated) entry.minCreated = o.created_at;
+    if (o.status === "paid" && (!entry.maxPaidUpdated || o.updated_at > entry.maxPaidUpdated)) {
+      entry.maxPaidUpdated = o.updated_at;
+    }
+    tableDayMap.set(key, entry);
+  }
+  let turnoverSumMinutes = 0;
+  let turnoverSamples = 0;
+  for (const { minCreated, maxPaidUpdated } of tableDayMap.values()) {
+    if (!maxPaidUpdated) continue;
+    const minutes = (new Date(maxPaidUpdated.replace(" ", "T")) - new Date(minCreated.replace(" ", "T"))) / 60000;
+    if (minutes >= 0) {
+      turnoverSumMinutes += minutes;
+      turnoverSamples += 1;
+    }
+  }
+  const avgTurnoverMinutes = turnoverSamples > 0 ? Math.round(turnoverSumMinutes / turnoverSamples) : null;
+
   return {
     // `date` is only meaningful for a single-day query (start === end) —
     // POST /close and the cron job rely on this to key the saved snapshot.
@@ -61,6 +124,8 @@ function computeSettlement(store, startDate, endDate = startDate) {
     problem_order_count: problemOrders.length,
     item_breakdown: itemBreakdown,
     daily_breakdown: dailyBreakdown,
+    hourly_breakdown: hourlyBreakdown,
+    avg_turnover_minutes: avgTurnoverMinutes,
     problem_orders: problemOrders
       .map((o) => ({
         id: o.id,
