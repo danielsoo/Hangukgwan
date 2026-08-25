@@ -866,10 +866,14 @@
             qtyHtml = `<div class="opt-tally">${ord ? tallyMark(ord.qty) : ""}</div>`;
           }
           const noteHtml = ord && ord.notes.length ? `<div class="row-note">${ord.notes.join(", ")}</div>` : "";
+          // price_note holds things like "2人份 / for 2" — the paper form
+          // shows just the Chinese half in parens right after the dish name
+          // (e.g. "銅盤烤肉(2人份)"), so split off the "/ for 2" part.
+          const priceNoteHtml = item.price_note ? `（${item.price_note.split("/")[0].trim()}）` : "";
           rows += `
             <tr class="${ord ? "ordered" : ""}">
               <td class="code">${item.code || ""}</td>
-              <td class="name">${item.name_zh || item.name_ko}${noteHtml}</td>
+              <td class="name">${item.name_zh || item.name_ko}${priceNoteHtml ? `<span class="price-note">${priceNoteHtml}</span>` : ""}${noteHtml}</td>
               <td class="price">${item.price}</td>
               <td class="qty">${qtyHtml}</td>
             </tr>`;
@@ -889,13 +893,19 @@
   @page { size: A4; margin: 8mm; }
   * { box-sizing: border-box; }
   body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; font-size: 10px; color: #000; }
-  .store-name { text-align: center; font-size: 20px; font-weight: 900; margin: 0 0 1mm; }
+  .ticket-frame { border: 2px solid #000; padding: 3mm; }
+  .store-name { text-align: center; font-size: 22px; font-weight: 900; margin: 0 0 1mm; letter-spacing: 2px; }
+  .store-name .store-name-en { font-size: 13px; font-weight: 700; letter-spacing: 3px; margin-left: 4px; }
   .store-sub { text-align: center; font-size: 11px; margin-bottom: 2mm; }
-  .meta-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 1.5mm 0; margin-bottom: 2mm; }
-  .ticket-grid { display: flex; gap: 4mm; }
+  .meta-row { display: flex; font-size: 13px; font-weight: 700; border: 2px solid #000; margin-bottom: 2mm; }
+  .meta-row span { flex: 1; padding: 1.5mm 2mm; }
+  .meta-row span:first-child { border-right: 2px solid #000; }
+  .ticket-grid { display: flex; gap: 0; border: 2px solid #000; border-top: none; }
   .ticket-col { flex: 1; min-width: 0; }
+  .ticket-col:first-child table { border-right: none; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   td { border: 1px solid #000; padding: 0.6mm 1mm; font-size: 9px; vertical-align: middle; }
+  .price-note { font-size: 8px; color: #333; }
   .cat-row td { background: #000; color: #fff; text-align: center; font-weight: 900; font-size: 10px; padding: 1mm; }
   .code { width: 7%; text-align: center; font-weight: 700; }
   .name { width: 46%; }
@@ -912,16 +922,18 @@
   .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 2mm; }
 </style>
 </head><body>
-  <div class="store-name">${storeName}</div>
-  ${phone ? `<div class="store-sub">${phone}</div>` : ""}
-  <div class="meta-row"><span>桌號：${o.table_number}</span><span>人數：${partySize || "-"}</span></div>
-  <div class="ticket-grid">
-    <div class="ticket-col"><table>${leftRows}</table></div>
-    <div class="ticket-col"><table>${rightRows}</table></div>
+  <div class="ticket-frame">
+    <div class="store-name">☯ ${storeName} <span class="store-name-en">KOREA</span></div>
+    ${phone ? `<div class="store-sub">${phone}</div>` : ""}
+    <div class="meta-row"><span>桌號：${o.table_number}</span><span>人數：${partySize || "-"}</span></div>
+    <div class="ticket-grid">
+      <div class="ticket-col"><table>${leftRows}</table></div>
+      <div class="ticket-col"><table>${rightRows}</table></div>
+    </div>
+    ${o.note ? `<div class="row-note" style="margin-top:1mm;">주문 메모: ${o.note}</div>` : ""}
+    <div class="footer">金額合計：NT$${o.total}</div>
+    <div class="print-time">${time}</div>
   </div>
-  ${o.note ? `<div class="row-note" style="margin-top:1mm;">주문 메모: ${o.note}</div>` : ""}
-  <div class="footer">金額合計：NT$${o.total}</div>
-  <div class="print-time">${time}</div>
 </body></html>`;
   }
 
