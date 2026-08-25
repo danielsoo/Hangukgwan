@@ -70,7 +70,10 @@ router.get("/checkout", async (req, res) => {
   });
 
   res.set("Content-Type", "text/html; charset=UTF-8");
-  res.send(ecpay.renderAutoSubmitForm(params));
+  // ?debug=1 skips the auto-submit and shows the exact params being sent —
+  // useful for troubleshooting an ECPay-side error without guessing what
+  // was actually submitted.
+  res.send(ecpay.renderAutoSubmitForm(params, { debug: req.query.debug === "1" }));
 });
 
 // ECPay's server-to-server payment result notification (ReturnURL). Must

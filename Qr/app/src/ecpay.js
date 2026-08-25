@@ -118,23 +118,53 @@ function verifyCallback(body) {
   return expected === received;
 }
 
+// Full HTML-entity escaping for attribute values — item names come from the
+// menu (owner-editable text), so a stray & < > " in a dish name must not be
+// able to break out of the value="..." attribute and corrupt the rest of
+// the form (which would silently drop required fields like MerchantID
+// before it ever reaches ECPay).
+function escapeHtmlAttr(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Renders a minimal HTML page that auto-submits a POST form to ECPay's
 // checkout page — ECPay requires the browser itself to POST there (it's not
 // a plain redirect), so we hand the customer's browser a self-submitting
 // form instead of building this client-side.
-function renderAutoSubmitForm(params) {
+function renderAutoSubmitForm(params, options = {}) {
   const inputs = Object.entries(params)
-    .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v).replace(/"/g, "&quot;")}" />`)
+    .map(([k, v]) => `<input type="hidden" name="${escapeHtmlAttr(k)}" value="${escapeHtmlAttr(v)}" />`)
     .join("\n");
+
+  // Debug view: shows exactly what would be sent and requires a manual tap
+  // to submit, instead of auto-submitting — lets you inspect the real
+  // params (and the exact checkout URL/mode) when something goes wrong on
+  // ECPay's side, without guessing what was actually transmitted.
+  const debugTable = options.debug
+    ? `<table border="1" cellpadding="6" style="border-collapse:collapse;margin:20px auto;font-family:monospace;font-size:13px;">
+        <tr><th colspan="2">${escapeHtmlAttr(checkoutUrl())}</th></tr>
+        ${Object.entries(params)
+          .map(([k, v]) => `<tr><td>${escapeHtmlAttr(k)}</td><td>${escapeHtmlAttr(v)}</td></tr>`)
+          .join("\n")}
+      </table>`
+    : "";
+
   return `<!DOCTYPE html>
 <html lang="zh-Hant">
 <head><meta charset="UTF-8" /><title>결제로 이동 중...</title></head>
 <body>
   <p style="font-family:sans-serif;text-align:center;margin-top:40px;">결제 페이지로 이동 중입니다...</p>
+  ${debugTable}
   <form id="ecpayForm" method="POST" action="${checkoutUrl()}">
     ${inputs}
+    ${options.debug ? `<div style="text-align:center;"><button type="submit">수동으로 ECPay에 제출</button></div>` : ""}
   </form>
-  <script>document.getElementById('ecpayForm').submit();</script>
+  ${options.debug ? "" : `<script>document.getElementById('ecpayForm').submit();</script>`}
 </body>
 </html>`;
 }
