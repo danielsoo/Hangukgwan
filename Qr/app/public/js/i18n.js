@@ -45,6 +45,8 @@ const I18N = {
     loadingMenu: "菜單載入中…",
     itemNotePlaceholder: "特殊要求（例如：不要辣、不要蔥）",
     orderNotePlaceholder: "整單備註（選填）",
+    payOnlineBtn: "線上付款",
+    payOnlineConfirm: "要用信用卡/LINE Pay/JKOPay 等方式付清這桌的未結帳金額嗎？",
   },
   ko: {
     viewCart: "장바구니 보기",
@@ -91,6 +93,8 @@ const I18N = {
     loadingMenu: "메뉴 불러오는 중…",
     itemNotePlaceholder: "특별 요청 사항 (예: 맵지 않게, 파 빼주세요)",
     orderNotePlaceholder: "전체 요청 사항 (선택)",
+    payOnlineBtn: "온라인 결제",
+    payOnlineConfirm: "이 테이블의 미결제 금액을 신용카드/LINE Pay/JKOPay 등으로 결제할까요?",
   },
   en: {
     viewCart: "View Cart",
@@ -137,5 +141,7 @@ const I18N = {
     loadingMenu: "Loading menu…",
     itemNotePlaceholder: "Special requests (e.g. no spice, no scallions)",
     orderNotePlaceholder: "Note for the whole order (optional)",
+    payOnlineBtn: "Pay Online",
+    payOnlineConfirm: "Pay this table's outstanding balance now by credit card / LINE Pay / JKOPay?",
   },
 };

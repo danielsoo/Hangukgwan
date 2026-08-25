@@ -27,6 +27,9 @@ const PUBLIC_KEYS = [
 function publicSettings() {
   const map = {};
   for (const k of PUBLIC_KEYS) if (store.settings[k] != null) map[k] = store.settings[k];
+  // Whether the customer-facing "온라인 결제" button should show at all —
+  // see /payment routes below and public/js/order.js.
+  map.online_payment_enabled = !!store.settings.online_payment_enabled;
   return map;
 }
 
@@ -204,6 +207,32 @@ router.delete("/line/targets/:userId", requireOwner, async (req, res) => {
   store.settings.line_targets = (store.settings.line_targets || []).filter((t) => t.userId !== req.params.userId);
   await save();
   res.json(lineStatus());
+});
+
+// Online payment (ECPay) on/off toggle — owner-only, same pattern as the
+// LINE closing-summary settings above. The actual ECPay merchant
+// credentials live in server environment variables (never in the DB or
+// sent to the browser) — see src/ecpay.js — so all this toggle controls is
+// whether the customer-facing "온라인 결제" button appears at all.
+function paymentStatus() {
+  const { credentials } = require("../ecpay");
+  return {
+    enabled: !!store.settings.online_payment_enabled,
+    // Lets the admin UI show a "테스트 모드" hint until real ECPay merchant
+    // credentials have been added to the server's environment variables.
+    isTestMode: credentials().isTest,
+  };
+}
+
+router.get("/payment", requireOwner, (req, res) => {
+  res.json(paymentStatus());
+});
+
+router.put("/payment", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  if (typeof b.enabled === "boolean") store.settings.online_payment_enabled = b.enabled;
+  await save();
+  res.json(paymentStatus());
 });
 
 module.exports = router;

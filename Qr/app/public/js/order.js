@@ -20,6 +20,7 @@
   let storeLat = null;
   let storeLng = null;
   let partySize = null;
+  let onlinePaymentEnabled = false;
 
   const PARTY_WARNING = {
     zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
@@ -75,6 +76,7 @@
     const lng = parseFloat(s.store_lng);
     storeLat = Number.isNaN(lat) ? null : lat;
     storeLng = Number.isNaN(lng) ? null : lng;
+    onlinePaymentEnabled = !!s.online_payment_enabled;
     $("#storeName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#storeInfoName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#infoHours").textContent = s.store_hours || "-";
@@ -494,7 +496,13 @@
       list.innerHTML = `<div class="history-empty">${t("noOrdersYet")}</div>`;
     }
     $("#historyTotalBig").textContent = money(total);
+    $("#payOnlineBtn").hidden = !(onlinePaymentEnabled && total > 0);
   }
+
+  $("#payOnlineBtn").onclick = () => {
+    if (!confirm(t("payOnlineConfirm"))) return;
+    location.href = `/api/payment/checkout?table=${encodeURIComponent(tableNumber)}`;
+  };
 
   $("#historyBtn").onclick = openHistory;
   $("#historyClose").onclick = () => ($("#historyBackdrop").hidden = true);

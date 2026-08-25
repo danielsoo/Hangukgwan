@@ -334,6 +334,14 @@
           <h4 data-i18n="lineApprovedTitle">알림 받는 사람</h4>
           <div id="lineApprovedList" class="line-people-list"></div>
         </div>
+        <div class="settings-card">
+          <h3 data-i18n="paymentSettingsTitle">온라인 결제 (ECPay)</h3>
+          <p class="settings-hint" data-i18n="paymentSettingsHint">손님이 테이블 미결제 합계를 직접 신용카드/LINE Pay/JKOPay 등으로 결제할 수 있게 해요. 꺼두면 지금처럼 직원이 결제 완료를 눌러야 해요.</p>
+          <label class="perm-toggle-row"><span data-i18n="paymentEnableLabel">온라인 결제 사용</span><input type="checkbox" id="paymentEnabledToggle" /></label>
+          <div id="paymentModeStatus" class="settings-hint"></div>
+          <button id="savePaymentSettingsBtn" data-i18n="saveBtn">저장</button>
+          <div class="save-msg" id="paymentMsg" hidden></div>
+        </div>
       </div>
     </section>
 

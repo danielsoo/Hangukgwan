@@ -70,6 +70,7 @@ app.use("/api/settings", require("./src/routes/settings"));
 app.use("/api/settlements", require("./src/routes/settlements"));
 app.use("/api/reservations", require("./src/routes/reservations"));
 app.use("/api/line/webhook", require("./src/routes/lineWebhook"));
+app.use("/api/payment", require("./src/routes/payments"));
 app.use("/api/photo", require("./src/routes/photos"));
 
 // Customer ordering page — table number is read client-side from the URL

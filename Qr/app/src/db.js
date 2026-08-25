@@ -17,12 +17,16 @@ const uri = process.env.MONGODB_URI;
 function defaultStore() {
   return {
     _id: "main",
-    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1, reservations: 1 },
+    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1, reservations: 1, payments: 1 },
     categories: [],
     menuItems: [],
     tables: [],
     orders: [],
     zones: [],
+    // Online-payment attempts via ECPay (see src/routes/payments.js) — one
+    // row per checkout the customer started, tracking which orders it
+    // covers so the payment-result callback knows what to mark paid.
+    payments: [],
     // One snapshot per business day, written by the nightly cron (see
     // src/routes/settlements.js) so a permanent record survives even if
     // orders are later edited/pruned. The 결산 admin tab also computes a

@@ -254,6 +254,12 @@
       lineTestSending: "전송 중...",
       lineTestSuccess: "✔ 테스트 메시지를 보냈어요. LINE 앱을 확인해보세요.",
       lineTestFailed: "전송 실패 — 등록된 사람이 없거나 토큰을 확인해주세요.",
+      paymentSettingsTitle: "온라인 결제 (ECPay)",
+      paymentSettingsHint: "손님이 테이블 미결제 합계를 직접 신용카드/LINE Pay/JKOPay 등으로 결제할 수 있게 해요. 꺼두면 지금처럼 직원이 결제 완료를 눌러야 해요.",
+      paymentEnableLabel: "온라인 결제 사용",
+      paymentTestModeStatus: "⚠ 테스트 모드 — ECPay 정식 가맹점 정보가 아직 설정되지 않아 실제 결제는 되지 않습니다 (서버 환경변수에 ECPAY_MERCHANT_ID 등을 추가하면 실결제로 전환돼요).",
+      paymentLiveModeStatus: "✔ 실결제 모드 — ECPay 정식 가맹점 정보로 연결되어 있습니다.",
+      paymentSavedMsg: "저장되었습니다",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
@@ -482,6 +488,12 @@
       lineTestSending: "傳送中...",
       lineTestSuccess: "✔ 已傳送測試訊息，請確認 LINE App。",
       lineTestFailed: "傳送失敗 — 請確認尚未有註冊的接收者，或檢查權杖設定。",
+      paymentSettingsTitle: "線上付款（綠界 ECPay）",
+      paymentSettingsHint: "讓顧客可以直接用信用卡/LINE Pay/JKOPay 等方式付清該桌的未結帳金額。關閉時維持現況，需要店員按下「結帳完成」。",
+      paymentEnableLabel: "啟用線上付款",
+      paymentTestModeStatus: "⚠ 測試模式 — 尚未設定綠界正式特店資訊，不會產生真實扣款（在伺服器環境變數加入 ECPAY_MERCHANT_ID 等即可切換為正式付款）。",
+      paymentLiveModeStatus: "✔ 正式付款模式 — 已連接綠界正式特店資訊。",
+      paymentSavedMsg: "已儲存",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
@@ -610,6 +622,7 @@
     if (currentRole === "owner") {
       loadStaffPermissions();
       loadLineSettings();
+      loadPaymentSettings();
     }
     startPolling();
   }
@@ -2548,6 +2561,36 @@
       renderLineStatus(await res.json());
       msg.style.color = "#1a8a44";
       msg.textContent = T("lineSavedMsg");
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordFailed");
+    }
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // ---------- Online payment (ECPay) toggle (owner only) ----------
+  async function loadPaymentSettings() {
+    const res = await fetch("/api/settings/payment");
+    if (!res.ok) return;
+    const data = await res.json();
+    $("#paymentEnabledToggle").checked = !!data.enabled;
+    $("#paymentModeStatus").textContent = data.isTestMode ? T("paymentTestModeStatus") : T("paymentLiveModeStatus");
+  }
+
+  $("#savePaymentSettingsBtn").onclick = async () => {
+    const res = await fetch("/api/settings/payment", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: $("#paymentEnabledToggle").checked }),
+    });
+    const msg = $("#paymentMsg");
+    if (res.ok) {
+      const data = await res.json();
+      $("#paymentEnabledToggle").checked = !!data.enabled;
+      $("#paymentModeStatus").textContent = data.isTestMode ? T("paymentTestModeStatus") : T("paymentLiveModeStatus");
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("paymentSavedMsg");
     } else {
       msg.style.color = "#b5232c";
       msg.textContent = T("staffPasswordFailed");
