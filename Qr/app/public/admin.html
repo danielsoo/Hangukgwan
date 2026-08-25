@@ -87,83 +87,112 @@
 
     <!-- SETTINGS TAB -->
     <section id="tab-settings" class="tab-panel" hidden>
-      <div class="settings-card need-settingsEdit">
-        <h3 data-i18n="settingsCoverTitle">손님 화면 상단 사진</h3>
-        <p class="settings-hint" data-i18n="settingsCoverHint">주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.</p>
-        <div id="coverPreviewWrap" class="cover-preview-wrap">
-          <div id="coverPreview" class="cover-preview"></div>
+      <div class="settings-subtabs">
+        <button data-subtab="general" class="settings-subtab-btn active" data-i18n="settingsTabGeneral">일반</button>
+        <button data-subtab="admin" class="settings-subtab-btn owner-only" data-i18n="settingsTabAdmin">관리자 전용</button>
+      </div>
+
+      <div id="settings-general" class="settings-subpanel">
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsCoverTitle">손님 화면 상단 사진</h3>
+          <p class="settings-hint" data-i18n="settingsCoverHint">주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.</p>
+          <div class="preview-row">
+            <div>
+              <input type="file" id="coverPhotoInput" accept="image/*" />
+              <div class="save-msg" id="coverMsg" hidden></div>
+            </div>
+            <div class="live-preview-box">
+              <div class="live-preview-label" data-i18n="livePreviewLabel">미리보기 (손님 화면)</div>
+              <div class="mini-order-preview">
+                <div id="miniHero" class="mini-hero"></div>
+                <div class="mini-store-header">
+                  <div class="mini-avatar">☯</div>
+                  <div class="mini-store-text">
+                    <div class="mini-store-name" id="miniStoreName">한국관</div>
+                    <div class="mini-table-badge">桌號 1</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <input type="file" id="coverPhotoInput" accept="image/*" />
-        <div class="save-msg" id="coverMsg" hidden></div>
-      </div>
-      <div class="settings-card need-settingsEdit">
-        <h3 data-i18n="settingsLogoTitle">매장 로고 (QR 코드 중앙에 표시)</h3>
-        <p class="settings-hint" data-i18n="settingsLogoHint">정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.</p>
-        <div id="logoPreviewWrap" class="cover-preview-wrap logo-preview-wrap">
-          <div id="logoPreview" class="cover-preview logo-preview"></div>
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsLogoTitle">매장 로고 (QR 코드 중앙에 표시)</h3>
+          <p class="settings-hint" data-i18n="settingsLogoHint">정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.</p>
+          <div class="preview-row">
+            <div>
+              <input type="file" id="logoPhotoInput" accept="image/*" />
+              <div class="save-msg" id="logoMsg" hidden></div>
+            </div>
+            <div class="live-preview-box">
+              <div class="live-preview-label" data-i18n="livePreviewLabel">미리보기 (손님 화면)</div>
+              <img id="logoQrPreview" class="logo-qr-preview" alt="QR preview" />
+            </div>
+          </div>
         </div>
-        <input type="file" id="logoPhotoInput" accept="image/*" />
-        <div class="save-msg" id="logoMsg" hidden></div>
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsNoticeTitle">공지 배너</h3>
+          <p class="settings-hint" data-i18n="settingsNoticeHint">손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).</p>
+          <label><span data-i18n="noticeLabel">공지 문구</span><textarea id="s_store_notice" rows="2"></textarea></label>
+          <button id="saveNoticeBtn" data-i18n="saveNoticeBtn">공지 저장</button>
+          <div class="save-msg" id="noticeMsg" hidden></div>
+        </div>
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsInfoTitle">매장 정보</h3>
+          <label><span data-i18n="labelNameZh">상호명 (중국어)</span><input id="s_store_name_zh" /></label>
+          <label><span data-i18n="labelNameKo">상호명 (한국어)</span><input id="s_store_name_ko" /></label>
+          <label>Store name (EN)<input id="s_store_name_en" /></label>
+          <label><span data-i18n="labelPhone">전화번호</span><input id="s_store_phone" /></label>
+          <label><span data-i18n="labelAddressZh">주소 (중국어)</span><input id="s_store_address_zh" /></label>
+          <label><span data-i18n="labelAddressKo">주소 (한국어, 선택사항)</span><input id="s_store_address_ko" data-i18n-placeholder="addressKoPlaceholder" placeholder="비워두면 중국어 주소로 표시됩니다" /></label>
+          <label>Address (EN, optional)<input id="s_store_address_en" placeholder="Leave blank to show the Chinese address" /></label>
+          <label><span data-i18n="labelHours">영업시간</span><input id="s_store_hours" /></label>
+          <label><span data-i18n="labelMinSpend">1인당 최소 주문 금액 (NT$)</span><input id="s_store_min_spend" type="number" /></label>
+          <button id="saveSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
+          <div class="save-msg" id="settingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
+        </div>
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsLocationTitle">위치 기반 주문 제한</h3>
+          <p class="settings-hint" data-i18n="settingsLocationHint">
+            매장 위치를 설정하면, 설정한 반경 밖에서는 주문이 접수되지 않습니다.
+            QR 코드를 사진으로 찍어 다른 곳에서 사용하는 것을 막기 위한 기능입니다.
+            <strong>매장 안에 계실 때</strong> 아래 버튼을 눌러주세요.
+          </p>
+          <button id="captureLocationBtn" type="button" data-i18n="captureLocationBtn">📍 지금 위치를 매장 위치로 저장</button>
+          <div class="save-msg" id="locationMsg" hidden></div>
+          <label><span data-i18n="labelRadius">허용 반경 (미터)</span><input id="s_order_radius_m" type="number" min="20" step="10" /></label>
+          <p class="settings-hint" id="locationStatusText" data-i18n="locationNotSet">아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)</p>
+        </div>
+        <div class="settings-card staff-only">
+          <h3 data-i18n="settingsPwTitle">비밀번호 변경</h3>
+          <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="pw_current" type="password" /></label>
+          <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="pw_new" type="password" /></label>
+          <button id="changePwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
+          <div class="save-msg" id="pwMsg" hidden></div>
+        </div>
       </div>
-      <div class="settings-card need-settingsEdit">
-        <h3 data-i18n="settingsNoticeTitle">공지 배너</h3>
-        <p class="settings-hint" data-i18n="settingsNoticeHint">손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).</p>
-        <label><span data-i18n="noticeLabel">공지 문구</span><textarea id="s_store_notice" rows="2"></textarea></label>
-        <button id="saveNoticeBtn" data-i18n="saveNoticeBtn">공지 저장</button>
-        <div class="save-msg" id="noticeMsg" hidden></div>
-      </div>
-      <div class="settings-card need-settingsEdit">
-        <h3 data-i18n="settingsInfoTitle">매장 정보</h3>
-        <label><span data-i18n="labelNameZh">상호명 (중국어)</span><input id="s_store_name_zh" /></label>
-        <label><span data-i18n="labelNameKo">상호명 (한국어)</span><input id="s_store_name_ko" /></label>
-        <label>Store name (EN)<input id="s_store_name_en" /></label>
-        <label><span data-i18n="labelPhone">전화번호</span><input id="s_store_phone" /></label>
-        <label><span data-i18n="labelAddressZh">주소 (중국어)</span><input id="s_store_address_zh" /></label>
-        <label><span data-i18n="labelAddressKo">주소 (한국어, 선택사항)</span><input id="s_store_address_ko" data-i18n-placeholder="addressKoPlaceholder" placeholder="비워두면 중국어 주소로 표시됩니다" /></label>
-        <label>Address (EN, optional)<input id="s_store_address_en" placeholder="Leave blank to show the Chinese address" /></label>
-        <label><span data-i18n="labelHours">영업시간</span><input id="s_store_hours" /></label>
-        <label><span data-i18n="labelMinSpend">1인당 최소 주문 금액 (NT$)</span><input id="s_store_min_spend" type="number" /></label>
-        <button id="saveSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
-        <div class="save-msg" id="settingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
-      </div>
-      <div class="settings-card need-settingsEdit">
-        <h3 data-i18n="settingsLocationTitle">위치 기반 주문 제한</h3>
-        <p class="settings-hint" data-i18n="settingsLocationHint">
-          매장 위치를 설정하면, 설정한 반경 밖에서는 주문이 접수되지 않습니다.
-          QR 코드를 사진으로 찍어 다른 곳에서 사용하는 것을 막기 위한 기능입니다.
-          <strong>매장 안에 계실 때</strong> 아래 버튼을 눌러주세요.
-        </p>
-        <button id="captureLocationBtn" type="button" data-i18n="captureLocationBtn">📍 지금 위치를 매장 위치로 저장</button>
-        <div class="save-msg" id="locationMsg" hidden></div>
-        <label><span data-i18n="labelRadius">허용 반경 (미터)</span><input id="s_order_radius_m" type="number" min="20" step="10" /></label>
-        <p class="settings-hint" id="locationStatusText" data-i18n="locationNotSet">아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)</p>
-      </div>
-      <div class="settings-card staff-only">
-        <h3 data-i18n="settingsPwTitle">비밀번호 변경</h3>
-        <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="pw_current" type="password" /></label>
-        <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="pw_new" type="password" /></label>
-        <button id="changePwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
-        <div class="save-msg" id="pwMsg" hidden></div>
-      </div>
-      <div class="settings-card owner-only">
-        <h3 data-i18n="ownerPwTitle">사장 비밀번호 변경</h3>
-        <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="owner_pw_current" type="password" /></label>
-        <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="owner_pw_new" type="password" /></label>
-        <button id="changeOwnerPwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
-        <div class="save-msg" id="ownerPwMsg" hidden></div>
-      </div>
-      <div class="settings-card owner-only">
-        <h3 data-i18n="staffPermTitle">직원 권한 관리</h3>
-        <p class="settings-hint" data-i18n="staffPermHint">직원 계정으로 로그인하면 아래에서 켠 항목만 추가/삭제/변경할 수 있어요. 주문 확인, 상태 변경(조리 시작/서빙/결제 완료), 인쇄는 항상 가능합니다.</p>
-        <label class="perm-toggle-row"><span data-i18n="permMenuEdit">메뉴 추가/수정/삭제</span><input type="checkbox" id="perm_menuEdit" /></label>
-        <label class="perm-toggle-row"><span data-i18n="permTableEdit">테이블/배치도 추가·삭제·편집</span><input type="checkbox" id="perm_tableEdit" /></label>
-        <label class="perm-toggle-row"><span data-i18n="permSettingsEdit">매장 설정 변경</span><input type="checkbox" id="perm_settingsEdit" /></label>
-        <label class="perm-toggle-row"><span data-i18n="permOrderCancel">주문 취소</span><input type="checkbox" id="perm_orderCancel" /></label>
-        <div class="save-msg" id="staffPermMsg" hidden></div>
-        <hr style="margin:16px 0;border:none;border-top:1px solid var(--line);" />
-        <label><span data-i18n="staffPasswordLabel">직원 로그인 비밀번호 재설정 (6자 이상)</span><input id="staff_new_password" type="password" /></label>
-        <button id="setStaffPasswordBtn" data-i18n="staffPasswordSaveBtn">직원 비밀번호 저장</button>
-        <div class="save-msg" id="staffPwMsg" hidden></div>
+
+      <div id="settings-admin" class="settings-subpanel owner-only" hidden>
+        <div class="settings-card">
+          <h3 data-i18n="ownerPwTitle">사장 비밀번호 변경</h3>
+          <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="owner_pw_current" type="password" /></label>
+          <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="owner_pw_new" type="password" /></label>
+          <button id="changeOwnerPwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
+          <div class="save-msg" id="ownerPwMsg" hidden></div>
+        </div>
+        <div class="settings-card">
+          <h3 data-i18n="staffPermTitle">직원 권한 관리</h3>
+          <p class="settings-hint" data-i18n="staffPermHint">직원 계정으로 로그인하면 아래에서 켠 항목만 추가/삭제/변경할 수 있어요. 주문 확인, 상태 변경(조리 시작/서빙/결제 완료), 인쇄는 항상 가능합니다.</p>
+          <label class="perm-toggle-row"><span data-i18n="permMenuEdit">메뉴 추가/수정/삭제</span><input type="checkbox" id="perm_menuEdit" /></label>
+          <label class="perm-toggle-row"><span data-i18n="permTableEdit">테이블/배치도 추가·삭제·편집</span><input type="checkbox" id="perm_tableEdit" /></label>
+          <label class="perm-toggle-row"><span data-i18n="permSettingsEdit">매장 설정 변경</span><input type="checkbox" id="perm_settingsEdit" /></label>
+          <label class="perm-toggle-row"><span data-i18n="permOrderCancel">주문 취소</span><input type="checkbox" id="perm_orderCancel" /></label>
+          <div class="save-msg" id="staffPermMsg" hidden></div>
+          <hr style="margin:16px 0;border:none;border-top:1px solid var(--line);" />
+          <label><span data-i18n="staffPasswordLabel">직원 로그인 비밀번호 재설정 (6자 이상)</span><input id="staff_new_password" type="password" /></label>
+          <button id="setStaffPasswordBtn" data-i18n="staffPasswordSaveBtn">직원 비밀번호 저장</button>
+          <div class="save-msg" id="staffPwMsg" hidden></div>
+        </div>
       </div>
     </section>
 

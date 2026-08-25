@@ -163,7 +163,13 @@ input, select, button, textarea { font-family: inherit; }
 .size-match-mark-h { height: 0; border-top: 2px solid #2f80ed; }
 
 /* Settings */
-.settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 480px; margin-bottom: 20px; }
+.settings-subtabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.settings-subtab-btn {
+  background: #fff; border: 1px solid var(--line); color: var(--muted); padding: 9px 16px;
+  border-radius: 999px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.settings-subtab-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+.settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 640px; margin-bottom: 20px; }
 .settings-card h3 { margin-top: 0; }
 .settings-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
 .settings-card input, .settings-card textarea { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 14px; font-family: inherit; resize: vertical; }
@@ -183,13 +189,34 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .perm-no-orderCancel .need-orderCancel { display: none !important; }
 .perm-toggle-row { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; }
 .perm-toggle-row input[type="checkbox"] { width: auto; margin-top: 0; transform: scale(1.3); }
-.cover-preview-wrap { margin-bottom: 12px; }
-.logo-preview-wrap { width: 120px; }
-.logo-preview { width: 120px !important; height: 120px !important; border-radius: 10px; }
-.cover-preview {
-  width: 100%; height: 120px; border-radius: 10px; background: linear-gradient(135deg, #2b2320, #1a1512);
+/* Live "실제 코드 UI" previews next to the logo/cover-photo uploads — shows
+   exactly how the upload will render for a customer, not a raw thumbnail. */
+.preview-row { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.preview-row > div:first-child { flex: 1; min-width: 180px; }
+.live-preview-box { width: 160px; flex-shrink: 0; }
+.live-preview-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+.logo-qr-preview { width: 140px; height: 140px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: block; }
+
+/* Mini replica of the real customer order-page header (see public/order.html
+   / public/css/order.css) — same layout, shrunk down, so the cover photo
+   preview shows its actual context instead of a bare rectangle. */
+.mini-order-preview {
+  width: 160px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff;
+}
+.mini-hero {
+  width: 100%; height: 70px; background: linear-gradient(135deg, #2b2320, #1a1512);
   background-size: cover; background-position: center;
 }
+.mini-store-header {
+  display: flex; align-items: center; gap: 8px; padding: 8px;
+}
+.mini-avatar {
+  width: 28px; height: 28px; border-radius: 999px; background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0;
+}
+.mini-store-text { min-width: 0; }
+.mini-store-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mini-table-badge { font-size: 10px; color: var(--muted); }
 
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }

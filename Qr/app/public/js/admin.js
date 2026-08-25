@@ -106,6 +106,9 @@
       addTableToZoneEmpty: "배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.",
       addTableToZoneCancel: "취소",
       addTableToZoneConfirm: "확인",
+      settingsTabGeneral: "일반",
+      settingsTabAdmin: "관리자 전용",
+      livePreviewLabel: "미리보기 (손님 화면)",
       settingsCoverTitle: "손님 화면 상단 사진",
       settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
       settingsLogoTitle: "매장 로고 (QR 코드 중앙에 표시)",
@@ -248,6 +251,9 @@
       addTableToZoneEmpty: "沒有可配置的桌號。<br/>請先在上方新增桌號。",
       addTableToZoneCancel: "取消",
       addTableToZoneConfirm: "確定",
+      settingsTabGeneral: "一般",
+      settingsTabAdmin: "僅限管理員",
+      livePreviewLabel: "預覽（顧客畫面）",
       settingsCoverTitle: "顧客畫面頂部照片",
       settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
       settingsLogoTitle: "店家標誌（顯示於 QR Code 中央）",
@@ -357,6 +363,7 @@
       b.classList.toggle("active", b.dataset.adminLang === adminLang);
     });
     renderLocationStatus();
+    if (storeSettings && storeSettings.store_name_zh !== undefined) renderMiniHeroPreview(storeSettings);
   }
 
   document.querySelectorAll(".admin-lang-btn").forEach((b) => {
@@ -402,6 +409,18 @@
     document.body.classList.toggle("perm-no-tableEdit", !canTableEdit());
     document.body.classList.toggle("perm-no-settingsEdit", !canSettingsEdit());
     document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
+    // Staff can never see the 관리자 전용 settings sub-tab — force back to 일반.
+    if (currentRole !== "owner") {
+      const generalBtn = $('.settings-subtab-btn[data-subtab="general"]');
+      if (generalBtn) {
+        $$(".settings-subtab-btn").forEach((b) => b.classList.remove("active"));
+        generalBtn.classList.add("active");
+      }
+      const generalPanel = $("#settings-general");
+      const adminPanel = $("#settings-admin");
+      if (generalPanel) generalPanel.hidden = false;
+      if (adminPanel) adminPanel.hidden = true;
+    }
   }
 
   async function showDashboard() {
@@ -447,6 +466,20 @@
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
       $(`#tab-${btn.dataset.tab}`).hidden = false;
+    };
+  });
+
+  // ---------- Settings sub-tabs (일반 / 관리자 전용) ----------
+  // The 관리자 전용 button itself is owner-only (hidden for staff via CSS),
+  // but we also guard the click handler and reset staff back to 일반 in
+  // applyRoleUI, in case a staff session ever has it focused/selected.
+  $$(".settings-subtab-btn").forEach((btn) => {
+    btn.onclick = () => {
+      if (btn.dataset.subtab === "admin" && currentRole !== "owner") return;
+      $$(".settings-subtab-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      $("#settings-general").hidden = btn.dataset.subtab !== "general";
+      $("#settings-admin").hidden = btn.dataset.subtab !== "admin";
     };
   });
 
@@ -1738,12 +1771,30 @@
     currentStoreLat = s.store_lat || "";
     currentStoreLng = s.store_lng || "";
     renderLocationStatus();
-    if (s.store_cover_photo) {
-      $("#coverPreview").style.backgroundImage = `url('${s.store_cover_photo}')`;
+    renderMiniHeroPreview(s);
+    refreshLogoPreview();
+  }
+
+  // Live "실제 코드 UI" previews — show the cover photo and logo exactly as
+  // they'll actually render for a customer, instead of a raw image thumbnail.
+  function renderMiniHeroPreview(s) {
+    const hero = $("#miniHero");
+    if (hero) {
+      hero.style.backgroundImage = s.store_cover_photo ? `url('${s.store_cover_photo}')` : "none";
     }
-    if (s.store_logo) {
-      $("#logoPreview").style.backgroundImage = `url('${s.store_logo}')`;
+    const nameEl = $("#miniStoreName");
+    if (nameEl) {
+      nameEl.textContent = (adminLang === "zh" ? s.store_name_zh : s.store_name_ko) || s.store_name_zh || s.store_name_ko || "한국관";
     }
+  }
+
+  // Re-fetches the sample QR-with-logo SVG from the server (same generator
+  // as the real printed QR sheet) so the owner sees exactly how the logo
+  // will look stamped into a real QR code — not just the raw uploaded image.
+  function refreshLogoPreview() {
+    const img = $("#logoQrPreview");
+    if (!img) return;
+    img.src = `/api/settings/logo-preview?t=${Date.now()}`;
   }
 
   $("#saveSettingsBtn").onclick = async () => {
@@ -1829,8 +1880,7 @@
     const msg = $("#logoMsg");
     const res = await fetch("/api/settings/logo", { method: "POST", body: fd });
     if (res.ok) {
-      const data = await res.json();
-      $("#logoPreview").style.backgroundImage = `url('${data.store_logo}')`;
+      refreshLogoPreview();
       msg.style.color = "#1a8a44";
       msg.textContent = T("logoUpdated");
     } else {
@@ -1850,7 +1900,7 @@
     const res = await fetch("/api/settings/cover-photo", { method: "POST", body: fd });
     if (res.ok) {
       const data = await res.json();
-      $("#coverPreview").style.backgroundImage = `url('${data.store_cover_photo}')`;
+      $("#miniHero").style.backgroundImage = `url('${data.store_cover_photo}')`;
       msg.style.color = "#1a8a44";
       msg.textContent = T("coverUpdated");
     } else {

@@ -1,7 +1,8 @@
 const express = require("express");
 const multer = require("multer");
-const { store, save, savePhoto, deletePhoto } = require("../db");
+const { store, save, savePhoto, deletePhoto, getPhoto } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
+const { buildQrSvg, getLogoDataUri } = require("../qr");
 const canEditSettings = requirePermission("settingsEdit");
 
 const router = express.Router();
@@ -84,6 +85,21 @@ router.post("/logo", canEditSettings, upload.single("photo"), async (req, res) =
   if (oldPhotoId) await deletePhoto(oldPhotoId);
 
   res.json({ store_logo: store.settings.store_logo });
+});
+
+// Live preview for the settings page: a real sample QR code (same
+// generator, same errorCorrectionLevel/logo-overlay as the actual printed
+// sheet) so the owner can see exactly how the uploaded logo will look
+// stamped into a real QR code, instead of just the raw uploaded image.
+router.get("/logo-preview", requireAdmin, async (req, res) => {
+  const logoDataUri = await getLogoDataUri(store, getPhoto);
+  const sampleTable = store.tables[0];
+  const sampleNumber = sampleTable ? sampleTable.number : "1";
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const svg = await buildQrSvg(`${baseUrl}/t/${encodeURIComponent(sampleNumber)}`, logoDataUri);
+  res.set("Content-Type", "image/svg+xml");
+  res.set("Cache-Control", "no-store");
+  res.send(svg);
 });
 
 // Staff permission toggles — only the owner can view/change these (staff
