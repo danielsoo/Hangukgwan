@@ -1,6 +1,11 @@
 (function () {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+  // Korean taegeuk (태극) mark — uses the exact reference image supplied
+  // (public/images/taegeuk.png), not a hand-drawn SVG, since a hand-drawn
+  // version kept coming out at a slightly wrong rotation angle.
+  const TAEGEUK_ICON_INLINE = '<img src="/images/taegeuk.png" alt="" style="width:1em;height:1em;vertical-align:-0.12em;margin-right:3px;" />';
   let categories = [];
   let orders = [];
   let tables = [];
@@ -42,7 +47,7 @@
       loginPasswordPlaceholder: "관리자 비밀번호",
       loginBtn: "로그인",
       loginError: "비밀번호가 올바르지 않습니다. 다시 시도해주세요",
-      brand: "☯ 한국관 관리자",
+      brand: `${TAEGEUK_ICON_INLINE} 한국관 관리자`,
       tabOrders: "실시간 주문",
       tabMenu: "메뉴 관리",
       tabTables: "테이블 / QR 코드",
@@ -276,7 +281,7 @@
       loginPasswordPlaceholder: "管理員密碼",
       loginBtn: "登入",
       loginError: "密碼錯誤，請重新輸入",
-      brand: "☯ 韓國館 管理後台",
+      brand: `${TAEGEUK_ICON_INLINE} 韓國館 管理後台`,
       tabOrders: "即時訂單",
       tabMenu: "菜單管理",
       tabTables: "桌號 / QR Code",

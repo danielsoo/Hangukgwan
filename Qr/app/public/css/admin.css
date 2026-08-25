@@ -215,8 +215,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
   display: flex; align-items: flex-end; gap: 12px; padding: 0 16px 12px; margin-top: -28px; position: relative;
 }
 .phone-avatar {
-  width: 64px; height: 64px; border-radius: 999px; background: var(--navy); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 26px;
+  width: 64px; height: 64px; border-radius: 999px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
   border: 4px solid #fff; flex-shrink: 0;
 }
 .phone-store-text { flex: 1; min-width: 0; padding-top: 34px; }
