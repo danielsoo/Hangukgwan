@@ -9,12 +9,16 @@ const router = express.Router();
 // as sensitive business data and kept owner-only rather than gated behind a
 // staff-permission toggle.
 
-// Live view for any date (defaults to today, Taipei time). Always computed
-// fresh from current orders — this is what the 결산 tab shows when opened,
-// so the owner never has to press a button to "do" the settlement.
+// Live view for a single date or a date range (defaults to today, Taipei
+// time). Always computed fresh from current orders — this is what the 결산
+// tab shows when opened, so the owner never has to press a button to "do"
+// the settlement. Accepts either ?date=YYYY-MM-DD (single day) or
+// ?start=YYYY-MM-DD&end=YYYY-MM-DD (inclusive range, e.g. "이번 주").
 router.get("/", requireOwner, (req, res) => {
-  const date = req.query.date || taipeiDateString();
-  res.json(computeSettlement(store, date));
+  const today = taipeiDateString();
+  const start = req.query.start || req.query.date || today;
+  const end = req.query.end || req.query.date || start;
+  res.json(computeSettlement(store, start, end));
 });
 
 // Permanent nightly snapshots (written by the cron job below, or manually

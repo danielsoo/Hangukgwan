@@ -110,20 +110,25 @@
       settingsTabAdmin: "관리자 전용",
       livePreviewLabel: "미리보기 (손님 화면)",
       tabSettlement: "결산",
-      settlementDateLabel: "날짜",
+      settlementStartLabel: "시작일",
+      settlementEndLabel: "종료일",
       settlementTodayBtn: "오늘",
+      settlementWeekBtn: "최근 7일",
+      settlementMonthBtn: "최근 30일",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
+      settlementCloseRangeHint: "하루를 선택했을 때만 저장할 수 있어요 (시작일 = 종료일).",
       settlementSavedMsg: "✔ 저장됨",
       settlementRevenue: "매출 (결제 완료)",
       settlementPaidCount: "결제 완료 주문",
       settlementProblemCount: "⚠️ 미결제/문제 주문",
       settlementCancelledCount: "취소된 주문",
       settlementProblemTitle: "⚠️ 결제되지 않은 주문",
-      settlementProblemHint: "아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.",
+      settlementProblemHint: "아래 주문들은 선택한 기간 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.",
       settlementItemsTitle: "품목별 판매 현황",
       settlementItemName: "메뉴",
       settlementItemQty: "수량",
       settlementItemSubtotal: "소계",
+      settlementTrendTitle: "매출 추이 (선택한 기간)",
       settlementHistoryTitle: "지난 정산 기록",
       settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).",
       settlementHistoryEmpty: "아직 저장된 정산 기록이 없습니다.",
@@ -276,20 +281,25 @@
       settingsTabAdmin: "僅限管理員",
       livePreviewLabel: "預覽（顧客畫面）",
       tabSettlement: "結算",
-      settlementDateLabel: "日期",
+      settlementStartLabel: "開始日期",
+      settlementEndLabel: "結束日期",
       settlementTodayBtn: "今天",
+      settlementWeekBtn: "最近 7 天",
+      settlementMonthBtn: "最近 30 天",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
+      settlementCloseRangeHint: "只有選擇單一天（開始日期＝結束日期）時才能儲存。",
       settlementSavedMsg: "✔ 已儲存",
       settlementRevenue: "營業額（已結帳）",
       settlementPaidCount: "已結帳訂單",
       settlementProblemCount: "⚠️ 未結帳/異常訂單",
       settlementCancelledCount: "已取消訂單",
       settlementProblemTitle: "⚠️ 尚未結帳的訂單",
-      settlementProblemHint: "以下訂單目前尚未標記為已結帳。請確認下單時間與內容，避免漏收款項。",
+      settlementProblemHint: "以下訂單在選定的期間內目前尚未標記為已結帳。請確認下單時間與內容，避免漏收款項。",
       settlementItemsTitle: "品項銷售明細",
       settlementItemName: "品項",
       settlementItemQty: "數量",
       settlementItemSubtotal: "小計",
+      settlementTrendTitle: "營業額趨勢（選定期間）",
       settlementHistoryTitle: "過往結算紀錄",
       settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。",
       settlementHistoryEmpty: "尚無已儲存的結算紀錄。",
@@ -421,7 +431,7 @@
       populateCategorySelect();
       if ($("#dashboard") && !$("#dashboard").hidden && !$("#floorPlanWrap").hidden) renderFloorPlan();
       if (openTableNumber) openTableDetail(openTableNumber);
-      if (!$("#tab-settlement").hidden) loadSettlement(currentSettlementDate);
+      if (!$("#tab-settlement").hidden) loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
     };
   });
 
@@ -2071,9 +2081,10 @@
   // press, no manual tallying) — "이 날짜 정산 기록 저장" just additionally
   // snapshots it into permanent history, same as the nightly cron does
   // automatically after closing time.
-  let currentSettlementDate = null;
+  let currentSettlementDate = null; // only set (non-null) when start === end — used by the manual "저장" button
   let settlementItemsChart = null;
   let settlementHistoryChart = null;
+  let settlementTrendChart = null;
 
   function itemDisplayName(it) {
     return adminLang === "zh" ? it.name_zh || it.name_ko : it.name_ko || it.name_zh;
@@ -2132,9 +2143,35 @@
     });
   }
 
+  // Trend chart for the currently selected range — one bar per day that had
+  // paid revenue in it, so a multi-day range (이번 주/이번 달 등) reads as an
+  // actual trend instead of one flat total.
+  function renderTrendChart(dailyBreakdown) {
+    const canvas = $("#settlementTrendChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    if (settlementTrendChart) settlementTrendChart.destroy();
+    settlementTrendChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: dailyBreakdown.map((d) => d.date.slice(5)),
+        datasets: [{ label: T("settlementRevenue"), data: dailyBreakdown.map((d) => d.revenue), backgroundColor: "#16213e", borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
+  }
+
   function renderSettlement(data) {
-    currentSettlementDate = data.date;
-    $("#settlementDate").value = data.date;
+    currentSettlementDate = data.date; // null when viewing a multi-day range
+    $("#settlementStartDate").value = data.start_date;
+    $("#settlementEndDate").value = data.end_date;
+    const closeBtn = $("#settlementCloseBtn");
+    closeBtn.disabled = !data.date;
+    closeBtn.title = data.date ? "" : T("settlementCloseRangeHint");
     $("#settlementRevenue").textContent = `NT$${Number(data.total_revenue || 0).toLocaleString()}`;
     $("#settlementPaidCount").textContent = data.paid_order_count;
     $("#settlementProblemCount").textContent = data.problem_order_count;
@@ -2177,16 +2214,38 @@
       )
       .join("");
     renderItemsChart(data.item_breakdown);
+    renderTrendChart(data.daily_breakdown || []);
   }
 
   const fmtOrderTableTag = (n) => (adminLang === "zh" ? `桌號 ${n}` : `${n}번 테이블`);
 
-  async function loadSettlement(date) {
-    const url = date ? `/api/settlements?date=${encodeURIComponent(date)}` : "/api/settlements";
-    const res = await fetch(url);
+  // start/end default to today when omitted. Pass the same date for both to
+  // view a single day (e.g. from clicking a row in 지난 정산 기록).
+  async function loadSettlement(start, end) {
+    const params = new URLSearchParams();
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    const qs = params.toString();
+    const res = await fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
     if (!res.ok) return;
     renderSettlement(await res.json());
     loadSettlementHistory();
+  }
+
+  function taipeiTodayString() {
+    // Client-side approximation of "today" in Taipei — used only to seed
+    // the date pickers' initial values; the server is always the source of
+    // truth for what "today" actually is (see loadSettlement()/GET /api/settlements).
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const map = {};
+    parts.forEach((p) => (map[p.type] = p.value));
+    return `${map.year}-${map.month}-${map.day}`;
+  }
+
+  function addDaysToDateString(dateStr, days) {
+    const d = new Date(`${dateStr}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
   }
 
   async function loadSettlementHistory() {
@@ -2212,13 +2271,32 @@
       )
       .join("");
     $$(".settlement-history-row").forEach((row) => {
-      row.onclick = () => loadSettlement(row.dataset.date);
+      row.onclick = () => loadSettlement(row.dataset.date, row.dataset.date);
     });
   }
 
-  $("#settlementDate").onchange = (e) => loadSettlement(e.target.value);
-  $("#settlementTodayBtn").onclick = () => loadSettlement(null);
+  function settlementDateRangeChanged() {
+    const start = $("#settlementStartDate").value;
+    const end = $("#settlementEndDate").value;
+    if (!start || !end) return;
+    loadSettlement(start, end);
+  }
+  $("#settlementStartDate").onchange = settlementDateRangeChanged;
+  $("#settlementEndDate").onchange = settlementDateRangeChanged;
+  $("#settlementTodayBtn").onclick = () => {
+    const today = taipeiTodayString();
+    loadSettlement(today, today);
+  };
+  $("#settlementWeekBtn").onclick = () => {
+    const today = taipeiTodayString();
+    loadSettlement(addDaysToDateString(today, -6), today);
+  };
+  $("#settlementMonthBtn").onclick = () => {
+    const today = taipeiTodayString();
+    loadSettlement(addDaysToDateString(today, -29), today);
+  };
   $("#settlementCloseBtn").onclick = async () => {
+    if (!currentSettlementDate) return;
     const btn = $("#settlementCloseBtn");
     const original = btn.textContent;
     await fetch("/api/settlements/close", {

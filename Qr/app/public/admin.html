@@ -90,11 +90,18 @@
     <section id="tab-settlement" class="tab-panel owner-only" hidden>
       <div class="settlement-toolbar">
         <label class="settlement-date-label">
-          <span data-i18n="settlementDateLabel">날짜</span>
-          <input type="date" id="settlementDate" />
+          <span data-i18n="settlementStartLabel">시작일</span>
+          <input type="date" id="settlementStartDate" />
+        </label>
+        <span class="settlement-date-sep">~</span>
+        <label class="settlement-date-label">
+          <span data-i18n="settlementEndLabel">종료일</span>
+          <input type="date" id="settlementEndDate" />
         </label>
         <button id="settlementTodayBtn" type="button" data-i18n="settlementTodayBtn">오늘</button>
-        <button id="settlementCloseBtn" type="button" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
+        <button id="settlementWeekBtn" type="button" data-i18n="settlementWeekBtn">최근 7일</button>
+        <button id="settlementMonthBtn" type="button" data-i18n="settlementMonthBtn">최근 30일</button>
+        <button id="settlementCloseBtn" type="button" class="settlement-close-btn" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
       </div>
 
       <div class="settlement-summary-cards">
@@ -116,30 +123,39 @@
         </div>
       </div>
 
-      <div id="settlementProblemSection" class="settings-card" hidden>
+      <div id="settlementProblemSection" class="settlement-wide-card settlement-card-problem-block" hidden>
         <h3 data-i18n="settlementProblemTitle">⚠️ 결제되지 않은 주문</h3>
         <p class="settings-hint" data-i18n="settlementProblemHint">아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.</p>
         <div id="settlementProblemList"></div>
       </div>
 
-      <div class="settings-card settlement-chart-card">
-        <h3 data-i18n="settlementItemsTitle">품목별 판매 현황</h3>
-        <div class="settlement-chart-wrap">
-          <canvas id="settlementItemsChart"></canvas>
+      <div class="settlement-charts-grid">
+        <div class="settlement-wide-card settlement-chart-card">
+          <h3 data-i18n="settlementItemsTitle">품목별 판매 현황</h3>
+          <div class="settlement-chart-wrap">
+            <canvas id="settlementItemsChart"></canvas>
+          </div>
+          <table class="settlement-items-table" id="settlementItemsTable">
+            <thead>
+              <tr>
+                <th data-i18n="settlementItemName">메뉴</th>
+                <th data-i18n="settlementItemQty">수량</th>
+                <th data-i18n="settlementItemSubtotal">소계</th>
+              </tr>
+            </thead>
+            <tbody id="settlementItemsBody"></tbody>
+          </table>
         </div>
-        <table class="settlement-items-table" id="settlementItemsTable">
-          <thead>
-            <tr>
-              <th data-i18n="settlementItemName">메뉴</th>
-              <th data-i18n="settlementItemQty">수량</th>
-              <th data-i18n="settlementItemSubtotal">소계</th>
-            </tr>
-          </thead>
-          <tbody id="settlementItemsBody"></tbody>
-        </table>
+
+        <div class="settlement-wide-card settlement-chart-card">
+          <h3 data-i18n="settlementTrendTitle">매출 추이 (선택한 기간)</h3>
+          <div class="settlement-chart-wrap">
+            <canvas id="settlementTrendChart"></canvas>
+          </div>
+        </div>
       </div>
 
-      <div class="settings-card settlement-chart-card">
+      <div class="settlement-wide-card settlement-chart-card settlement-history-card">
         <h3 data-i18n="settlementHistoryTitle">지난 정산 기록</h3>
         <p class="settings-hint" data-i18n="settlementHistoryHint">매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).</p>
         <div class="settlement-chart-wrap">
