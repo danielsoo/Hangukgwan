@@ -1036,11 +1036,11 @@
     // toward the left side of its blank area (closer to its own label).
     const headerTop = 249;
     const headerBottom = 301;
-    overlays += `<div class="value-overlay header-value-table" style="left:${pct(314, TICKET_IMG_W)}%;top:${pct(
+    overlays += `<div class="value-overlay header-value-table" style="left:${pct(312, TICKET_IMG_W)}%;top:${pct(
       headerTop,
       TICKET_IMG_H
     )}%;width:${pct(110, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
-    overlays += `<div class="value-overlay header-value-party" style="left:${pct(682, TICKET_IMG_W)}%;top:${pct(
+    overlays += `<div class="value-overlay header-value-party" style="left:${pct(686, TICKET_IMG_W)}%;top:${pct(
       headerTop,
       TICKET_IMG_H
     )}%;width:${pct(140, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
