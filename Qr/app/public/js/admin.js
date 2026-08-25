@@ -819,26 +819,63 @@
   //      meals) have no reserved spot on it, so they print in a small
   //      appendix table below the photo instead of being silently dropped;
   //   2) the coordinates below were measured by hand from the photo and
-  //      may drift by a few px in places — nudge ROW_TOP0/ROW_HEIGHT/COLS
-  //      below if a tally ever lands slightly off from its row.
+  //      may drift by a few px in places — nudge ROW_POINTS/COLS below if
+  //      a tally ever lands slightly off from its row.
   // Image asset: public/images/kitchen-ticket-template.jpg (878x1865).
+  // Traditional 正-tally counting draws the 5 strokes of 正 one at a time
+  // as the count goes from 1 to 5 (1=一, 2=+vertical, 3=+a horizontal,
+  // 4=+another horizontal, 5=complete 正), then starts a new 正 alongside
+  // for the next group of 5. There's no existing font character for the
+  // in-between partial forms (2/3/4 strokes), so these are drawn as small
+  // inline SVG line strokes instead of text — guarantees they render
+  // identically on any printer regardless of what Chinese font is
+  // installed, the same problem that caused rare characters to print
+  // blank elsewhere in this ticket.
+  const TALLY_STROKES = [
+    "M3,4 L21,4", // 1: top horizontal (一)
+    "M12,4 L12,25", // 2: + vertical spine
+    "M3,11 L21,11", // 3: + upper-middle horizontal
+    "M3,18 L21,18", // 4: + lower-middle horizontal
+    "M3,25 L21,25", // 5: + bottom horizontal — now a complete 正
+  ];
+  function strokeGlyphSvg(strokeCount) {
+    const paths = TALLY_STROKES.slice(0, strokeCount)
+      .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="square"/>`)
+      .join("");
+    return `<svg viewBox="0 0 24 28" class="tally-glyph">${paths}</svg>`;
+  }
   function tallyMark(n) {
     if (!n || n <= 0) return "";
     const groups = Math.floor(n / 5);
     const rem = n % 5;
-    return "正".repeat(groups) + "丨".repeat(rem);
+    let out = "";
+    for (let i = 0; i < groups; i++) out += strokeGlyphSvg(5);
+    if (rem > 0) out += strokeGlyphSvg(rem);
+    return out;
   }
 
   const TICKET_IMG_W = 878;
   const TICKET_IMG_H = 1865;
-  // First item row (11 / 51) starts at y=461; the 海尼根/金額合計 row ends
-  // at y=1841 — 28 rows measured to fit evenly in that span (see the
-  // conversation history for how these were derived from the photo).
-  const ROW_TOP0 = 461;
-  const ROW_HEIGHT = (1841 - 461) / 28;
+  // Row boundaries measured directly from the photo (not a uniform-height
+  // formula — that drifted a few px further off with every row down the
+  // page, which was visibly wrong by the bottom of the form). Index i's
+  // row spans ROW_POINTS[i] to ROW_POINTS[i+1]. If a row ever needs
+  // nudging, adjust the specific point(s) here rather than a formula.
+  const ROW_POINTS = [
+    461, 506, 558, 609, 666, 711, 771, 814, 866, 917, 968, 1019, 1071, 1122, 1173, 1225,
+    1276, 1328, 1379, 1430, 1481, 1533, 1584, 1635, 1687, 1738, 1790, 1841,
+  ];
   function rowRect(index) {
-    const top = ROW_TOP0 + index * ROW_HEIGHT;
-    return { top, bottom: top + ROW_HEIGHT };
+    if (index + 1 < ROW_POINTS.length) {
+      return { top: ROW_POINTS[index], bottom: ROW_POINTS[index + 1] };
+    }
+    // Ran past the measured points (an unusually long category) — keep
+    // going at the same height as the last measured row rather than
+    // erroring out.
+    const lastHeight = ROW_POINTS[ROW_POINTS.length - 1] - ROW_POINTS[ROW_POINTS.length - 2];
+    const stepsPast = index - (ROW_POINTS.length - 2);
+    const top = ROW_POINTS[ROW_POINTS.length - 1] + (stepsPast - 1) * lastHeight;
+    return { top, bottom: top + lastHeight };
   }
   const BAR_RECT = { top: 398, bottom: 461 }; // shared 飯類/烤肉類 bar row, right above row 0
   const COLS = {
@@ -887,8 +924,13 @@
           const qty = ord.byOption[opt];
           if (!qty) return "";
           const x0 = colX[0] + i * subW;
-          const top = rect.top + (rect.bottom - rect.top) * 0.48;
-          const height = (rect.bottom - rect.top) * 0.5;
+          // The 牛/豬 (etc) label printed on the photo sits in the top
+          // ~45% of the row; the tally goes in the remaining space below
+          // it. Keeping a small gap from the row's bottom border (ending
+          // at 90%, not 100%) matters — a mark sitting right against the
+          // border reads as "belongs to the row below" at a glance.
+          const top = rect.top + (rect.bottom - rect.top) * 0.5;
+          const height = (rect.bottom - rect.top) * 0.4;
           return `<div class="tally-overlay" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
             subW,
             TICKET_IMG_W
@@ -929,20 +971,22 @@
     });
 
     // 桌號 / 人數 values, in the blank cell of the top header box (y249-301).
+    // 桌號's box is pushed toward the right side of its blank area, 人數's
+    // toward the left side of its blank area (closer to its own label).
     const headerTop = 249;
     const headerBottom = 301;
-    overlays += `<div class="value-overlay" style="left:${pct(230, TICKET_IMG_W)}%;top:${pct(headerTop, TICKET_IMG_H)}%;width:${pct(
-      214,
-      TICKET_IMG_W
-    )}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
-    overlays += `<div class="value-overlay" style="left:${pct(674, TICKET_IMG_W)}%;top:${pct(headerTop, TICKET_IMG_H)}%;width:${pct(
-      204,
-      TICKET_IMG_W
-    )}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
+    overlays += `<div class="value-overlay header-value" style="left:${pct(330, TICKET_IMG_W)}%;top:${pct(
+      headerTop,
+      TICKET_IMG_H
+    )}%;width:${pct(110, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
+    overlays += `<div class="value-overlay header-value" style="left:${pct(674, TICKET_IMG_W)}%;top:${pct(
+      headerTop,
+      TICKET_IMG_H
+    )}%;width:${pct(140, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
 
     // 金額合計 value — the merged box spanning the last 2 rows (rows[26..27]).
-    const totalTop = ROW_TOP0 + 26 * ROW_HEIGHT;
-    const totalBottom = ROW_TOP0 + 28 * ROW_HEIGHT;
+    const totalTop = ROW_POINTS[ROW_POINTS.length - 3];
+    const totalBottom = ROW_POINTS[ROW_POINTS.length - 1];
     overlays += `<div class="value-overlay total-overlay" style="left:${pct(230, TICKET_IMG_W)}%;top:${pct(
       totalTop,
       TICKET_IMG_H
@@ -982,9 +1026,14 @@
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-weight: 900; color: #c0161f; line-height: 1;
   }
-  .value-overlay { font-size: 20px; justify-content: flex-start; padding-left: 4px; }
-  .total-overlay { font-size: 22px; }
-  .tally-overlay { font-size: 15px; letter-spacing: 1px; }
+  /* Sized in vw (relative to the printed page width) rather than a fixed
+     px, so they scale with the photo the same way regardless of paper
+     size — 3.76vw was measured directly off the "金額合計" label's own
+     printed character height, so the total lines up with it exactly. */
+  .value-overlay { font-size: 3.6vw; justify-content: flex-start; }
+  .total-overlay { font-size: 3.76vw; }
+  .tally-overlay { display: flex; align-items: flex-start; justify-content: center; gap: 1px; flex-wrap: wrap; }
+  .tally-glyph { width: 1.9vw; height: 2.2vw; overflow: visible; }
   .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
   .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
   .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
