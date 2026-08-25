@@ -889,9 +889,23 @@
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" />
 <style>
   @page { size: A4; margin: 8mm; }
-  * { box-sizing: border-box; }
+  /* Without this, most browsers strip background colors (the black
+     category bars, the yellow "ordered" highlight) out of the printed
+     page entirely, regardless of what CSS says — this forces them to
+     print as designed instead of silently vanishing. */
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  /* Relying on a system-installed Chinese font (PMingLiU etc.) meant some
+     less-common characters (魷, 滷, 噌, 烤, 份, 雞, 糕, 飲, 啤...) were
+     printing as blank instead of falling back to a font that has them —
+     loading the actual Noto Sans TC webfont above guarantees every
+     Traditional Chinese character in the menu renders, regardless of
+     what's installed on the printing computer.
+  */
   body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; font-size: 10px; color: #000; }
   .ticket-frame { border: 2px solid #000; padding: 3mm; }
   .store-name { text-align: center; font-size: 22px; font-weight: 900; margin: 0 0 1mm; letter-spacing: 2px; }
@@ -954,10 +968,24 @@
     doc.open();
     doc.write(buildTicketHtml(o));
     doc.close();
-    setTimeout(() => {
+
+    // Wait for the Noto Sans TC webfont (loaded via Google Fonts link tag
+    // in buildTicketHtml) to actually finish downloading before printing —
+    // otherwise the print can fire before the font arrives and some less-
+    // common Chinese characters silently render blank instead of falling
+    // back to a font that has them.
+    const triggerPrint = () => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-    }, 150);
+    };
+    const fontsReady = doc.fonts && doc.fonts.ready;
+    if (fontsReady && fontsReady.then) {
+      Promise.race([fontsReady, new Promise((resolve) => setTimeout(resolve, 3000))]).then(() =>
+        setTimeout(triggerPrint, 50)
+      );
+    } else {
+      setTimeout(triggerPrint, 500);
+    }
   }
 
   async function updateOrderStatus(id, status) {
