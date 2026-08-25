@@ -1096,18 +1096,18 @@
   .tally-overlay-group1-right { transform: translateX(-6.5px); } /* 오른쪽 칸: -8.5px에서 2px 더 오른쪽 */
 
   /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
-  .tally-overlay-group2 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group2 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
   .tally-overlay-group2 .tally-glyph-single { height: 1.1vw; }
   .tally-overlay-group2 { transform: translateX(-13px); } /* -15px에서 오른쪽으로 2px */
 
   /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
-  .tally-overlay-group3 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group3 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
   .tally-overlay-group3 .tally-glyph-single { height: 1.1vw; }
   .tally-overlay-group3 { transform: translateX(-5.5px); } /* -6px에서 오른쪽으로 0.5px */
 
   /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
      bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
-  .tally-overlay-group4 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group4 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
   .tally-overlay-group4 .tally-glyph-single { height: 1.1vw; }
   .tally-overlay-group4 { transform: translateX(-1px); } /* -3px에서 오른쪽으로 2px */
 
