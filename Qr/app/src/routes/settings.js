@@ -153,6 +153,16 @@ router.get("/line", requireOwner, (req, res) => {
   res.json(lineStatus());
 });
 
+// Reveals the actual saved token/secret (owner-only, requires an explicit
+// click in the UI) — useful for checking a paste didn't pick up stray
+// whitespace, e.g. when a webhook signature mismatch is happening.
+router.get("/line/reveal", requireOwner, (req, res) => {
+  res.json({
+    token: store.settings.line_channel_access_token || "",
+    secret: store.settings.line_channel_secret || "",
+  });
+});
+
 router.put("/line", requireOwner, async (req, res) => {
   const b = req.body || {};
   if (typeof b.enabled === "boolean") store.settings.line_notify_enabled = b.enabled;

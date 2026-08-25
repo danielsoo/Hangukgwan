@@ -234,6 +234,8 @@
       testLineBtn: "📩 지금 테스트 메시지 보내기",
       lineTokenSetStatus: "✔ 토큰이 저장되어 있습니다",
       lineTokenNotSetStatus: "토큰이 아직 저장되지 않았습니다",
+      lineRevealBtn: "보기",
+      lineHideBtn: "숨기기",
       lineSecretLabel: "채널 시크릿 (Webhook 인증용)",
       lineSecretPlaceholder: "저장된 값이 있으면 비워두면 유지됩니다",
       lineSecretSetStatus: "✔ 채널 시크릿이 저장되어 있습니다",
@@ -459,6 +461,8 @@
       testLineBtn: "📩 立即傳送測試訊息",
       lineTokenSetStatus: "✔ 已儲存權杖",
       lineTokenNotSetStatus: "尚未儲存權杖",
+      lineRevealBtn: "顯示",
+      lineHideBtn: "隱藏",
       lineSecretLabel: "頻道密鑰（Webhook 驗證用）",
       lineSecretPlaceholder: "若已儲存密鑰，留空即可保留原本設定",
       lineSecretSetStatus: "✔ 已儲存頻道密鑰",
@@ -804,22 +808,34 @@
   }
 
   // ---------- Kitchen ticket printing ----------
-  // Replicates the restaurant's existing paper order slip: the full menu,
-  // grouped by category with black header bars, and only the ordered
-  // items' quantity boxes filled in. Printed via a hidden iframe so it
-  // doesn't disturb the admin page itself — whatever printer is set as
-  // the default on this computer/tablet receives it, same as any normal
-  // browser print. Sized for an 80mm thermal receipt printer (the common
-  // standard); the width can be tuned later in the @page/body CSS below
-  // once the actual printer is known.
+  // Replicates the restaurant's actual paper order slip exactly: two
+  // columns of categories (black header bars), every menu item listed with
+  // its code/name/price, and only the ordered items' quantity boxes filled
+  // in — using traditional 正-character tally marks (groups of 5, plus a
+  // 丨 stroke per remaining unit) instead of plain digits. Items with an
+  // options list (e.g. 소고기/돼지고기, 참치/새우) get one small tally box
+  // per option, matching the paper form's separate 牛/豬 sub-columns.
+  // Printed via a hidden iframe so it doesn't disturb the admin page
+  // itself. This full two-column layout is sized for a normal A4/Letter
+  // printer, not an 80mm thermal receipt printer — the restaurant's
+  // printer at the order station needs to support that page size.
+  function tallyMark(n) {
+    if (!n || n <= 0) return "";
+    const groups = Math.floor(n / 5);
+    const rem = n % 5;
+    return "正".repeat(groups) + "丨".repeat(rem);
+  }
+
   function buildTicketHtml(o) {
     const table = tables.find((t) => t.number === o.table_number);
     const partySize = table && table.party_size ? table.party_size : "";
     const orderedMap = {};
     o.items.forEach((it) => {
-      if (!orderedMap[it.item_id]) orderedMap[it.item_id] = { qty: 0, notes: [] };
+      if (!orderedMap[it.item_id]) orderedMap[it.item_id] = { qty: 0, notes: [], byOption: {} };
       orderedMap[it.item_id].qty += it.qty;
-      if (it.option_choice) orderedMap[it.item_id].notes.push(it.option_choice);
+      if (it.option_choice) {
+        orderedMap[it.item_id].byOption[it.option_choice] = (orderedMap[it.item_id].byOption[it.option_choice] || 0) + it.qty;
+      }
       if (it.note) orderedMap[it.item_id].notes.push(it.note);
     });
 
@@ -827,48 +843,82 @@
     const storeName = storeSettings.store_name_zh || "韓國館";
     const phone = storeSettings.store_phone ? `TEL：${storeSettings.store_phone}` : "";
 
-    let rows = "";
-    categories.forEach((c) => {
-      if (!c.items || !c.items.length) return;
-      rows += `<tr class="cat-row"><td colspan="4">${c.name_zh || c.name_ko}</td></tr>`;
-      c.items.forEach((item) => {
-        const ord = orderedMap[item.id];
-        const noteHtml = ord && ord.notes.length ? `<div class="row-note">${ord.notes.join(", ")}</div>` : "";
-        rows += `
-          <tr class="${ord ? "ordered" : ""}">
-            <td class="code">${item.code || ""}</td>
-            <td class="name">${item.name_zh || item.name_ko}${noteHtml}</td>
-            <td class="price">${item.price}</td>
-            <td class="qty">${ord ? ord.qty : ""}</td>
-          </tr>`;
+    function buildColumnRows(cats) {
+      let rows = "";
+      cats.forEach((c) => {
+        rows += `<tr class="cat-row"><td colspan="4">${c.name_zh || c.name_ko}</td></tr>`;
+        c.items.forEach((item) => {
+          const ord = orderedMap[item.id];
+          const optsArr = item.options
+            ? item.options.split(",").map((s) => s.trim()).filter(Boolean)
+            : null;
+          let qtyHtml;
+          if (optsArr && optsArr.length) {
+            qtyHtml = `<div class="opt-cells">${optsArr
+              .map((opt) => {
+                const matched = ord && ord.byOption[opt];
+                return `<div class="opt-cell"><div class="opt-label">${opt}</div><div class="opt-tally">${
+                  matched ? tallyMark(matched) : ""
+                }</div></div>`;
+              })
+              .join("")}</div>`;
+          } else {
+            qtyHtml = `<div class="opt-tally">${ord ? tallyMark(ord.qty) : ""}</div>`;
+          }
+          const noteHtml = ord && ord.notes.length ? `<div class="row-note">${ord.notes.join(", ")}</div>` : "";
+          rows += `
+            <tr class="${ord ? "ordered" : ""}">
+              <td class="code">${item.code || ""}</td>
+              <td class="name">${item.name_zh || item.name_ko}${noteHtml}</td>
+              <td class="price">${item.price}</td>
+              <td class="qty">${qtyHtml}</td>
+            </tr>`;
+        });
       });
-    });
+      return rows;
+    }
+
+    const validCats = categories.filter((c) => c.items && c.items.length);
+    const mid = Math.ceil(validCats.length / 2);
+    const leftRows = buildColumnRows(validCats.slice(0, mid));
+    const rightRows = buildColumnRows(validCats.slice(mid));
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <style>
-  @page { size: 80mm auto; margin: 2mm; }
+  @page { size: A4; margin: 8mm; }
   * { box-sizing: border-box; }
-  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; width: 76mm; margin: 0; padding: 0; font-size: 11px; color: #000; }
-  .store-name { text-align: center; font-size: 18px; font-weight: 900; margin: 1mm 0 0; }
-  .store-sub { text-align: center; font-size: 10px; margin-bottom: 2mm; }
-  .meta-row { display: flex; justify-content: space-between; font-size: 12px; font-weight: 700; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 1mm 0; margin-bottom: 1mm; }
-  table { width: 100%; border-collapse: collapse; }
-  td { border: 1px solid #000; padding: 0.8mm 1mm; font-size: 10px; vertical-align: middle; }
-  .cat-row td { background: #000; color: #fff; text-align: center; font-weight: 900; font-size: 11px; padding: 1mm; }
-  .code { width: 8mm; text-align: center; font-weight: 700; }
-  .price { width: 10mm; text-align: right; }
-  .qty { width: 9mm; text-align: center; font-weight: 900; }
+  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; font-size: 10px; color: #000; }
+  .store-name { text-align: center; font-size: 20px; font-weight: 900; margin: 0 0 1mm; }
+  .store-sub { text-align: center; font-size: 11px; margin-bottom: 2mm; }
+  .meta-row { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 1.5mm 0; margin-bottom: 2mm; }
+  .ticket-grid { display: flex; gap: 4mm; }
+  .ticket-col { flex: 1; min-width: 0; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  td { border: 1px solid #000; padding: 0.6mm 1mm; font-size: 9px; vertical-align: middle; }
+  .cat-row td { background: #000; color: #fff; text-align: center; font-weight: 900; font-size: 10px; padding: 1mm; }
+  .code { width: 7%; text-align: center; font-weight: 700; }
+  .name { width: 46%; }
+  .price { width: 12%; text-align: right; }
+  .qty { width: 35%; text-align: center; font-weight: 900; padding: 0; }
+  .opt-cells { display: flex; }
+  .opt-cell { flex: 1; border-left: 1px solid #999; padding: 0.6mm; }
+  .opt-cell:first-child { border-left: none; }
+  .opt-label { font-size: 7px; color: #555; }
+  .opt-tally { font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
   tr.ordered td { background: #ffe9a8; }
-  .row-note { font-size: 8.5px; color: #333; }
-  .footer { text-align: right; font-weight: 900; font-size: 14px; margin-top: 2mm; border-top: 2px solid #000; padding-top: 1mm; }
+  .row-note { font-size: 7.5px; color: #333; }
+  .footer { text-align: left; font-weight: 900; font-size: 15px; margin-top: 3mm; border-top: 2px solid #000; padding-top: 1.5mm; }
   .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 2mm; }
 </style>
 </head><body>
   <div class="store-name">${storeName}</div>
   ${phone ? `<div class="store-sub">${phone}</div>` : ""}
   <div class="meta-row"><span>桌號：${o.table_number}</span><span>人數：${partySize || "-"}</span></div>
-  <table>${rows}</table>
+  <div class="ticket-grid">
+    <div class="ticket-col"><table>${leftRows}</table></div>
+    <div class="ticket-col"><table>${rightRows}</table></div>
+  </div>
   ${o.note ? `<div class="row-note" style="margin-top:1mm;">주문 메모: ${o.note}</div>` : ""}
   <div class="footer">金額合計：NT$${o.total}</div>
   <div class="print-time">${time}</div>
@@ -2244,7 +2294,11 @@
     const msg = $("#lineMsg");
     if (res.ok) {
       $("#lineTokenInput").value = "";
+      $("#lineTokenInput").type = "password";
+      $("#lineTokenRevealBtn").textContent = T("lineRevealBtn");
       $("#lineSecretInput").value = "";
+      $("#lineSecretInput").type = "password";
+      $("#lineSecretRevealBtn").textContent = T("lineRevealBtn");
       renderLineStatus(await res.json());
       msg.style.color = "#1a8a44";
       msg.textContent = T("lineSavedMsg");
@@ -2255,6 +2309,37 @@
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2500);
   };
+
+  // Owner-only "reveal" toggle: fetches the actual saved token/secret and
+  // shows it in the input (in place of the "leave blank to keep" prompt) so
+  // a paste error (stray whitespace, cut-off characters, an old rotated
+  // token) can be spotted at a glance instead of guessing.
+  function wireLineReveal(btnId, inputId) {
+    const btn = $(btnId);
+    const input = $(inputId);
+    let revealed = false;
+    btn.onclick = async () => {
+      if (revealed) {
+        input.type = "password";
+        input.value = "";
+        input.placeholder = input.dataset.origPlaceholder || input.placeholder;
+        btn.textContent = T("lineRevealBtn");
+        revealed = false;
+        return;
+      }
+      const res = await fetch("/api/settings/line/reveal");
+      if (!res.ok) return;
+      const data = await res.json();
+      const value = inputId === "#lineTokenInput" ? data.token : data.secret;
+      input.dataset.origPlaceholder = input.placeholder;
+      input.type = "text";
+      input.value = value || "";
+      btn.textContent = T("lineHideBtn");
+      revealed = true;
+    };
+  }
+  wireLineReveal("#lineTokenRevealBtn", "#lineTokenInput");
+  wireLineReveal("#lineSecretRevealBtn", "#lineSecretInput");
 
   $("#testLineBtn").onclick = async () => {
     const btn = $("#testLineBtn");

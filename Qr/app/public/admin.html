@@ -310,9 +310,19 @@
           <h3 data-i18n="lineSettingsTitle">마감 자동 알림 (LINE)</h3>
           <p class="settings-hint" data-i18n="lineSettingsHint">매일 밤 마감 시간 이후 그날 매출/미결제 요약을, 아래 등록된 사람에게만 개별로 전송해요 (친구 추가한 모두에게 보내는 게 아니에요).</p>
           <label class="perm-toggle-row"><span data-i18n="lineEnableLabel">마감 알림 사용</span><input type="checkbox" id="lineEnabledToggle" /></label>
-          <label><span data-i18n="lineTokenLabel">채널 액세스 토큰</span><input id="lineTokenInput" type="password" data-i18n-placeholder="lineTokenPlaceholder" placeholder="저장된 토큰이 있으면 비워두면 유지됩니다" /></label>
+          <label><span data-i18n="lineTokenLabel">채널 액세스 토큰</span>
+            <div class="line-secret-row">
+              <input id="lineTokenInput" type="password" data-i18n-placeholder="lineTokenPlaceholder" placeholder="저장된 토큰이 있으면 비워두면 유지됩니다" />
+              <button type="button" id="lineTokenRevealBtn" class="line-reveal-btn" data-i18n="lineRevealBtn">보기</button>
+            </div>
+          </label>
           <div id="lineTokenStatus" class="settings-hint"></div>
-          <label><span data-i18n="lineSecretLabel">채널 시크릿 (Webhook 인증용)</span><input id="lineSecretInput" type="password" data-i18n-placeholder="lineSecretPlaceholder" placeholder="저장된 값이 있으면 비워두면 유지됩니다" /></label>
+          <label><span data-i18n="lineSecretLabel">채널 시크릿 (Webhook 인증용)</span>
+            <div class="line-secret-row">
+              <input id="lineSecretInput" type="password" data-i18n-placeholder="lineSecretPlaceholder" placeholder="저장된 값이 있으면 비워두면 유지됩니다" />
+              <button type="button" id="lineSecretRevealBtn" class="line-reveal-btn" data-i18n="lineRevealBtn">보기</button>
+            </div>
+          </label>
           <div id="lineSecretStatus" class="settings-hint"></div>
           <button id="saveLineSettingsBtn" data-i18n="saveLineSettingsBtn">저장</button>
           <button id="testLineBtn" type="button" data-i18n="testLineBtn">📩 지금 테스트 메시지 보내기</button>
