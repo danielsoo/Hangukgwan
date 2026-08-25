@@ -1068,12 +1068,18 @@
   @page { size: A4; margin: 6mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; color: #000; }
-  .ticket-photo-wrap { position: relative; width: 100%; }
+  /* width:100% here means something DIFFERENT depending on context: on
+     screen it's 100% of the browser window, but the instant @page (above)
+     takes over — i.e. print, print-preview, even just pressing Cmd+P on
+     this same tab — "100%"/vw suddenly mean 100% of the A4 content box
+     instead (~748px, not however wide the window was). Every vw-based
+     size and every fixed-px nudge below was silently being measured
+     against two different rulers depending on which mode was rendering it.
+     Fixing width to the photo's own native pixels (878) and using ONLY
+     fixed px everywhere below (no vw) makes both modes use the exact same
+     ruler, always. */
+  .ticket-photo-wrap { position: relative; width: 878px; margin: 0 auto; }
   .ticket-photo-wrap img { width: 100%; display: block; }
-  /* Shared base only — every group below overrides on top of this, and
-     each group is independently tunable: touching one never moves another.
-     Sized in vw (relative to the printed page width) rather than a fixed
-     px, so they scale with the photo the same way regardless of paper size. */
   .value-overlay, .tally-overlay {
     position: absolute; display: flex; align-items: center; justify-content: center;
     font-weight: 900; color: #c0161f; line-height: 1;
@@ -1083,44 +1089,44 @@
 
   /* ── 51번 (銅盤烤肉) — 어떤 그룹에도 속하지 않음. 크기는 그대로 두되
      좌(牛)/우(豬) 칸은 개별 이동 가능하게 분리. ── */
-  .tally-overlay-option-51 .tally-glyph { width: 5.2vw; height: 2.2vw; }
-  .tally-overlay-option-51 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-option-51-left { transform: translateX(-1px); } /* 왼쪽(牛) 칸: -3px에서 오른쪽으로 2px */
+  .tally-overlay-option-51 .tally-glyph { width: 45.66px; height: 19.32px; }
+  .tally-overlay-option-51 .tally-glyph-single { height: 9.66px; }
+  .tally-overlay-option-51-left { transform: translateX(-1px); }
 
   /* ── 그룹 1: 11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯 (51 제외) ──
      牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 크기는 원래 그대로.
      좌/우 칸(牛|豬, 鮪魚|蝦仁)을 따로 움직일 수 있도록 위치는 -left/-right에서 지정. */
-  .tally-overlay-group1 .tally-glyph { width: 5.2vw; height: 2.2vw; }
-  .tally-overlay-group1 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group1-left { transform: translateX(-18.5px); } /* 왼쪽 칸: -16.5px에서 2px 더 왼쪽 */
-  .tally-overlay-group1-right { transform: translateX(-6.5px); } /* 오른쪽 칸: -8.5px에서 2px 더 오른쪽 */
+  .tally-overlay-group1 .tally-glyph { width: 45.66px; height: 19.32px; }
+  .tally-overlay-group1 .tally-glyph-single { height: 9.66px; }
+  .tally-overlay-group1-left { transform: translateX(-18.5px); }
+  .tally-overlay-group1-right { transform: translateX(-6.5px); }
 
   /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
-  .tally-overlay-group2 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
-  .tally-overlay-group2 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group2 { transform: translateX(-13px); } /* -15px에서 오른쪽으로 2px */
+  .tally-overlay-group2 .tally-glyph { width: 136.97px; height: 19.32px; } /* 45.66px에서 1.5배 */
+  .tally-overlay-group2 .tally-glyph-single { height: 9.66px; }
+  .tally-overlay-group2 { transform: translateX(-13px); }
 
   /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
-  .tally-overlay-group3 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
-  .tally-overlay-group3 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group3 { transform: translateX(-5.5px); } /* -6px에서 오른쪽으로 0.5px */
+  .tally-overlay-group3 .tally-glyph { width: 136.97px; height: 19.32px; }
+  .tally-overlay-group3 .tally-glyph-single { height: 9.66px; }
+  .tally-overlay-group3 { transform: translateX(-5.5px); }
 
   /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
      bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
-  .tally-overlay-group4 .tally-glyph { width: 15.6vw; height: 2.2vw; } /* 10.4vw에서 1.5배 */
-  .tally-overlay-group4 .tally-glyph-single { height: 1.1vw; }
-  .tally-overlay-group4 { transform: translateX(-1px); } /* -3px에서 오른쪽으로 2px */
+  .tally-overlay-group4 .tally-glyph { width: 136.97px; height: 19.32px; }
+  .tally-overlay-group4 .tally-glyph-single { height: 9.66px; }
+  .tally-overlay-group4 { transform: translateX(-1px); }
 
   /* ── 桌號 (테이블 번호) ── */
-  .header-value-table { font-size: 3.6vw; }
+  .header-value-table { font-size: 31.61px; }
 
   /* ── 人數 (인원수) ── */
-  .header-value-party { font-size: 3.6vw; }
+  .header-value-party { font-size: 31.61px; }
 
   /* ── 金額合計 (총 금액) ──
-     3.76vw는 "金額合計" 라벨 자체의 인쇄 글자 높이를 실측한 값 — 라벨과
+     33.01px는 "金額合計" 라벨 자체의 인쇄 글자 높이를 실측한 값 — 라벨과
      숫자 크기가 딱 맞도록. */
-  .total-overlay { font-size: 3.76vw; }
+  .total-overlay { font-size: 33.01px; }
   .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
   .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
   .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
@@ -1140,23 +1146,18 @@
 </body></html>`;
   }
 
+  // Prints via the exact same code path as previewKitchenTicket (a real
+  // window.open tab) instead of a hidden iframe. 미리보기 is confirmed
+  // correct, and a hidden iframe is a genuinely different rendering
+  // context (its own layout/sizing quirks depending on browser) from a
+  // normal tab — reusing window.open guarantees print renders byte-for-byte
+  // what 미리보기 already shows, since it's now literally the same call.
   function printKitchenTicket(o) {
-    let iframe = document.getElementById("ticketPrintFrame");
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.id = "ticketPrintFrame";
-      iframe.style.position = "fixed";
-      iframe.style.right = "0";
-      iframe.style.bottom = "0";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "0";
-      document.body.appendChild(iframe);
-    }
-    const doc = iframe.contentDocument || iframe.contentWindow.document;
-    doc.open();
-    doc.write(buildTicketHtml(o));
-    doc.close();
+    const win = window.open("", "_blank");
+    if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
+    win.document.open();
+    win.document.write(buildTicketHtml(o));
+    win.document.close();
 
     // Wait for both the Noto Sans TC webfont AND the ticket photo itself
     // to finish loading before printing — otherwise the print can fire on
@@ -1164,9 +1165,10 @@
     // the latter silently rendering some less-common Chinese characters
     // blank instead of falling back to a font that has them).
     const triggerPrint = () => {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
+      win.focus();
+      win.print();
     };
+    const doc = win.document;
     const fontsReady = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
     const img = doc.querySelector(".ticket-photo-wrap img");
     const imgReady =
