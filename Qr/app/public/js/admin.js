@@ -807,23 +807,99 @@
     }, 50);
   }
 
-  // ---------- Kitchen ticket printing ----------
-  // Replicates the restaurant's actual paper order slip exactly: two
-  // columns of categories (black header bars), every menu item listed with
-  // its code/name/price, and only the ordered items' quantity boxes filled
-  // in — using traditional 正-character tally marks (groups of 5, plus a
-  // 丨 stroke per remaining unit) instead of plain digits. Items with an
-  // options list (e.g. 소고기/돼지고기, 참치/새우) get one small tally box
-  // per option, matching the paper form's separate 牛/豬 sub-columns.
-  // Printed via a hidden iframe so it doesn't disturb the admin page
-  // itself. This full two-column layout is sized for a normal A4/Letter
-  // printer, not an 80mm thermal receipt printer — the restaurant's
-  // printer at the order station needs to support that page size.
+  // ---------- Kitchen ticket printing (photo-overlay version) ----------
+  // Prints the restaurant's actual paper order-slip PHOTO as-is (staff
+  // already know this exact layout), and draws only the ordered quantities
+  // (as 正/丨 tally marks) and the 桌號/人數/金額合計 numbers on top of it
+  // at hand-measured coordinates — deliberately NOT a from-scratch HTML
+  // recreation. This was a conscious choice after the recreated version
+  // kept drifting from the real form (missing colors/glyphs, spacing) —
+  // the owner asked to use the real photo directly instead, accepting that:
+  //   1) menu items added AFTER this photo was taken (e.g. the Pororo kids
+  //      meals) have no reserved spot on it, so they print in a small
+  //      appendix table below the photo instead of being silently dropped;
+  //   2) the coordinates below were measured by hand from the photo and
+  //      may drift by a few px in places — nudge ROW_TOP0/ROW_HEIGHT/COLS
+  //      below if a tally ever lands slightly off from its row.
+  // Image asset: public/images/kitchen-ticket-template.jpg (878x1865).
   function tallyMark(n) {
     if (!n || n <= 0) return "";
     const groups = Math.floor(n / 5);
     const rem = n % 5;
     return "正".repeat(groups) + "丨".repeat(rem);
+  }
+
+  const TICKET_IMG_W = 878;
+  const TICKET_IMG_H = 1865;
+  // First item row (11 / 51) starts at y=461; the 海尼根/金額合計 row ends
+  // at y=1841 — 28 rows measured to fit evenly in that span (see the
+  // conversation history for how these were derived from the photo).
+  const ROW_TOP0 = 461;
+  const ROW_HEIGHT = (1841 - 461) / 28;
+  function rowRect(index) {
+    const top = ROW_TOP0 + index * ROW_HEIGHT;
+    return { top, bottom: top + ROW_HEIGHT };
+  }
+  const BAR_RECT = { top: 398, bottom: 461 }; // shared 飯類/烤肉類 bar row, right above row 0
+  const COLS = {
+    left: { code: [48, 85], name: [85, 287], price: [287, 363], qty: [363, 444] },
+    right: { code: [444, 480], name: [480, 682], price: [682, 751], qty: [751, 839] },
+  };
+  // How many physical rows the photo reserves per category (src/seed.js
+  // category keys) — anything beyond this per category goes to the
+  // appendix instead of overflowing onto a row that doesn't exist.
+  const TEMPLATE_SLOTS = { rice: 8, noodle: 9, hotpot: 7, bbq: 6, other: 13, drink: 7 };
+  const LEFT_CAT_KEYS = ["rice", "noodle", "hotpot"];
+  const RIGHT_CAT_KEYS = ["bbq", "other", "drink"];
+
+  function buildSideSlots(catKeys) {
+    let rowCursor = 0;
+    const slots = [];
+    const extra = [];
+    catKeys.forEach((key, catIdx) => {
+      const cat = categories.find((c) => c.key === key);
+      const barRect = catIdx === 0 ? BAR_RECT : rowRect(rowCursor++);
+      slots.push({ rect: barRect, type: "bar" });
+      const reserved = TEMPLATE_SLOTS[key] || 0;
+      const items = (cat && cat.items) || [];
+      for (let i = 0; i < reserved; i++) {
+        slots.push({ rect: rowRect(rowCursor++), type: "item", item: items[i] || null });
+      }
+      if (items.length > reserved) extra.push(...items.slice(reserved));
+    });
+    return { slots, extra };
+  }
+
+  function pct(px, total) {
+    return (px / total) * 100;
+  }
+
+  function tallyOverlayForSlot(rect, side, item, orderedMap) {
+    if (!item) return "";
+    const ord = orderedMap[item.id];
+    if (!ord) return "";
+    const colX = COLS[side].qty;
+    const optsArr = item.options ? item.options.split(",").map((s) => s.trim()).filter(Boolean) : null;
+    if (optsArr && optsArr.length) {
+      const subW = (colX[1] - colX[0]) / optsArr.length;
+      return optsArr
+        .map((opt, i) => {
+          const qty = ord.byOption[opt];
+          if (!qty) return "";
+          const x0 = colX[0] + i * subW;
+          const top = rect.top + (rect.bottom - rect.top) * 0.48;
+          const height = (rect.bottom - rect.top) * 0.5;
+          return `<div class="tally-overlay" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
+            subW,
+            TICKET_IMG_W
+          )}%;height:${pct(height, TICKET_IMG_H)}%;">${tallyMark(qty)}</div>`;
+        })
+        .join("");
+    }
+    return `<div class="tally-overlay" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(rect.top, TICKET_IMG_H)}%;width:${pct(
+      colX[1] - colX[0],
+      TICKET_IMG_W
+    )}%;height:${pct(rect.bottom - rect.top, TICKET_IMG_H)}%;">${tallyMark(ord.qty)}</div>`;
   }
 
   function buildTicketHtml(o) {
@@ -840,114 +916,91 @@
     });
 
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
-    const storeName = storeSettings.store_name_zh || "韓國館";
-    const phone = storeSettings.store_phone ? `TEL：${storeSettings.store_phone}` : "";
 
-    function buildColumnRows(cats) {
-      let rows = "";
-      cats.forEach((c) => {
-        rows += `<tr class="cat-row"><td colspan="4">${c.name_zh || c.name_ko}</td></tr>`;
-        c.items.forEach((item) => {
-          const ord = orderedMap[item.id];
-          const optsArr = item.options
-            ? item.options.split(",").map((s) => s.trim()).filter(Boolean)
-            : null;
-          let qtyHtml;
-          if (optsArr && optsArr.length) {
-            qtyHtml = `<div class="opt-cells">${optsArr
-              .map((opt) => {
-                const matched = ord && ord.byOption[opt];
-                return `<div class="opt-cell"><div class="opt-label">${opt}</div><div class="opt-tally">${
-                  matched ? tallyMark(matched) : ""
-                }</div></div>`;
-              })
-              .join("")}</div>`;
-          } else {
-            qtyHtml = `<div class="opt-tally">${ord ? tallyMark(ord.qty) : ""}</div>`;
-          }
-          const noteHtml = ord && ord.notes.length ? `<div class="row-note">${ord.notes.join(", ")}</div>` : "";
-          // price_note holds things like "2人份 / for 2" — the paper form
-          // shows just the Chinese half in parens right after the dish name
-          // (e.g. "銅盤烤肉(2人份)"), so split off the "/ for 2" part.
-          const priceNoteHtml = item.price_note ? `（${item.price_note.split("/")[0].trim()}）` : "";
-          rows += `
-            <tr class="${ord ? "ordered" : ""}">
-              <td class="code">${item.code || ""}</td>
-              <td class="name">${item.name_zh || item.name_ko}${priceNoteHtml ? `<span class="price-note">${priceNoteHtml}</span>` : ""}${noteHtml}</td>
-              <td class="price">${item.price}</td>
-              <td class="qty">${qtyHtml}</td>
-            </tr>`;
-        });
-      });
-      return rows;
+    const leftBuild = buildSideSlots(LEFT_CAT_KEYS);
+    const rightBuild = buildSideSlots(RIGHT_CAT_KEYS);
+
+    let overlays = "";
+    leftBuild.slots.forEach((s) => {
+      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "left", s.item, orderedMap);
+    });
+    rightBuild.slots.forEach((s) => {
+      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "right", s.item, orderedMap);
+    });
+
+    // 桌號 / 人數 values, in the blank cell of the top header box (y249-301).
+    const headerTop = 249;
+    const headerBottom = 301;
+    overlays += `<div class="value-overlay" style="left:${pct(230, TICKET_IMG_W)}%;top:${pct(headerTop, TICKET_IMG_H)}%;width:${pct(
+      214,
+      TICKET_IMG_W
+    )}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
+    overlays += `<div class="value-overlay" style="left:${pct(674, TICKET_IMG_W)}%;top:${pct(headerTop, TICKET_IMG_H)}%;width:${pct(
+      204,
+      TICKET_IMG_W
+    )}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
+
+    // 金額合計 value — the merged box spanning the last 2 rows (rows[26..27]).
+    const totalTop = ROW_TOP0 + 26 * ROW_HEIGHT;
+    const totalBottom = ROW_TOP0 + 28 * ROW_HEIGHT;
+    overlays += `<div class="value-overlay total-overlay" style="left:${pct(230, TICKET_IMG_W)}%;top:${pct(
+      totalTop,
+      TICKET_IMG_H
+    )}%;width:${pct(214, TICKET_IMG_W)}%;height:${pct(totalBottom - totalTop, TICKET_IMG_H)}%;">NT$${o.total}</div>`;
+
+    // Menu items that don't fit in their category's reserved photo rows
+    // (added to the live menu after the photo was taken) — printed in a
+    // small appendix below the photo instead of being silently dropped.
+    const extraItems = [...leftBuild.extra, ...rightBuild.extra];
+    let extraHtml = "";
+    if (extraItems.length) {
+      extraHtml =
+        `<div class="extra-title">추가 메뉴 (사진 양식에 없음)</div><table class="extra-table">` +
+        extraItems
+          .map((item) => {
+            const ord = orderedMap[item.id];
+            return `<tr class="${ord ? "ordered" : ""}"><td class="code">${item.code || ""}</td><td class="name">${
+              item.name_zh || item.name_ko
+            }</td><td class="price">${item.price}</td><td class="qty">${ord ? tallyMark(ord.qty) : ""}</td></tr>`;
+          })
+          .join("") +
+        `</table>`;
     }
-
-    const validCats = categories.filter((c) => c.items && c.items.length);
-    const mid = Math.ceil(validCats.length / 2);
-    const leftRows = buildColumnRows(validCats.slice(0, mid));
-    const rightRows = buildColumnRows(validCats.slice(mid));
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&display=swap" />
 <style>
-  @page { size: A4; margin: 8mm; }
-  /* Without this, most browsers strip background colors (the black
-     category bars, the yellow "ordered" highlight) out of the printed
-     page entirely, regardless of what CSS says — this forces them to
-     print as designed instead of silently vanishing. */
+  @page { size: A4; margin: 6mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  /* Relying on a system-installed Chinese font (PMingLiU etc.) meant some
-     less-common characters (魷, 滷, 噌, 烤, 份, 雞, 糕, 飲, 啤...) were
-     printing as blank instead of falling back to a font that has them —
-     loading the actual Noto Sans TC webfont above guarantees every
-     Traditional Chinese character in the menu renders, regardless of
-     what's installed on the printing computer.
-  */
-  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; font-size: 10px; color: #000; }
-  .ticket-frame { border: 2px solid #000; padding: 3mm; }
-  .store-name { text-align: center; font-size: 22px; font-weight: 900; margin: 0 0 1mm; letter-spacing: 2px; }
-  .store-name .store-name-en { font-size: 13px; font-weight: 700; letter-spacing: 3px; margin-left: 4px; }
-  .store-sub { text-align: center; font-size: 11px; margin-bottom: 2mm; }
-  .meta-row { display: flex; font-size: 13px; font-weight: 700; border: 2px solid #000; margin-bottom: 2mm; }
-  .meta-row span { flex: 1; padding: 1.5mm 2mm; }
-  .meta-row span:first-child { border-right: 2px solid #000; }
-  .ticket-grid { display: flex; gap: 0; border: 2px solid #000; border-top: none; }
-  .ticket-col { flex: 1; min-width: 0; }
-  .ticket-col:first-child table { border-right: none; }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  td { border: 1px solid #000; padding: 0.6mm 1mm; font-size: 9px; vertical-align: middle; }
-  .price-note { font-size: 8px; color: #333; }
-  .cat-row td { background: #000; color: #fff; text-align: center; font-weight: 900; font-size: 10px; padding: 1mm; }
-  .code { width: 7%; text-align: center; font-weight: 700; }
-  .name { width: 46%; }
-  .price { width: 12%; text-align: right; }
-  .qty { width: 35%; text-align: center; font-weight: 900; padding: 0; }
-  .opt-cells { display: flex; }
-  .opt-cell { flex: 1; border-left: 1px solid #999; padding: 0.6mm; }
-  .opt-cell:first-child { border-left: none; }
-  .opt-label { font-size: 7px; color: #555; }
-  .opt-tally { font-size: 11px; font-weight: 900; letter-spacing: 0.5px; }
-  tr.ordered td { background: #ffe9a8; }
-  .row-note { font-size: 7.5px; color: #333; }
-  .footer { text-align: left; font-weight: 900; font-size: 15px; margin-top: 3mm; border-top: 2px solid #000; padding-top: 1.5mm; }
-  .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 2mm; }
+  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; color: #000; }
+  .ticket-photo-wrap { position: relative; width: 100%; }
+  .ticket-photo-wrap img { width: 100%; display: block; }
+  .value-overlay, .tally-overlay {
+    position: absolute; display: flex; align-items: center; justify-content: center;
+    font-weight: 900; color: #c0161f; line-height: 1;
+  }
+  .value-overlay { font-size: 20px; justify-content: flex-start; padding-left: 4px; }
+  .total-overlay { font-size: 22px; }
+  .tally-overlay { font-size: 15px; letter-spacing: 1px; }
+  .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
+  .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+  .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
+  .extra-table .qty { color: #c0161f; font-weight: 900; text-align: center; }
+  .extra-table tr.ordered td { background: #ffe9a8; }
+  .row-note { font-size: 10px; color: #333; }
+  .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 3mm; }
 </style>
 </head><body>
-  <div class="ticket-frame">
-    <div class="store-name">☯ ${storeName} <span class="store-name-en">KOREA</span></div>
-    ${phone ? `<div class="store-sub">${phone}</div>` : ""}
-    <div class="meta-row"><span>桌號：${o.table_number}</span><span>人數：${partySize || "-"}</span></div>
-    <div class="ticket-grid">
-      <div class="ticket-col"><table>${leftRows}</table></div>
-      <div class="ticket-col"><table>${rightRows}</table></div>
-    </div>
-    ${o.note ? `<div class="row-note" style="margin-top:1mm;">주문 메모: ${o.note}</div>` : ""}
-    <div class="footer">金額合計：NT$${o.total}</div>
-    <div class="print-time">${time}</div>
+  <div class="ticket-photo-wrap">
+    <img src="${location.origin}/images/kitchen-ticket-template.jpg" />
+    ${overlays}
   </div>
+  ${extraHtml}
+  ${o.note ? `<div class="row-note" style="margin-top:2mm;">주문 메모: ${o.note}</div>` : ""}
+  <div class="print-time">${time}</div>
 </body></html>`;
   }
 
@@ -969,23 +1022,27 @@
     doc.write(buildTicketHtml(o));
     doc.close();
 
-    // Wait for the Noto Sans TC webfont (loaded via Google Fonts link tag
-    // in buildTicketHtml) to actually finish downloading before printing —
-    // otherwise the print can fire before the font arrives and some less-
-    // common Chinese characters silently render blank instead of falling
-    // back to a font that has them.
+    // Wait for both the Noto Sans TC webfont AND the ticket photo itself
+    // to finish loading before printing — otherwise the print can fire on
+    // a still-blank page (image not painted yet / font not arrived yet,
+    // the latter silently rendering some less-common Chinese characters
+    // blank instead of falling back to a font that has them).
     const triggerPrint = () => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
     };
-    const fontsReady = doc.fonts && doc.fonts.ready;
-    if (fontsReady && fontsReady.then) {
-      Promise.race([fontsReady, new Promise((resolve) => setTimeout(resolve, 3000))]).then(() =>
-        setTimeout(triggerPrint, 50)
-      );
-    } else {
-      setTimeout(triggerPrint, 500);
-    }
+    const fontsReady = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
+    const img = doc.querySelector(".ticket-photo-wrap img");
+    const imgReady =
+      img && !img.complete
+        ? new Promise((resolve) => {
+            img.addEventListener("load", resolve, { once: true });
+            img.addEventListener("error", resolve, { once: true });
+          })
+        : Promise.resolve();
+    Promise.race([Promise.all([fontsReady, imgReady]), new Promise((resolve) => setTimeout(resolve, 4000))]).then(() =>
+      setTimeout(triggerPrint, 50)
+    );
   }
 
   async function updateOrderStatus(id, status) {
