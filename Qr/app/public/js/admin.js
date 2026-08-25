@@ -839,6 +839,14 @@
     "M3,25 L21,25", // 5: + bottom horizontal — now a complete 正
   ];
   function strokeGlyphSvg(strokeCount) {
+    if (strokeCount === 1) {
+      // A lone "1" is just a short centered dash, sized/positioned to sit
+      // level with the price number beside it — the top stroke of a
+      // growing 正 is deliberately biased toward the top of its box (so
+      // strokes 2-5 can stack below it), which looks off-center when it's
+      // the only stroke on its own.
+      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M3,6 L21,6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="square"/></svg>`;
+    }
     const paths = TALLY_STROKES.slice(0, strokeCount)
       .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="square"/>`)
       .join("");
@@ -1030,10 +1038,11 @@
      px, so they scale with the photo the same way regardless of paper
      size — 3.76vw was measured directly off the "金額合計" label's own
      printed character height, so the total lines up with it exactly. */
-  .value-overlay { font-size: 3.6vw; justify-content: flex-start; }
+  .value-overlay { font-size: 3.6vw; justify-content: center; }
   .total-overlay { font-size: 3.76vw; }
-  .tally-overlay { display: flex; align-items: flex-start; justify-content: center; gap: 1px; flex-wrap: wrap; }
+  .tally-overlay { display: flex; align-items: center; justify-content: center; gap: 1px; flex-wrap: wrap; transform: translateX(-30px); }
   .tally-glyph { width: 1.9vw; height: 2.2vw; overflow: visible; }
+  .tally-glyph-single { height: 1vw; }
   .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
   .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
   .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
