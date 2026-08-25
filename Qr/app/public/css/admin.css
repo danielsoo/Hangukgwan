@@ -197,26 +197,33 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .live-preview-label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
 .logo-qr-preview { width: 140px; height: 140px; border: 1px solid var(--line); border-radius: 10px; background: #fff; display: block; }
 
-/* Mini replica of the real customer order-page header (see public/order.html
-   / public/css/order.css) — same layout, shrunk down, so the cover photo
-   preview shows its actual context instead of a bare rectangle. */
-.mini-order-preview {
-  width: 160px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff;
+/* Real-scale replica of the actual customer order-page header (exact same
+   px values as public/css/main.css .hero/.store-header/.table-badge) at
+   real phone width — not a shrunk-down thumbnail — so the owner sees
+   precisely how the uploaded cover photo will look on a customer's phone. */
+.phone-preview-wrap { display: flex; justify-content: center; margin-top: 14px; }
+.phone-preview {
+  width: 375px; max-width: 100%; border: 1px solid var(--line); border-radius: 14px;
+  overflow: hidden; background: #fff; box-shadow: 0 2px 14px rgba(0,0,0,0.08);
 }
-.mini-hero {
-  width: 100%; height: 70px; background: linear-gradient(135deg, #2b2320, #1a1512);
+.phone-hero {
+  width: 100%; height: 180px; background: linear-gradient(135deg, #2b2320, #1a1512);
   background-size: cover; background-position: center;
 }
-.mini-store-header {
-  display: flex; align-items: center; gap: 8px; padding: 8px;
+.phone-store-header {
+  display: flex; align-items: flex-end; gap: 12px; padding: 0 16px 12px; margin-top: -28px; position: relative;
 }
-.mini-avatar {
-  width: 28px; height: 28px; border-radius: 999px; background: var(--navy); color: #fff;
-  display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0;
+.phone-avatar {
+  width: 64px; height: 64px; border-radius: 999px; background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 26px;
+  border: 4px solid #fff; flex-shrink: 0;
 }
-.mini-store-text { min-width: 0; }
-.mini-store-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mini-table-badge { font-size: 10px; color: var(--muted); }
+.phone-store-text { flex: 1; min-width: 0; padding-top: 34px; }
+.phone-store-name { font-size: 19px; font-weight: 900; margin: 0 0 4px; color: var(--ink); }
+.phone-table-badge {
+  display: inline-block; background: var(--red); color: #fff; padding: 4px 11px;
+  border-radius: 999px; font-size: 12px; font-weight: 700;
+}
 
 /* Settlement (결산) */
 .settlement-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
@@ -246,6 +253,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .settlement-history-row:hover { background: #f7f5f1; }
 .settlement-history-date { font-weight: 700; min-width: 90px; }
 .settlement-history-warn { color: #b3261e; font-weight: 700; }
+.settlement-chart-card { max-width: 720px; }
+.settlement-chart-wrap { position: relative; height: 240px; margin-bottom: 16px; }
 
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }

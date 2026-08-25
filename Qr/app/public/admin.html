@@ -122,8 +122,11 @@
         <div id="settlementProblemList"></div>
       </div>
 
-      <div class="settings-card">
+      <div class="settings-card settlement-chart-card">
         <h3 data-i18n="settlementItemsTitle">품목별 판매 현황</h3>
+        <div class="settlement-chart-wrap">
+          <canvas id="settlementItemsChart"></canvas>
+        </div>
         <table class="settlement-items-table" id="settlementItemsTable">
           <thead>
             <tr>
@@ -136,9 +139,12 @@
         </table>
       </div>
 
-      <div class="settings-card">
+      <div class="settings-card settlement-chart-card">
         <h3 data-i18n="settlementHistoryTitle">지난 정산 기록</h3>
         <p class="settings-hint" data-i18n="settlementHistoryHint">매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).</p>
+        <div class="settlement-chart-wrap">
+          <canvas id="settlementHistoryChart"></canvas>
+        </div>
         <div id="settlementHistoryList"></div>
       </div>
     </section>
@@ -154,21 +160,17 @@
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsCoverTitle">손님 화면 상단 사진</h3>
           <p class="settings-hint" data-i18n="settingsCoverHint">주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.</p>
-          <div class="preview-row">
-            <div>
-              <input type="file" id="coverPhotoInput" accept="image/*" />
-              <div class="save-msg" id="coverMsg" hidden></div>
-            </div>
-            <div class="live-preview-box">
-              <div class="live-preview-label" data-i18n="livePreviewLabel">미리보기 (손님 화면)</div>
-              <div class="mini-order-preview">
-                <div id="miniHero" class="mini-hero"></div>
-                <div class="mini-store-header">
-                  <div class="mini-avatar">☯</div>
-                  <div class="mini-store-text">
-                    <div class="mini-store-name" id="miniStoreName">한국관</div>
-                    <div class="mini-table-badge">桌號 1</div>
-                  </div>
+          <input type="file" id="coverPhotoInput" accept="image/*" />
+          <div class="save-msg" id="coverMsg" hidden></div>
+          <div class="live-preview-label" data-i18n="livePreviewLabel">미리보기 (손님 화면, 실제 크기)</div>
+          <div class="phone-preview-wrap">
+            <div class="phone-preview">
+              <div id="miniHero" class="phone-hero"></div>
+              <div class="phone-store-header">
+                <div class="phone-avatar">☯</div>
+                <div class="phone-store-text">
+                  <div class="phone-store-name" id="miniStoreName">한국관</div>
+                  <div class="phone-table-badge">桌號 1</div>
                 </div>
               </div>
             </div>
@@ -329,6 +331,7 @@
 
 <audio id="notifySound" preload="auto"></audio>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

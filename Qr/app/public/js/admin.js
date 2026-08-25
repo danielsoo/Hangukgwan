@@ -2057,9 +2057,64 @@
   // snapshots it into permanent history, same as the nightly cron does
   // automatically after closing time.
   let currentSettlementDate = null;
+  let settlementItemsChart = null;
+  let settlementHistoryChart = null;
 
   function itemDisplayName(it) {
     return adminLang === "zh" ? it.name_zh || it.name_ko : it.name_ko || it.name_zh;
+  }
+
+  // Bar chart of today's (or the selected date's) top-selling items by
+  // revenue — the table below already has the exact numbers, this is just
+  // the "그래프로도 보여줘" visual on top of it.
+  function renderItemsChart(itemBreakdown) {
+    const canvas = $("#settlementItemsChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    const top = itemBreakdown.slice(0, 10);
+    if (settlementItemsChart) settlementItemsChart.destroy();
+    settlementItemsChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: top.map(itemDisplayName),
+        datasets: [{ label: T("settlementItemSubtotal"), data: top.map((it) => it.subtotal), backgroundColor: "#b5232c", borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
+  }
+
+  // Bar chart of revenue across saved settlement history — bars for days
+  // that had unpaid/problem orders are colored red so a bad night stands
+  // out at a glance, not just as a number in the list below.
+  function renderHistoryChart(list) {
+    const canvas = $("#settlementHistoryChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
+    if (settlementHistoryChart) settlementHistoryChart.destroy();
+    settlementHistoryChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: sorted.map((s) => s.date.slice(5)),
+        datasets: [
+          {
+            label: T("settlementRevenue"),
+            data: sorted.map((s) => s.total_revenue || 0),
+            backgroundColor: sorted.map((s) => (s.problem_order_count > 0 ? "#b3261e" : "#16213e")),
+            borderRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } },
+      },
+    });
   }
 
   function renderSettlement(data) {
@@ -2106,6 +2161,7 @@
           </tr>`
       )
       .join("");
+    renderItemsChart(data.item_breakdown);
   }
 
   const fmtOrderTableTag = (n) => (adminLang === "zh" ? `桌號 ${n}` : `${n}번 테이블`);
@@ -2122,6 +2178,7 @@
     const res = await fetch("/api/settlements/history");
     if (!res.ok) return;
     const list = await res.json();
+    renderHistoryChart(list);
     const el = $("#settlementHistoryList");
     if (!el) return;
     if (list.length === 0) {
