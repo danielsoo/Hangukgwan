@@ -935,18 +935,20 @@
     return (px / total) * 100;
   }
 
-  // Four independently-tunable tally style groups (per owner's explicit
-  // grouping, not just "option vs regular"):
-  //   1) tally-overlay-option   — 11,15,17,51 (牛/豬, 鮪魚/蝦仁 등 옵션 분할 칸)
-  //   2) tally-overlay-rice     — 12,13,14,16,18 (rice의 나머지, 옵션 없음)
-  //   3) tally-overlay-leftrest — 21~45 (noodle 전체 + hotpot 전체)
-  //   4) tally-overlay-rightrest— 52~94 및 그 뒤 사진에 번호 없는 추가 항목까지
-  //                                (bbq의 나머지 + other 전체 + drink 전체)
+  // Five independently-tunable tally style groups (per owner's explicit
+  // grouping):
+  //   0) tally-overlay-option-51 — 51 only, left completely untouched
+  //   1) tally-overlay-group1    — 11,15,17 (51 제외한 나머지 옵션 항목)
+  //   2) tally-overlay-group2    — 12,13,14,16,18 (rice의 나머지, 옵션 없음)
+  //   3) tally-overlay-group3    — 21~45 (noodle 전체 + hotpot 전체)
+  //   4) tally-overlay-group4    — 52~97 및 그 뒤 사진에 번호 없는 추가 항목까지
+  //                                 (bbq의 나머지 + other 전체 + drink 전체)
   function tallyGroupClass(catKey, item) {
-    if (item.options && item.options.trim()) return "tally-overlay-option";
-    if (catKey === "rice") return "tally-overlay-rice";
-    if (catKey === "noodle" || catKey === "hotpot") return "tally-overlay-leftrest";
-    return "tally-overlay-rightrest"; // bbq(옵션 제외)/other/drink
+    if (item.code === "51") return "tally-overlay-option-51";
+    if (item.options && item.options.trim()) return "tally-overlay-group1";
+    if (catKey === "rice") return "tally-overlay-group2";
+    if (catKey === "noodle" || catKey === "hotpot") return "tally-overlay-group3";
+    return "tally-overlay-group4"; // bbq(51 제외)/other/drink
   }
 
   function tallyOverlayForSlot(rect, side, catKey, item, orderedMap) {
@@ -1074,31 +1076,39 @@
   .tally-overlay { gap: 1px; flex-wrap: wrap; transform: translateX(-10px); }
   .tally-glyph { overflow: visible; }
 
-  /* ── 그룹 1: 옵션 항목 (11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯, 51 銅盤烤肉) ──
-     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 원래 크기 유지. */
-  .tally-overlay-option .tally-glyph { width: 5.2vw; height: 2.2vw; }
-  .tally-overlay-option .tally-glyph-single { height: 1.1vw; }
+  /* ── 51번 (銅盤烤肉) — 어떤 그룹에도 속하지 않음, 완전히 그대로 유지. ── */
+  .tally-overlay-option-51 .tally-glyph { width: 5.2vw; height: 2.2vw; }
+  .tally-overlay-option-51 .tally-glyph-single { height: 1.1vw; }
 
-  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
-  .tally-overlay-rice .tally-glyph { width: 10.4vw; height: 2.2vw; }
-  .tally-overlay-rice .tally-glyph-single { height: 1.1vw; }
+  /* ── 그룹 1: 11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯 (51 제외) ──
+     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 크기는 원래 그대로,
+     위치만 기본(-10px)보다 5px 더 왼쪽으로. */
+  .tally-overlay-group1 .tally-glyph { width: 5.2vw; height: 2.2vw; }
+  .tally-overlay-group1 .tally-glyph-single { height: 1.1vw; }
+  .tally-overlay-group1 { transform: translateX(-15px); }
 
-  /* ── 그룹 3: 왼쪽 나머지 (21~45 — noodle 전체 + hotpot 전체) ── */
-  .tally-overlay-leftrest .tally-glyph { width: 10.4vw; height: 2.2vw; }
-  .tally-overlay-leftrest .tally-glyph-single { height: 1.1vw; }
+  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ──
+     기본(-10px)보다 5px 더 왼쪽으로. */
+  .tally-overlay-group2 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group2 .tally-glyph-single { height: 1.1vw; }
+  .tally-overlay-group2 { transform: translateX(-15px); }
 
-  /* ── 그룹 4: 오른쪽 나머지 (52~94 및 사진에 번호 없는 추가 항목까지 —
-     bbq 중 옵션 없는 항목 + other 전체 + drink 전체) ── */
-  .tally-overlay-rightrest .tally-glyph { width: 10.4vw; height: 2.2vw; }
-  .tally-overlay-rightrest .tally-glyph-single { height: 1.1vw; }
+  /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
+  .tally-overlay-group3 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group3 .tally-glyph-single { height: 1.1vw; }
 
-  /* ── 그룹 3: 桌號 (테이블 번호) ── */
+  /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
+     bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
+  .tally-overlay-group4 .tally-glyph { width: 10.4vw; height: 2.2vw; }
+  .tally-overlay-group4 .tally-glyph-single { height: 1.1vw; }
+
+  /* ── 桌號 (테이블 번호) ── */
   .header-value-table { font-size: 3.6vw; }
 
-  /* ── 그룹 4: 人數 (인원수) ── */
+  /* ── 人數 (인원수) ── */
   .header-value-party { font-size: 3.6vw; }
 
-  /* ── 그룹 5: 金額合計 (총 금액) ──
+  /* ── 金額合計 (총 금액) ──
      3.76vw는 "金額合計" 라벨 자체의 인쇄 글자 높이를 실측한 값 — 라벨과
      숫자 크기가 딱 맞도록. */
   .total-overlay { font-size: 3.76vw; }
