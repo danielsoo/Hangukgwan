@@ -763,7 +763,7 @@
       minute: "2-digit",
     });
     const itemsHtml = o.items
-      .map((it) => `${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
+      .map((it) => `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
       .join("<br/>");
     card.innerHTML = `
       <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}</span><span class="order-card-time">${time}</span></div>
@@ -1164,7 +1164,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
@@ -1430,7 +1430,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-            <span>${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )

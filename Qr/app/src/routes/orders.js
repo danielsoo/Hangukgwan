@@ -55,6 +55,7 @@ router.post("/", async (req, res) => {
     total += mi.price * qty;
     validated.push({
       item_id: mi.id,
+      code: mi.code || null,
       name_zh: mi.name_zh,
       name_ko: mi.name_ko,
       name_en: mi.name_en,
