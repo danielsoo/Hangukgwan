@@ -137,6 +137,7 @@
       settingsNoticeHint: "손님 주문 페이지 상단에 표시할 안내 문구입니다 (비워두면 표시되지 않습니다).",
       noticeLabel: "공지 문구",
       saveNoticeBtn: "공지 저장",
+      noticePreviewEmpty: "공지 문구를 입력하면 여기에 표시됩니다.",
       settingsInfoTitle: "매장 정보",
       labelNameZh: "상호명 (중국어)",
       labelNameKo: "상호명 (한국어)",
@@ -302,6 +303,7 @@
       settingsNoticeHint: "顯示在顧客點餐頁面上方的公告文字（留空則不顯示）。",
       noticeLabel: "公告文字",
       saveNoticeBtn: "儲存公告",
+      noticePreviewEmpty: "輸入公告文字後會顯示在這裡。",
       settingsInfoTitle: "店家資訊",
       labelNameZh: "店名（中文）",
       labelNameKo: "店名（韓文）",
@@ -1825,6 +1827,7 @@
     renderLocationStatus();
     renderMiniHeroPreview(s);
     refreshLogoPreview();
+    renderNoticePreview($("#s_store_notice").value);
   }
 
   // Live "실제 코드 UI" previews — show the cover photo and logo exactly as
@@ -1839,6 +1842,18 @@
       nameEl.textContent = (adminLang === "zh" ? s.store_name_zh : s.store_name_ko) || s.store_name_zh || s.store_name_ko || "한국관";
     }
   }
+
+  // Updates live as the owner types (see #s_store_notice's oninput below),
+  // not just after saving — matches production's "비워두면 표시되지 않음"
+  // behavior (empty banner just doesn't render).
+  function renderNoticePreview(text) {
+    const banner = $("#noticePreview");
+    const empty = $("#noticePreviewEmpty");
+    if (!banner) return;
+    banner.textContent = text || "";
+    if (empty) empty.hidden = !!text;
+  }
+  $("#s_store_notice").addEventListener("input", (e) => renderNoticePreview(e.target.value));
 
   // Re-fetches the sample QR-with-logo SVG from the server (same generator
   // as the real printed QR sheet) so the owner sees exactly how the logo
