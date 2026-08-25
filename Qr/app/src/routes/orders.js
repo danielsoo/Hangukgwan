@@ -1,15 +1,9 @@
 const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireAdmin } = require("../auth");
+const { nowLocal } = require("../time");
 
 const router = express.Router();
-
-function nowLocal() {
-  // "YYYY-MM-DD HH:MM:SS" in server local time
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
 
 // Straight-line distance between two lat/lng points, in meters.
 function haversineMeters(lat1, lng1, lat2, lng2) {

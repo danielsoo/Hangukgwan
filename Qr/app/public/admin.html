@@ -29,6 +29,7 @@
       <button data-tab="orders" class="active"><span data-i18n="tabOrders">실시간 주문</span> <span id="newOrderBadge" class="badge-count" hidden>0</span></button>
       <button data-tab="menu" data-i18n="tabMenu">메뉴 관리</button>
       <button data-tab="tables" data-i18n="tabTables">테이블 / QR 코드</button>
+      <button data-tab="settlement" class="owner-only" data-i18n="tabSettlement">결산</button>
       <button data-tab="settings" data-i18n="tabSettings">설정</button>
     </nav>
     <div class="admin-lang-switch">
@@ -82,6 +83,63 @@
       <div id="floorPlanWrap" class="floor-plan-wrap" hidden>
         <p class="settings-hint" data-i18n="floorPlanHint">구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요.</p>
         <div id="floorPlan" class="floor-plan"></div>
+      </div>
+    </section>
+
+    <!-- SETTLEMENT (결산) TAB — owner-only, shows sales/revenue -->
+    <section id="tab-settlement" class="tab-panel owner-only" hidden>
+      <div class="settlement-toolbar">
+        <label class="settlement-date-label">
+          <span data-i18n="settlementDateLabel">날짜</span>
+          <input type="date" id="settlementDate" />
+        </label>
+        <button id="settlementTodayBtn" type="button" data-i18n="settlementTodayBtn">오늘</button>
+        <button id="settlementCloseBtn" type="button" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
+      </div>
+
+      <div class="settlement-summary-cards">
+        <div class="settlement-card">
+          <div class="settlement-card-label" data-i18n="settlementRevenue">매출 (결제 완료)</div>
+          <div class="settlement-card-value" id="settlementRevenue">NT$0</div>
+        </div>
+        <div class="settlement-card">
+          <div class="settlement-card-label" data-i18n="settlementPaidCount">결제 완료 주문</div>
+          <div class="settlement-card-value" id="settlementPaidCount">0</div>
+        </div>
+        <div class="settlement-card settlement-card-warn" id="settlementProblemCard">
+          <div class="settlement-card-label" data-i18n="settlementProblemCount">⚠️ 미결제/문제 주문</div>
+          <div class="settlement-card-value" id="settlementProblemCount">0</div>
+        </div>
+        <div class="settlement-card">
+          <div class="settlement-card-label" data-i18n="settlementCancelledCount">취소된 주문</div>
+          <div class="settlement-card-value" id="settlementCancelledCount">0</div>
+        </div>
+      </div>
+
+      <div id="settlementProblemSection" class="settings-card" hidden>
+        <h3 data-i18n="settlementProblemTitle">⚠️ 결제되지 않은 주문</h3>
+        <p class="settings-hint" data-i18n="settlementProblemHint">아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.</p>
+        <div id="settlementProblemList"></div>
+      </div>
+
+      <div class="settings-card">
+        <h3 data-i18n="settlementItemsTitle">품목별 판매 현황</h3>
+        <table class="settlement-items-table" id="settlementItemsTable">
+          <thead>
+            <tr>
+              <th data-i18n="settlementItemName">메뉴</th>
+              <th data-i18n="settlementItemQty">수량</th>
+              <th data-i18n="settlementItemSubtotal">소계</th>
+            </tr>
+          </thead>
+          <tbody id="settlementItemsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="settings-card">
+        <h3 data-i18n="settlementHistoryTitle">지난 정산 기록</h3>
+        <p class="settings-hint" data-i18n="settlementHistoryHint">매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).</p>
+        <div id="settlementHistoryList"></div>
       </div>
     </section>
 

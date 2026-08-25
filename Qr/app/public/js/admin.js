@@ -109,6 +109,26 @@
       settingsTabGeneral: "일반",
       settingsTabAdmin: "관리자 전용",
       livePreviewLabel: "미리보기 (손님 화면)",
+      tabSettlement: "결산",
+      settlementDateLabel: "날짜",
+      settlementTodayBtn: "오늘",
+      settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
+      settlementSavedMsg: "✔ 저장됨",
+      settlementRevenue: "매출 (결제 완료)",
+      settlementPaidCount: "결제 완료 주문",
+      settlementProblemCount: "⚠️ 미결제/문제 주문",
+      settlementCancelledCount: "취소된 주문",
+      settlementProblemTitle: "⚠️ 결제되지 않은 주문",
+      settlementProblemHint: "아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.",
+      settlementItemsTitle: "품목별 판매 현황",
+      settlementItemName: "메뉴",
+      settlementItemQty: "수량",
+      settlementItemSubtotal: "소계",
+      settlementHistoryTitle: "지난 정산 기록",
+      settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).",
+      settlementHistoryEmpty: "아직 저장된 정산 기록이 없습니다.",
+      settlementHistoryPaid: "결제",
+      settlementHistoryProblem: "미결제",
       settingsCoverTitle: "손님 화면 상단 사진",
       settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
       settingsLogoTitle: "매장 로고 (QR 코드 중앙에 표시)",
@@ -254,6 +274,26 @@
       settingsTabGeneral: "一般",
       settingsTabAdmin: "僅限管理員",
       livePreviewLabel: "預覽（顧客畫面）",
+      tabSettlement: "結算",
+      settlementDateLabel: "日期",
+      settlementTodayBtn: "今天",
+      settlementCloseBtn: "📌 儲存這天的結算紀錄",
+      settlementSavedMsg: "✔ 已儲存",
+      settlementRevenue: "營業額（已結帳）",
+      settlementPaidCount: "已結帳訂單",
+      settlementProblemCount: "⚠️ 未結帳/異常訂單",
+      settlementCancelledCount: "已取消訂單",
+      settlementProblemTitle: "⚠️ 尚未結帳的訂單",
+      settlementProblemHint: "以下訂單目前尚未標記為已結帳。請確認下單時間與內容，避免漏收款項。",
+      settlementItemsTitle: "品項銷售明細",
+      settlementItemName: "品項",
+      settlementItemQty: "數量",
+      settlementItemSubtotal: "小計",
+      settlementHistoryTitle: "過往結算紀錄",
+      settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。",
+      settlementHistoryEmpty: "尚無已儲存的結算紀錄。",
+      settlementHistoryPaid: "已結帳",
+      settlementHistoryProblem: "未結帳",
       settingsCoverTitle: "顧客畫面頂部照片",
       settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
       settingsLogoTitle: "店家標誌（顯示於 QR Code 中央）",
@@ -379,6 +419,7 @@
       populateCategorySelect();
       if ($("#dashboard") && !$("#dashboard").hidden && !$("#floorPlanWrap").hidden) renderFloorPlan();
       if (openTableNumber) openTableDetail(openTableNumber);
+      if (!$("#tab-settlement").hidden) loadSettlement(currentSettlementDate);
     };
   });
 
@@ -420,6 +461,15 @@
       const adminPanel = $("#settings-admin");
       if (generalPanel) generalPanel.hidden = false;
       if (adminPanel) adminPanel.hidden = true;
+      // Same for the owner-only 결산 tab — bounce staff back to 실시간 주문.
+      const settlementTab = $('.admin-tabs button[data-tab="settlement"]');
+      if (settlementTab && settlementTab.classList.contains("active")) {
+        settlementTab.classList.remove("active");
+        const ordersBtn = $('.admin-tabs button[data-tab="orders"]');
+        if (ordersBtn) ordersBtn.classList.add("active");
+        $$(".tab-panel").forEach((p) => (p.hidden = true));
+        $("#tab-orders").hidden = false;
+      }
     }
   }
 
@@ -462,10 +512,12 @@
   // ---------- Tabs ----------
   $$(".admin-tabs button").forEach((btn) => {
     btn.onclick = () => {
+      if (btn.dataset.tab === "settlement" && currentRole !== "owner") return;
       $$(".admin-tabs button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
       $(`#tab-${btn.dataset.tab}`).hidden = false;
+      if (btn.dataset.tab === "settlement") loadSettlement();
     };
   });
 
@@ -1997,6 +2049,114 @@
     }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // ---------- Settlement (결산) ----------
+  // Owner-only. The main view is always a *live* computation (no button to
+  // press, no manual tallying) — "이 날짜 정산 기록 저장" just additionally
+  // snapshots it into permanent history, same as the nightly cron does
+  // automatically after closing time.
+  let currentSettlementDate = null;
+
+  function itemDisplayName(it) {
+    return adminLang === "zh" ? it.name_zh || it.name_ko : it.name_ko || it.name_zh;
+  }
+
+  function renderSettlement(data) {
+    currentSettlementDate = data.date;
+    $("#settlementDate").value = data.date;
+    $("#settlementRevenue").textContent = `NT$${Number(data.total_revenue || 0).toLocaleString()}`;
+    $("#settlementPaidCount").textContent = data.paid_order_count;
+    $("#settlementProblemCount").textContent = data.problem_order_count;
+    $("#settlementCancelledCount").textContent = data.cancelled_order_count;
+
+    const problemSection = $("#settlementProblemSection");
+    const problemCard = $("#settlementProblemCard");
+    if (data.problem_order_count > 0) {
+      problemSection.hidden = false;
+      problemCard.classList.add("has-problems");
+      $("#settlementProblemList").innerHTML = data.problem_orders
+        .map((o) => {
+          const time = o.created_at.slice(11, 16);
+          const itemsText = o.items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
+          return `
+            <div class="settlement-problem-row">
+              <div class="settlement-problem-head">
+                <span class="settlement-problem-time">${time}</span>
+                <span class="settlement-problem-table">${fmtOrderTableTag(o.table_number)}</span>
+                <span class="settlement-problem-status">${statusLabel(o.status)}</span>
+                <span class="settlement-problem-total">NT$${o.total}</span>
+              </div>
+              <div class="settlement-problem-items">${itemsText}</div>
+            </div>`;
+        })
+        .join("");
+    } else {
+      problemSection.hidden = true;
+      problemCard.classList.remove("has-problems");
+    }
+
+    $("#settlementItemsBody").innerHTML = data.item_breakdown
+      .map(
+        (it) => `
+          <tr>
+            <td>${itemDisplayName(it)}</td>
+            <td>${it.qty}</td>
+            <td>NT$${it.subtotal.toLocaleString()}</td>
+          </tr>`
+      )
+      .join("");
+  }
+
+  const fmtOrderTableTag = (n) => (adminLang === "zh" ? `桌號 ${n}` : `${n}번 테이블`);
+
+  async function loadSettlement(date) {
+    const url = date ? `/api/settlements?date=${encodeURIComponent(date)}` : "/api/settlements";
+    const res = await fetch(url);
+    if (!res.ok) return;
+    renderSettlement(await res.json());
+    loadSettlementHistory();
+  }
+
+  async function loadSettlementHistory() {
+    const res = await fetch("/api/settlements/history");
+    if (!res.ok) return;
+    const list = await res.json();
+    const el = $("#settlementHistoryList");
+    if (!el) return;
+    if (list.length === 0) {
+      el.innerHTML = `<p class="settings-hint">${T("settlementHistoryEmpty")}</p>`;
+      return;
+    }
+    el.innerHTML = list
+      .map(
+        (s) => `
+          <div class="settlement-history-row" data-date="${s.date}">
+            <span class="settlement-history-date">${s.date}</span>
+            <span>NT$${Number(s.total_revenue || 0).toLocaleString()}</span>
+            <span>${T("settlementHistoryPaid")} ${s.paid_order_count}</span>
+            <span class="${s.problem_order_count > 0 ? "settlement-history-warn" : ""}">${T("settlementHistoryProblem")} ${s.problem_order_count}</span>
+          </div>`
+      )
+      .join("");
+    $$(".settlement-history-row").forEach((row) => {
+      row.onclick = () => loadSettlement(row.dataset.date);
+    });
+  }
+
+  $("#settlementDate").onchange = (e) => loadSettlement(e.target.value);
+  $("#settlementTodayBtn").onclick = () => loadSettlement(null);
+  $("#settlementCloseBtn").onclick = async () => {
+    const btn = $("#settlementCloseBtn");
+    const original = btn.textContent;
+    await fetch("/api/settlements/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date: currentSettlementDate }),
+    });
+    btn.textContent = T("settlementSavedMsg");
+    loadSettlementHistory();
+    setTimeout(() => (btn.textContent = original), 2000);
   };
 
   applyAdminI18n();

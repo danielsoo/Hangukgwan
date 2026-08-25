@@ -218,6 +218,35 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .mini-store-name { font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mini-table-badge { font-size: 10px; color: var(--muted); }
 
+/* Settlement (결산) */
+.settlement-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.settlement-date-label { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.settlement-date-label input[type="date"] { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+.settlement-toolbar button { padding: 9px 16px; border: none; border-radius: 8px; background: var(--navy); color: #fff; font-weight: 700; cursor: pointer; font-size: 13px; }
+.settlement-summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.settlement-card { background: #fff; border-radius: 12px; padding: 16px; }
+.settlement-card-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.settlement-card-value { font-size: 24px; font-weight: 800; color: var(--ink); }
+.settlement-card-warn.has-problems { background: #fdecea; }
+.settlement-card-warn.has-problems .settlement-card-value { color: #b3261e; }
+.settlement-problem-row { border: 1px solid #f3c8c4; background: #fff8f7; border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+.settlement-problem-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; font-weight: 700; }
+.settlement-problem-time { color: var(--ink); }
+.settlement-problem-table { color: var(--navy); }
+.settlement-problem-status { color: #b3261e; }
+.settlement-problem-total { margin-left: auto; }
+.settlement-problem-items { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.settlement-items-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.settlement-items-table th, .settlement-items-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+.settlement-items-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.settlement-history-row {
+  display: flex; align-items: center; gap: 16px; padding: 10px 6px; border-bottom: 1px solid var(--line);
+  font-size: 13px; cursor: pointer;
+}
+.settlement-history-row:hover { background: #f7f5f1; }
+.settlement-history-date { font-weight: 700; min-width: 90px; }
+.settlement-history-warn { color: #b3261e; font-weight: 700; }
+
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
 .modal { background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; position: relative; }

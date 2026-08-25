@@ -62,6 +62,7 @@ app.use("/api/tables", require("./src/routes/tables"));
 app.use("/api/zones", require("./src/routes/zones"));
 app.use("/api/orders", require("./src/routes/orders"));
 app.use("/api/settings", require("./src/routes/settings"));
+app.use("/api/settlements", require("./src/routes/settlements"));
 app.use("/api/photo", require("./src/routes/photos"));
 
 // Customer ordering page — table number is read client-side from the URL
