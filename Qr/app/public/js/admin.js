@@ -61,6 +61,7 @@
       nextServed: "결제 완료로 변경",
       cancelBtn: "취소",
       printBtn: "🖨️ 인쇄",
+      previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       tableLabel: "테이블",
       memoLabel: "메모",
@@ -288,6 +289,7 @@
       nextServed: "標記為已結帳",
       cancelBtn: "取消",
       printBtn: "🖨️ 列印",
+      previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       tableLabel: "桌號",
       memoLabel: "備註",
@@ -796,6 +798,13 @@
       printKitchenTicket(o);
     };
     actions.appendChild(printBtn);
+    const previewBtn = document.createElement("button");
+    previewBtn.textContent = T("previewBtn");
+    previewBtn.onclick = (e) => {
+      e.stopPropagation();
+      previewKitchenTicket(o);
+    };
+    actions.appendChild(previewBtn);
     card.onclick = () => openOrderDetail(o);
     return card;
   }
@@ -832,11 +841,11 @@
   // installed, the same problem that caused rare characters to print
   // blank elsewhere in this ticket.
   const TALLY_STROKES = [
-    "M3,4 L21,4", // 1: top horizontal (一)
+    "M1,4 L23,4", // 1: top horizontal (一)
     "M12,4 L12,25", // 2: + vertical spine
-    "M3,11 L21,11", // 3: + upper-middle horizontal
-    "M3,18 L21,18", // 4: + lower-middle horizontal
-    "M3,25 L21,25", // 5: + bottom horizontal — now a complete 正
+    "M1,11 L23,11", // 3: + upper-middle horizontal
+    "M1,18 L23,18", // 4: + lower-middle horizontal
+    "M1,25 L23,25", // 5: + bottom horizontal — now a complete 正
   ];
   function strokeGlyphSvg(strokeCount) {
     if (strokeCount === 1) {
@@ -845,7 +854,7 @@
       // growing 正 is deliberately biased toward the top of its box (so
       // strokes 2-5 can stack below it), which looks off-center when it's
       // the only stroke on its own.
-      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M3,6 L21,6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="square"/></svg>`;
+      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M1,6 L23,6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="square"/></svg>`;
     }
     const paths = TALLY_STROKES.slice(0, strokeCount)
       .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="square"/>`)
@@ -870,7 +879,7 @@
   // row spans ROW_POINTS[i] to ROW_POINTS[i+1]. If a row ever needs
   // nudging, adjust the specific point(s) here rather than a formula.
   const ROW_POINTS = [
-    461, 506, 558, 609, 666, 711, 771, 814, 866, 917, 968, 1019, 1071, 1122, 1173, 1225,
+    404, 461, 506, 558, 609, 666, 711, 771, 814, 866, 917, 968, 1019, 1071, 1122, 1173, 1225,
     1276, 1328, 1379, 1430, 1481, 1533, 1584, 1635, 1687, 1738, 1790, 1841,
   ];
   function rowRect(index) {
@@ -885,7 +894,7 @@
     const top = ROW_POINTS[ROW_POINTS.length - 1] + (stepsPast - 1) * lastHeight;
     return { top, bottom: top + lastHeight };
   }
-  const BAR_RECT = { top: 398, bottom: 461 }; // shared 飯類/烤肉類 bar row, right above row 0
+  const BAR_RECT = { top: 352, bottom: 404 }; // shared 飯類/烤肉類 bar row, right above row 0
   const COLS = {
     left: { code: [48, 85], name: [85, 287], price: [287, 363], qty: [363, 444] },
     right: { code: [444, 480], name: [480, 682], price: [682, 751], qty: [751, 839] },
@@ -893,7 +902,7 @@
   // How many physical rows the photo reserves per category (src/seed.js
   // category keys) — anything beyond this per category goes to the
   // appendix instead of overflowing onto a row that doesn't exist.
-  const TEMPLATE_SLOTS = { rice: 8, noodle: 9, hotpot: 7, bbq: 6, other: 13, drink: 7 };
+  const TEMPLATE_SLOTS = { rice: 8, noodle: 9, hotpot: 9, bbq: 6, other: 13, drink: 7 };
   const LEFT_CAT_KEYS = ["rice", "noodle", "hotpot"];
   const RIGHT_CAT_KEYS = ["bbq", "other", "drink"];
 
@@ -1040,9 +1049,9 @@
      printed character height, so the total lines up with it exactly. */
   .value-overlay { font-size: 3.6vw; justify-content: center; }
   .total-overlay { font-size: 3.76vw; }
-  .tally-overlay { display: flex; align-items: center; justify-content: center; gap: 1px; flex-wrap: wrap; transform: translateX(-30px); }
-  .tally-glyph { width: 1.9vw; height: 2.2vw; overflow: visible; }
-  .tally-glyph-single { height: 1vw; }
+  .tally-overlay { display: flex; align-items: center; justify-content: center; gap: 1px; flex-wrap: wrap; transform: translateX(-10px); }
+  .tally-glyph { width: 5.2vw; height: 2.2vw; overflow: visible; }
+  .tally-glyph-single { height: 1.1vw; }
   .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
   .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
   .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
@@ -1101,6 +1110,17 @@
     Promise.race([Promise.all([fontsReady, imgReady]), new Promise((resolve) => setTimeout(resolve, 4000))]).then(() =>
       setTimeout(triggerPrint, 50)
     );
+  }
+
+  // Opens the exact same ticket HTML in a new tab, without triggering the
+  // print dialog — a fast way to check tally-mark alignment/sizing after a
+  // tweak without needing to actually print a physical page each time.
+  function previewKitchenTicket(o) {
+    const win = window.open("", "_blank");
+    if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
+    win.document.open();
+    win.document.write(buildTicketHtml(o));
+    win.document.close();
   }
 
   async function updateOrderStatus(id, status) {
