@@ -1098,18 +1098,18 @@
      좌/우 칸(牛|豬, 鮪魚|蝦仁)을 따로 움직일 수 있도록 위치는 -left/-right에서 지정. */
   .tally-overlay-group1 .tally-glyph { width: 45.66px; height: 19.32px; }
   .tally-overlay-group1 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group1-left { transform: translateX(-18.5px); }
-  .tally-overlay-group1-right { transform: translateX(-6.5px); }
+  .tally-overlay-group1-left { transform: translateX(-12.5px); } /* -14.5px에서 2px 오른쪽 */
+  .tally-overlay-group1-right { transform: translateX(-3.5px); } /* -4.5px에서 1px 오른쪽 */
 
   /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
   .tally-overlay-group2 .tally-glyph { width: 136.97px; height: 19.32px; } /* 45.66px에서 1.5배 */
   .tally-overlay-group2 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group2 { transform: translateX(-13px); }
+  .tally-overlay-group2 { transform: translateX(-8px); } /* -9px에서 1px 오른쪽 */
 
   /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
   .tally-overlay-group3 .tally-glyph { width: 136.97px; height: 19.32px; }
   .tally-overlay-group3 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group3 { transform: translateX(-5.5px); }
+  .tally-overlay-group3 { transform: translateX(-1.5px); } /* -5.5px에서 4px 오른쪽 */
 
   /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
      bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
