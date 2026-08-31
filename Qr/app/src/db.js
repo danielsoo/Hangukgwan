@@ -101,6 +101,34 @@ async function save() {
   await db.collection("store").replaceOne({ _id: "main" }, store, { upsert: true });
 }
 
+// The per-request refreshStore() call in server.js only guards against
+// staleness at the *start* of a request. For a slow request — the photo
+// upload endpoint is the clear case, since savePhoto()'s Mongo round-trip
+// can take a real stretch of wall-clock time — the in-memory `store` can go
+// stale again before this request's own save() at the end, so a concurrent
+// request elsewhere (an order coming in, a different admin edit) can commit
+// its save() in between and then get silently overwritten by this one's
+// now-outdated full-document replace, or vice versa (exactly the
+// "data randomly resets" failure mode refreshStore()'s comment above
+// describes, just triggered mid-request instead of only between requests).
+//
+// refreshAndSave() re-fetches immediately before mutating, narrowing that
+// window to essentially just the mutate+save step. It's not a true atomic
+// transaction (another save() could still land in the gap between this
+// refresh and this save), but it shrinks the risk from "the whole request
+// duration" to "a few milliseconds", which is what matters for something
+// like a multi-second file upload.
+//
+// `mutate` must look up whatever it needs fresh off the `store` argument —
+// refreshStore() replaces store.menuItems/orders/etc. with new arrays, so
+// any item/order reference captured before this call no longer lives in
+// those arrays.
+async function refreshAndSave(mutate) {
+  await refreshStore();
+  await mutate(store);
+  await save();
+}
+
 function nextId(collection) {
   return store.nextId[collection]++;
 }
@@ -129,4 +157,4 @@ async function deletePhoto(id) {
   await db.collection("photos").deleteOne({ _id: new ObjectId(id) });
 }
 
-module.exports = { connectDB, refreshStore, store, save, nextId, savePhoto, getPhoto, deletePhoto };
+module.exports = { connectDB, refreshStore, store, save, refreshAndSave, nextId, savePhoto, getPhoto, deletePhoto };

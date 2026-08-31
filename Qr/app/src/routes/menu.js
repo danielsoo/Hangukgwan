@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { store, save, nextId, savePhoto, deletePhoto } = require("../db");
+const { store, save, refreshAndSave, nextId, savePhoto, deletePhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const canEditMenu = requirePermission("menuEdit");
 
@@ -84,23 +84,32 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
 
 router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const item = store.menuItems.find((i) => i.id === id);
-  if (!item) return res.status(404).json({ error: "not_found" });
   const b = req.body || {};
   const fields = [
     "category_id", "code", "name_zh", "name_ko", "name_en",
     "desc_zh", "desc_ko", "desc_en", "price", "price_note", "original_price", "options",
     "min_first_order_qty", "sort_order",
   ];
-  for (const f of fields) if (b[f] !== undefined) item[f] = b[f];
-  if (b.category_id !== undefined) item.category_id = parseInt(b.category_id, 10);
-  if (b.allergens !== undefined) item.allergens = Array.isArray(b.allergens) ? b.allergens : [];
-  if (b.mix_options !== undefined) item.mix_options = b.mix_options ? 1 : 0;
-  if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
-  if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;
-  if (b.available !== undefined) item.available = b.available ? 1 : 0;
-  await save();
-  res.json(item);
+  // Re-fetches the latest data right before writing (see refreshAndSave() in
+  // src/db.js) instead of mutating the `item` this request loaded at the
+  // top — narrows the window for another concurrent save (an incoming
+  // order, another admin edit) to overwrite this change or get overwritten
+  // by it.
+  let updated = null;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    for (const f of fields) if (b[f] !== undefined) item[f] = b[f];
+    if (b.category_id !== undefined) item.category_id = parseInt(b.category_id, 10);
+    if (b.allergens !== undefined) item.allergens = Array.isArray(b.allergens) ? b.allergens : [];
+    if (b.mix_options !== undefined) item.mix_options = b.mix_options ? 1 : 0;
+    if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
+    if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;
+    if (b.available !== undefined) item.available = b.available ? 1 : 0;
+    updated = item;
+  });
+  if (!updated) return res.status(404).json({ error: "not_found" });
+  res.json(updated);
 });
 
 router.delete("/admin/items/:id", canEditMenu, async (req, res) => {
@@ -112,19 +121,32 @@ router.delete("/admin/items/:id", canEditMenu, async (req, res) => {
 
 router.post("/admin/items/:id/photo", canEditMenu, upload.single("photo"), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const item = store.menuItems.find((i) => i.id === id);
-  if (!item) return res.status(404).json({ error: "not_found" });
+  const existing = store.menuItems.find((i) => i.id === id);
+  if (!existing) return res.status(404).json({ error: "not_found" });
   if (!req.file) return res.status(400).json({ error: "no_file" });
 
-  const oldPhotoId = photoIdFromUrl(item.photo_url);
+  const oldPhotoId = photoIdFromUrl(existing.photo_url);
 
+  // savePhoto()'s Mongo round-trip is the slow part of this request — often
+  // a real stretch of wall-clock time — so the `store` snapshot from the
+  // top of the request (and the `existing` item pulled from it above) can
+  // go stale by the time we're ready to write. Re-fetch right before saving
+  // (see refreshAndSave() in src/db.js) instead of writing through the
+  // stale `existing` reference, so a concurrent order/edit saved in the
+  // meantime doesn't get silently clobbered — or silently clobber this.
   const photoId = await savePhoto(req.file.buffer, req.file.mimetype);
-  item.photo_url = `/api/photo/${photoId}`;
-  await save();
+  let newPhotoUrl = null;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    item.photo_url = `/api/photo/${photoId}`;
+    newPhotoUrl = item.photo_url;
+  });
+  if (!newPhotoUrl) return res.status(404).json({ error: "not_found" });
 
   if (oldPhotoId) await deletePhoto(oldPhotoId);
 
-  res.json({ photo_url: item.photo_url });
+  res.json({ photo_url: newPhotoUrl });
 });
 
 // Admin: categories management
