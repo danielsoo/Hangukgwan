@@ -197,6 +197,7 @@
       itemPriceLabel: "가격 (NT$)",
       itemPriceNoteLabel: "가격 비고",
       itemPriceNotePlaceholder: "예: 2인분",
+      itemOriginalPriceLabel: "정가 (할인 전 가격, 없으면 비워두세요)",
       itemOptionsLabel: "옵션 (쉼표로 구분, 예: 소고기,돼지고기)",
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
@@ -433,6 +434,7 @@
       itemPriceLabel: "價格（NT$）",
       itemPriceNoteLabel: "價格備註",
       itemPriceNotePlaceholder: "例如：2人份",
+      itemOriginalPriceLabel: "原價（折扣前價格，不需要請留空）",
       itemOptionsLabel: "選項（用逗號分隔，例如：牛肉,豬肉）",
       itemOptionsPlaceholder: "沒有選項請留空",
       itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
@@ -1314,6 +1316,7 @@
     $("#f_desc_en").value = item?.desc_en || "";
     $("#f_price").value = item?.price ?? "";
     $("#f_price_note").value = item?.price_note || "";
+    $("#f_original_price").value = item?.original_price || "";
     $("#f_options").value = item?.options || "";
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
@@ -1359,6 +1362,7 @@
       desc_en: $("#f_desc_en").value.trim() || null,
       price: parseInt($("#f_price").value, 10) || 0,
       price_note: $("#f_price_note").value.trim() || null,
+      original_price: parseInt($("#f_original_price").value, 10) || null,
       options: $("#f_options").value.trim() || null,
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,

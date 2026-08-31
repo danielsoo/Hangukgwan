@@ -77,6 +77,18 @@
     return `${CURRENCY_SYMBOL[currency] || "NT$"}${n}`;
   }
 
+  // Set-discount price display (e.g. 신라면 김밥세트: original_price is what
+  // the items would cost bought separately, price is the set's discounted
+  // total) — shows the crossed-out original price plus how much is saved,
+  // so the discount is obvious at a glance instead of just a lower number.
+  function priceHtml(item) {
+    if (item.original_price && item.original_price > item.price) {
+      const off = item.original_price - item.price;
+      return `<span class="item-price-original">${money(item.original_price)}</span> ${money(item.price)}<span class="item-discount-badge">-${money(off)}</span>`;
+    }
+    return money(item.price);
+  }
+
   let toastTimer = null;
   function showToast(msg) {
     const el = $("#toastBanner");
@@ -191,7 +203,7 @@
               ${item.is_signature ? `<span class="badge badge-signature">★ ${t("signature")}</span>` : ""}
               ${item.is_spicy ? `<span class="badge badge-spicy">🌶 ${t("spicy")}</span>` : ""}
             </div>
-            <div class="item-price">${money(item.price)}${item.price_note ? `<span class="item-price-note">${item.price_note}</span>` : ""}</div>
+            <div class="item-price">${priceHtml(item)}${item.price_note ? `<span class="item-price-note">${item.price_note}</span>` : ""}</div>
             <div class="item-sub">${descFor(item) || [item.name_zh, item.name_ko, item.name_en].filter((n) => n && n !== nameFor(item)).join(" · ")}</div>
           </div>
           <div class="item-row-photo" style="${itemPhotoStyle(item)}">${item.photo_url ? "" : "🍽️"}</div>
@@ -232,6 +244,13 @@
       .join(" · ");
     $("#itemDesc").textContent = descFor(item);
     $("#itemNote").value = "";
+    const priceInfo = $("#itemPriceInfo");
+    if (item.original_price && item.original_price > item.price) {
+      priceInfo.innerHTML = priceHtml(item);
+      priceInfo.hidden = false;
+    } else {
+      priceInfo.hidden = true;
+    }
 
     const optWrap = $("#itemOptions");
     const optList = $("#optionsList");

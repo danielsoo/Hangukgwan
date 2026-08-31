@@ -173,6 +173,11 @@ body {
 .badge-signature { background: #fff2cf; color: #8a6a00; }
 .item-price { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
 .item-price-note { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+.item-price-original { font-size: 12px; color: var(--muted); font-weight: 400; text-decoration: line-through; margin-right: 5px; }
+.item-discount-badge {
+  display: inline-block; font-size: 11px; font-weight: 700; color: #c0392b;
+  background: #fdecea; border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: middle;
+}
 .item-sub { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .item-row-photo {
   width: 84px; height: 84px; border-radius: 12px; flex-shrink: 0;
@@ -254,6 +259,7 @@ body {
 .sheet-body h2 { margin: 0 0 4px; font-size: 20px; }
 .sheet-sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
 .sheet-desc { font-size: 13px; color: #55504a; margin: 0 0 12px; }
+.sheet-price-info { font-size: 15px; font-weight: 700; margin: 0 0 12px; }
 .options-label { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
 .options-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .options-list button {

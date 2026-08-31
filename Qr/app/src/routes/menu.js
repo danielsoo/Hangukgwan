@@ -66,6 +66,7 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     desc_en: b.desc_en || null,
     price: b.price,
     price_note: b.price_note || null,
+    original_price: b.original_price || null,
     options: b.options || null,
     mix_options: b.mix_options ? 1 : 0,
     min_first_order_qty: b.min_first_order_qty || null,
@@ -87,7 +88,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const b = req.body || {};
   const fields = [
     "category_id", "code", "name_zh", "name_ko", "name_en",
-    "desc_zh", "desc_ko", "desc_en", "price", "price_note", "options",
+    "desc_zh", "desc_ko", "desc_en", "price", "price_note", "original_price", "options",
     "min_first_order_qty", "sort_order",
   ];
   for (const f of fields) if (b[f] !== undefined) item[f] = b[f];

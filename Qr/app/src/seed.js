@@ -29,7 +29,10 @@ const ITEMS = {
   ],
   noodle: [
     { code: "21", name_zh: "辛拉麵(泡麵)", name_ko: "신라면", name_en: "Shin Ramyun", price: 180 },
-    { code: "22", name_zh: "辛拉麵套餐", name_ko: "신라면 김밥세트", name_en: "Shin Ramyun + Kimbap Set", price: 280 },
+    // Priced as a set discount off buying 신라면(21, 180)+김밥(82, 150)
+    // separately (330 total) — original_price lets the menu show that
+    // discount instead of just the flat set price (see public/js/order.js).
+    { code: "22", name_zh: "辛拉麵套餐", name_ko: "신라면 김밥세트", name_en: "Shin Ramyun + Kimbap Set", price: 280, original_price: 330 },
     { code: "23", name_zh: "大滷麵", name_ko: "우동면", name_en: "Seafood Udon (not spicy)", price: 230, desc_zh: "海鮮麵不辣", desc_ko: "맵지 않아요", desc_en: "Not spicy" },
     { code: "24", name_zh: "韓式炸醬麵", name_ko: "짜장면", name_en: "Korean Black Bean Noodles", price: 230 },
     { code: "25", name_zh: "韓式炸醬飯", name_ko: "짜장밥", name_en: "Korean Black Bean Rice", price: 230 },
@@ -90,13 +93,16 @@ const ITEMS = {
 // saved to public/uploads/dish-{code}.jpg. Used to auto-fill photo_url on
 // first seed (fresh installs). Existing installs are patched separately.
 const CODES_WITH_PHOTOS = [
-  "11", "12", "13", "14", "15", "16", "17", "18", "21", "23", "24", "26", "28",
+  "11", "12", "13", "14", "15", "16", "17", "18", "21", "22", "23", "24", "26", "28",
   "41", "42", "43", "44", "45", "51", "52", "54", "71", "72", "73", "74", "75",
   "76", "77", "78", "79", "80", "81", "82", "83", "98", "99", "100",
 ];
-// Items that share the same menu photo as a sibling variant (e.g. 辛拉麵套餐
-// uses the same photo as 辛拉麵) — code -> code whose dish-{code}.jpg to reuse.
-const PHOTO_ALIAS = { "22": "21", "25": "24", "27": "26", "29": "28", "53": "52" };
+// Items that share the same menu photo as a sibling variant (e.g. 韓式炸醬飯
+// uses the same photo as 韓式炸醬麵) — code -> code whose dish-{code}.jpg to reuse.
+// 22 (辛拉麵套餐) used to alias 21's photo here; it now has its own composite
+// photo (dish-22.jpg, ramyun + kimbap together) so it moved up into
+// CODES_WITH_PHOTOS instead.
+const PHOTO_ALIAS = { "25": "24", "27": "26", "29": "28", "53": "52" };
 
 async function run() {
   await connectDB();
