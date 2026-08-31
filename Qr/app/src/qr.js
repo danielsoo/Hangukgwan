@@ -11,7 +11,7 @@ function embedLogoInQrSvg(svg, logoDataUri) {
   const m = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
   if (!m) return svg;
   const vb = parseInt(m[1], 10);
-  const logoSize = vb * 0.22;
+  const logoSize = vb * 0.27;
   const center = vb / 2;
   const overlay = `
     <image x="${center - logoSize / 2}" y="${center - logoSize / 2}" width="${logoSize}" height="${logoSize}" href="${logoDataUri}" />
