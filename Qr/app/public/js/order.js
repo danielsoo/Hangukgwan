@@ -323,9 +323,13 @@
   $("#itemSheetBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "itemSheetBackdrop") $("#itemSheetBackdrop").hidden = true;
   });
+  // Griddle items with a min_first_order_qty are NOT floored at that minimum
+  // here — the qty stepper moves freely like any other item (down to 1).
+  // The minimum is only enforced (with an explanatory toast) at add-to-cart
+  // time below, same as the mix_options items — clearer to customers than a
+  // stepper that mysteriously refuses to go lower.
   $("#qtyMinus").onclick = () => {
-    const minQty = currentItem && currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
-    currentQty = Math.max(minQty, currentQty - 1);
+    currentQty = Math.max(1, currentQty - 1);
     $("#qtyVal").textContent = currentQty;
     updateAddBtnPrice();
   };
@@ -351,6 +355,11 @@
         }
       });
     } else {
+      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      if (currentQty < requiredMin) {
+        showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
+        return;
+      }
       cart.push({
         itemId: currentItem.id,
         item: currentItem,
@@ -416,11 +425,11 @@
         <div class="cart-item-right">${money(c.item.price * c.qty)}</div>
       `;
       row.querySelector('[data-act="minus"]').onclick = () => {
-        // mix_options items (e.g. 동판불고기) are split into one cart line per
-        // option (牛/豬), so the combined-2 minimum lives across two lines,
-        // not one — don't apply a per-line floor there, 1+1 already covers it.
-        const minQty = c.item.min_first_order_qty && !hasPriorOrder && !c.item.mix_options ? c.item.min_first_order_qty : 1;
-        c.qty = Math.max(minQty, c.qty - 1);
+        // No min_first_order_qty floor here either (see #qtyMinus above) —
+        // the server re-checks the minimum at submit and shows an
+        // explanatory alert (see #submitOrderBtn's grill_min_qty handling)
+        // if the cart ends up under it.
+        c.qty = Math.max(1, c.qty - 1);
         renderCart();
         renderCartFab();
       };
