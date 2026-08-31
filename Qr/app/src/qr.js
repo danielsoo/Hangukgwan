@@ -1,20 +1,19 @@
 const QRCode = require("qrcode");
 
-// Centers a logo (as a base64 data URI) inside a QR code SVG string, with a
-// white circular backing so it stays legible against the black modules. Only
-// safe because the QR is generated with errorCorrectionLevel "H" (survives
-// up to ~30% obstruction) — see buildQrSvg below. Shared by the real
-// per-table QR sheet (src/routes/tables.js) and the settings-page logo
-// preview (src/routes/settings.js) so both render identically.
+// Centers a logo (as a base64 data URI) directly over the QR code SVG
+// string — no white plate behind it, just the logo image sitting on top of
+// the modules. Only safe because the QR is generated with
+// errorCorrectionLevel "H" (survives up to ~30% obstruction) — see
+// buildQrSvg below. Shared by the real per-table QR sheet
+// (src/routes/tables.js) and the settings-page logo preview
+// (src/routes/settings.js) so both render identically.
 function embedLogoInQrSvg(svg, logoDataUri) {
   const m = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
   if (!m) return svg;
   const vb = parseInt(m[1], 10);
   const logoSize = vb * 0.22;
-  const backingSize = logoSize * 1.35;
   const center = vb / 2;
   const overlay = `
-    <circle cx="${center}" cy="${center}" r="${backingSize / 2}" fill="#ffffff" />
     <image x="${center - logoSize / 2}" y="${center - logoSize / 2}" width="${logoSize}" height="${logoSize}" href="${logoDataUri}" />
   `;
   return svg.replace("</svg>", `${overlay}</svg>`);
