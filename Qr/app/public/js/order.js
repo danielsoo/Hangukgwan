@@ -89,6 +89,24 @@
     return money(item.price);
   }
 
+  // Meat-type / allergen badges (see public/js/allergens.js for the shared
+  // ALLERGENS list) — `compact` renders icon-only pills for the menu list
+  // row, the full version (icon + label) is used in the item detail sheet.
+  function allergenBadgesHtml(item, compact) {
+    const ids = item.allergens || [];
+    if (!ids.length) return "";
+    const defs = (window.ALLERGENS || []).filter((a) => ids.includes(a.id));
+    if (!defs.length) return "";
+    return defs
+      .map((a) => {
+        const label = a[lang] || a.zh;
+        return compact
+          ? `<span class="allergen-badge allergen-badge-compact" title="${label}">${a.icon}</span>`
+          : `<span class="allergen-badge">${a.icon} ${label}</span>`;
+      })
+      .join("");
+  }
+
   let toastTimer = null;
   function showToast(msg) {
     const el = $("#toastBanner");
@@ -205,6 +223,7 @@
             </div>
             <div class="item-price">${priceHtml(item)}${item.price_note ? `<span class="item-price-note">${item.price_note}</span>` : ""}</div>
             <div class="item-sub">${descFor(item) || [item.name_zh, item.name_ko, item.name_en].filter((n) => n && n !== nameFor(item)).join(" · ")}</div>
+            ${item.allergens && item.allergens.length ? `<div class="item-row-allergens">${allergenBadgesHtml(item, true)}</div>` : ""}
           </div>
           <div class="item-row-photo" style="${itemPhotoStyle(item)}">${item.photo_url ? "" : "🍽️"}</div>
         `;
@@ -243,6 +262,13 @@
       .filter((n) => n && n !== nameFor(item))
       .join(" · ");
     $("#itemDesc").textContent = descFor(item);
+    const allergensEl = $("#itemAllergens");
+    if (item.allergens && item.allergens.length) {
+      allergensEl.innerHTML = allergenBadgesHtml(item, false);
+      allergensEl.hidden = false;
+    } else {
+      allergensEl.hidden = true;
+    }
     $("#itemNote").value = "";
     const priceInfo = $("#itemPriceInfo");
     if (item.original_price && item.original_price > item.price) {

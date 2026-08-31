@@ -381,6 +381,8 @@
         <label><input type="checkbox" id="f_available" checked /> <span data-i18n="itemAvailableLabel">판매 중</span></label>
         <label><input type="checkbox" id="f_mix_options" /> <span data-i18n="itemMixOptionsLabel">옵션별 개별 수량(+/-) 허용</span></label>
       </div>
+      <label><span data-i18n="itemAllergensLabel">알러지 / 육류 표시 (손님 화면에 표시돼요)</span></label>
+      <div class="allergen-checkboxes" id="f_allergens_list"></div>
       <label><span data-i18n="itemPhotoLabel">사진</span>
         <input type="file" id="f_photo" accept="image/*" />
       </label>
@@ -449,6 +451,7 @@
 <audio id="notifySound" preload="auto"></audio>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="/js/allergens.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

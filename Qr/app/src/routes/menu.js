@@ -70,6 +70,7 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     options: b.options || null,
     mix_options: b.mix_options ? 1 : 0,
     min_first_order_qty: b.min_first_order_qty || null,
+    allergens: Array.isArray(b.allergens) ? b.allergens : [],
     is_spicy: b.is_spicy ? 1 : 0,
     is_signature: b.is_signature ? 1 : 0,
     photo_url: b.photo_url || null,
@@ -93,6 +94,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   ];
   for (const f of fields) if (b[f] !== undefined) item[f] = b[f];
   if (b.category_id !== undefined) item.category_id = parseInt(b.category_id, 10);
+  if (b.allergens !== undefined) item.allergens = Array.isArray(b.allergens) ? b.allergens : [];
   if (b.mix_options !== undefined) item.mix_options = b.mix_options ? 1 : 0;
   if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
   if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;

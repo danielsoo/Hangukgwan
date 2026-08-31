@@ -202,6 +202,7 @@
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
       itemMixOptionsLabel: "옵션별 개별 수량(+/-) 허용",
+      itemAllergensLabel: "알러지 / 육류 표시 (손님 화면에 표시돼요)",
       itemSpicyLabel: "매운맛 🌶",
       itemSignatureLabel: "대표 메뉴 ★",
       itemAvailableLabel: "판매 중",
@@ -439,6 +440,7 @@
       itemOptionsPlaceholder: "沒有選項請留空",
       itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
       itemMixOptionsLabel: "允許各選項獨立增減數量(+/-)",
+      itemAllergensLabel: "過敏原 / 肉類標示（會顯示在顧客畫面）",
       itemSpicyLabel: "辣 🌶",
       itemSignatureLabel: "招牌菜 ★",
       itemAvailableLabel: "供應中",
@@ -1323,6 +1325,7 @@
     $("#f_is_signature").checked = !!item?.is_signature;
     $("#f_available").checked = item ? !!item.available : true;
     $("#f_mix_options").checked = !!item?.mix_options;
+    renderAllergenCheckboxes(item?.allergens || []);
     $("#f_photo").value = "";
     if (item?.photo_url) {
       $("#f_photo_preview").src = item.photo_url;
@@ -1333,6 +1336,24 @@
     $("#deleteItemBtn").hidden = !item;
     $("#itemModalBackdrop").hidden = false;
   }
+  // Renders one checkbox per ALLERGENS entry (see public/js/allergens.js)
+  // into the item modal, checking whichever ones the item already has.
+  function renderAllergenCheckboxes(selected) {
+    const wrap = $("#f_allergens_list");
+    wrap.innerHTML = "";
+    (window.ALLERGENS || []).forEach((a) => {
+      const label = document.createElement("label");
+      label.className = "allergen-checkbox";
+      const label_text = a[adminLang] || a.zh;
+      label.innerHTML = `<input type="checkbox" value="${a.id}" ${selected.includes(a.id) ? "checked" : ""} /> <span>${a.icon} ${label_text}</span>`;
+      wrap.appendChild(label);
+    });
+  }
+
+  function collectSelectedAllergens() {
+    return Array.from($("#f_allergens_list").querySelectorAll("input[type=checkbox]:checked")).map((el) => el.value);
+  }
+
   $("#itemModalClose").onclick = () => ($("#itemModalBackdrop").hidden = true);
   $("#itemModalBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "itemModalBackdrop") $("#itemModalBackdrop").hidden = true;
@@ -1369,6 +1390,7 @@
       is_signature: $("#f_is_signature").checked,
       available: $("#f_available").checked,
       mix_options: $("#f_mix_options").checked,
+      allergens: collectSelectedAllergens(),
     };
     if (!payload.name_zh) {
       alert(T("alertMenuNameRequired"));

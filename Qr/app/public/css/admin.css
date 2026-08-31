@@ -301,6 +301,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .form-row.checkboxes label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink); }
 .form-row.checkboxes input { width: auto; margin: 0; }
 .photo-preview { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; margin-bottom: 12px; }
+.allergen-checkboxes { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 0 0 16px; padding: 10px 12px; background: #f8f5ef; border-radius: 10px; }
+.allergen-checkbox { display: flex !important; align-items: center; gap: 5px; font-size: 13px; color: var(--ink); width: auto; margin: 0 !important; }
+.allergen-checkbox input { width: auto; margin: 0; }
 .modal-actions { display: flex; justify-content: space-between; margin-top: 10px; }
 .primary-btn { background: var(--red); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .danger-btn { background: #fff; color: var(--red); border: 1px solid var(--red); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
