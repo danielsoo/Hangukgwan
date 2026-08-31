@@ -164,7 +164,12 @@ body {
 .menu-list { padding: 4px 16px 20px; }
 .loading { text-align: center; color: var(--muted); padding: 40px 0; }
 .no-results { text-align: center; color: var(--muted); padding: 30px 0; font-size: 13px; }
-.cat-section { margin-bottom: 6px; }
+/* Lands scrollIntoView() below the sticky .cat-tabs-row instead of behind
+   it — without this, clicking a category tab (see order.js) scrolls the
+   section flush to the very top of the page, which is exactly where the
+   sticky tab bar then pins itself, hiding the category title underneath
+   it and making the jump look like it landed one row too far down. */
+.cat-section { margin-bottom: 6px; scroll-margin-top: 54px; }
 .cat-title {
   font-family: var(--font-display); font-size: 16px; font-weight: 700; margin: 20px 0 10px;
   display: flex; align-items: center; gap: 10px;
