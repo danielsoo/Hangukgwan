@@ -46,10 +46,16 @@ const ITEMS = {
     { code: "45", name_zh: "牛骨湯飯", name_ko: "사골곰탕", name_en: "Beef Bone Soup with Rice", price: 240 },
   ],
   bbq: [
-    { code: "51", name_zh: "銅盤烤肉", name_ko: "동판불고기", name_en: "Korean BBQ Bulgogi", price: 500, price_note: "2人份 / for 2", options: "牛,豬" },
-    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 600, price_note: "2人份 / for 2", is_spicy: 1 },
+    // Griddle (불판) items: price is now per single serving. The first order
+    // from a table still needs to total >= min_first_order_qty servings of
+    // each of these (enforced in public/js/order.js and re-checked server
+    // side in src/routes/orders.js) — that used to be baked into the price
+    // itself (charged per 2 servings), which is why these three are the only
+    // items with min_first_order_qty set.
+    { code: "51", name_zh: "銅盤烤肉", name_ko: "동판불고기", name_en: "Korean BBQ Bulgogi", price: 250, price_note: "首次低消2份(可混搭牛豬) / min 2 on 1st order, mix ok", options: "牛,豬", mix_options: 1, min_first_order_qty: 2 },
+    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 300, price_note: "首次點餐低消2份 / min 2 on 1st order", is_spicy: 1, min_first_order_qty: 2 },
     { code: "53", name_zh: "雞排拌飯(加飯)", name_ko: "볶음밥 추가", name_en: "Fried Rice Add-on (for 辣炒雞排)", price: 80 },
-    { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 620, price_note: "2人份 / for 2" },
+    { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, price_note: "首次點餐低消2份 / min 2 on 1st order", min_first_order_qty: 2 },
   ],
   other: [
     { code: "71", name_zh: "部隊鍋", name_ko: "부대찌개", name_en: "Army Stew", price: 600, is_spicy: 1, is_signature: 1 },
@@ -121,6 +127,8 @@ async function run() {
           price: item.price,
           price_note: item.price_note || null,
           options: item.options || null,
+          mix_options: item.mix_options ? 1 : 0,
+          min_first_order_qty: item.min_first_order_qty || null,
           is_spicy: item.is_spicy ? 1 : 0,
           is_signature: item.is_signature ? 1 : 0,
           photo_url: CODES_WITH_PHOTOS.includes(item.code)

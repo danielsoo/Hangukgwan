@@ -14,7 +14,14 @@
   let currentItem = null;
   let currentOption = null;
   let currentQty = 1;
+  let mixQty = {}; // { optionLabel: qty } — used instead of currentQty for mix_options items
   let activeOrderId = null;
+  // Whether this table already has an order in flight (from this phone or
+  // any other phone at the same table — see checkPriorOrder). Drives the
+  // griddle items' first-order minimum (see min_first_order_qty below).
+  // Defaults to false (= "treat as first order") so the safe direction on a
+  // slow/failed check is asking for the minimum, not silently skipping it.
+  let hasPriorOrder = false;
   let searchTerm = "";
   let statusPollTimer = null;
   let storeLat = null;
@@ -26,6 +33,16 @@
     zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
     ko: (n) => `인원(${n}명)보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
     en: (n) => `Your order has fewer items than your party size (${n}). Feel free to add more if you'd like.`,
+  };
+
+  // Shown when trying to add a griddle (불판) item below its
+  // min_first_order_qty on the table's first order (see openItemSheet /
+  // addToCartBtn below, and the matching server check in
+  // src/routes/orders.js).
+  const GRILL_MIN_MSG = {
+    zh: (n) => `首次點餐這道菜至少要 ${n} 份（可自由搭配比例）`,
+    ko: (n) => `첫 주문에서는 이 메뉴를 최소 ${n}인분 담아야 해요 (비율은 자유롭게 조절 가능)`,
+    en: (n) => `On your first order, this dish needs at least ${n} servings total (mix the ratio however you like)`,
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -101,6 +118,21 @@
     categories = await res.json();
     renderTabs();
     renderMenu();
+  }
+
+  // Whether this table already has an order in flight — determines whether
+  // griddle items (min_first_order_qty) enforce their minimum. Checked
+  // against the server rather than just the local activeOrderId, since
+  // everyone at the table usually orders from their own phone, not just the
+  // one that placed the very first order.
+  async function checkPriorOrder() {
+    try {
+      const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
+      const list = await res.json();
+      hasPriorOrder = Array.isArray(list) && list.length > 0;
+    } catch (e) {
+      /* leave hasPriorOrder at its safe default (false = enforce minimum) */
+    }
   }
 
   function renderTabs() {
@@ -191,7 +223,6 @@
 
   function openItemSheet(item) {
     currentItem = item;
-    currentQty = 1;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
@@ -201,35 +232,91 @@
       .join(" · ");
     $("#itemDesc").textContent = descFor(item);
     $("#itemNote").value = "";
-    $("#qtyVal").textContent = "1";
 
     const optWrap = $("#itemOptions");
     const optList = $("#optionsList");
+    const qtyRow = $("#qtyRow");
+    const mixWrap = $("#mixOptions");
     optList.innerHTML = "";
-    if (item.options) {
-      optWrap.hidden = false;
-      item.options.split(",").forEach((opt, i) => {
-        const b = document.createElement("button");
-        b.textContent = opt.trim();
-        if (i === 0) b.classList.add("active");
-        b.onclick = () => {
-          currentOption = opt.trim();
-          optList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
-          b.classList.add("active");
-        };
-        optList.appendChild(b);
-      });
-    } else {
+
+    if (item.mix_options && item.options) {
+      // e.g. 동판불고기: 牛/豬 get their own independent +/- counters instead
+      // of a single radio choice, so a table can mix both in one line item.
       optWrap.hidden = true;
+      qtyRow.hidden = true;
+      mixWrap.hidden = false;
+      $("#mixOptionsHint").textContent = t("mixOptionsHint");
+      const opts = item.options.split(",").map((s) => s.trim());
+      mixQty = {};
+      // Default to 1 of each — meets the >=2 combined minimum by default,
+      // whether or not this happens to be the table's first order.
+      opts.forEach((opt) => (mixQty[opt] = 1));
+      renderMixOptions(opts);
+    } else {
+      mixWrap.hidden = true;
+      currentQty = item.min_first_order_qty && !hasPriorOrder ? item.min_first_order_qty : 1;
+      $("#qtyVal").textContent = String(currentQty);
+      qtyRow.hidden = false;
+      if (item.options) {
+        optWrap.hidden = false;
+        item.options.split(",").forEach((opt, i) => {
+          const b = document.createElement("button");
+          b.textContent = opt.trim();
+          if (i === 0) b.classList.add("active");
+          b.onclick = () => {
+            currentOption = opt.trim();
+            optList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+            b.classList.add("active");
+          };
+          optList.appendChild(b);
+        });
+      } else {
+        optWrap.hidden = true;
+      }
     }
 
     updateAddBtnPrice();
     $("#itemSheetBackdrop").hidden = false;
   }
 
+  // Renders one +/- row per option for a mix_options item (see openItemSheet
+  // above) into #mixOptionsList, wired to mutate the shared `mixQty` map.
+  function renderMixOptions(opts) {
+    const mixList = $("#mixOptionsList");
+    mixList.innerHTML = "";
+    opts.forEach((opt) => {
+      const row = document.createElement("div");
+      row.className = "mix-option-row";
+      row.innerHTML = `
+        <span class="mix-option-name">${opt}</span>
+        <div class="qty-row">
+          <button data-act="minus">−</button>
+          <span class="mix-qty-val">${mixQty[opt]}</span>
+          <button data-act="plus">+</button>
+        </div>
+      `;
+      row.querySelector('[data-act="minus"]').onclick = () => {
+        mixQty[opt] = Math.max(0, mixQty[opt] - 1);
+        row.querySelector(".mix-qty-val").textContent = mixQty[opt];
+        updateAddBtnPrice();
+      };
+      row.querySelector('[data-act="plus"]').onclick = () => {
+        mixQty[opt] = Math.min(20, mixQty[opt] + 1);
+        row.querySelector(".mix-qty-val").textContent = mixQty[opt];
+        updateAddBtnPrice();
+      };
+      mixList.appendChild(row);
+    });
+  }
+
   function updateAddBtnPrice() {
     if (!currentItem) return;
-    $("#addToCartPrice").textContent = money(currentItem.price * currentQty);
+    if (currentItem.mix_options) {
+      const totalQty = Object.values(mixQty).reduce((sum, q) => sum + q, 0);
+      $("#addToCartPrice").textContent = money(currentItem.price * totalQty);
+    } else {
+      $("#addToCartPrice").textContent = money(currentItem.price * currentQty);
+    }
   }
 
   $("#itemSheetClose").onclick = () => ($("#itemSheetBackdrop").hidden = true);
@@ -237,7 +324,8 @@
     if (e.target.id === "itemSheetBackdrop") $("#itemSheetBackdrop").hidden = true;
   });
   $("#qtyMinus").onclick = () => {
-    currentQty = Math.max(1, currentQty - 1);
+    const minQty = currentItem && currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+    currentQty = Math.max(minQty, currentQty - 1);
     $("#qtyVal").textContent = currentQty;
     updateAddBtnPrice();
   };
@@ -248,13 +336,29 @@
   };
 
   $("#addToCartBtn").onclick = () => {
-    cart.push({
-      itemId: currentItem.id,
-      item: currentItem,
-      qty: currentQty,
-      option: currentOption,
-      note: $("#itemNote").value.trim(),
-    });
+    const note = $("#itemNote").value.trim();
+    if (currentItem.mix_options) {
+      const opts = Object.keys(mixQty);
+      const totalQty = opts.reduce((sum, o) => sum + mixQty[o], 0);
+      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      if (totalQty < requiredMin) {
+        showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
+        return;
+      }
+      opts.forEach((opt) => {
+        if (mixQty[opt] > 0) {
+          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, note });
+        }
+      });
+    } else {
+      cart.push({
+        itemId: currentItem.id,
+        item: currentItem,
+        qty: currentQty,
+        option: currentOption,
+        note,
+      });
+    }
     $("#itemSheetBackdrop").hidden = true;
     renderCartFab();
   };
@@ -312,7 +416,11 @@
         <div class="cart-item-right">${money(c.item.price * c.qty)}</div>
       `;
       row.querySelector('[data-act="minus"]').onclick = () => {
-        c.qty = Math.max(1, c.qty - 1);
+        // mix_options items (e.g. 동판불고기) are split into one cart line per
+        // option (牛/豬), so the combined-2 minimum lives across two lines,
+        // not one — don't apply a per-line floor there, 1+1 already covers it.
+        const minQty = c.item.min_first_order_qty && !hasPriorOrder && !c.item.mix_options ? c.item.min_first_order_qty : 1;
+        c.qty = Math.max(minQty, c.qty - 1);
         renderCart();
         renderCartFab();
       };
@@ -374,6 +482,7 @@
 
     btn.disabled = true;
     btn.textContent = t("submitting");
+    let grillMinBody = null;
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -391,10 +500,15 @@
         if (body.error === "out_of_range") throw new Error("out_of_range");
         if (body.error === "location_required") throw new Error("location_required");
         if (body.error === "party_size_required") throw new Error("party_size_required");
+        if (body.error === "grill_min_qty") {
+          grillMinBody = body;
+          throw new Error("grill_min_qty");
+        }
         throw new Error("submit_failed");
       }
       const order = await res.json();
       activeOrderId = order.id;
+      hasPriorOrder = true;
       saveOrderToHistory(order.id);
       cart = [];
       renderCartFab();
@@ -404,7 +518,11 @@
       if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
       else if (e.message === "party_size_required") showPartySizeModal();
-      else alert(t("submitFailed"));
+      else if (e.message === "grill_min_qty" && grillMinBody) {
+        const mi = categories.flatMap((c) => c.items).find((i) => i.id === grillMinBody.itemId);
+        const name = mi ? nameFor(mi) : "";
+        alert((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(grillMinBody.min) + (name ? ` (${name})` : ""));
+      } else alert(t("submitFailed"));
     } finally {
       btn.disabled = false;
       btn.textContent = t("placeOrder");
@@ -670,4 +788,5 @@
   loadSettings();
   loadMenu();
   initPartySize();
+  checkPriorOrder();
 })();

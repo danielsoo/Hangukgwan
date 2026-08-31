@@ -373,10 +373,12 @@
         <label><span data-i18n="itemPriceNoteLabel">가격 비고</span><input id="f_price_note" data-i18n-placeholder="itemPriceNotePlaceholder" placeholder="예: 2인분" /></label>
       </div>
       <label><span data-i18n="itemOptionsLabel">옵션 (쉼표로 구분, 예: 소고기,돼지고기)</span><input id="f_options" data-i18n-placeholder="itemOptionsPlaceholder" placeholder="옵션이 없으면 비워두세요" /></label>
+      <label><span data-i18n="itemMinFirstOrderQtyLabel">최초 주문 최소 수량 (없으면 비워두세요)</span><input id="f_min_first_order_qty" type="number" min="0" /></label>
       <div class="form-row checkboxes">
         <label><input type="checkbox" id="f_is_spicy" /> <span data-i18n="itemSpicyLabel">매운맛 🌶</span></label>
         <label><input type="checkbox" id="f_is_signature" /> <span data-i18n="itemSignatureLabel">대표 메뉴 ★</span></label>
         <label><input type="checkbox" id="f_available" checked /> <span data-i18n="itemAvailableLabel">판매 중</span></label>
+        <label><input type="checkbox" id="f_mix_options" /> <span data-i18n="itemMixOptionsLabel">옵션별 개별 수량(+/-) 허용</span></label>
       </div>
       <label><span data-i18n="itemPhotoLabel">사진</span>
         <input type="file" id="f_photo" accept="image/*" />

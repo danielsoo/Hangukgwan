@@ -75,6 +75,28 @@ router.post("/", async (req, res) => {
   }
   if (validated.length === 0) return res.status(400).json({ error: "no_valid_items" });
 
+  // Griddle (불판) items like 동판불고기/닭갈비/삼겹살 carry a min_first_order_qty
+  // (see src/seed.js) — the table's very first order needs to total at least
+  // that many servings of the item (summed across option lines, e.g. 牛+豬
+  // together for the mix-options bulgogi). Re-checked here so it can't be
+  // bypassed by calling this API directly, same as the party-size/location
+  // checks above — the client (public/js/order.js) already nudges toward
+  // this, this is just the real enforcement point.
+  const priorOrders = store.orders.filter(
+    (o) => o.table_number === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
+  );
+  if (priorOrders.length === 0) {
+    const qtyByItem = {};
+    for (const v of validated) qtyByItem[v.item_id] = (qtyByItem[v.item_id] || 0) + v.qty;
+    for (const mi of store.menuItems) {
+      if (!mi.min_first_order_qty) continue;
+      const orderedQty = qtyByItem[mi.id] || 0;
+      if (orderedQty > 0 && orderedQty < mi.min_first_order_qty) {
+        return res.status(400).json({ error: "grill_min_qty", itemId: mi.id, min: mi.min_first_order_qty });
+      }
+    }
+  }
+
   const order = {
     id: nextId("orders"),
     table_number: String(tableNumber),

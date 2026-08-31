@@ -199,6 +199,8 @@
       itemPriceNotePlaceholder: "예: 2인분",
       itemOptionsLabel: "옵션 (쉼표로 구분, 예: 소고기,돼지고기)",
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
+      itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
+      itemMixOptionsLabel: "옵션별 개별 수량(+/-) 허용",
       itemSpicyLabel: "매운맛 🌶",
       itemSignatureLabel: "대표 메뉴 ★",
       itemAvailableLabel: "판매 중",
@@ -433,6 +435,8 @@
       itemPriceNotePlaceholder: "例如：2人份",
       itemOptionsLabel: "選項（用逗號分隔，例如：牛肉,豬肉）",
       itemOptionsPlaceholder: "沒有選項請留空",
+      itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
+      itemMixOptionsLabel: "允許各選項獨立增減數量(+/-)",
       itemSpicyLabel: "辣 🌶",
       itemSignatureLabel: "招牌菜 ★",
       itemAvailableLabel: "供應中",
@@ -1311,9 +1315,11 @@
     $("#f_price").value = item?.price ?? "";
     $("#f_price_note").value = item?.price_note || "";
     $("#f_options").value = item?.options || "";
+    $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
     $("#f_is_signature").checked = !!item?.is_signature;
     $("#f_available").checked = item ? !!item.available : true;
+    $("#f_mix_options").checked = !!item?.mix_options;
     $("#f_photo").value = "";
     if (item?.photo_url) {
       $("#f_photo_preview").src = item.photo_url;
@@ -1354,9 +1360,11 @@
       price: parseInt($("#f_price").value, 10) || 0,
       price_note: $("#f_price_note").value.trim() || null,
       options: $("#f_options").value.trim() || null,
+      min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,
       is_signature: $("#f_is_signature").checked,
       available: $("#f_available").checked,
+      mix_options: $("#f_mix_options").checked,
     };
     if (!payload.name_zh) {
       alert(T("alertMenuNameRequired"));
