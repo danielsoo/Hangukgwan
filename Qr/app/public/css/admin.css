@@ -172,7 +172,7 @@ input, select, button, textarea { font-family: inherit; }
 .settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 640px; margin: 0 auto 20px; }
 .settings-card h3 { margin-top: 0; }
 .settings-card label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
-.settings-card input, .settings-card textarea { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 14px; font-family: inherit; resize: vertical; }
+.settings-card input, .settings-card textarea, .settings-card select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 14px; font-family: inherit; resize: vertical; }
 .settings-card button { padding: 10px 18px; border: none; background: var(--navy); color: #fff; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .save-msg { color: var(--green); font-size: 12px; margin-top: 10px; }
 .settings-hint { font-size: 12px; color: var(--muted); margin: -6px 0 14px; }

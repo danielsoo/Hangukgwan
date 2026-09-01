@@ -220,10 +220,17 @@
               </div>
             </div>
           </div>
-          <label class="allergen-checkbox" style="margin-top:10px;">
-            <input type="checkbox" id="s_seasonal_taegeuk" checked />
-            <span data-i18n="seasonalTaegeukLabel">계절에 맞게 태극 무늬 자동으로 바꾸기 (봄 벚꽃 · 여름 파라솔 · 가을 낙엽 · 겨울 눈)</span>
-          </label>
+          <div style="margin-top:10px;">
+            <label data-i18n="seasonalTaegeukLabel" style="display:block;margin-bottom:6px;">헤더 로고 계절 설정</label>
+            <select id="s_taegeuk_season_mode">
+              <option value="auto" data-i18n="seasonOptAuto">자동 (오늘 날짜 기준)</option>
+              <option value="spring" data-i18n="seasonOptSpring">봄 (벚꽃)</option>
+              <option value="summer" data-i18n="seasonOptSummer">여름 (파라솔)</option>
+              <option value="autumn" data-i18n="seasonOptAutumn">가을 (낙엽)</option>
+              <option value="winter" data-i18n="seasonOptWinter">겨울 (눈)</option>
+              <option value="off" data-i18n="seasonOptOff">끄기 (기본 태극 무늬)</option>
+            </select>
+          </div>
         </div>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsLogoTitle">매장 로고 (QR 코드 중앙에 표시)</h3>

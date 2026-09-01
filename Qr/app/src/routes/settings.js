@@ -30,12 +30,15 @@ function publicSettings() {
   // Whether the customer-facing "온라인 결제" button should show at all —
   // see /payment routes below and public/js/order.js.
   map.online_payment_enabled = !!store.settings.online_payment_enabled;
-  // Whether the header logo (order.html store-avatar, and this settings
-  // page's own live preview) auto-decorates for the current season — see
-  // public/js/season.js. On by default.
-  map.seasonal_taegeuk = store.settings.seasonalTaegeuk !== false;
+  // Header logo mode (order.html store-avatar, and this settings page's own
+  // live preview) — see public/js/season.js. "auto" (default) picks the
+  // season from today's date; it can also be forced to one specific season
+  // regardless of the real month, or turned "off" entirely.
+  map.taegeuk_season_mode = store.settings.taegeukSeasonMode || "auto";
   return map;
 }
+
+const TAEGEUK_SEASON_MODES = ["auto", "off", "spring", "summer", "autumn", "winter"];
 
 function photoIdFromUrl(url) {
   if (!url) return null;
@@ -53,7 +56,7 @@ router.put("/", canEditSettings, async (req, res) => {
     if (key === "store_cover_photo" || key === "store_logo") continue; // set only via the photo upload routes
     if (b[key] != null) store.settings[key] = String(b[key]);
   }
-  if (typeof b.seasonal_taegeuk === "boolean") store.settings.seasonalTaegeuk = b.seasonal_taegeuk;
+  if (TAEGEUK_SEASON_MODES.includes(b.taegeuk_season_mode)) store.settings.taegeukSeasonMode = b.taegeuk_season_mode;
   await save();
   res.json(publicSettings());
 });
