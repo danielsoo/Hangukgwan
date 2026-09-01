@@ -215,9 +215,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
   display: flex; align-items: flex-end; gap: 12px; padding: 0 16px 12px; margin-top: -28px; position: relative;
 }
 .phone-avatar {
-  width: 64px; height: 64px; border-radius: 999px; overflow: hidden;
+  width: 64px; height: 64px; border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
   border: 4px solid #fff; flex-shrink: 0;
+  /* overflow visible on purpose — see .store-avatar in main.css, this is
+     just the settings-page live preview of that same header. */
+}
+.phone-avatar img {
+  width: 92px; height: 92px; display: block;
+  filter: drop-shadow(0 3px 6px rgba(26, 18, 11, 0.35));
 }
 .phone-store-text { flex: 1; min-width: 0; padding-top: 34px; }
 .phone-store-name { font-size: 19px; font-weight: 900; margin: 0 0 4px; color: var(--ink); }
