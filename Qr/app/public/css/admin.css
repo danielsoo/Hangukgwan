@@ -171,7 +171,7 @@ input, select, button, textarea { font-family: inherit; }
 
 /* Settings — a left-hand category nav plus a scrolling content column, so
    the (now fairly large) pile of settings cards isn't all shown at once. */
-.settings-shell { display: flex; align-items: flex-start; gap: 32px; max-width: 1000px; margin: 0 auto; }
+.settings-shell { display: flex; align-items: flex-start; gap: 32px; max-width: 1320px; margin: 0 auto; }
 .settings-nav { display: flex; flex-direction: column; gap: 4px; flex: 0 0 168px; position: sticky; top: 16px; }
 .settings-nav-btn {
   background: transparent; border: none; text-align: left; color: var(--muted); padding: 11px 14px;
@@ -180,7 +180,7 @@ input, select, button, textarea { font-family: inherit; }
 .settings-nav-btn:hover { background: #f0f0f0; }
 .settings-nav-btn.active { background: var(--navy); color: #fff; }
 .settings-content { flex: 1; min-width: 0; }
-.settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 640px; margin: 0 0 20px; }
+.settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 880px; margin: 0 0 20px; }
 .settings-card h3 { margin-top: 0; }
 .settings-card label { display: block; font-size: 16px; color: var(--muted); margin-bottom: 12px; }
 .settings-card input, .settings-card textarea, .settings-card select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 18px; font-family: inherit; resize: vertical; }
