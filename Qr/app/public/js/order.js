@@ -10,9 +10,10 @@
   // and moved on before the next party scans the QR code.
   let currency = "TWD";
   let categories = [];
-  let cart = []; // { itemId, qty, option, note, item }
+  let cart = []; // { itemId, qty, option, spice, note, item }
   let currentItem = null;
   let currentOption = null;
+  let currentSpiceOption = null;
   let currentQty = 1;
   let mixQty = {}; // { optionLabel: qty } — used instead of currentQty for mix_options items
   let activeOrderId = null;
@@ -256,6 +257,7 @@
   function openItemSheet(item) {
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
+    currentSpiceOption = item.spice_options ? item.spice_options.split(",")[0].trim() : null;
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
     $("#itemName").textContent = nameFor(item);
@@ -284,6 +286,26 @@
     const qtyRow = $("#qtyRow");
     const mixWrap = $("#mixOptions");
     optList.innerHTML = "";
+
+    const spiceWrap = $("#itemSpiceOptions");
+    const spiceList = $("#spiceOptionsList");
+    spiceList.innerHTML = "";
+    if (item.spice_options) {
+      spiceWrap.hidden = false;
+      item.spice_options.split(",").forEach((opt, i) => {
+        const b = document.createElement("button");
+        b.textContent = opt.trim();
+        if (i === 0) b.classList.add("active");
+        b.onclick = () => {
+          currentSpiceOption = opt.trim();
+          spiceList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+        };
+        spiceList.appendChild(b);
+      });
+    } else {
+      spiceWrap.hidden = true;
+    }
 
     if (item.mix_options && item.options) {
       // e.g. 동판불고기: 牛/豬 get their own independent +/- counters instead
@@ -397,7 +419,7 @@
       }
       opts.forEach((opt) => {
         if (mixQty[opt] > 0) {
-          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, note });
+          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, note });
         }
       });
     } else {
@@ -411,6 +433,7 @@
         item: currentItem,
         qty: currentQty,
         option: currentOption,
+        spice: currentSpiceOption,
         note,
       });
     }
@@ -456,6 +479,7 @@
       row.className = "cart-item";
       const metaParts = [];
       if (c.option) metaParts.push(c.option);
+      if (c.spice) metaParts.push(c.spice);
       if (c.note) metaParts.push(c.note);
       row.innerHTML = `
         <div>
@@ -544,7 +568,7 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tableNumber,
-          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, note: c.note })),
+          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, note: c.note })),
           note: $("#orderNote").value.trim(),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,

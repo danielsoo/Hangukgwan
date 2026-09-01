@@ -134,6 +134,7 @@ async function run() {
           price_note: item.price_note || null,
           original_price: item.original_price || null,
           options: item.options || null,
+          spice_options: item.spice_options || null,
           mix_options: item.mix_options ? 1 : 0,
           min_first_order_qty: item.min_first_order_qty || null,
           allergens: item.allergens || [],

@@ -3,6 +3,7 @@ const I18N = {
   zh: {
     viewCart: "查看購物車",
     chooseOption: "請選擇",
+    chooseSpiceOption: "請選擇辣度",
     addToCart: "加入購物車",
     yourOrder: "您的訂單",
     total: "總計",
@@ -55,6 +56,7 @@ const I18N = {
   ko: {
     viewCart: "장바구니 보기",
     chooseOption: "선택하세요",
+    chooseSpiceOption: "맵기를 선택하세요",
     addToCart: "장바구니에 담기",
     yourOrder: "주문 내역",
     total: "합계",
@@ -107,6 +109,7 @@ const I18N = {
   en: {
     viewCart: "View Cart",
     chooseOption: "Choose an option",
+    chooseSpiceOption: "Choose a spice level",
     addToCart: "Add to Cart",
     yourOrder: "Your Order",
     total: "Total",

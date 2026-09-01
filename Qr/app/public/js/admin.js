@@ -208,6 +208,8 @@
       itemOriginalPriceLabel: "정가 (할인 전 가격, 없으면 비워두세요)",
       itemOptionsLabel: "옵션 (쉼표로 구분, 예: 소고기,돼지고기)",
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
+      itemSpiceOptionsLabel: "맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)",
+      itemSpiceOptionsPlaceholder: "맵기 옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
       itemMixOptionsLabel: "옵션별 개별 수량(+/-) 허용",
       itemAllergensLabel: "알러지 / 육류 표시 (손님 화면에 표시돼요)",
@@ -454,6 +456,8 @@
       itemOriginalPriceLabel: "原價（折扣前價格，不需要請留空）",
       itemOptionsLabel: "選項（用逗號分隔，例如：牛肉,豬肉）",
       itemOptionsPlaceholder: "沒有選項請留空",
+      itemSpiceOptionsLabel: "辣度選項（用逗號分隔，例如：不辣,普通,辣）",
+      itemSpiceOptionsPlaceholder: "沒有辣度選項請留空",
       itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
       itemMixOptionsLabel: "允許各選項獨立增減數量(+/-)",
       itemAllergensLabel: "過敏原 / 肉類標示（會顯示在顧客畫面）",
@@ -858,355 +862,88 @@
     }, 50);
   }
 
-  // ---------- Kitchen ticket printing (photo-overlay version) ----------
-  // Prints the restaurant's actual paper order-slip PHOTO as-is (staff
-  // already know this exact layout), and draws only the ordered quantities
-  // (as 正/丨 tally marks) and the 桌號/人數/金額合計 numbers on top of it
-  // at hand-measured coordinates — deliberately NOT a from-scratch HTML
-  // recreation. This was a conscious choice after the recreated version
-  // kept drifting from the real form (missing colors/glyphs, spacing) —
-  // the owner asked to use the real photo directly instead, accepting that:
-  //   1) menu items added AFTER this photo was taken (e.g. the Pororo kids
-  //      meals) have no reserved spot on it, so they print in a small
-  //      appendix table below the photo instead of being silently dropped;
-  //   2) the coordinates below were measured by hand from the photo and
-  //      may drift by a few px in places — nudge ROW_POINTS/COLS below if
-  //      a tally ever lands slightly off from its row.
-  // Image asset: public/images/kitchen-ticket-template.jpg (878x1865).
-  // Traditional 正-tally counting draws the 5 strokes of 正 one at a time
-  // as the count goes from 1 to 5 (1=一, 2=+vertical, 3=+a horizontal,
-  // 4=+another horizontal, 5=complete 正), then starts a new 正 alongside
-  // for the next group of 5. There's no existing font character for the
-  // in-between partial forms (2/3/4 strokes), so these are drawn as small
-  // inline SVG line strokes instead of text — guarantees they render
-  // identically on any printer regardless of what Chinese font is
-  // installed, the same problem that caused rare characters to print
-  // blank elsewhere in this ticket.
-  // Horizontal strokes run from x=-2 to x=26 (centered on the vertical
-  // spine's x=12) instead of the viewBox's own 1..23 — deliberately longer
-  // left-right than the 24-wide viewBox, relying on .tally-glyph's
-  // overflow:visible to let them bleed out a bit on each side. Checked this
-  // against the tightest real spot (the 51/11/15/17 groups' split 牛/豬
-  // half-cells, ~45px wide, shifted as far as -12.5px by
-  // .tally-overlay-group1-left) and it still clears that cell's edge.
-  const TALLY_STROKES = [
-    "M-2,4 L26,4", // 1: top horizontal (一)
-    "M12,4 L12,25", // 2: + vertical spine
-    "M-2,11 L26,11", // 3: + upper-middle horizontal
-    "M-2,18 L26,18", // 4: + lower-middle horizontal
-    "M-2,25 L26,25", // 5: + bottom horizontal — now a complete 正
-  ];
-  function strokeGlyphSvg(strokeCount, isStandaloneOne) {
-    if (strokeCount === 1 && isStandaloneOne) {
-      // A lone "1" (the order's TOTAL qty is exactly 1, no completed 正
-      // group before it) is drawn as a ✓ checkmark instead of a 正 stroke —
-      // clearer at a glance than a single dash, which could be missed or
-      // mistaken for a printing artifact. Widened past the viewBox (-3..27,
-      // vs the box's own 0..24) the same way the 正 strokes are, and
-      // checked against the tightest real cell (51/11/15/17's split 牛/豬
-      // half, shifted as far as -12.5px) — it clears that cell too.
-      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M-3,6 L8,13 L27,-3" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    }
-    // A "1" that's actually the remainder after one or more completed 正
-    // groups (e.g. qty 6, 11, 16...) is the first stroke of a NEW 正 in
-    // progress — it must use the same top-of-box stroke as strokes 2-5 do,
-    // not the standalone centered dash, otherwise it reads as a random
-    // disconnected mark floating next to the completed 正 instead of the
-    // start of the next one.
-    // stroke-width 6 (up from the original 2.6) makes the tally as bold as
-    // the red 金額合計 total (both are drawn in the same #c0161f red) —
-    // measured/verified this is the boldest it can go before the 4
-    // horizontal strokes of 正, spaced 7 viewBox units apart, start fusing
-    // into a solid block; anything above ~6 loses the tally shape entirely.
-    const paths = TALLY_STROKES.slice(0, strokeCount)
-      .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="square"/>`)
-      .join("");
-    return `<svg viewBox="0 0 24 28" class="tally-glyph">${paths}</svg>`;
-  }
-  function tallyMark(n) {
-    if (!n || n <= 0) return "";
-    const groups = Math.floor(n / 5);
-    const rem = n % 5;
-    let out = "";
-    for (let i = 0; i < groups; i++) out += strokeGlyphSvg(5, false);
-    if (rem > 0) out += strokeGlyphSvg(rem, groups === 0);
-    return out;
-  }
-
-  const TICKET_IMG_W = 878;
-  const TICKET_IMG_H = 1865;
-  // Row boundaries measured directly from the photo (not a uniform-height
-  // formula — that drifted a few px further off with every row down the
-  // page, which was visibly wrong by the bottom of the form). Index i's
-  // row spans ROW_POINTS[i] to ROW_POINTS[i+1]. If a row ever needs
-  // nudging, adjust the specific point(s) here rather than a formula.
-  const ROW_POINTS = [
-    404, 461, 506, 558, 609, 666, 711, 771, 814, 866, 917, 968, 1019, 1071, 1122, 1173, 1225,
-    1276, 1328, 1379, 1430, 1481, 1533, 1584, 1635, 1687, 1738, 1790, 1841,
-  ];
-  function rowRect(index) {
-    if (index + 1 < ROW_POINTS.length) {
-      return { top: ROW_POINTS[index], bottom: ROW_POINTS[index + 1] };
-    }
-    // Ran past the measured points (an unusually long category) — keep
-    // going at the same height as the last measured row rather than
-    // erroring out.
-    const lastHeight = ROW_POINTS[ROW_POINTS.length - 1] - ROW_POINTS[ROW_POINTS.length - 2];
-    const stepsPast = index - (ROW_POINTS.length - 2);
-    const top = ROW_POINTS[ROW_POINTS.length - 1] + (stepsPast - 1) * lastHeight;
-    return { top, bottom: top + lastHeight };
-  }
-  const BAR_RECT = { top: 352, bottom: 404 }; // shared 飯類/烤肉類 bar row, right above row 0
-  const COLS = {
-    left: { code: [48, 85], name: [85, 287], price: [287, 363], qty: [363, 444] },
-    right: { code: [444, 480], name: [480, 682], price: [682, 751], qty: [751, 839] },
-  };
-  // How many physical rows the photo reserves per category (src/seed.js
-  // category keys) — anything beyond this per category goes to the
-  // appendix instead of overflowing onto a row that doesn't exist.
-  const TEMPLATE_SLOTS = { rice: 8, noodle: 9, hotpot: 9, bbq: 6, other: 13, drink: 7 };
-  const LEFT_CAT_KEYS = ["rice", "noodle", "hotpot"];
-  const RIGHT_CAT_KEYS = ["bbq", "other", "drink"];
-
-  function buildSideSlots(catKeys) {
-    let rowCursor = 0;
-    const slots = [];
-    const extra = [];
-    catKeys.forEach((key, catIdx) => {
-      const cat = categories.find((c) => c.key === key);
-      const barRect = catIdx === 0 ? BAR_RECT : rowRect(rowCursor++);
-      slots.push({ rect: barRect, type: "bar" });
-      const reserved = TEMPLATE_SLOTS[key] || 0;
-      const items = (cat && cat.items) || [];
-      for (let i = 0; i < reserved; i++) {
-        slots.push({ rect: rowRect(rowCursor++), type: "item", item: items[i] || null, catKey: key });
-      }
-      if (items.length > reserved) extra.push(...items.slice(reserved));
-    });
-    return { slots, extra };
-  }
-
-  function pct(px, total) {
-    return (px / total) * 100;
-  }
-
-  // Five independently-tunable tally style groups (per owner's explicit
-  // grouping):
-  //   0) tally-overlay-option-51 — 51 only, left completely untouched
-  //   1) tally-overlay-group1    — 11,15,17 (51 제외한 나머지 옵션 항목)
-  //   2) tally-overlay-group2    — 12,13,14,16,18 (rice의 나머지, 옵션 없음)
-  //   3) tally-overlay-group3    — 21~45 (noodle 전체 + hotpot 전체)
-  //   4) tally-overlay-group4    — 52~97 및 그 뒤 사진에 번호 없는 추가 항목까지
-  //                                 (bbq의 나머지 + other 전체 + drink 전체)
-  function tallyGroupClass(catKey, item) {
-    if (item.code === "51") return "tally-overlay-option-51";
-    if (item.options && item.options.trim()) return "tally-overlay-group1";
-    if (catKey === "rice") return "tally-overlay-group2";
-    if (catKey === "noodle" || catKey === "hotpot") return "tally-overlay-group3";
-    return "tally-overlay-group4"; // bbq(51 제외)/other/drink
-  }
-
-  function tallyOverlayForSlot(rect, side, catKey, item, orderedMap) {
-    if (!item) return "";
-    const ord = orderedMap[item.id];
-    if (!ord) return "";
-    const colX = COLS[side].qty;
-    const groupClass = tallyGroupClass(catKey, item);
-    const optsArr = item.options ? item.options.split(",").map((s) => s.trim()).filter(Boolean) : null;
-    if (optsArr && optsArr.length) {
-      const subW = (colX[1] - colX[0]) / optsArr.length;
-      return optsArr
-        .map((opt, i) => {
-          const qty = ord.byOption[opt];
-          if (!qty) return "";
-          const x0 = colX[0] + i * subW;
-          // The 牛/豬 (etc) label printed on the photo sits in the top
-          // ~45% of the row; the tally goes in the remaining space below
-          // it. Keeping a small gap from the row's bottom border (ending
-          // at 90%, not 100%) matters — a mark sitting right against the
-          // border reads as "belongs to the row below" at a glance.
-          const top = rect.top + (rect.bottom - rect.top) * 0.5;
-          const height = (rect.bottom - rect.top) * 0.4;
-          // Group 1 (11/15/17) and 51 each need their left (牛/鮪魚) and
-          // right (豬/蝦仁) sub-cells independently movable.
-          let posClass = "";
-          if (groupClass === "tally-overlay-group1") posClass = i === 0 ? "tally-overlay-group1-left" : "tally-overlay-group1-right";
-          else if (groupClass === "tally-overlay-option-51") posClass = i === 0 ? "tally-overlay-option-51-left" : "tally-overlay-option-51-right";
-          return `<div class="tally-overlay ${groupClass} ${posClass}" style="left:${pct(x0, TICKET_IMG_W)}%;top:${pct(top, TICKET_IMG_H)}%;width:${pct(
-            subW,
-            TICKET_IMG_W
-          )}%;height:${pct(height, TICKET_IMG_H)}%;">${tallyMark(qty)}</div>`;
-        })
-        .join("");
-    }
-    return `<div class="tally-overlay ${groupClass}" style="left:${pct(colX[0], TICKET_IMG_W)}%;top:${pct(
-      rect.top,
-      TICKET_IMG_H
-    )}%;width:${pct(colX[1] - colX[0], TICKET_IMG_W)}%;height:${pct(rect.bottom - rect.top, TICKET_IMG_H)}%;">${tallyMark(
-      ord.qty
-    )}</div>`;
+  // ---------- Kitchen ticket printing (thermal receipt version) ----------
+  // Simple Korean-kitchen-bill-style ticket for a real narrow-roll thermal
+  // receipt printer (confirmed with the owner — not a regular A4 printer),
+  // replacing the earlier photo-overlay recreation of the paper order slip.
+  // The owner's spec: which table, when, each menu item's name + quantity,
+  // the order type (매장/dine-in vs 배달/delivery — all QR orders are
+  // dine-in for now, see order_type in src/routes/orders.js), and the
+  // 소/돼지 (option_choice) and 맵기 (spice_choice) distinctions per item.
+  // No more hand-measured coordinates onto a fixed photo — each ordered
+  // line just flows down the narrow strip, so a menu item added after the
+  // fact needs no special "extra items" handling like the old system did.
+  function orderTypeLabel(o) {
+    return o.order_type === "delivery" ? "배달" : "매장";
   }
 
   function buildTicketHtml(o) {
-    const table = tables.find((t) => t.number === o.table_number);
-    const partySize = table && table.party_size ? table.party_size : "";
-    const orderedMap = {};
-    o.items.forEach((it) => {
-      if (!orderedMap[it.item_id]) orderedMap[it.item_id] = { qty: 0, notes: [], byOption: {} };
-      orderedMap[it.item_id].qty += it.qty;
-      if (it.option_choice) {
-        orderedMap[it.item_id].byOption[it.option_choice] = (orderedMap[it.item_id].byOption[it.option_choice] || 0) + it.qty;
-      }
-      if (it.note) orderedMap[it.item_id].notes.push(it.note);
-    });
-
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
+    const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
 
-    const leftBuild = buildSideSlots(LEFT_CAT_KEYS);
-    const rightBuild = buildSideSlots(RIGHT_CAT_KEYS);
-
-    let overlays = "";
-    leftBuild.slots.forEach((s) => {
-      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "left", s.catKey, s.item, orderedMap);
-    });
-    rightBuild.slots.forEach((s) => {
-      if (s.type === "item") overlays += tallyOverlayForSlot(s.rect, "right", s.catKey, s.item, orderedMap);
-    });
-
-    // 桌號 / 人數 values, in the blank cell of the top header box (y249-301).
-    // 桌號's box is pushed toward the right side of its blank area, 人數's
-    // toward the left side of its blank area (closer to its own label).
-    const headerTop = 249;
-    const headerBottom = 301;
-    overlays += `<div class="value-overlay header-value-table" style="left:${pct(312, TICKET_IMG_W)}%;top:${pct(
-      headerTop,
-      TICKET_IMG_H
-    )}%;width:${pct(110, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${o.table_number}</div>`;
-    overlays += `<div class="value-overlay header-value-party" style="left:${pct(688, TICKET_IMG_W)}%;top:${pct(
-      headerTop,
-      TICKET_IMG_H
-    )}%;width:${pct(140, TICKET_IMG_W)}%;height:${pct(headerBottom - headerTop, TICKET_IMG_H)}%;">${partySize || ""}</div>`;
-
-    // 金額合計 value — the merged box spanning the last 2 rows (rows[26..27]).
-    const totalTop = ROW_POINTS[ROW_POINTS.length - 3];
-    const totalBottom = ROW_POINTS[ROW_POINTS.length - 1];
-    overlays += `<div class="value-overlay total-overlay" style="left:${pct(230, TICKET_IMG_W)}%;top:${pct(
-      totalTop,
-      TICKET_IMG_H
-    )}%;width:${pct(214, TICKET_IMG_W)}%;height:${pct(totalBottom - totalTop, TICKET_IMG_H)}%;">NT$${o.total}</div>`;
-
-    // Menu items that don't fit in their category's reserved photo rows
-    // (added to the live menu after the photo was taken) — printed in a
-    // small appendix below the photo instead of being silently dropped.
-    const extraItems = [...leftBuild.extra, ...rightBuild.extra];
-    let extraHtml = "";
-    if (extraItems.length) {
-      extraHtml =
-        `<div class="extra-title">추가 메뉴 (사진 양식에 없음)</div><table class="extra-table">` +
-        extraItems
-          .map((item) => {
-            const ord = orderedMap[item.id];
-            return `<tr class="${ord ? "ordered" : ""}"><td class="code">${item.code || ""}</td><td class="name">${
-              item.name_zh || item.name_ko
-            }</td><td class="price">${item.price}</td><td class="qty">${ord ? tallyMark(ord.qty) : ""}</td></tr>`;
-          })
-          .join("") +
-        `</table>`;
-    }
+    const itemRows = o.items
+      .map((it) => {
+        const name = it.name_zh || it.name_ko || it.name_en || "";
+        const metaParts = [];
+        if (it.option_choice) metaParts.push(it.option_choice);
+        if (it.spice_choice) metaParts.push(it.spice_choice);
+        const meta = metaParts.length ? `<div class="item-meta">${metaParts.join(" · ")}</div>` : "";
+        const note = it.note ? `<div class="item-note">메모: ${it.note}</div>` : "";
+        return `<div class="item-row">
+          <div class="item-main"><span class="item-name">${name}</span><span class="item-qty">x${it.qty}</span></div>
+          ${meta}
+          ${note}
+        </div>`;
+      })
+      .join("");
 
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&family=Noto+Sans+KR:wght@700;900&display=swap" />
 <style>
-  @page { size: A4; margin: 6mm; }
+  /* 80mm narrow-roll thermal/receipt printer, not A4 — height is left to
+     "auto" since the roll cuts to whatever length the content needs. */
+  @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  body { font-family: "Noto Sans TC", "PMingLiU", sans-serif; margin: 0; padding: 0; color: #000; }
-  /* width:100% here means something DIFFERENT depending on context: on
-     screen it's 100% of the browser window, but the instant @page (above)
-     takes over — i.e. print, print-preview, even just pressing Cmd+P on
-     this same tab — "100%"/vw suddenly mean 100% of the A4 content box
-     instead (~748px, not however wide the window was). Every vw-based
-     size and every fixed-px nudge below was silently being measured
-     against two different rulers depending on which mode was rendering it.
-     Fixing width to the photo's own native pixels (878) and using ONLY
-     fixed px everywhere below (no vw) makes both modes use the exact same
-     ruler, always. */
-  .ticket-photo-wrap { position: relative; width: 878px; margin: 0 auto; }
-  .ticket-photo-wrap img { width: 100%; display: block; }
-  .value-overlay, .tally-overlay {
-    position: absolute; display: flex; align-items: center; justify-content: center;
-    font-weight: 900; color: #c0161f; line-height: 1;
+  body {
+    width: 80mm; margin: 0; padding: 3mm 4mm;
+    font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
+    color: #000;
   }
-  .tally-overlay { gap: 1px; flex-wrap: wrap; transform: translateX(-10px); }
-  .tally-glyph { overflow: visible; }
-
-  /* ── 51번 (銅盤烤肉) — 어떤 그룹에도 속하지 않음. 크기는 그대로 두되
-     좌(牛)/우(豬) 칸은 개별 이동 가능하게 분리. ── */
-  .tally-overlay-option-51 .tally-glyph { width: 45.66px; height: 19.32px; }
-  .tally-overlay-option-51 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-option-51-left { transform: translateX(-1px); }
-
-  /* ── 그룹 1: 11 石鍋拌飯, 15 韓式烤肉飯, 17 蛋包飯 (51 제외) ──
-     牛/豬, 鮪魚/蝦仁 등으로 칸이 반으로 쪼개지는 좁은 칸이라 크기는 원래 그대로.
-     좌/우 칸(牛|豬, 鮪魚|蝦仁)을 따로 움직일 수 있도록 위치는 -left/-right에서 지정. */
-  .tally-overlay-group1 .tally-glyph { width: 45.66px; height: 19.32px; }
-  .tally-overlay-group1 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group1-left { transform: translateX(-12.5px); } /* -14.5px에서 2px 오른쪽 */
-  .tally-overlay-group1-right { transform: translateX(-3.5px); } /* -4.5px에서 1px 오른쪽 */
-
-  /* ── 그룹 2: 飯類 나머지 (12,13,14,16,18 — rice 중 옵션 없는 항목) ── */
-  .tally-overlay-group2 .tally-glyph { width: 136.97px; height: 19.32px; } /* 45.66px에서 1.5배 */
-  .tally-overlay-group2 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group2 { transform: translateX(-8px); } /* -9px에서 1px 오른쪽 */
-
-  /* ── 그룹 3: 21~45 (noodle 전체 + hotpot 전체) ── */
-  .tally-overlay-group3 .tally-glyph { width: 136.97px; height: 19.32px; }
-  .tally-overlay-group3 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group3 { transform: translateX(-1.5px); } /* -5.5px에서 4px 오른쪽 */
-
-  /* ── 그룹 4: 52~97 및 사진에 번호 없는 추가 항목까지 —
-     bbq 중 51 제외한 나머지 + other 전체 + drink 전체 ── */
-  .tally-overlay-group4 .tally-glyph { width: 136.97px; height: 19.32px; }
-  .tally-overlay-group4 .tally-glyph-single { height: 9.66px; }
-  .tally-overlay-group4 { transform: translateX(-1px); }
-
-  /* ── 桌號 (테이블 번호) ── */
-  .header-value-table { font-size: 31.61px; }
-
-  /* ── 人數 (인원수) ── */
-  .header-value-party { font-size: 31.61px; }
-
-  /* ── 金額合計 (총 금액) ──
-     33.01px는 "金額合計" 라벨 자체의 인쇄 글자 높이를 실측한 값 — 라벨과
-     숫자 크기가 딱 맞도록. */
-  .total-overlay { font-size: 33.01px; }
-  .extra-title { margin-top: 4mm; font-weight: 900; font-size: 13px; }
-  .extra-table { width: 100%; border-collapse: collapse; margin-top: 2mm; }
-  .extra-table td { border: 1px solid #000; padding: 1mm 2mm; font-size: 11px; }
-  .extra-table .qty { color: #c0161f; font-weight: 900; text-align: center; }
-  .extra-table tr.ordered td { background: #ffe9a8; }
-  .row-note { font-size: 10px; color: #333; }
-  .print-time { text-align: center; font-size: 9px; color: #555; margin-top: 3mm; }
+  .header { text-align: center; margin-bottom: 2mm; }
+  .store-name { font-size: 17px; font-weight: 900; }
+  .divider { border-top: 1px dashed #000; margin: 2mm 0; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; margin-bottom: 1mm; }
+  .order-type-badge { display: inline-block; font-size: 13px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
+  .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
+  .item-row:last-child { border-bottom: none; }
+  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: 16px; font-weight: 900; }
+  .item-name { flex: 1; }
+  .item-qty { white-space: nowrap; }
+  .item-meta { font-size: 12px; color: #333; margin-top: 0.5mm; }
+  .item-note { font-size: 11px; color: #c0161f; margin-top: 0.5mm; }
+  .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
+  .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
+  .print-time { text-align: center; font-size: 10px; color: #555; margin-top: 3mm; }
 </style>
 </head><body>
-  <div class="ticket-photo-wrap">
-    <img src="${location.origin}/images/kitchen-ticket-template.jpg" />
-    ${overlays}
-  </div>
-  ${extraHtml}
-  ${o.note ? `<div class="row-note" style="margin-top:2mm;">주문 메모: ${o.note}</div>` : ""}
-  <div class="print-time">${time}</div>
+  <div class="header"><div class="store-name">${storeName} 주방 주문서</div></div>
+  <div class="divider"></div>
+  <div class="meta-row"><span>테이블 ${o.table_number}번</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+  <div class="meta-row"><span>${time}</span></div>
+  <div class="divider"></div>
+  ${itemRows}
+  <div class="total-row"><span>합계</span><span>NT$${o.total}</span></div>
+  ${o.note ? `<div class="order-note">주문 메모: ${o.note}</div>` : ""}
+  <div class="print-time">인쇄: ${new Date().toLocaleString("ko-KR")}</div>
 </body></html>`;
   }
 
   // Prints via the exact same code path as previewKitchenTicket (a real
-  // window.open tab) instead of a hidden iframe. 미리보기 is confirmed
-  // correct, and a hidden iframe is a genuinely different rendering
-  // context (its own layout/sizing quirks depending on browser) from a
-  // normal tab — reusing window.open guarantees print renders byte-for-byte
-  // what 미리보기 already shows, since it's now literally the same call.
+  // window.open tab) instead of a hidden iframe, so print renders
+  // byte-for-byte what 미리보기 already showed.
   function printKitchenTicket(o) {
     const win = window.open("", "_blank");
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
@@ -1214,33 +951,21 @@
     win.document.write(buildTicketHtml(o));
     win.document.close();
 
-    // Wait for both the Noto Sans TC webfont AND the ticket photo itself
-    // to finish loading before printing — otherwise the print can fire on
-    // a still-blank page (image not painted yet / font not arrived yet,
-    // the latter silently rendering some less-common Chinese characters
-    // blank instead of falling back to a font that has them).
+    // Wait for the receipt fonts (Noto Sans KR/TC) to finish loading before
+    // printing — otherwise a font that arrives late can print some
+    // characters blank instead of falling back cleanly.
     const triggerPrint = () => {
       win.focus();
       win.print();
     };
     const doc = win.document;
     const fontsReady = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
-    const img = doc.querySelector(".ticket-photo-wrap img");
-    const imgReady =
-      img && !img.complete
-        ? new Promise((resolve) => {
-            img.addEventListener("load", resolve, { once: true });
-            img.addEventListener("error", resolve, { once: true });
-          })
-        : Promise.resolve();
-    Promise.race([Promise.all([fontsReady, imgReady]), new Promise((resolve) => setTimeout(resolve, 4000))]).then(() =>
-      setTimeout(triggerPrint, 50)
-    );
+    Promise.race([fontsReady, new Promise((resolve) => setTimeout(resolve, 4000))]).then(() => setTimeout(triggerPrint, 50));
   }
 
   // Opens the exact same ticket HTML in a new tab, without triggering the
-  // print dialog — a fast way to check tally-mark alignment/sizing after a
-  // tweak without needing to actually print a physical page each time.
+  // print dialog — a fast way to check the layout after a tweak without
+  // needing to actually print a physical page each time.
   function previewKitchenTicket(o) {
     const win = window.open("", "_blank");
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
@@ -1349,6 +1074,7 @@
     $("#f_price_note").value = item?.price_note || "";
     $("#f_original_price").value = item?.original_price || "";
     $("#f_options").value = item?.options || "";
+    $("#f_spice_options").value = item?.spice_options || "";
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
     $("#f_is_signature").checked = !!item?.is_signature;
@@ -1414,6 +1140,7 @@
       price_note: $("#f_price_note").value.trim() || null,
       original_price: parseInt($("#f_original_price").value, 10) || null,
       options: $("#f_options").value.trim() || null,
+      spice_options: $("#f_spice_options").value.trim() || null,
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,
       is_signature: $("#f_is_signature").checked,

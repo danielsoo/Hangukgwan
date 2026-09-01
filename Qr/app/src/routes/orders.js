@@ -70,6 +70,7 @@ router.post("/", async (req, res) => {
       qty,
       unit_price: mi.price,
       option_choice: it.option || null,
+      spice_choice: it.spice || null,
       note: (it.note || "").slice(0, 200),
     });
   }
@@ -101,6 +102,9 @@ router.post("/", async (req, res) => {
     id: nextId("orders"),
     table_number: String(tableNumber),
     status: "new",
+    // QR ordering is dine-in only for now — delivery orders will get their
+    // own flow (and a real value here) later.
+    order_type: "dine_in",
     total,
     note: (note || "").slice(0, 300),
     created_at: nowLocal(),
