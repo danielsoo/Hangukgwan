@@ -151,6 +151,7 @@
       settlementHistoryProblem: "미결제",
       settingsCoverTitle: "손님 화면 상단 사진",
       settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
+      seasonalTaegeukLabel: "계절에 맞게 태극 무늬 자동으로 바꾸기 (봄 벚꽃 · 여름 파라솔 · 가을 낙엽 · 겨울 눈)",
       settingsLogoTitle: "매장 로고 (QR 코드 중앙에 표시)",
       settingsLogoHint: "정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.",
       settingsNoticeTitle: "공지 배너",
@@ -389,6 +390,7 @@
       settlementHistoryProblem: "未結帳",
       settingsCoverTitle: "顧客畫面頂部照片",
       settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
+      seasonalTaegeukLabel: "依季節自動切換太極圖案（春櫻花・夏陽傘・秋落葉・冬雪）",
       settingsLogoTitle: "店家標誌（顯示於 QR Code 中央）",
       settingsLogoHint: "建議使用接近正方形的圖片，會小尺寸置中顯示在列印用 QR Code 上。",
       settingsNoticeTitle: "公告橫幅",
@@ -2304,6 +2306,8 @@
     currentStoreLng = s.store_lng || "";
     renderLocationStatus();
     renderMiniHeroPreview(s);
+    $("#s_seasonal_taegeuk").checked = s.seasonal_taegeuk !== false;
+    if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.seasonal_taegeuk !== false);
     refreshLogoPreview();
     renderNoticePreview($("#s_store_notice").value);
   }
@@ -2354,12 +2358,14 @@
       store_hours: $("#s_store_hours").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
       order_radius_m: $("#s_order_radius_m").value.trim(),
+      seasonal_taegeuk: $("#s_seasonal_taegeuk").checked,
     };
     await fetch("/api/settings", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (window.applyTaegeukSeason) window.applyTaegeukSeason(payload.seasonal_taegeuk);
     const msg = $("#settingsMsg");
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);

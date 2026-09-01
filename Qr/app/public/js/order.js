@@ -124,6 +124,7 @@
     storeLat = Number.isNaN(lat) ? null : lat;
     storeLng = Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;
+    if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.seasonal_taegeuk !== false);
     $("#storeName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#storeInfoName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#infoHours").textContent = s.store_hours || "-";
