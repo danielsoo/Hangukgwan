@@ -19,6 +19,12 @@
   let pollTimer = null;
   let knownOrderIds = new Set();
   let openTableNumber = null;
+  // Orders whose most recent auto-print attempt is known to have failed
+  // (see printKitchenTicket() / markPrintFailed() below) — surfaced as a
+  // banner plus a badge on the order's card, since a printer that silently
+  // fails is otherwise indistinguishable from "no new order came in" to
+  // kitchen staff who only glance at the paper ticket.
+  let printFailedOrderIds = new Set();
 
   // ---------- Admin-panel-wide font size (this browser only) ----------
   // A personal display preference, not a shared setting — stored in this
@@ -112,6 +118,7 @@
       orderCardTakeoutBadge: "포장",
       orderCardDeliveryBadge: "배달",
       orderCardMixedBadge: "혼합",
+      printFailedCardMsg: "⚠️ 인쇄 실패 — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도",
       memoLabel: "메모",
       orderMemoLabel: "주문 메모",
       totalLabel: "합계",
@@ -401,6 +408,7 @@
       orderCardTakeoutBadge: "外帶",
       orderCardDeliveryBadge: "外送",
       orderCardMixedBadge: "混合",
+      printFailedCardMsg: "⚠️ 列印失敗 — 請確認廚房是否收到，或用下方列印按鈕重試",
       memoLabel: "備註",
       orderMemoLabel: "訂單備註",
       totalLabel: "合計",
@@ -670,6 +678,12 @@
   // language rather than through the flat T() dictionary above.
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
   const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
+  const fmtPrintFailBanner = (n, tableNumbers) => {
+    const tables = tableNumbers.join(", ");
+    return adminLang === "zh"
+      ? `⚠️ ${n} 張出單可能沒印出來（桌號：${tables}）— 出單機沒紙、沒連線、或彈出視窗被瀏覽器擋下都可能造成這樣，請確認廚房收到，或按該筆訂單的「列印」重新送出。`
+      : `⚠️ 빌지 ${n}건이 제대로 안 나갔을 수 있어요 (테이블: ${tables}) — 프린터 용지 부족, 연결 끊김, 브라우저 팝업 차단 등이 원인일 수 있어요. 주방에 실제로 전달됐는지 확인하거나, 해당 주문의 "인쇄" 버튼으로 다시 보내주세요.`;
+  };
   const fmtConfirmDeleteTable = (n) => (adminLang === "zh" ? `確定要刪除桌號 ${n} 嗎？` : `테이블 ${n}을(를) 삭제하시겠습니까?`);
   const fmtConfirmPayAll = (label, n) =>
     adminLang === "zh"
@@ -882,7 +896,15 @@
 
     orders = fresh;
     knownOrderIds = new Set(fresh.map((o) => o.id));
-    renderOrders();
+    // An order only needs the "인쇄 실패" flag while it's still sitting in
+    // 신규 waiting on a ticket — once staff have moved it along (or
+    // cancelled it) they've clearly already noticed it some other way, so
+    // drop any flags for orders that are no longer "new" (or gone entirely).
+    const stillNew = new Set(fresh.filter((o) => o.status === "new").map((o) => o.id));
+    printFailedOrderIds.forEach((id) => {
+      if (!stillNew.has(id)) printFailedOrderIds.delete(id);
+    });
+    renderOrders(); // also refreshes #printFailBanner, using prunedAny above
     renderTables();
     if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber);
@@ -890,7 +912,9 @@
     if (!isFirstLoad && newlyArrived.length > 0) {
       newlyArrived.forEach((o) => flashNewOrder(o.id));
       if (soundOn) playBeep();
-      if (autoPrintOn) newlyArrived.forEach((o) => printKitchenTicket(o));
+      if (autoPrintOn) {
+        Promise.all(newlyArrived.map((o) => printKitchenTicket(o))).then(renderOrders);
+      }
     }
   }
 
@@ -920,11 +944,34 @@
       body.innerHTML = "";
       cols[status].forEach((o) => body.appendChild(renderOrderCard(o)));
     });
+    renderPrintFailureBanner();
+  }
+
+  // A banner that doesn't go away on its own — sound + the card flash
+  // (flashNewOrder) already fade after a few seconds, which is fine for
+  // "a new order came in" but wrong for "and the kitchen might not have a
+  // ticket for it", since that needs someone to actually go check the
+  // printer. Each failed order also gets its own badge on its card (see
+  // renderOrderCard) for when staff notice one card among many; this
+  // banner is for noticing at a glance that something needs attention at
+  // all, and for orders whose card isn't currently in view.
+  function renderPrintFailureBanner() {
+    const banner = $("#printFailBanner");
+    if (!banner) return;
+    if (printFailedOrderIds.size === 0) {
+      banner.hidden = true;
+      return;
+    }
+    const tableNumbers = orders
+      .filter((o) => printFailedOrderIds.has(o.id))
+      .map((o) => o.table_number);
+    banner.textContent = fmtPrintFailBanner(printFailedOrderIds.size, tableNumbers);
+    banner.hidden = false;
   }
 
   function renderOrderCard(o) {
     const card = document.createElement("div");
-    card.className = "order-card";
+    card.className = "order-card" + (printFailedOrderIds.has(o.id) ? " print-failed" : "");
     card.dataset.orderId = o.id;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
@@ -957,8 +1004,12 @@
           : o.order_type === "delivery"
             ? `<span class="order-card-type-badge delivery">${T("orderCardDeliveryBadge")}</span>`
             : "";
+    const printFailedNotice = printFailedOrderIds.has(o.id)
+      ? `<div class="order-card-print-fail">${T("printFailedCardMsg")}</div>`
+      : "";
     card.innerHTML = `
       <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}${typeBadge}</span><span class="order-card-time">${time}</span></div>
+      ${printFailedNotice}
       <div class="order-card-items">${itemsHtml}</div>
       <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
@@ -985,9 +1036,13 @@
     }
     const printBtn = document.createElement("button");
     printBtn.textContent = T("printBtn");
-    printBtn.onclick = (e) => {
+    printBtn.onclick = async (e) => {
       e.stopPropagation();
-      printKitchenTicket(o);
+      // A manual click is a real user gesture, so this can't be
+      // popup-blocked the way the automatic 자동 인쇄 path can be — clicking
+      // 인쇄 again is exactly the retry for a card showing 인쇄 실패.
+      await printKitchenTicket(o);
+      renderOrders();
     };
     actions.appendChild(printBtn);
     const previewBtn = document.createElement("button");
@@ -1179,6 +1234,27 @@
   // Prints via the exact same code path as previewKitchenTicket (a real
   // window.open tab) instead of a hidden iframe, so print renders
   // byte-for-byte what 미리보기 already showed.
+  // Neither print path can actually confirm paper came out of the printer
+  // — browsers deliberately don't expose that, and QZ Tray only confirms
+  // the raw ESC/POS bytes were handed to the printer connection, not that
+  // it had paper or wasn't jammed. What we CAN detect and must not swallow
+  // silently: the browser-print popup getting blocked, which is a very
+  // real failure mode here specifically, since 자동 인쇄 fires this from the
+  // 4-second order-polling timer (see startPolling/loadOrders below), not
+  // from a click — exactly the kind of call popup blockers exist to stop.
+  // When that happens the kitchen never gets a ticket and, without this,
+  // nobody would know: the paper just never comes out. markPrintFailed()/
+  // markPrintSucceeded() turn that into a visible banner + card badge
+  // instead (see renderPrintFailureBanner() and the badge in
+  // renderOrderCard()), and the existing manual 인쇄 button on each card
+  // doubles as the retry — being a real click, it can't be popup-blocked.
+  function markPrintFailed(orderId) {
+    printFailedOrderIds.add(orderId);
+  }
+  function markPrintSucceeded(orderId) {
+    printFailedOrderIds.delete(orderId);
+  }
+
   async function printKitchenTicket(o) {
     // If ESC/POS auto-print is turned on and QZ Tray is reachable on this
     // computer, this sends the ticket straight to the physical printer with
@@ -1186,10 +1262,16 @@
     // Tray not running, printer name mismatch, etc.) falls straight through
     // to the normal browser-print flow below, so printing is never silently
     // lost either way.
-    if (await tryPrintViaEscPos(o)) return;
+    if (await tryPrintViaEscPos(o)) {
+      markPrintSucceeded(o.id);
+      return;
+    }
 
     const win = window.open("", "_blank");
-    if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
+    if (!win) {
+      markPrintFailed(o.id);
+      return;
+    }
     win.document.open();
     win.document.write(buildTicketHtml(o, ticketFontSizes));
     win.document.close();
@@ -1204,6 +1286,10 @@
     const doc = win.document;
     const fontsReady = doc.fonts && doc.fonts.ready ? doc.fonts.ready : Promise.resolve();
     Promise.race([fontsReady, new Promise((resolve) => setTimeout(resolve, 4000))]).then(() => setTimeout(triggerPrint, 50));
+    // Getting this far (a real ticket window opened and print() was called)
+    // is the best confirmation this code can get, so treat it as success —
+    // clears any earlier failure flag if this was a manual retry.
+    markPrintSucceeded(o.id);
   }
 
   // Opens the exact same ticket HTML in a new tab, without triggering the

@@ -72,6 +72,21 @@ input, select, button, textarea { font-family: inherit; }
 .order-card-type-badge.takeout { background: #fff3cd; color: #8a6100; border: 1px solid #e3c07a; }
 .order-card-type-badge.delivery { background: #dbeafe; color: #1e429f; border: 1px solid #93b8f5; }
 .order-card-type-badge.mixed { background: #f3e8ff; color: #6b21a8; border: 1px solid #d3b3f0; }
+
+/* Print-failure banner + card badge — see printKitchenTicket()/
+   markPrintFailed()/renderPrintFailureBanner() in admin.js. Deliberately
+   loud and non-auto-dismissing: a printer failing silently is otherwise
+   indistinguishable from "no order came in" to kitchen staff who only
+   watch the paper. */
+.print-fail-banner {
+  background: #fdecea; border: 1px solid var(--red); color: var(--red); font-weight: 700;
+  font-size: 15px; line-height: 1.5; padding: 12px 16px; border-radius: 10px; margin-bottom: 14px;
+}
+.order-card.print-failed { border-left-color: var(--red); box-shadow: 0 0 0 2px rgba(181,35,44,0.35); }
+.order-card-print-fail {
+  background: #fdecea; color: var(--red); font-size: 13px; font-weight: 700;
+  padding: 5px 8px; border-radius: 6px; margin-bottom: 6px; line-height: 1.4;
+}
 @keyframes flash { 0%,100% { box-shadow: 0 1px 3px rgba(0,0,0,0.06);} 50% { box-shadow: 0 0 0 4px rgba(181,35,44,0.35);} }
 
 /* Menu management */
