@@ -115,6 +115,33 @@ body {
   flex-shrink: 0;
 }
 
+/* 매장(dine-in) / 포장(takeout) segmented control — two tabs joined into one
+   rounded pill (not separate pill buttons like .cat-tabs below), so they
+   read as a single either/or toggle rather than a list of choices. */
+.order-type-tabs {
+  display: flex;
+  margin: 0 16px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+}
+.order-type-tab {
+  flex: 1;
+  padding: 9px 0;
+  border: none;
+  background: none;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.order-type-tab.active {
+  background: var(--ink);
+  color: var(--cream);
+}
+
 /* Notice banner */
 .notice-banner {
   margin: 0 16px 14px;

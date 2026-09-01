@@ -11,6 +11,12 @@
   let currency = "TWD";
   let categories = [];
   let cart = []; // { itemId, qty, option, spice, note, item }
+  // 매장(dine-in) vs 포장(takeout) — see the .order-type-tabs pill at the top
+  // of the page. Always starts at "dine_in" and is never persisted, same
+  // reset-on-fresh-load behavior as lang/currency above — a customer sitting
+  // at the table should never see a stale "takeout" selection from whoever
+  // used this table before them.
+  let orderType = "dine_in";
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
@@ -570,6 +576,7 @@
           tableNumber,
           items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, note: c.note })),
           note: $("#orderNote").value.trim(),
+          orderType,
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
         }),
@@ -709,6 +716,14 @@
     if (!confirm(t("payOnlineConfirm"))) return;
     location.href = `/api/payment/checkout?table=${encodeURIComponent(tableNumber)}`;
   };
+
+  // Order-type tabs (매장/포장)
+  document.querySelectorAll(".order-type-tab[data-type]").forEach((b) => {
+    b.onclick = () => {
+      orderType = b.dataset.type;
+      document.querySelectorAll(".order-type-tab[data-type]").forEach((btn) => btn.classList.toggle("active", btn === b));
+    };
+  });
 
   $("#historyBtn").onclick = openHistory;
   $("#historyClose").onclick = () => ($("#historyBackdrop").hidden = true);

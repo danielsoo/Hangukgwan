@@ -26,6 +26,14 @@
     <button class="store-info-btn" id="storeInfoBtn" data-i18n="storeInfo">店家資訊</button>
   </div>
 
+  <!-- 매장(dine-in) vs 포장(takeout) — always starts on 매장 (see `orderType`
+       in order.js: never persisted across a page load), so a customer
+       eating at the table never accidentally places a takeout order. -->
+  <div class="order-type-tabs" id="orderTypeTabs">
+    <button type="button" class="order-type-tab active" data-type="dine_in" data-i18n="orderTypeDineIn">內用</button>
+    <button type="button" class="order-type-tab" data-type="takeout" data-i18n="orderTypeTakeout">外帶</button>
+  </div>
+
   <div class="notice-banner" id="noticeBanner" hidden></div>
 
   <div class="cat-tabs-row">

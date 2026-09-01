@@ -38,7 +38,7 @@ function checkLocation(lat, lng) {
 
 // Customer: place a new order
 router.post("/", async (req, res) => {
-  const { tableNumber, items, note, lat, lng } = req.body || {};
+  const { tableNumber, items, note, lat, lng, orderType } = req.body || {};
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
   }
@@ -102,9 +102,12 @@ router.post("/", async (req, res) => {
     id: nextId("orders"),
     table_number: String(tableNumber),
     status: "new",
-    // QR ordering is dine-in only for now — delivery orders will get their
-    // own flow (and a real value here) later.
-    order_type: "dine_in",
+    // 매장(dine-in) vs 포장(takeout) — see the .order-type-tabs pill at the
+    // top of order.html/order.js. Anything else (missing, tampered,
+    // unrecognized) safely falls back to dine-in. A true delivery flow
+    // (a courier picking up from outside the restaurant) is still a
+    // possible future order_type value but has no UI yet.
+    order_type: orderType === "takeout" ? "takeout" : "dine_in",
     total,
     note: (note || "").slice(0, 300),
     created_at: nowLocal(),

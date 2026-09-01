@@ -109,6 +109,8 @@
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       tableLabel: "테이블",
+      orderCardTakeoutBadge: "포장",
+      orderCardDeliveryBadge: "배달",
       memoLabel: "메모",
       orderMemoLabel: "주문 메모",
       totalLabel: "합계",
@@ -386,6 +388,8 @@
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       tableLabel: "桌號",
+      orderCardTakeoutBadge: "外帶",
+      orderCardDeliveryBadge: "外送",
       memoLabel: "備註",
       orderMemoLabel: "訂單備註",
       totalLabel: "合計",
@@ -910,8 +914,17 @@
     const itemsHtml = o.items
       .map((it) => `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
       .join("<br/>");
+    // 매장(dine-in) orders are the overwhelming default and stay unbadged;
+    // 포장(takeout) gets a badge right in the live queue so staff notice it
+    // needs to-go packaging without having to open/print the ticket first.
+    const typeBadge =
+      o.order_type === "takeout"
+        ? `<span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
+        : o.order_type === "delivery"
+          ? `<span class="order-card-type-badge delivery">${T("orderCardDeliveryBadge")}</span>`
+          : "";
     card.innerHTML = `
-      <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}</span><span class="order-card-time">${time}</span></div>
+      <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}${typeBadge}</span><span class="order-card-time">${time}</span></div>
       <div class="order-card-items">${itemsHtml}</div>
       <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
@@ -966,9 +979,11 @@
   // printer (confirmed with the owner — not a regular A4 printer), replacing
   // the earlier photo-overlay recreation of the paper order slip. The
   // owner's spec: which table, when, each menu item's name + quantity, the
-  // order type (內用/dine-in vs 外送/delivery — all QR orders are dine-in
-  // for now, see order_type in src/routes/orders.js), and the 소/돼지
-  // (option_choice) and 맵기 (spice_choice) distinctions per item, printed
+  // order type (內用/dine-in, 外帶/takeout — picked via the .order-type-tabs
+  // pill on order.html, or 外送/delivery, a possible future order_type value
+  // with no customer-facing UI yet — see order_type in src/routes/orders.js),
+  // and the 소/돼지 (option_choice) and 맵기 (spice_choice) distinctions per
+  // item, printed
   // as clearly-labeled sub-lines (see "detail" comment below) so the kitchen
   // never mistakes an item's meat-type/spice-level for a second item.
   // No more hand-measured coordinates onto a fixed photo — each ordered
@@ -981,7 +996,9 @@
   // (name_zh preferred, falling back to name_ko/name_en if a dish was never
   // given a Chinese name).
   function orderTypeLabel(o) {
-    return o.order_type === "delivery" ? "外送" : "內用";
+    if (o.order_type === "takeout") return "外帶";
+    if (o.order_type === "delivery") return "外送";
+    return "內用";
   }
 
   // Per-component font sizes (px) for the kitchen ticket — adjustable by

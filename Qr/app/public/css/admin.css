@@ -65,6 +65,12 @@ input, select, button, textarea { font-family: inherit; }
 .order-card-actions button { flex: 1; font-size: 14px; padding: 6px 4px; border-radius: 6px; border: 1px solid var(--line); background: #f7f5f0; cursor: pointer; }
 .order-card-actions button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
 .order-card.flash { animation: flash 1.2s ease-in-out 2; }
+.order-card-type-badge {
+  display: inline-block; margin-left: 8px; vertical-align: middle;
+  font-size: 12px; font-weight: 700; padding: 1px 9px; border-radius: 999px;
+}
+.order-card-type-badge.takeout { background: #fff3cd; color: #8a6100; border: 1px solid #e3c07a; }
+.order-card-type-badge.delivery { background: #dbeafe; color: #1e429f; border: 1px solid #93b8f5; }
 @keyframes flash { 0%,100% { box-shadow: 0 1px 3px rgba(0,0,0,0.06);} 50% { box-shadow: 0 0 0 4px rgba(181,35,44,0.35);} }
 
 /* Menu management */

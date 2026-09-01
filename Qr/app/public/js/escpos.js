@@ -102,7 +102,9 @@
   }
 
   function orderTypeLabel(o) {
-    return o.order_type === "delivery" ? "外送" : "內用";
+    if (o.order_type === "takeout") return "外帶";
+    if (o.order_type === "delivery") return "外送";
+    return "內用";
   }
 
   // Mirrors buildTicketHtml()'s own item-name preference (name_zh first —
