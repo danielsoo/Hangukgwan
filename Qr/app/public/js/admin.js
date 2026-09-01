@@ -182,8 +182,8 @@
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       collapseItemsBtn: "접기 ▲",
-      tableDetailTabActive: "진행중",
-      tableDetailTabPaid: "결제완료 내역",
+      tableDetailTabActive: "현재 주문",
+      tableDetailTabPaid: "이전 주문",
       tableDetailNoPaidHistory: "아직 결제 완료된 주문이 없습니다.",
       orderEditModalTitle: "주문 수정",
       orderEditAddBtn: "+ 추가",
@@ -495,8 +495,8 @@
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       collapseItemsBtn: "收合 ▲",
-      tableDetailTabActive: "進行中",
-      tableDetailTabPaid: "已結帳紀錄",
+      tableDetailTabActive: "目前訂單",
+      tableDetailTabPaid: "先前訂單",
       tableDetailNoPaidHistory: "目前還沒有已結帳的訂單。",
       orderEditModalTitle: "修改訂單",
       orderEditAddBtn: "+ 新增",
@@ -1673,7 +1673,7 @@
       .join("");
     $("#orderDetailBody").innerHTML = `
       <h2>${T("tableLabel")} ${o.table_number}</h2>
-      <p style="color:#999;font-size:13px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
+      <p style="color:#999;font-size:15px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
       ${itemsHtml}
       ${o.note ? `<p style="margin-top:10px;"><strong>${T("memoLabel")}:</strong>${o.note}</p>` : ""}
       <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">${T("totalLabel")} NT$${o.total}</div>
@@ -2119,12 +2119,12 @@
     // Same "only while actually occupied" rule as the table-list badge above.
     const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
     const payAllBtn = unpaidOrders.length
-      ? `<button class="primary-btn pay-all-btn" style="padding:6px 14px;font-size:12px;">${T("payAllBtn")}</button>`
+      ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
       : "";
     const header = `
       <h2>${T("tableLabel")} ${label || tableNumber}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
-        <p style="color:var(--muted);font-size:13px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
+        <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
         ${payAllBtn}
       </div>
     `;
@@ -2142,7 +2142,7 @@
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          <p style="font-size:15px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
+          <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
           ${payAllBtn}
         </div>
       `
@@ -2209,8 +2209,8 @@
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
     const itemLines = o.items.map(
       (it) =>
-        `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+        `<div style="display:flex;justify-content:space-between;font-size:16px;padding:5px 0;">
+          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
           <span>NT$${it.unit_price * it.qty}</span>
         </div>`
     );
@@ -2228,22 +2228,22 @@
           }</button>`
         : "";
     const nextBtn = NEXT_STATUS[o.status]
-      ? `<button class="primary-btn" style="padding:6px 12px;font-size:12px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
+      ? `<button class="primary-btn" style="padding:7px 14px;font-size:14px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
       : "";
     const editBtn =
       o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
-        ? `<button style="padding:6px 12px;font-size:12px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
+        ? `<button style="padding:7px 14px;font-size:14px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
     return `
-      <div style="border-top:1px solid var(--line);padding:12px 0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <span style="font-weight:700;font-size:13px;">${time} · ${statusLabel(o.status)}</span>
+      <div style="border-top:1px solid var(--line);padding:14px 0;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-weight:700;font-size:15px;">${time} · ${statusLabel(o.status)}</span>
           <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
         ${itemsToggleHtml}
-        ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
-        <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">${T("subtotalLabel")} NT$${o.total}</div>
+        ${o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
+        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:6px;">${T("subtotalLabel")} NT$${o.total}</div>
       </div>
     `;
   }
