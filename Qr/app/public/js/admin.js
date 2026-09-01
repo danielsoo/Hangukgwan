@@ -1054,6 +1054,20 @@
       if (cols[o.status]) cols[o.status].push(o);
     });
 
+    // 결제완료 칼럼은 같은 테이블의 과거 결제 기록이 계속 쌓이면 헷갈리므로,
+    // 테이블당 가장 최근에 결제된 주문 1건만 보여준다. 나머지 이력은
+    // 테이블 상세 > 이전 주문 탭에서 계속 확인 가능하다.
+    const latestPaidByTable = new Map();
+    cols.paid.forEach((o) => {
+      const existing = latestPaidByTable.get(o.table_number);
+      if (!existing || new Date(o.updated_at.replace(" ", "T")) > new Date(existing.updated_at.replace(" ", "T"))) {
+        latestPaidByTable.set(o.table_number, o);
+      }
+    });
+    cols.paid = [...latestPaidByTable.values()].sort(
+      (a, b) => new Date(b.updated_at.replace(" ", "T")) - new Date(a.updated_at.replace(" ", "T"))
+    );
+
     let newCount = cols.new.length;
     const badge = $("#newOrderBadge");
     if (newCount > 0) {
