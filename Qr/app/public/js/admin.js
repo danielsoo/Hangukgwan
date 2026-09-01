@@ -958,12 +958,19 @@
        middle of the window, on a gray "desk" background, so it's easy to
        see how it'll actually look — @media print below strips all of this
        back out for the real printed page, which is still just the bare
-       80mm-wide receipt content edge-to-edge like before. */
+       80mm-wide receipt content edge-to-edge like before.
+       align-items is flex-start (not "center") on purpose: a long order
+       zoomed to 2.4x can be much taller than the window, and centering a
+       taller-than-container flex item makes it overflow equally off the
+       TOP and bottom — the top half (table number, order type, first
+       items) becomes literally unreachable by scrolling in Chrome. Anchor
+       to the top instead so scrolling down always reveals the rest, no
+       matter how long the ticket is. */
     background: #dfe3e7;
     min-height: 100%;
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     padding: 28px 0;
   }
   .receipt {
