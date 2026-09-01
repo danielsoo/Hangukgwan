@@ -158,6 +158,7 @@
       seasonOptAutumn: "가을 (낙엽)",
       seasonOptWinter: "겨울 (눈)",
       seasonOptOff: "끄기 (기본 태극 무늬)",
+      saveSeasonBtn: "계절 설정 저장",
       settingsLogoTitle: "매장 로고 (QR 코드 중앙에 표시)",
       settingsLogoHint: "정사각형에 가까운 이미지를 권장합니다. 인쇄용 QR 코드 정중앙에 작게 들어갑니다.",
       settingsNoticeTitle: "공지 배너",
@@ -403,6 +404,7 @@
       seasonOptAutumn: "秋（落葉）",
       seasonOptWinter: "冬（雪）",
       seasonOptOff: "關閉（原始太極圖案）",
+      saveSeasonBtn: "儲存季節設定",
       settingsLogoTitle: "店家標誌（顯示於 QR Code 中央）",
       settingsLogoHint: "建議使用接近正方形的圖片，會小尺寸置中顯示在列印用 QR Code 上。",
       settingsNoticeTitle: "公告橫幅",
@@ -2420,6 +2422,21 @@
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
+  };
+
+  $("#saveTaegeukSeasonBtn").onclick = async () => {
+    const mode = $("#s_taegeuk_season_mode").value;
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taegeuk_season_mode: mode }),
+    });
+    if (window.applyTaegeukSeason) window.applyTaegeukSeason(mode);
+    const msg = $("#taegeukSeasonMsg");
+    msg.style.color = "#1a8a44";
+    msg.textContent = T("savedMsg");
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2000);
   };
 
   $("#saveNoticeBtn").onclick = async () => {
