@@ -899,12 +899,13 @@
   function strokeGlyphSvg(strokeCount, isStandaloneOne) {
     if (strokeCount === 1 && isStandaloneOne) {
       // A lone "1" (the order's TOTAL qty is exactly 1, no completed 正
-      // group before it) is just a short centered dash, sized/positioned
-      // to sit level with the price number beside it — the top stroke of
-      // a growing 正 is deliberately biased toward the top of its box (so
-      // strokes 2-5 can stack below it), which looks off-center when it's
-      // the only stroke on its own.
-      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M-2,6 L26,6" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="square"/></svg>`;
+      // group before it) is drawn as a ✓ checkmark instead of a 正 stroke —
+      // clearer at a glance than a single dash, which could be missed or
+      // mistaken for a printing artifact. Widened past the viewBox (-3..27,
+      // vs the box's own 0..24) the same way the 正 strokes are, and
+      // checked against the tightest real cell (51/11/15/17's split 牛/豬
+      // half, shifted as far as -12.5px) — it clears that cell too.
+      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M-3,6 L8,13 L27,-3" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     }
     // A "1" that's actually the remainder after one or more completed 正
     // groups (e.g. qty 6, 11, 16...) is the first stroke of a NEW 正 in
