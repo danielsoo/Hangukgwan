@@ -1629,11 +1629,15 @@
       .forEach((btn) => {
         btn.onclick = async () => {
           if (!confirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length))) return;
+          // No separate "now also clear the party size" step here on
+          // purpose — each updateOrderStatus() call PATCHes that order to
+          // "paid", and the server's PATCH /api/orders/:id handler already
+          // clears the table's party_size by itself the instant the table's
+          // last order leaves active status (see src/routes/orders.js). The
+          // order and the headcount are one bundled unit for this purpose:
+          // they disappear together as a side effect of the same status
+          // change, not as a second, separately-triggered rule.
           await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
-          // Table is fully settled — clear its registered party size so the
-          // next party that scans this table's QR code is asked fresh
-          // instead of silently inheriting this party's headcount.
-          await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, { method: "DELETE" });
           await loadOrders();
           await loadTables();
           openTableDetail(tableNumber, label);

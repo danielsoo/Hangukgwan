@@ -817,11 +817,13 @@
   // It must survive a page refresh / re-scan mid-visit (the same party
   // shouldn't be asked again just because their phone reloaded the page),
   // so on every load we first ask the server whether this table already
-  // has one registered. It only gets cleared once the table is actually
-  // settled (admin's "전체 결제 완료" or a completed online payment — see
-  // src/routes/tables.js's DELETE /party-size, called from those two
-  // places), which is the real signal that this party is done and the
-  // table is free for whoever scans it next.
+  // has one registered. It's tied to the table's orders as one bundled
+  // unit, not tracked separately: the moment the table's last order is
+  // paid or cancelled (one order paid off at a time, all of them via
+  // admin's "전체 결제 완료", or a completed online payment), the server
+  // clears it as a side effect of that same status change (see the PATCH
+  // handler in src/routes/orders.js) — which is the real signal that this
+  // party is done and the table is free for whoever scans it next.
   let partySizeStep = 1;
   function showPartySizeModal() {
     partySizeStep = 1;
