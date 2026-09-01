@@ -971,6 +971,12 @@
     background: #fff;
     padding: 3mm 4mm;
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    /* On-screen only — blows the paper mockup up to a size that actually
+       uses the screen instead of a tiny 80mm-wide strip lost in empty gray
+       space. zoom (not transform) scales real layout, not just pixels, so
+       the flex-centering above still measures the enlarged box correctly.
+       Reset to 1 for print below — the physical page must stay 80mm. */
+    zoom: 2.4;
   }
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: 17px; font-weight: 900; }
@@ -988,8 +994,15 @@
   .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
   .print-time { text-align: center; font-size: 10px; color: #555; margin-top: 3mm; }
   @media print {
+    /* html/body's height:100% above (needed to vertically-center the
+       on-screen preview) forces the print engine to treat the page as
+       exactly one screen-height tall instead of letting @page's "auto"
+       grow to fit the real content — on a long order (many items) that
+       silently cuts the ticket off partway down instead of printing the
+       rest. Reset to auto here so a long ticket always prints in full. */
+    html, body { height: auto; }
     body { background: none; min-height: 0; display: block; padding: 0; }
-    .receipt { width: 80mm; box-shadow: none; margin: 0; }
+    .receipt { width: 80mm; box-shadow: none; margin: 0; zoom: 1; }
   }
 </style>
 </head><body>
