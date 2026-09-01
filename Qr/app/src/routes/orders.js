@@ -168,8 +168,43 @@ router.get("/", requireAdmin, (req, res) => {
   let list = [...store.orders];
   if (req.query.status) list = list.filter((o) => o.status === req.query.status);
   if (req.query.date) list = list.filter((o) => o.created_at.slice(0, 10) === req.query.date);
-  list.sort((a, b) => b.id - a.id);
+  // Within any one status (the admin board groups by status client-side,
+  // so only same-status relative order actually matters), an order that's
+  // been drag-reordered (see PATCH /reorder above) sorts by its queue_order
+  // ascending, ahead of anything never touched -- which keeps the original
+  // newest-first default among themselves, so a restaurant that never
+  // drags anything sees no change at all.
+  list.sort((a, b) => {
+    if (a.status !== b.status) return b.id - a.id;
+    const aHas = a.queue_order != null;
+    const bHas = b.queue_order != null;
+    if (aHas && bHas) return a.queue_order - b.queue_order;
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    return b.id - a.id;
+  });
   res.json(list.slice(0, 500));
+});
+
+// Admin: persist a manual drag-to-reorder within one status column (kitchen
+// wants to bump a particular order up/down the queue). Registered before
+// PATCH /:id on purpose -- Express would otherwise match "reorder" itself
+// as the :id param and this route would never be reached. Takes the full
+// list of order ids for that column in their new on-screen order and just
+// assigns each one's queue_order to its index, so the next GET / (sorted
+// below) reflects the drag from then on, not just until the next refresh.
+// Orders that have never been dragged keep queue_order unset and keep
+// sorting by the existing newest-first default -- see the sort below.
+router.patch("/reorder", requireAdmin, async (req, res) => {
+  const { orderIds } = req.body || {};
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return res.status(400).json({ error: "invalid_order_ids" });
+  }
+  orderIds.forEach((id, index) => {
+    const order = store.orders.find((o) => o.id === parseInt(id, 10));
+    if (order) order.queue_order = index;
+  });
+  await save();
+  res.json({ ok: true });
 });
 
 // Admin: update order status. Advancing an order forward (조리 시작 /

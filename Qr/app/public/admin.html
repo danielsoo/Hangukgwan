@@ -564,6 +564,20 @@
   </div>
 </div>
 
+<!-- Generic in-app confirm/alert, replacing every native window.confirm()/
+     alert() on this page -- a browser-native popup blocks the whole tab and
+     looks nothing like the rest of the UI. See showConfirm()/showAlert()
+     in admin.js. Alert mode just hides the Cancel button. -->
+<div id="appDialogBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal">
+    <p id="appDialogMessage"></p>
+    <div class="modal-actions">
+      <button class="danger-btn" id="appDialogCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="appDialogOk" data-i18n="appDialogOk">확인</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit an already-placed order's items -- quantity, removal, and (for
      simple items with an options/spice_options list) their option or spice
      choice, plus adding more simple items. A griddle/mix-option item like

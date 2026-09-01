@@ -31,6 +31,63 @@
   // that's what activeOrdersForTable() keys on.
   let mergePayMode = false;
   let mergePaySelected = new Set();
+  // Order cards/blocks with more than this many item lines render collapsed
+  // (see renderCollapsibleItemLines() below) so a table's big order doesn't
+  // force the whole 신규/조리중 column into a long scroll — most cards end
+  // up roughly the same height, with a 펼치기/접기 toggle for the rest.
+  // Expansion state is kept here (by order id) rather than as a per-render
+  // local, since renderOrders()/openTableDetail() rebuild this markup from
+  // scratch on every 4-second poll and a click's "expanded" choice needs to
+  // survive that.
+  const ORDER_ITEMS_COLLAPSE_THRESHOLD = 4;
+  let expandedOrderIds = new Set();
+  // Drag-to-reorder state for the order queue columns (see renderOrderCard()
+  // and the .col-body drag handlers below) — which order id is currently
+  // being dragged, and which column body it started in, so a drop is only
+  // honored as a same-column reorder and never as a sneaky status change.
+  let draggingOrderId = null;
+  let dragSourceColumnBody = null;
+  // 테이블 상세 modal: which sub-view is showing — 진행중 (still-open orders)
+  // or 완료 내역 (already-paid ones for this table). Kept separate so a
+  // brand-new order placed right after a previous round was paid off shows
+  // up cleanly in 진행중 instead of getting visually mixed in with the
+  // just-settled one in the same scrolling list. Reset to "active" every
+  // time a (possibly different) table is opened.
+  let tableDetailView = "active";
+
+  // ---------- In-app confirm/alert ----------
+  // Replaces every native window.confirm()/alert() on this page. A
+  // browser-native popup freezes the whole tab behind an OS-styled box that
+  // looks nothing like the rest of the admin UI; these do the same
+  // yes/no-or-acknowledge job with a modal styled like every other dialog
+  // here. Both are Promise-based so call sites just `await` them.
+  function showConfirm(message) {
+    return new Promise((resolve) => {
+      $("#appDialogMessage").textContent = message;
+      $("#appDialogCancel").hidden = false;
+      $("#appDialogBackdrop").hidden = false;
+      const finish = (result) => {
+        $("#appDialogBackdrop").hidden = true;
+        $("#appDialogOk").onclick = null;
+        $("#appDialogCancel").onclick = null;
+        resolve(result);
+      };
+      $("#appDialogOk").onclick = () => finish(true);
+      $("#appDialogCancel").onclick = () => finish(false);
+    });
+  }
+  function showAlert(message) {
+    return new Promise((resolve) => {
+      $("#appDialogMessage").textContent = message;
+      $("#appDialogCancel").hidden = true;
+      $("#appDialogBackdrop").hidden = false;
+      $("#appDialogOk").onclick = () => {
+        $("#appDialogBackdrop").hidden = true;
+        $("#appDialogOk").onclick = null;
+        resolve();
+      };
+    });
+  }
 
   // ---------- Admin-panel-wide font size (this browser only) ----------
   // A personal display preference, not a shared setting — stored in this
@@ -95,6 +152,8 @@
 
   const ADMIN_I18N = {
     ko: {
+      appDialogOk: "확인",
+      appDialogCancel: "취소",
       pageTitle: "한국관 관리자 페이지",
       loginTitle: "관리자 로그인",
       loginPasswordPlaceholder: "관리자 비밀번호",
@@ -122,6 +181,10 @@
       printBtn: "🖨️ 인쇄",
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
+      collapseItemsBtn: "접기 ▲",
+      tableDetailTabActive: "진행중",
+      tableDetailTabPaid: "결제완료 내역",
+      tableDetailNoPaidHistory: "아직 결제 완료된 주문이 없습니다.",
       orderEditModalTitle: "주문 수정",
       orderEditAddBtn: "+ 추가",
       orderEditAddHint: "동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.",
@@ -402,6 +465,8 @@
       permissionDeniedMsg: "이 작업은 사장님의 허락이 필요해요. 사장님께 문의해주세요.",
     },
     zh: {
+      appDialogOk: "確定",
+      appDialogCancel: "取消",
       pageTitle: "韓國館 管理後台",
       loginTitle: "管理員登入",
       loginPasswordPlaceholder: "管理員密碼",
@@ -429,6 +494,10 @@
       printBtn: "🖨️ 列印",
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
+      collapseItemsBtn: "收合 ▲",
+      tableDetailTabActive: "進行中",
+      tableDetailTabPaid: "已結帳紀錄",
+      tableDetailNoPaidHistory: "目前還沒有已結帳的訂單。",
       orderEditModalTitle: "修改訂單",
       orderEditAddBtn: "+ 新增",
       orderEditAddHint: "像銅盤烤肉這種可混搭的餐點，無法在這裡新增——如需新增請改用手動點餐。",
@@ -730,6 +799,7 @@
     adminLang === "zh"
       ? `確定要將桌號 ${label} 的 ${n} 筆未結帳訂單全部標記為已結帳嗎？`
       : `테이블 ${label}의 미결제 주문 ${n}건을 모두 결제 완료로 처리하시겠습니까?`;
+  const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
     adminLang === "zh"
       ? `已選 ${tableCount} 桌 · ${orderCount} 筆訂單 · 合計 NT$${total}`
@@ -993,8 +1063,69 @@
       const body = col.querySelector(".col-body");
       body.innerHTML = "";
       cols[status].forEach((o) => body.appendChild(renderOrderCard(o)));
+      wireColumnDragDrop(body);
     });
     renderPrintFailureBanner();
+  }
+
+  // ---------- Drag-to-reorder within one order-queue column ----------
+  // Classic "vanilla JS sortable list" trick: while dragging, figure out
+  // which existing card the pointer is currently above/below and move the
+  // dragged card there live in the DOM; on drop, read the column's final
+  // DOM order back out and persist it. Reassigned on every renderOrders()
+  // call (property assignment, not addEventListener) so there's never more
+  // than one live handler per column even though the cards get rebuilt
+  // from scratch every 4-second poll.
+  function getDragAfterElement(container, y) {
+    const candidates = [...container.querySelectorAll(".order-card:not(.dragging)")];
+    return candidates.reduce(
+      (closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) return { offset, element: child };
+        return closest;
+      },
+      { offset: Number.NEGATIVE_INFINITY, element: null }
+    ).element;
+  }
+
+  function wireColumnDragDrop(body) {
+    body.ondragover = (e) => {
+      if (body !== dragSourceColumnBody) return; // never drop into a different status column
+      e.preventDefault();
+      const dragging = body.querySelector(".dragging");
+      if (!dragging) return;
+      const afterElement = getDragAfterElement(body, e.clientY);
+      if (afterElement == null) body.appendChild(dragging);
+      else body.insertBefore(dragging, afterElement);
+    };
+    body.ondrop = async (e) => {
+      if (body !== dragSourceColumnBody) return;
+      e.preventDefault();
+      const orderIds = [...body.querySelectorAll(".order-card")].map((el) => parseInt(el.dataset.orderId, 10));
+      // Keep the in-memory list consistent with what's now on screen so an
+      // intervening renderOrders() call (e.g. the next poll landing before
+      // the PATCH below resolves) doesn't visually snap back. Updating
+      // queue_order alone isn't enough — renderOrders() rebuilds each
+      // column by iterating `orders` in its current array order, so the
+      // array itself needs to reflect the drop too, not just the field the
+      // server will eventually re-sort by.
+      const idsSet = new Set(orderIds);
+      let insertAt = 0;
+      for (const o of orders) {
+        if (idsSet.has(o.id)) break;
+        insertAt++;
+      }
+      const remaining = orders.filter((o) => !idsSet.has(o.id));
+      const reordered = orderIds.map((id) => orders.find((o) => o.id === id)).filter(Boolean);
+      reordered.forEach((o, index) => (o.queue_order = index));
+      orders = remaining.slice(0, insertAt).concat(reordered, remaining.slice(insertAt));
+      await fetch("/api/orders/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderIds }),
+      });
+    };
   }
 
   // A banner that doesn't go away on its own — sound + the card flash
@@ -1023,6 +1154,22 @@
     const card = document.createElement("div");
     card.className = "order-card" + (printFailedOrderIds.has(o.id) ? " print-failed" : "");
     card.dataset.orderId = o.id;
+    // Drag-to-reorder within this same column (see wireColumnDragDrop()) —
+    // staff can bump a particular order up/down the queue by hand, e.g. a
+    // table that asked to rush their order.
+    card.draggable = true;
+    card.ondragstart = (e) => {
+      draggingOrderId = o.id;
+      dragSourceColumnBody = card.parentElement;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(o.id));
+      setTimeout(() => card.classList.add("dragging"), 0);
+    };
+    card.ondragend = () => {
+      card.classList.remove("dragging");
+      draggingOrderId = null;
+      dragSourceColumnBody = null;
+    };
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1033,16 +1180,30 @@
     // src/routes/orders.js). For a mixed order we also tag each individual
     // takeout line here, since the header badge alone can't say which dish
     // needs to-go packaging.
-    const itemsHtml = o.items
-      .map((it) => {
-        const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`;
-        const perItemTag =
-          o.order_type === "mixed" && it.order_type === "takeout"
-            ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
-            : "";
-        return label + perItemTag;
-      })
-      .join("<br/>");
+    const itemLines = o.items.map((it) => {
+      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`;
+      const perItemTag =
+        o.order_type === "mixed" && it.order_type === "takeout"
+          ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
+          : "";
+      return label + perItemTag;
+    });
+    // A table's big order (lots of dishes) used to make its card grow to
+    // however many lines that took, which forced a long scroll through the
+    // whole 신규/조리중 column to see everything below it. Past the
+    // threshold, only show the first few and offer 펼치기 for the rest —
+    // expandedOrderIds (declared up top) remembers the choice across the
+    // 4-second auto-refresh re-render.
+    const expanded = expandedOrderIds.has(o.id);
+    const overflowCount = itemLines.length - ORDER_ITEMS_COLLAPSE_THRESHOLD;
+    const visibleLines = expanded || overflowCount <= 0 ? itemLines : itemLines.slice(0, ORDER_ITEMS_COLLAPSE_THRESHOLD);
+    const itemsHtml = visibleLines.join("<br/>");
+    const itemsToggleHtml =
+      overflowCount > 0
+        ? `<button type="button" class="order-items-toggle" data-toggle-items-id="${o.id}">${
+            expanded ? T("collapseItemsBtn") : fmtExpandItemsBtn(overflowCount)
+          }</button>`
+        : "";
     // 매장(dine-in) orders are the overwhelming default and stay unbadged;
     // 포장(takeout)/혼합(mixed) get a badge right in the live queue so staff
     // notice to-go packaging is needed without opening/printing the ticket.
@@ -1061,9 +1222,19 @@
       <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}${typeBadge}</span><span class="order-card-time">${time}</span></div>
       ${printFailedNotice}
       <div class="order-card-items">${itemsHtml}</div>
+      ${itemsToggleHtml}
       <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
     `;
+    const itemsToggleBtn = card.querySelector("[data-toggle-items-id]");
+    if (itemsToggleBtn) {
+      itemsToggleBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (expandedOrderIds.has(o.id)) expandedOrderIds.delete(o.id);
+        else expandedOrderIds.add(o.id);
+        renderOrders();
+      };
+    }
     const actions = card.querySelector(`#actions-${o.id}`);
     if (NEXT_STATUS[o.status]) {
       const btn = document.createElement("button");
@@ -1078,9 +1249,9 @@
     if (o.status !== "cancelled" && o.status !== "paid" && canCancelOrder()) {
       const cancelBtn = document.createElement("button");
       cancelBtn.textContent = T("cancelBtn");
-      cancelBtn.onclick = (e) => {
+      cancelBtn.onclick = async (e) => {
         e.stopPropagation();
-        if (confirm(T("confirmCancelOrder"))) updateOrderStatus(o.id, "cancelled");
+        if (await showConfirm(T("confirmCancelOrder"))) updateOrderStatus(o.id, "cancelled");
       };
       actions.appendChild(cancelBtn);
     }
@@ -1524,7 +1695,7 @@
 
   function openOrderEdit(order) {
     if (order.status === "paid" || order.status === "cancelled") {
-      alert(T("orderEditNotEditable"));
+      showAlert(T("orderEditNotEditable"));
       return;
     }
     // Edited entirely on a local draft copy — nothing reaches the server
@@ -1649,7 +1820,7 @@
 
     $("#orderEditSave").onclick = async () => {
       if (draftItems.length === 0) {
-        alert(T("orderEditEmptyError"));
+        await showAlert(T("orderEditEmptyError"));
         return;
       }
       const payload = {
@@ -1830,7 +2001,7 @@
       allergens: collectSelectedAllergens(),
     };
     if (!payload.name_zh) {
-      alert(T("alertMenuNameRequired"));
+      await showAlert(T("alertMenuNameRequired"));
       return;
     }
     let itemId = editingItemId;
@@ -1860,7 +2031,7 @@
 
   $("#deleteItemBtn").onclick = async () => {
     if (!editingItemId) return;
-    if (!confirm(T("confirmDeleteItem"))) return;
+    if (!(await showConfirm(T("confirmDeleteItem")))) return;
     await fetch(`/api/menu/admin/items/${editingItemId}`, { method: "DELETE" });
     $("#itemModalBackdrop").hidden = true;
     loadMenu();
@@ -1902,7 +2073,7 @@
       if (canTableEdit() && !mergePayMode) {
         chip.querySelector(".del-btn").onclick = async (e) => {
           e.stopPropagation();
-          if (!confirm(fmtConfirmDeleteTable(t.number))) return;
+          if (!(await showConfirm(fmtConfirmDeleteTable(t.number)))) return;
           await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
           loadTables();
         };
@@ -1931,10 +2102,19 @@
   }
 
   function openTableDetail(tableNumber, label) {
+    // A previous round's paid order used to sit in the same undivided,
+    // continuously-scrolling list as whatever the table ordered next —
+    // fine right after paying, confusing once a new order comes in.
+    // 진행중/결제완료 내역 tabs (tableDetailView, declared up top) keep the
+    // two apart: paid orders always land in 완료 내역, so a fresh order for
+    // the same table always starts clean in 진행중.
+    if (openTableNumber !== tableNumber) tableDetailView = "active";
     openTableNumber = tableNumber;
     const table = tables.find((t) => String(t.number) === String(tableNumber));
-    const tableOrders = activeOrdersForTable(tableNumber);
-    const unpaidOrders = tableOrders.filter((o) => o.status !== "paid");
+    const tableOrders = activeOrdersForTable(tableNumber); // excludes only "cancelled"
+    const activeOrders = tableOrders.filter((o) => o.status !== "paid");
+    const paidOrders = tableOrders.filter((o) => o.status === "paid");
+    const unpaidOrders = activeOrders;
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
     // Same "only while actually occupied" rule as the table-list badge above.
     const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
@@ -1948,10 +2128,18 @@
         ${payAllBtn}
       </div>
     `;
-    const body = tableOrders.length
-      ? tableOrders.map((o) => renderTableOrderBlock(o)).join("")
-      : `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("noOrdersYetAdmin")}</p>`;
-    const footer = tableOrders.length
+    const tabsHtml = `
+      <div class="table-detail-tabs">
+        <button type="button" class="table-detail-tab-btn ${tableDetailView === "active" ? "active" : ""}" data-detail-view="active">${T("tableDetailTabActive")} (${activeOrders.length})</button>
+        <button type="button" class="table-detail-tab-btn ${tableDetailView === "paid" ? "active" : ""}" data-detail-view="paid">${T("tableDetailTabPaid")} (${paidOrders.length})</button>
+      </div>
+    `;
+    const shownOrders = tableDetailView === "paid" ? paidOrders : activeOrders;
+    const emptyMsg = tableDetailView === "paid" ? T("tableDetailNoPaidHistory") : T("noOrdersYetAdmin");
+    const body = shownOrders.length
+      ? shownOrders.map((o) => renderTableOrderBlock(o)).join("")
+      : `<p style="color:var(--muted);padding:20px 0;text-align:center;">${emptyMsg}</p>`;
+    const footer = tableDetailView === "active" && activeOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
           <p style="font-size:15px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
@@ -1959,13 +2147,31 @@
         </div>
       `
       : "";
-    $("#tableDetailBody").innerHTML = header + body + footer;
+    $("#tableDetailBody").innerHTML = header + tabsHtml + body + footer;
+    $("#tableDetailBody")
+      .querySelectorAll("[data-detail-view]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          tableDetailView = btn.dataset.detailView;
+          openTableDetail(tableNumber, label);
+        };
+      });
     $("#tableDetailBody")
       .querySelectorAll("[data-edit-id]")
       .forEach((btn) => {
         btn.onclick = () => {
           const o = tableOrders.find((x) => x.id === parseInt(btn.dataset.editId, 10));
           if (o) openOrderEdit(o);
+        };
+      });
+    $("#tableDetailBody")
+      .querySelectorAll("[data-toggle-items-id]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          const id = parseInt(btn.dataset.toggleItemsId, 10);
+          if (expandedOrderIds.has(id)) expandedOrderIds.delete(id);
+          else expandedOrderIds.add(id);
+          openTableDetail(tableNumber, label);
         };
       });
     $("#tableDetailBody")
@@ -1981,7 +2187,7 @@
       .querySelectorAll(".pay-all-btn")
       .forEach((btn) => {
         btn.onclick = async () => {
-          if (!confirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length))) return;
+          if (!(await showConfirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length)))) return;
           // No separate "now also clear the party size" step here on
           // purpose — each updateOrderStatus() call PATCHes that order to
           // "paid", and the server's PATCH /api/orders/:id handler already
@@ -2001,15 +2207,26 @@
 
   function renderTableOrderBlock(o) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-    const itemsHtml = o.items
-      .map(
-        (it) =>
-          `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
-            <span>NT$${it.unit_price * it.qty}</span>
-          </div>`
-      )
-      .join("");
+    const itemLines = o.items.map(
+      (it) =>
+        `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
+          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+          <span>NT$${it.unit_price * it.qty}</span>
+        </div>`
+    );
+    // Same fixed-size-by-default treatment as the order-queue cards (see
+    // renderOrderCard) — a table with a big running order shouldn't force
+    // the whole 테이블 상세 panel into a long scroll.
+    const expanded = expandedOrderIds.has(o.id);
+    const overflowCount = itemLines.length - ORDER_ITEMS_COLLAPSE_THRESHOLD;
+    const visibleLines = expanded || overflowCount <= 0 ? itemLines : itemLines.slice(0, ORDER_ITEMS_COLLAPSE_THRESHOLD);
+    const itemsHtml = visibleLines.join("");
+    const itemsToggleHtml =
+      overflowCount > 0
+        ? `<button type="button" class="order-items-toggle" data-toggle-items-id="${o.id}">${
+            expanded ? T("collapseItemsBtn") : fmtExpandItemsBtn(overflowCount)
+          }</button>`
+        : "";
     const nextBtn = NEXT_STATUS[o.status]
       ? `<button class="primary-btn" style="padding:6px 12px;font-size:12px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
       : "";
@@ -2024,6 +2241,7 @@
           <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
+        ${itemsToggleHtml}
         ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
         <div style="text-align:right;font-weight:700;font-size:13px;margin-top:4px;">${T("subtotalLabel")} NT$${o.total}</div>
       </div>
@@ -2072,7 +2290,7 @@
       return true;
     } catch (e) {
       revert();
-      alert(T("alertFloorPlanSaveFailed"));
+      await showAlert(T("alertFloorPlanSaveFailed"));
       renderFloorPlan();
       return false;
     }
@@ -2473,7 +2691,7 @@
     if (canTableEdit()) {
       el.querySelector(".table-unassign").onclick = async (e) => {
         e.stopPropagation();
-        if (!confirm(fmtConfirmUnassignTable(t.label || t.number))) return;
+        if (!(await showConfirm(fmtConfirmUnassignTable(t.label || t.number)))) return;
         const prevZoneId = t.zone_id;
         t.zone_id = null;
         const ok = await patchFloorPlan(`/api/tables/${t.id}`, { zoneId: null }, () => {
@@ -2681,7 +2899,7 @@
         };
         el.querySelector(".zone-del").onclick = async (e) => {
           e.stopPropagation();
-          if (!confirm(fmtConfirmDeleteZone(z.name))) return;
+          if (!(await showConfirm(fmtConfirmDeleteZone(z.name)))) return;
           await fetch(`/api/zones/${z.id}`, { method: "DELETE" });
           tables.filter((t) => t.zone_id === z.id).forEach((t) => (t.zone_id = null));
           await loadZones();
@@ -2791,7 +3009,7 @@
       activeOrdersForTable(tableNumber).filter((o) => o.status !== "paid")
     );
     if (allUnpaid.length === 0) return;
-    if (!confirm(fmtConfirmMergePay(mergePaySelected.size, allUnpaid.length))) return;
+    if (!(await showConfirm(fmtConfirmMergePay(mergePaySelected.size, allUnpaid.length)))) return;
     // Same principle as the single-table 전체 결제 완료 button above: no
     // separate "now also clear the party size" step here either. Each
     // updateOrderStatus() call PATCHes that order to "paid", and the
@@ -2903,7 +3121,7 @@
   $("#addTableBtn").onclick = async () => {
     const number = $("#newTableNumber").value.trim();
     const label = $("#newTableLabel").value.trim();
-    if (!number) return alert(T("alertTableNumberRequired"));
+    if (!number) return showAlert(T("alertTableNumberRequired"));
     const res = await fetch("/api/tables", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2916,9 +3134,9 @@
     } else {
       const body = await res.json().catch(() => ({}));
       if (body.error === "unlucky_number") {
-        alert(T("alertUnluckyNumber"));
+        await showAlert(T("alertUnluckyNumber"));
       } else {
-        alert(T("alertTableExists"));
+        await showAlert(T("alertTableExists"));
       }
     }
   };
@@ -3249,7 +3467,7 @@
   }
 
   async function removeLineTarget(userId) {
-    if (!confirm(T("lineRemoveConfirm"))) return;
+    if (!(await showConfirm(T("lineRemoveConfirm")))) return;
     const res = await fetch(`/api/settings/line/targets/${encodeURIComponent(userId)}`, { method: "DELETE" });
     if (res.ok) renderLineStatus(await res.json());
   }
@@ -3966,7 +4184,7 @@
 
   $("#deleteReservationBtn").onclick = async () => {
     if (!editingReservationId) return;
-    if (!confirm(T("reservationDeleteConfirm"))) return;
+    if (!(await showConfirm(T("reservationDeleteConfirm")))) return;
     await fetch(`/api/reservations/${editingReservationId}`, { method: "DELETE" });
     $("#reservationModalBackdrop").hidden = true;
     loadReservations($("#reservationDateFilter").value || undefined);
