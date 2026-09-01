@@ -344,6 +344,7 @@
           <label class="perm-toggle-row"><span data-i18n="permTableEdit">테이블/배치도 추가·삭제·편집</span><input type="checkbox" id="perm_tableEdit" /></label>
           <label class="perm-toggle-row"><span data-i18n="permSettingsEdit">매장 설정 변경</span><input type="checkbox" id="perm_settingsEdit" /></label>
           <label class="perm-toggle-row"><span data-i18n="permOrderCancel">주문 취소</span><input type="checkbox" id="perm_orderCancel" /></label>
+          <label class="perm-toggle-row"><span data-i18n="permOrderEdit">주문 내용 수정 (메뉴/수량/옵션)</span><input type="checkbox" id="perm_orderEdit" /></label>
           <label class="perm-toggle-row"><span data-i18n="permReservationManage">예약 추가/수정/삭제</span><input type="checkbox" id="perm_reservationManage" /></label>
           <div class="save-msg" id="staffPermMsg" hidden></div>
           <hr style="margin:16px 0;border:none;border-top:1px solid var(--line);" />
@@ -560,6 +561,31 @@
     <h2 data-i18n="manualOrderModalTitle">수기 주문 — 테이블 선택</h2>
     <p class="settings-hint" data-i18n="manualOrderHint">테이블을 선택하면 손님 주문 화면이 새 탭에서 열려요. 거기서 그대로 메뉴를 담아 주문을 넣으면 평소처럼 신규 주문에 뜨고 빌지도 나갑니다.</p>
     <div id="manualOrderGrid" class="table-picker-grid"></div>
+  </div>
+</div>
+
+<!-- Edit an already-placed order's items -- quantity, removal, and (for
+     simple items with an options/spice_options list) their option or spice
+     choice, plus adding more simple items. A griddle/mix-option item like
+     동판불고기 can only have its quantity changed or be removed here; adding
+     a brand-new mix line still needs the full picker, so that goes through
+     수기 주문 instead (see orderEditAddHint below). -->
+<div id="orderEditBackdrop" class="modal-backdrop" hidden>
+  <div class="modal order-detail-modal">
+    <button class="modal-close" id="orderEditClose">✕</button>
+    <h2 id="orderEditTitle" data-i18n="orderEditModalTitle">주문 수정</h2>
+    <div id="orderEditItems"></div>
+    <div class="order-edit-add-row">
+      <select id="orderEditAddSelect"></select>
+      <button id="orderEditAddBtn" type="button" data-i18n="orderEditAddBtn">+ 추가</button>
+    </div>
+    <p class="settings-hint" data-i18n="orderEditAddHint">동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.</p>
+    <div class="order-edit-total" id="orderEditTotal"></div>
+    <div class="save-msg" id="orderEditMsg" hidden></div>
+    <div class="modal-actions">
+      <button class="danger-btn" id="orderEditCancel" data-i18n="orderEditCancel">취소</button>
+      <button class="primary-btn" id="orderEditSave" data-i18n="orderEditSave">저장</button>
+    </div>
   </div>
 </div>
 

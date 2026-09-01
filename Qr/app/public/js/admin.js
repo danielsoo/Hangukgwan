@@ -78,11 +78,12 @@
   // after login — the server enforces the same boundaries independently
   // (see requirePermission in src/auth.js), this is just for the UI.
   let currentRole = "owner";
-  let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, reservationManage: true };
+  let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, orderEdit: true, reservationManage: true };
   const canMenuEdit = () => currentRole === "owner" || staffPermissions.menuEdit;
   const canTableEdit = () => currentRole === "owner" || staffPermissions.tableEdit;
   const canSettingsEdit = () => currentRole === "owner" || staffPermissions.settingsEdit;
   const canCancelOrder = () => currentRole === "owner" || staffPermissions.orderCancel;
+  const canEditOrder = () => currentRole === "owner" || staffPermissions.orderEdit;
   const canManageReservations = () => currentRole === "owner" || staffPermissions.reservationManage;
 
   // ---------- Admin UI language (Korean / Traditional Chinese) ----------
@@ -117,9 +118,18 @@
       nextPreparing: "서빙 완료로 변경",
       nextServed: "결제 완료로 변경",
       cancelBtn: "취소",
+      orderEditBtn: "✏️ 수정",
       printBtn: "🖨️ 인쇄",
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
+      orderEditModalTitle: "주문 수정",
+      orderEditAddBtn: "+ 추가",
+      orderEditAddHint: "동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.",
+      orderEditCancel: "취소",
+      orderEditSave: "저장",
+      orderEditSaved: "수정 내용이 저장되었습니다.",
+      orderEditEmptyError: "주문에는 최소 1개 이상의 항목이 있어야 합니다.",
+      orderEditNotEditable: "결제되었거나 취소된 주문은 수정할 수 없습니다.",
       tableLabel: "테이블",
       orderCardTakeoutBadge: "포장",
       orderCardDeliveryBadge: "배달",
@@ -295,6 +305,7 @@
       permTableEdit: "테이블/배치도 추가·삭제·편집",
       permSettingsEdit: "매장 설정 변경",
       permOrderCancel: "주문 취소",
+      permOrderEdit: "주문 내용 수정 (메뉴/수량/옵션)",
       permReservationManage: "예약 추가/수정/삭제",
       tabReservations: "예약",
       reservationDateFilterLabel: "날짜",
@@ -414,9 +425,18 @@
       nextPreparing: "標記為已出餐",
       nextServed: "標記為已結帳",
       cancelBtn: "取消",
+      orderEditBtn: "✏️ 修改",
       printBtn: "🖨️ 列印",
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
+      orderEditModalTitle: "修改訂單",
+      orderEditAddBtn: "+ 新增",
+      orderEditAddHint: "像銅盤烤肉這種可混搭的餐點，無法在這裡新增——如需新增請改用手動點餐。",
+      orderEditCancel: "取消",
+      orderEditSave: "儲存",
+      orderEditSaved: "修改內容已儲存。",
+      orderEditEmptyError: "訂單至少要保留一項餐點。",
+      orderEditNotEditable: "已結帳或已取消的訂單無法修改。",
       tableLabel: "桌號",
       orderCardTakeoutBadge: "外帶",
       orderCardDeliveryBadge: "外送",
@@ -592,6 +612,7 @@
       permTableEdit: "新增・刪除・編輯桌號/平面圖",
       permSettingsEdit: "變更店家設定",
       permOrderCancel: "取消訂單",
+      permOrderEdit: "修改訂單內容（餐點/數量/選項）",
       permReservationManage: "新增/修改/刪除訂位",
       tabReservations: "訂位",
       reservationDateFilterLabel: "日期",
@@ -787,6 +808,7 @@
     document.body.classList.toggle("perm-no-tableEdit", !canTableEdit());
     document.body.classList.toggle("perm-no-settingsEdit", !canSettingsEdit());
     document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
+    document.body.classList.toggle("perm-no-orderEdit", !canEditOrder());
     document.body.classList.toggle("perm-no-reservationManage", !canManageReservations());
     // Staff can never see an owner-only settings category (알림/결제/인쇄)
     // — if one of those was left selected, bounce back to 화면.
@@ -1061,6 +1083,15 @@
         if (confirm(T("confirmCancelOrder"))) updateOrderStatus(o.id, "cancelled");
       };
       actions.appendChild(cancelBtn);
+    }
+    if (o.status !== "cancelled" && o.status !== "paid" && canEditOrder()) {
+      const editBtn = document.createElement("button");
+      editBtn.textContent = T("orderEditBtn");
+      editBtn.onclick = (e) => {
+        e.stopPropagation();
+        openOrderEdit(o);
+      };
+      actions.appendChild(editBtn);
     }
     const printBtn = document.createElement("button");
     printBtn.textContent = T("printBtn");
@@ -1483,6 +1514,180 @@
     if (e.target.id === "orderDetailBackdrop") $("#orderDetailBackdrop").hidden = true;
   });
 
+  // ---------- 주문 수정 (edit an already-placed order's items) ----------
+  // categories is the same menu tree loadMenu() already keeps for the 메뉴
+  // 관리 tab — flattened here just to look up a line's menu-item definition
+  // (its options/spice_options lists, availability, current price) by id.
+  function flatMenuItems() {
+    return categories.flatMap((c) => c.items);
+  }
+
+  function openOrderEdit(order) {
+    if (order.status === "paid" || order.status === "cancelled") {
+      alert(T("orderEditNotEditable"));
+      return;
+    }
+    // Edited entirely on a local draft copy — nothing reaches the server
+    // until Save, so closing/cancelling this modal never has a side effect.
+    const draftItems = order.items.map((it) => ({ ...it }));
+    const allItems = flatMenuItems();
+    const itemTotal = (it) => it.unit_price * it.qty;
+    const grandTotal = () => draftItems.reduce((s, it) => s + itemTotal(it), 0);
+
+    function renderDraft() {
+      const wrap = $("#orderEditItems");
+      wrap.innerHTML = "";
+      draftItems.forEach((it, idx) => {
+        const mi = allItems.find((m) => m.id === it.item_id);
+        // A mix_options item (동판불고기 etc.) keeps whatever option/spice it
+        // already had — changing that would mean re-splitting quantities
+        // across multiple lines, which is exactly the complexity 수기 주문
+        // exists to sidestep, so only qty/removal are offered for those.
+        const optionsHtml =
+          mi && mi.options && !mi.mix_options
+            ? `<select data-idx="${idx}" data-field="option">${mi.options
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
+                .map((o) => `<option value="${o}" ${it.option_choice === o ? "selected" : ""}>${o}</option>`)
+                .join("")}</select>`
+            : it.option_choice
+              ? `<span style="font-size:13px;color:var(--muted);">(${it.option_choice})</span>`
+              : "";
+        const spiceHtml =
+          mi && mi.spice_options
+            ? `<select data-idx="${idx}" data-field="spice">${mi.spice_options
+                .split(",")
+                .map((o) => o.trim())
+                .filter(Boolean)
+                .map((o) => `<option value="${o}" ${it.spice_choice === o ? "selected" : ""}>${o}</option>`)
+                .join("")}</select>`
+            : it.spice_choice
+              ? `<span style="font-size:13px;color:var(--muted);">(${it.spice_choice})</span>`
+              : "";
+        const row = document.createElement("div");
+        row.className = "order-edit-item-row";
+        row.innerHTML = `
+          <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}</span>
+          ${optionsHtml}
+          ${spiceHtml}
+          <div class="order-edit-qty-group">
+            <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="dec">−</button>
+            <span class="order-edit-qty-value">${it.qty}</span>
+            <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="inc">+</button>
+          </div>
+          <span class="order-edit-item-price">NT$${itemTotal(it)}</span>
+          <button type="button" class="order-edit-remove-btn" data-idx="${idx}" title="${T("cancelBtn")}">✕</button>
+        `;
+        wrap.appendChild(row);
+      });
+
+      wrap.querySelectorAll("[data-action='dec']").forEach((btn) => {
+        btn.onclick = () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (draftItems[idx].qty > 1) draftItems[idx].qty--;
+          renderDraft();
+        };
+      });
+      wrap.querySelectorAll("[data-action='inc']").forEach((btn) => {
+        btn.onclick = () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          if (draftItems[idx].qty < 20) draftItems[idx].qty++;
+          renderDraft();
+        };
+      });
+      wrap.querySelectorAll(".order-edit-remove-btn").forEach((btn) => {
+        btn.onclick = () => {
+          draftItems.splice(parseInt(btn.dataset.idx, 10), 1);
+          renderDraft();
+        };
+      });
+      wrap.querySelectorAll("select[data-field='option']").forEach((sel) => {
+        sel.onchange = () => {
+          draftItems[parseInt(sel.dataset.idx, 10)].option_choice = sel.value;
+        };
+      });
+      wrap.querySelectorAll("select[data-field='spice']").forEach((sel) => {
+        sel.onchange = () => {
+          draftItems[parseInt(sel.dataset.idx, 10)].spice_choice = sel.value;
+        };
+      });
+
+      $("#orderEditTotal").textContent = `${T("totalLabel")} NT$${grandTotal()}`;
+    }
+
+    // Quick-add only offers simple items (no mix_options, still available)
+    // — see the modal's own hint text for why griddle/mix items are excluded.
+    const addable = allItems.filter((mi) => mi.available && !mi.mix_options);
+    const addSelect = $("#orderEditAddSelect");
+    addSelect.innerHTML = addable
+      .map((mi) => `<option value="${mi.id}">${mi.code ? `${mi.code} ` : ""}${itemName(mi)} — NT$${mi.price}</option>`)
+      .join("");
+    $("#orderEditAddBtn").onclick = () => {
+      const mi = allItems.find((m) => m.id === parseInt(addSelect.value, 10));
+      if (!mi) return;
+      draftItems.push({
+        item_id: mi.id,
+        code: mi.code || null,
+        name_zh: mi.name_zh,
+        name_ko: mi.name_ko,
+        name_en: mi.name_en,
+        qty: 1,
+        unit_price: mi.price,
+        option_choice: mi.options ? mi.options.split(",")[0].trim() : null,
+        spice_choice: mi.spice_options ? mi.spice_options.split(",")[0].trim() : null,
+        order_type: "dine_in",
+        note: "",
+      });
+      renderDraft();
+    };
+
+    $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${T("tableLabel")} ${order.table_number}`;
+    $("#orderEditMsg").hidden = true;
+    renderDraft();
+    $("#orderEditBackdrop").hidden = false;
+
+    $("#orderEditSave").onclick = async () => {
+      if (draftItems.length === 0) {
+        alert(T("orderEditEmptyError"));
+        return;
+      }
+      const payload = {
+        items: draftItems.map((it) => ({
+          itemId: it.item_id,
+          qty: it.qty,
+          option: it.option_choice,
+          spice: it.spice_choice,
+          orderType: it.order_type,
+          note: it.note || "",
+        })),
+      };
+      const res = await fetch(`/api/orders/${order.id}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const msg = $("#orderEditMsg");
+        msg.style.color = "#b5232c";
+        msg.textContent = T("orderEditNotEditable");
+        msg.hidden = false;
+        return;
+      }
+      $("#orderEditBackdrop").hidden = true;
+      // loadOrders() already re-opens the table-detail modal for whatever
+      // table is currently shown (see openTableNumber), so no separate
+      // refresh call is needed here even when this was opened from there.
+      await loadOrders();
+      await loadTables();
+    };
+  }
+  $("#orderEditClose").onclick = () => ($("#orderEditBackdrop").hidden = true);
+  $("#orderEditCancel").onclick = () => ($("#orderEditBackdrop").hidden = true);
+  $("#orderEditBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "orderEditBackdrop") $("#orderEditBackdrop").hidden = true;
+  });
+
   // ---------- Menu management ----------
   async function loadMenu() {
     const res = await fetch("/api/menu/admin");
@@ -1756,6 +1961,14 @@
       : "";
     $("#tableDetailBody").innerHTML = header + body + footer;
     $("#tableDetailBody")
+      .querySelectorAll("[data-edit-id]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          const o = tableOrders.find((x) => x.id === parseInt(btn.dataset.editId, 10));
+          if (o) openOrderEdit(o);
+        };
+      });
+    $("#tableDetailBody")
       .querySelectorAll("[data-advance-id]")
       .forEach((btn) => {
         btn.onclick = async () => {
@@ -1800,11 +2013,15 @@
     const nextBtn = NEXT_STATUS[o.status]
       ? `<button class="primary-btn" style="padding:6px 12px;font-size:12px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
       : "";
+    const editBtn =
+      o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
+        ? `<button style="padding:6px 12px;font-size:12px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
+        : "";
     return `
       <div style="border-top:1px solid var(--line);padding:12px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
           <span style="font-weight:700;font-size:13px;">${time} · ${statusLabel(o.status)}</span>
-          ${nextBtn}
+          <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
         ${o.note ? `<p style="font-size:12px;color:var(--muted);margin:6px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
@@ -2938,7 +3155,7 @@
   $("#changeOwnerPwBtn").onclick = () => changeOwnPassword("owner_pw_current", "owner_pw_new", "ownerPwMsg");
 
   // ---------- Staff permission management (owner only) ----------
-  const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "reservationManage"];
+  const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "orderEdit", "reservationManage"];
 
   async function loadStaffPermissions() {
     const res = await fetch("/api/settings/staff-permissions");

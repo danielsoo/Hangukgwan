@@ -38,14 +38,23 @@ router.get("/me", (req, res) => {
   if (!req.session || !req.session.role) return res.json({ isAdmin: false });
   const role = req.session.role;
   const staffPerms = store.settings.staff_permissions || {};
+  // NOTE: reservationManage was missing from this list even though it's a
+  // real toggle in staff_permissions (see settings.js's STAFF_PERMISSION_KEYS
+  // and admin.js's canManageReservations()) — the frontend defaults an
+  // unlisted key to true only when `data.permissions` itself is entirely
+  // absent, so once /me started returning a permissions object at all, a
+  // staff session's actual reservationManage toggle was silently never
+  // reaching the browser. Added here alongside the new orderEdit toggle.
   const permissions =
     role === "owner"
-      ? { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true }
+      ? { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, orderEdit: true, reservationManage: true }
       : {
           menuEdit: !!staffPerms.menuEdit,
           tableEdit: !!staffPerms.tableEdit,
           settingsEdit: !!staffPerms.settingsEdit,
           orderCancel: !!staffPerms.orderCancel,
+          orderEdit: !!staffPerms.orderEdit,
+          reservationManage: !!staffPerms.reservationManage,
         };
   res.json({ isAdmin: true, role, permissions });
 });

@@ -225,14 +225,15 @@ async function run() {
       tableEdit: false,
       settingsEdit: false,
       orderCancel: false,
+      orderEdit: false,
       reservationManage: false,
     };
   } else {
     // Backfill any permission keys added after this install's first seed
-    // (e.g. reservationManage) — same non-destructive pattern as db.js's
-    // refreshStore() backfill, so existing restaurants don't need a manual
-    // migration every time a new toggleable feature is added.
-    const permDefaults = { menuEdit: false, tableEdit: false, settingsEdit: false, orderCancel: false, reservationManage: false };
+    // (e.g. reservationManage, orderEdit) — same non-destructive pattern as
+    // db.js's refreshStore() backfill, so existing restaurants don't need a
+    // manual migration every time a new toggleable feature is added.
+    const permDefaults = { menuEdit: false, tableEdit: false, settingsEdit: false, orderCancel: false, orderEdit: false, reservationManage: false };
     for (const k of Object.keys(permDefaults)) {
       if (!(k in store.settings.staff_permissions)) store.settings.staff_permissions[k] = permDefaults[k];
     }

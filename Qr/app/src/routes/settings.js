@@ -118,7 +118,7 @@ router.get("/logo-preview", requireAdmin, async (req, res) => {
 // toggle-able features should be added here going forward: the owner always
 // has them on, and separately decides whether to switch each one on for
 // staff too.
-const STAFF_PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "reservationManage"];
+const STAFF_PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "orderEdit", "reservationManage"];
 
 router.get("/staff-permissions", requireOwner, (req, res) => {
   const perms = store.settings.staff_permissions || {};

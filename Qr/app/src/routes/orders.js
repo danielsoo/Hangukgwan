@@ -217,4 +217,68 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   res.json(order);
 });
 
+// Admin: edit an already-placed order's items (staff noticed a mistake, or
+// the guest changed their mind before the food came out) — quantity,
+// removal, and each line's option/spice choice, plus adding more items.
+// Gated behind the owner's "주문 내용 수정" toggle, same pattern as
+// orderCancel above, since silently changing what a table is charged for
+// deserves the same guardrail as cancelling it outright. Only allowed while
+// the order is still open (not yet paid or cancelled) — a settled order's
+// items are the receipt of record and shouldn't move after the fact.
+router.patch("/:id/items", requireAdmin, async (req, res) => {
+  if (req.session.role !== "owner") {
+    const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderEdit);
+    if (!allowed) return res.status(403).json({ error: "permission_denied" });
+  }
+  const id = parseInt(req.params.id, 10);
+  const order = store.orders.find((o) => o.id === id);
+  if (!order) return res.status(404).json({ error: "not_found" });
+  if (order.status === "paid" || order.status === "cancelled") {
+    return res.status(400).json({ error: "order_not_editable" });
+  }
+
+  const { items } = req.body || {};
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "invalid_order" });
+  }
+
+  // Same validation as placing a new order (POST / above) — re-look-up
+  // each item server-side rather than trusting the client's price/name, so
+  // this can't be used to sneak in an unavailable item or a tampered price.
+  // Unlike a fresh order, the griddle min-first-order-qty check isn't
+  // re-applied here: that rule only governs a table's very first order, and
+  // this is editing an order that (by definition) already exists.
+  const validated = [];
+  let total = 0;
+  for (const it of items) {
+    const mi = store.menuItems.find((m) => m.id === parseInt(it.itemId, 10) && m.available);
+    if (!mi) continue;
+    const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
+    total += mi.price * qty;
+    validated.push({
+      item_id: mi.id,
+      code: mi.code || null,
+      name_zh: mi.name_zh,
+      name_ko: mi.name_ko,
+      name_en: mi.name_en,
+      qty,
+      unit_price: mi.price,
+      option_choice: it.option || null,
+      spice_choice: it.spice || null,
+      order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
+      note: (it.note || "").slice(0, 200),
+    });
+  }
+  if (validated.length === 0) return res.status(400).json({ error: "no_valid_items" });
+
+  const takeoutCount = validated.filter((v) => v.order_type === "takeout").length;
+  order.order_type = takeoutCount === 0 ? "dine_in" : takeoutCount === validated.length ? "takeout" : "mixed";
+  order.items = validated;
+  order.total = total;
+  order.updated_at = nowLocal();
+
+  await save();
+  res.json(order);
+});
+
 module.exports = router;

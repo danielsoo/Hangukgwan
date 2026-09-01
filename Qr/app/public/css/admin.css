@@ -458,6 +458,28 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .table-picker-btn.selected { border-color: var(--red); background: var(--red); color: #fff; }
 .table-picker-empty { color: var(--muted); font-size: 17px; padding: 16px 0; text-align: center; }
 
+/* 주문 수정 (edit an already-placed order's items) — see openOrderEdit()
+   in admin.js. */
+.order-edit-item-row {
+  display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.order-edit-item-name { flex: 1; min-width: 120px; font-weight: 700; font-size: 15px; }
+.order-edit-item-row select { width: auto; padding: 4px 6px; font-size: 13px; }
+.order-edit-qty-group { display: flex; align-items: center; gap: 6px; }
+.order-edit-qty-btn {
+  width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: #fff; cursor: pointer;
+  font-weight: 800; font-size: 15px; line-height: 1; color: var(--ink); padding: 0;
+}
+.order-edit-qty-btn:hover { border-color: var(--navy); color: var(--navy); }
+.order-edit-qty-value { min-width: 22px; text-align: center; font-weight: 700; }
+.order-edit-item-price { font-size: 13px; color: var(--muted); min-width: 60px; text-align: right; }
+.order-edit-remove-btn {
+  background: none; border: none; color: var(--red); font-size: 18px; font-weight: 800; cursor: pointer; padding: 0 4px;
+}
+.order-edit-add-row { display: flex; gap: 8px; margin-top: 14px; }
+.order-edit-add-row select { flex: 1; }
+.order-edit-total { text-align: right; font-weight: 800; font-size: 17px; margin-top: 12px; padding-top: 10px; border-top: 2px solid var(--ink); }
+
 @media (max-width: 900px) {
   .orders-board { grid-template-columns: 1fr 1fr; }
   .form-row { grid-template-columns: 1fr; }
