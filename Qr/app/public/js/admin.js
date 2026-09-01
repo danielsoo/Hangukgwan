@@ -93,7 +93,9 @@
       viewListBtn: "📋 목록 보기",
       viewFloorBtn: "🗺️ 배치도 보기",
       addZoneBtn: "+ 구역 추가",
-      floorPlanHint: "구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요.",
+      saveFloorPlanBtn: "💾 배치도 저장",
+      floorPlanSavedMsg: "배치도가 저장되었습니다",
+      floorPlanHint: "구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요. 자리를 옮긴 뒤에는 \"배치도 저장\"을 눌러서 저장됐는지 확인하세요.",
       alertTableNumberRequired: "테이블 번호를 입력하세요",
       alertUnluckyNumber: "숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).",
       alertTableExists: "이미 존재하는 테이블 번호입니다",
@@ -342,7 +344,9 @@
       viewListBtn: "📋 清單檢視",
       viewFloorBtn: "🗺️ 平面圖檢視",
       addZoneBtn: "+ 新增區域",
-      floorPlanHint: "拖曳區域和桌號即可移動位置，拖曳右下角可調整大小。點擊區域名稱可以修改名稱。",
+      saveFloorPlanBtn: "💾 儲存版面",
+      floorPlanSavedMsg: "版面已儲存",
+      floorPlanHint: "拖曳區域和桌號即可移動位置，拖曳右下角可調整大小。點擊區域名稱可以修改名稱。移動位置後請按「儲存版面」確認已儲存。",
       alertTableNumberRequired: "請輸入桌號",
       alertUnluckyNumber: "桌號不能包含數字「4」（在台灣被視為不吉利的數字）。",
       alertTableExists: "此桌號已經存在",
@@ -2014,6 +2018,7 @@
     $("#tablesList").hidden = false;
     $("#floorPlanWrap").hidden = true;
     $("#addZoneBtn").hidden = true;
+    $("#saveFloorPlanBtn").hidden = true;
   };
   $("#viewFloorBtn").onclick = async () => {
     $("#viewFloorBtn").classList.add("active");
@@ -2021,8 +2026,55 @@
     $("#tablesList").hidden = true;
     $("#floorPlanWrap").hidden = false;
     $("#addZoneBtn").hidden = false;
+    $("#saveFloorPlanBtn").hidden = false;
     await loadZones();
     renderFloorPlan();
+  };
+  // Explicit save button for the 배치도 floor plan — every drag/resize
+  // already auto-saves on its own (see patchFloorPlan() above), but the
+  // owner specifically asked for a visible save action with its own
+  // confirmation message, the same way every other editable section here
+  // works (설정 저장, 계절 설정 저장, etc.), rather than trusting a silent
+  // auto-save. Re-sends every table/zone's current position/size — cheap,
+  // and doubles as a "sync now" in case anything from a recent drag hasn't
+  // landed yet — then re-loads from the server and re-renders so what's on
+  // screen is guaranteed to match what's actually saved.
+  $("#saveFloorPlanBtn").onclick = async () => {
+    const btn = $("#saveFloorPlanBtn");
+    const msg = $("#floorPlanSaveMsg");
+    btn.disabled = true;
+    try {
+      const tablePatches = tables
+        .filter((t) => t.zone_id != null)
+        .map((t) =>
+          fetch(`/api/tables/${t.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ x: t.x, y: t.y, width: t.width, height: t.height }),
+          })
+        );
+      const zonePatches = zones.map((z) =>
+        fetch(`/api/zones/${z.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ x: z.x, y: z.y, width: z.width, height: z.height }),
+        })
+      );
+      const results = await Promise.all([...tablePatches, ...zonePatches]);
+      const allOk = results.every((r) => r.ok);
+      msg.textContent = allOk ? T("floorPlanSavedMsg") : T("alertFloorPlanSaveFailed");
+      msg.style.color = allOk ? "" : "var(--red)";
+      msg.hidden = false;
+      if (allOk) {
+        // Confirms on-screen state matches what's actually in the DB now,
+        // instead of just trusting the local model that sent the PATCHes.
+        await Promise.all([loadTables(), loadZones()]);
+        renderFloorPlan();
+      }
+      setTimeout(() => (msg.hidden = true), 4000);
+    } finally {
+      btn.disabled = false;
+    }
   };
   $("#addZoneBtn").onclick = async () => {
     const res = await fetch("/api/zones", {

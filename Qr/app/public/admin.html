@@ -79,11 +79,13 @@
         <button id="viewListBtn" class="view-toggle-btn active" data-i18n="viewListBtn">📋 목록 보기</button>
         <button id="viewFloorBtn" class="view-toggle-btn" data-i18n="viewFloorBtn">🗺️ 배치도 보기</button>
         <button id="addZoneBtn" class="view-toggle-btn need-tableEdit" hidden data-i18n="addZoneBtn">+ 구역 추가</button>
+        <button id="saveFloorPlanBtn" class="view-toggle-btn need-tableEdit primary-btn" hidden data-i18n="saveFloorPlanBtn">💾 배치도 저장</button>
       </div>
       <div id="tablesList" class="tables-list"></div>
       <div id="floorPlanWrap" class="floor-plan-wrap" hidden>
-        <p class="settings-hint" data-i18n="floorPlanHint">구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요.</p>
+        <p class="settings-hint" data-i18n="floorPlanHint">구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요. 자리를 옮긴 뒤에는 "배치도 저장"을 눌러서 저장됐는지 확인하세요.</p>
         <div id="floorPlan" class="floor-plan"></div>
+        <div class="save-msg" id="floorPlanSaveMsg" hidden></div>
       </div>
     </section>
 
