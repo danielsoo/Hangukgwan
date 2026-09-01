@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, patchArrayItem, nextId, getPhoto } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const canEditTables = requirePermission("tableEdit");
@@ -14,25 +14,34 @@ router.post("/", canEditTables, async (req, res) => {
   const { number, label } = req.body || {};
   if (!number) return res.status(400).json({ error: "number_required" });
   if (String(number).includes("4")) return res.status(400).json({ error: "unlucky_number" });
-  if (store.tables.some((t) => t.number === String(number))) {
-    return res.status(400).json({ error: "table_exists" });
-  }
-  const maxSort = store.tables.reduce((m, t) => Math.max(m, t.sort_order), 0);
-  // zone_id starts unset — the table won't appear on the 배치도 floor plan
-  // until the owner explicitly adds it into a zone from that view.
-  const table = {
-    id: nextId("tables"),
-    number: String(number),
-    label: label || null,
-    sort_order: maxSort + 1,
-    zone_id: null,
-    x: 10,
-    y: 10,
-    width: 70,
-    height: 70,
-  };
-  store.tables.push(table);
-  await save();
+  // refreshAndSave (not save()) re-fetches right before creating — narrows
+  // the window for a table added from a second admin tab/device at nearly
+  // the same moment to race with this one (same "lost update" class of bug
+  // fixed for the floor-plan drag/resize PATCHes above).
+  let table = null;
+  let dupe = false;
+  await refreshAndSave((s) => {
+    if (s.tables.some((t) => t.number === String(number))) {
+      dupe = true;
+      return;
+    }
+    const maxSort = s.tables.reduce((m, t) => Math.max(m, t.sort_order), 0);
+    // zone_id starts unset — the table won't appear on the 배치도 floor plan
+    // until the owner explicitly adds it into a zone from that view.
+    table = {
+      id: nextId("tables"),
+      number: String(number),
+      label: label || null,
+      sort_order: maxSort + 1,
+      zone_id: null,
+      x: 10,
+      y: 10,
+      width: 70,
+      height: 70,
+    };
+    s.tables.push(table);
+  });
+  if (dupe) return res.status(400).json({ error: "table_exists" });
   res.status(201).json(table);
 });
 
@@ -136,8 +145,9 @@ router.delete("/:tableNumber/party-size", async (req, res) => {
 
 router.delete("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  store.tables = store.tables.filter((t) => t.id !== id);
-  await save();
+  await refreshAndSave((s) => {
+    s.tables = s.tables.filter((t) => t.id !== id);
+  });
   res.json({ ok: true });
 });
 

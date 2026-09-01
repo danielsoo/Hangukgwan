@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, patchArrayItem, nextId } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const canEditTables = requirePermission("tableEdit");
 
@@ -11,18 +11,24 @@ router.get("/", requireAdmin, (req, res) => {
 
 router.post("/", canEditTables, async (req, res) => {
   const { name, x, y, width, height } = req.body || {};
-  const maxSort = store.zones.reduce((m, z) => Math.max(m, z.sort_order), 0);
-  const zone = {
-    id: nextId("zones"),
-    name: name || `구역 ${store.zones.length + 1}`,
-    x: Number(x) || 20,
-    y: Number(y) || 20,
-    width: Number(width) || 300,
-    height: Number(height) || 240,
-    sort_order: maxSort + 1,
-  };
-  store.zones.push(zone);
-  await save();
+  // refreshAndSave (not save()) re-fetches right before creating — same
+  // reasoning as tables.js's POST: narrows the window for a zone added from
+  // a second admin tab/device at nearly the same moment to race with this
+  // one and lose an update.
+  let zone = null;
+  await refreshAndSave((s) => {
+    const maxSort = s.zones.reduce((m, z) => Math.max(m, z.sort_order), 0);
+    zone = {
+      id: nextId("zones"),
+      name: name || `구역 ${s.zones.length + 1}`,
+      x: Number(x) || 20,
+      y: Number(y) || 20,
+      width: Number(width) || 300,
+      height: Number(height) || 240,
+      sort_order: maxSort + 1,
+    };
+    s.zones.push(zone);
+  });
   res.status(201).json(zone);
 });
 
@@ -63,8 +69,9 @@ router.patch("/:id", canEditTables, async (req, res) => {
 
 router.delete("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  store.zones = store.zones.filter((z) => z.id !== id);
-  await save();
+  await refreshAndSave((s) => {
+    s.zones = s.zones.filter((z) => z.id !== id);
+  });
   res.json({ ok: true });
 });
 
