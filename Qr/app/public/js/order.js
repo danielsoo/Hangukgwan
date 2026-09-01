@@ -853,11 +853,20 @@
     const btn = $("#partySizeConfirmBtn");
     btn.disabled = true;
     try {
-      await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
+      const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ partySize: partySizeStep }),
       });
+      // fetch() only rejects on a network-level failure — a 4xx/5xx response
+      // still resolves normally, so this must be checked explicitly.
+      // Otherwise a save that actually failed server-side (table not found,
+      // a transient error, etc.) would still close this modal and set
+      // partySize locally, and the customer would only find out something
+      // was wrong when order submission later gets rejected with
+      // party_size_required and this same modal pops back up — confusing,
+      // since they already thought they'd answered it once.
+      if (!res.ok) throw new Error("save_failed");
       partySize = partySizeStep;
       $("#partySizeBackdrop").hidden = true;
       resetIdleTimer();
