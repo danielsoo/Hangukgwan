@@ -282,6 +282,18 @@
       paymentTestModeStatus: "⚠ 테스트 모드 — ECPay 정식 가맹점 정보가 아직 설정되지 않아 실제 결제는 되지 않습니다 (서버 환경변수에 ECPAY_MERCHANT_ID 등을 추가하면 실결제로 전환돼요).",
       paymentLiveModeStatus: "✔ 실결제 모드 — ECPay 정식 가맹점 정보로 연결되어 있습니다.",
       paymentSavedMsg: "저장되었습니다",
+      escposSettingsTitle: "주방 프린터 직접 인쇄 (ESC/POS · QZ Tray)",
+      escposSettingsHint:
+        "켜두면 확인창 없이 영수증 프린터로 바로 인쇄돼요 (커팅 자동 포함). 이 컴퓨터에 <strong>QZ Tray</strong> 프로그램이 설치되어 실행 중이어야 하고, 프린터 이름은 QZ Tray가 인식한 이름 그대로 입력해야 해요. 꺼두거나 QZ Tray 연결이 안 되면 지금처럼 브라우저 인쇄(미리보기 인쇄)로 자동 전환돼요.",
+      escposEnableLabel: "ESC/POS 자동 인쇄 사용",
+      escposPrinterNameLabel: "프린터 이름 (QZ Tray 기준)",
+      escposPrinterNamePlaceholder: "예: XINYE N160II",
+      escposSavedMsg: "저장되었습니다",
+      escposNoPrinterName: "먼저 프린터 이름을 입력해주세요",
+      escposConnecting: "QZ Tray에 연결 중...",
+      testEscposBtn: "🖨️ 테스트 인쇄",
+      escposTestSuccess: "✔ 테스트 인쇄를 보냈어요. 프린터를 확인해보세요.",
+      escposTestFailed: "✘ 인쇄 실패 — QZ Tray가 실행 중인지, 프린터 이름이 맞는지 확인해주세요.",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
@@ -533,6 +545,18 @@
       paymentTestModeStatus: "⚠ 測試模式 — 尚未設定綠界正式特店資訊，不會產生真實扣款（在伺服器環境變數加入 ECPAY_MERCHANT_ID 等即可切換為正式付款）。",
       paymentLiveModeStatus: "✔ 正式付款模式 — 已連接綠界正式特店資訊。",
       paymentSavedMsg: "已儲存",
+      escposSettingsTitle: "廚房出單機直接列印（ESC/POS · QZ Tray）",
+      escposSettingsHint:
+        "開啟後會直接送到出單機列印，不會跳出確認視窗（自動切紙）。這台電腦需要安裝並執行 <strong>QZ Tray</strong> 程式，且印表機名稱要和 QZ Tray 顯示的名稱完全一致。關閉或 QZ Tray 未連線時，會自動改回目前的瀏覽器列印（預覽列印）方式。",
+      escposEnableLabel: "啟用 ESC/POS 直接列印",
+      escposPrinterNameLabel: "印表機名稱（依 QZ Tray 顯示）",
+      escposPrinterNamePlaceholder: "例如：XINYE N160II",
+      escposSavedMsg: "已儲存",
+      escposNoPrinterName: "請先輸入印表機名稱",
+      escposConnecting: "正在連線 QZ Tray...",
+      testEscposBtn: "🖨️ 測試列印",
+      escposTestSuccess: "✔ 已送出測試列印，請確認印表機。",
+      escposTestFailed: "✘ 列印失敗 — 請確認 QZ Tray 是否執行中，以及印表機名稱是否正確。",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
@@ -662,6 +686,7 @@
       loadStaffPermissions();
       loadLineSettings();
       loadPaymentSettings();
+      loadEscposSettings();
     }
     startPolling();
   }
@@ -950,7 +975,15 @@
   // Prints via the exact same code path as previewKitchenTicket (a real
   // window.open tab) instead of a hidden iframe, so print renders
   // byte-for-byte what 미리보기 already showed.
-  function printKitchenTicket(o) {
+  async function printKitchenTicket(o) {
+    // If ESC/POS auto-print is turned on and QZ Tray is reachable on this
+    // computer, this sends the ticket straight to the physical printer with
+    // no dialog at all and we're done. Any failure here (feature off, QZ
+    // Tray not running, printer name mismatch, etc.) falls straight through
+    // to the normal browser-print flow below, so printing is never silently
+    // lost either way.
+    if (await tryPrintViaEscPos(o)) return;
+
     const win = window.open("", "_blank");
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
     win.document.open();
@@ -2499,6 +2532,131 @@
     }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // ---------- Direct ESC/POS kitchen printer via QZ Tray (owner only UI,
+  // but see the GET route comment in settings.js — staff sessions can read
+  // the saved config too, since printKitchenTicket() below needs it for
+  // staff logins as well) ----------
+  async function loadEscposSettings() {
+    const res = await fetch("/api/settings/escpos");
+    if (!res.ok) return;
+    const data = await res.json();
+    $("#escposEnabledToggle").checked = !!data.enabled;
+    $("#escposPrinterNameInput").value = data.printerName || "";
+  }
+
+  $("#saveEscposSettingsBtn").onclick = async () => {
+    const res = await fetch("/api/settings/escpos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: $("#escposEnabledToggle").checked,
+        printerName: $("#escposPrinterNameInput").value.trim(),
+      }),
+    });
+    const msg = $("#escposMsg");
+    if (res.ok) {
+      const data = await res.json();
+      $("#escposEnabledToggle").checked = !!data.enabled;
+      $("#escposPrinterNameInput").value = data.printerName || "";
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("escposSavedMsg");
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordFailed");
+    }
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // QZ Tray connects over a local WebSocket to the QZ Tray program running
+  // on THIS computer (not the server — the server is on Vercel and can't
+  // reach a restaurant's LAN printer directly, which is the whole reason
+  // this bridge exists). No certificate/signature is configured here since
+  // this restaurant's single-computer setup doesn't need signed requests —
+  // QZ Tray will instead show a one-time "Allow/Block" popup on its own the
+  // first time it connects; checking "remember this decision" there avoids
+  // it showing again on future connects.
+  let qzSecuritySetup = false;
+  function setupQzSecurity() {
+    if (qzSecuritySetup || typeof qz === "undefined") return;
+    qz.security.setCertificatePromise((resolve) => resolve(""));
+    qz.security.setSignaturePromise(() => (resolve) => resolve(""));
+    qzSecuritySetup = true;
+  }
+
+  async function ensureQzConnected() {
+    if (typeof qz === "undefined") throw new Error("qz_tray_js_not_loaded");
+    setupQzSecurity();
+    if (!qz.websocket.isActive()) await qz.websocket.connect();
+  }
+
+  // Tries to print `o` straight to the physical printer via QZ Tray,
+  // completely bypassing the browser's print dialog (no click needed, paper
+  // auto-cuts — see public/js/escpos.js). Returns true only if the print
+  // command was actually sent; false for any reason at all (feature turned
+  // off, no printer name saved, QZ Tray not installed/running on this
+  // computer, printer not found by that name, etc.) — callers fall back to
+  // the existing browser-print ticket whenever this returns false, so
+  // printing never just silently fails for the kitchen.
+  async function tryPrintViaEscPos(o) {
+    try {
+      const res = await fetch("/api/settings/escpos");
+      if (!res.ok) return false;
+      const cfg = await res.json();
+      if (!cfg.enabled || !cfg.printerName) return false;
+      if (typeof qz === "undefined" || typeof buildEscPosTicket !== "function") return false;
+
+      await ensureQzConnected();
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      const raw = buildEscPosTicket(o, storeName);
+      const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
+      await qz.print(config, [{ type: "raw", format: "command", flavor: "plain", data: raw }]);
+      return true;
+    } catch (e) {
+      console.warn("ESC/POS print failed, falling back to browser print:", e);
+      return false;
+    }
+  }
+
+  $("#testEscposBtn").onclick = async () => {
+    const btn = $("#testEscposBtn");
+    const status = $("#escposConnStatus");
+    const printerName = $("#escposPrinterNameInput").value.trim();
+    if (!printerName) {
+      status.style.color = "#b5232c";
+      status.textContent = T("escposNoPrinterName");
+      status.hidden = false;
+      return;
+    }
+    btn.disabled = true;
+    status.style.color = "";
+    status.textContent = T("escposConnecting");
+    status.hidden = false;
+    try {
+      await ensureQzConnected();
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      const sampleOrder = {
+        table_number: "TEST",
+        order_type: "dine_in",
+        created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
+        items: [{ name_ko: "테스트 메뉴", name_zh: "測試菜品", qty: 1, option_choice: "보통", spice_choice: "보통", note: "" }],
+        total: 0,
+        note: "",
+      };
+      const raw = buildEscPosTicket(sampleOrder, storeName);
+      const config = qz.configs.create(printerName, { encoding: "UTF-8" });
+      await qz.print(config, [{ type: "raw", format: "command", flavor: "plain", data: raw }]);
+      status.style.color = "#1a8a44";
+      status.textContent = T("escposTestSuccess");
+    } catch (e) {
+      console.warn("ESC/POS test print failed:", e);
+      status.style.color = "#b5232c";
+      status.textContent = T("escposTestFailed");
+    } finally {
+      btn.disabled = false;
+    }
   };
 
   // Owner-only "reveal" toggle: fetches the actual saved token/secret and

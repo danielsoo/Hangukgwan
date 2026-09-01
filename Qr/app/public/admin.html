@@ -357,6 +357,23 @@
           <button id="savePaymentSettingsBtn" data-i18n="saveBtn">저장</button>
           <div class="save-msg" id="paymentMsg" hidden></div>
         </div>
+        <div class="settings-card">
+          <h3 data-i18n="escposSettingsTitle">주방 프린터 직접 인쇄 (ESC/POS · QZ Tray)</h3>
+          <p class="settings-hint" data-i18n="escposSettingsHint">
+            켜두면 확인창 없이 영수증 프린터로 바로 인쇄돼요 (커팅 자동 포함). 이 컴퓨터에
+            <strong>QZ Tray</strong> 프로그램이 설치되어 실행 중이어야 하고, 프린터 이름은
+            QZ Tray가 인식한 이름 그대로 입력해야 해요. 꺼두거나 QZ Tray 연결이 안 되면
+            지금처럼 브라우저 인쇄(미리보기 인쇄)로 자동 전환돼요.
+          </p>
+          <label class="perm-toggle-row"><span data-i18n="escposEnableLabel">ESC/POS 자동 인쇄 사용</span><input type="checkbox" id="escposEnabledToggle" /></label>
+          <label><span data-i18n="escposPrinterNameLabel">프린터 이름 (QZ Tray 기준)</span>
+            <input id="escposPrinterNameInput" data-i18n-placeholder="escposPrinterNamePlaceholder" placeholder="예: XINYE N160II" />
+          </label>
+          <div id="escposConnStatus" class="settings-hint"></div>
+          <button id="saveEscposSettingsBtn" data-i18n="saveBtn">저장</button>
+          <button id="testEscposBtn" type="button" data-i18n="testEscposBtn">🖨️ 테스트 인쇄</button>
+          <div class="save-msg" id="escposMsg" hidden></div>
+        </div>
       </div>
     </section>
 
@@ -469,6 +486,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <script src="/js/allergens.js"></script>
 <script src="/js/season.js"></script>
+<script src="/js/qz-tray.js"></script>
+<script src="/js/escpos.js"></script>
 <script src="/js/admin.js"></script>
 </body>
 </html>

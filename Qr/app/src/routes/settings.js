@@ -243,4 +243,32 @@ router.put("/payment", requireOwner, async (req, res) => {
   res.json(paymentStatus());
 });
 
+// Direct ESC/POS kitchen-printer setting (QZ Tray) — owner-only, same
+// pattern as the payment/LINE toggles above. Just a flag + a printer name
+// string; QZ Tray itself (a separate program running on whichever computer
+// opens the admin panel) is what actually talks to the printer — see
+// public/js/qz-tray.js / public/js/escpos.js / admin.js's printKitchenTicket.
+function escposStatus() {
+  return {
+    enabled: !!store.settings.escpos_enabled,
+    printerName: store.settings.escpos_printer_name || "",
+  };
+}
+
+// GET is requireAdmin (not requireOwner) on purpose: a staff session also
+// needs to read this (printKitchenTicket() in admin.js checks it before
+// every print, for staff logins too) — only *changing* the setting is
+// owner-only, via PUT below.
+router.get("/escpos", requireAdmin, (req, res) => {
+  res.json(escposStatus());
+});
+
+router.put("/escpos", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  if (typeof b.enabled === "boolean") store.settings.escpos_enabled = b.enabled;
+  if (typeof b.printerName === "string") store.settings.escpos_printer_name = b.printerName.trim().slice(0, 100);
+  await save();
+  res.json(escposStatus());
+});
+
 module.exports = router;
