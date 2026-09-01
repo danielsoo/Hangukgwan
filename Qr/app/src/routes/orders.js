@@ -180,6 +180,29 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   if (!order) return res.status(404).json({ error: "not_found" });
   order.status = status;
   order.updated_at = nowLocal();
+
+  // Once this table has no order left in flight (every order is now either
+  // paid or cancelled), clear its registered party size — same cleanup the
+  // admin's bulk "전체 결제 완료" already does explicitly, but this covers
+  // every other way a table can empty out too: a single order paid off one
+  // at a time through the normal new->preparing->served->paid flow, or an
+  // order cancelled outright with none left behind. Without this, a table
+  // could sit at "비어있음" (empty) in the admin table list while still
+  // showing a stale headcount from whoever ordered last — and worse, the
+  // next customer who scans that table's QR code would silently inherit
+  // that stale party size instead of being asked fresh (see initPartySize()
+  // in public/js/order.js), even though they're a different party entirely.
+  const stillActive = store.orders.some(
+    (o) => o.table_number === order.table_number && o.status !== "paid" && o.status !== "cancelled"
+  );
+  if (!stillActive) {
+    const table = store.tables.find((t) => t.number === order.table_number);
+    if (table && table.party_size) {
+      table.party_size = null;
+      table.party_size_updated_at = null;
+    }
+  }
+
   await save();
   res.json(order);
 });

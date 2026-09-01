@@ -1564,7 +1564,12 @@
       const badge = unpaid.length > 0
         ? `<div class="table-order-badge active">${fmtOrderCount(unpaid.length, unpaid.reduce((s, o) => s + o.total, 0))}</div>`
         : `<div class="table-order-badge empty">${T("tableEmptyBadge")}</div>`;
-      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
+      // Only shown while the table actually has an order in flight — a
+      // party size registered on an otherwise-empty table is stale data
+      // (see the party_size auto-clear in src/routes/orders.js's PATCH
+      // handler) and showing it here would make an empty table look
+      // occupied, exactly the "비어있음인데 인원수가 남아있다" bug reported.
+      const partyBadge = t.party_size && unpaid.length > 0 ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
       const delBtn = canTableEdit() ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       chip.innerHTML = `${delBtn}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
       if (canTableEdit()) {
@@ -1586,7 +1591,8 @@
     const tableOrders = activeOrdersForTable(tableNumber);
     const unpaidOrders = tableOrders.filter((o) => o.status !== "paid");
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
-    const partyText = table && table.party_size ? ` · ${fmtPartyCount(table.party_size)}` : "";
+    // Same "only while actually occupied" rule as the table-list badge above.
+    const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
     const payAllBtn = unpaidOrders.length
       ? `<button class="primary-btn pay-all-btn" style="padding:6px 14px;font-size:12px;">${T("payAllBtn")}</button>`
       : "";
@@ -2099,7 +2105,7 @@
     const unassignBtn = canTableEdit() ? `<button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>` : "";
     el.innerHTML = `
       ${unassignBtn}
-      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+      <span>${t.label || t.number}</span>${t.party_size && unpaid.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
     `;
     container.appendChild(el);
 
