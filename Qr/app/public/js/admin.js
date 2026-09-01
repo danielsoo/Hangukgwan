@@ -344,10 +344,15 @@
       ticketFontSizesHint:
         "항목별로 글자 크기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요. 브라우저 인쇄(미리보기 인쇄)에만 적용되고, ESC/POS 직접 인쇄에는 적용되지 않아요 — 프린터 자체 글꼴이라 크기를 이렇게 세밀하게 조절할 수 없어요.",
       tfsStoreName: "상호명 (헤더)",
-      tfsMeta: "테이블 · 주문유형 · 시간",
+      tfsTableNo: "테이블 번호",
+      tfsOrderTypeBadge: "주문유형 (매장/포장) 배지",
+      tfsTime: "주문 시간",
       tfsItemName: "메뉴 이름",
-      tfsItemDetail: "세부사항 (└ 표시)",
+      tfsItemDetail: "세부사항 (└ 소/맵기)",
+      tfsItemNote: "메뉴별 요청사항 (└ 비고)",
+      tfsItemTakeout: "메뉴별 포장 표시 (└ 포장)",
       tfsTotal: "합계",
+      tfsOrderNote: "전체 주문 메모",
       tfsPrintTime: "인쇄 시간",
       ticketFontSavedMsg: "저장되었습니다",
       ticketFontResetBtn: "기본값으로",
@@ -624,10 +629,15 @@
       ticketFontSizesHint:
         "可以個別調整每個項目的文字大小，右邊的預覽是實際列印大小。只影響瀏覽器列印（預覽列印），不影響 ESC/POS 直接列印 — 因為印表機本身的字型無法這樣細部調整大小。",
       tfsStoreName: "店名（標題）",
-      tfsMeta: "桌號 · 內用外送 · 時間",
+      tfsTableNo: "桌號",
+      tfsOrderTypeBadge: "訂單類型（內用/外帶）標籤",
+      tfsTime: "點餐時間",
       tfsItemName: "菜品名稱",
-      tfsItemDetail: "細項（└ 標示）",
+      tfsItemDetail: "細項（└ 肉類/辣度）",
+      tfsItemNote: "單品要求（└ 備註）",
+      tfsItemTakeout: "單品外帶標示（└ 外帶）",
       tfsTotal: "合計",
+      tfsOrderNote: "整單備註",
       tfsPrintTime: "列印時間",
       ticketFontSavedMsg: "已儲存",
       ticketFontResetBtn: "恢復預設值",
@@ -1031,10 +1041,15 @@
   // until the owner changes them, or if the setting fails to load.
   const DEFAULT_TICKET_FONT_SIZES = {
     storeName: 17, // header line ("한국관 廚房出單")
-    meta: 13, // 桌號/內用-外送/time rows
+    tableNo: 13, // "桌號 12" text
+    orderTypeBadge: 13, // 內用/外帶/混合 badge next to the table number
+    time: 13, // order time, its own row under the table number
     itemName: 16, // each dish's name + quantity
-    itemDetail: 13, // └ meat-type/spice/note lines under a dish
+    itemDetail: 13, // └ meat-type/spice lines under a dish
+    itemNote: 13, // └ 備註 (customer note) line under a dish
+    itemTakeout: 13, // └ 外帶 line under a dish ordered as takeout
     total: 16, // 合計 row
+    orderNote: 11, // 訂單備註 (whole-order note) line
     printTime: 10, // footer 列印時間 line
   };
   let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
@@ -1122,18 +1137,20 @@
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: ${fs.storeName}px; font-weight: 900; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
-  .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: ${fs.meta}px; font-weight: 700; margin-bottom: 1mm; }
-  .order-type-badge { display: inline-block; font-size: ${fs.meta}px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 1mm; }
+  .table-no { font-size: ${fs.tableNo}px; }
+  .order-type-badge { display: inline-block; font-size: ${fs.orderTypeBadge}px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
+  .order-time { font-size: ${fs.time}px; }
   .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
   .item-row:last-child { border-bottom: none; }
   .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: 900; }
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
   .item-detail { font-size: ${fs.itemDetail}px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
-  .item-note { color: #c0161f; }
-  .item-takeout { font-weight: 900; color: #000; }
+  .item-note { font-size: ${fs.itemNote}px; color: #c0161f; }
+  .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: 900; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
-  .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
+  .order-note { font-size: ${fs.orderNote}px; color: #c0161f; margin-top: 2mm; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; color: #555; margin-top: 3mm; }
   ${screenChromeCss}
 </style>
@@ -1141,8 +1158,8 @@
   <div class="receipt">
     <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
     <div class="divider"></div>
-    <div class="meta-row"><span>桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
-    <div class="meta-row"><span>${time}</span></div>
+    <div class="meta-row"><span class="table-no">桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    <div class="meta-row"><span class="order-time">${time}</span></div>
     <div class="divider"></div>
     ${itemRows}
     <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
@@ -1202,27 +1219,33 @@
   // a thermal printer's font table doesn't support arbitrary px sizes. ----------
   const TICKET_FONT_INPUT_IDS = {
     storeName: "tfsStoreName",
-    meta: "tfsMeta",
+    tableNo: "tfsTableNo",
+    orderTypeBadge: "tfsOrderTypeBadge",
+    time: "tfsTime",
     itemName: "tfsItemName",
     itemDetail: "tfsItemDetail",
+    itemNote: "tfsItemNote",
+    itemTakeout: "tfsItemTakeout",
     total: "tfsTotal",
+    orderNote: "tfsOrderNote",
     printTime: "tfsPrintTime",
   };
 
   // A small sample order for the live actual-size preview in the settings
   // card — deliberately touches every element a real ticket can have (two
-  // dishes, a meat-type choice, a spice-level choice, and a note) so every
-  // font-size field's effect is visible in the preview at once.
+  // dishes, a meat-type choice, a spice-level choice, a per-dish note, a
+  // takeout dish, and a whole-order note) so every font-size field's effect
+  // is visible in the preview at once.
   function sampleTicketOrderForPreview() {
     return {
       table_number: "7",
       // "mixed" + one takeout item below, so this preview also shows what
-      // the new per-dish 外帶 sub-line (see buildTicketHtml's detailLines)
-      // looks like at whatever font sizes the owner is trying out.
+      // the per-dish 外帶 sub-line (see buildTicketHtml's detailLines) looks
+      // like at whatever font sizes the owner is trying out.
       order_type: "mixed",
       created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
       total: 780,
-      note: "",
+      note: "餐具x3",
       items: [
         { name_zh: "石鍋拌飯", qty: 1, option_choice: "牛", spice_choice: "中辣", order_type: "dine_in" },
         { name_zh: "辣炒年糕", qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥", order_type: "takeout" },

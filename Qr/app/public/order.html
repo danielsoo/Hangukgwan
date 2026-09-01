@@ -97,6 +97,13 @@
           <button id="qtyPlus">+</button>
         </div>
         <div class="mix-options" id="mixOptions" hidden>
+          <!-- Quick-pick: choosing 牛 sets it to 2/0, choosing 豬 sets it to
+               0/2 — a normal single-choice starting point. The +/- counters
+               below still let the customer fine-tune into an actual mix
+               (e.g. 1/1) from there. See openItemSheet()/renderMixQuickPick()
+               in order.js. -->
+          <div class="options-label" data-i18n="chooseOption">請選擇</div>
+          <div class="options-list" id="mixQuickPickList"></div>
           <div class="mix-options-list" id="mixOptionsList"></div>
           <div class="mix-options-hint" id="mixOptionsHint"></div>
         </div>

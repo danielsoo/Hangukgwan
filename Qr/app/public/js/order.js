@@ -284,15 +284,19 @@
     if (item.mix_options && item.options) {
       // e.g. 동판불고기: 牛/豬 get their own independent +/- counters instead
       // of a single radio choice, so a table can mix both in one line item.
+      // Defaults to a plain single-choice pick, same as a normal item's
+      // options (see the "else" branch below) — quick-pick 牛 sets 2/0,
+      // 豬 sets 0/2 — and the +/- counters underneath still let the
+      // customer fine-tune from there into an actual mix (e.g. 1/1).
       optWrap.hidden = true;
       qtyRow.hidden = true;
       mixWrap.hidden = false;
       $("#mixOptionsHint").textContent = t("mixOptionsHint");
       const opts = item.options.split(",").map((s) => s.trim());
       mixQty = {};
-      // Default to 1 of each — meets the >=2 combined minimum by default,
-      // whether or not this happens to be the table's first order.
-      opts.forEach((opt) => (mixQty[opt] = 1));
+      opts.forEach((opt) => (mixQty[opt] = 0));
+      mixQty[opts[0]] = 2;
+      renderMixQuickPick(opts, opts[0]);
       renderMixOptions(opts);
     } else {
       mixWrap.hidden = true;
@@ -319,6 +323,30 @@
 
     updateAddBtnPrice();
     $("#itemSheetBackdrop").hidden = false;
+  }
+
+  // Quick-pick row for a mix_options item (see openItemSheet above) —
+  // ordinary-looking option buttons (牛/豬) that just set a starting point:
+  // clicking one zeroes every other option and puts everything (2 servings)
+  // on that one, then re-renders the +/- counters below so the customer can
+  // still nudge it into an actual mix from there.
+  function renderMixQuickPick(opts, activeOpt) {
+    const wrap = $("#mixQuickPickList");
+    wrap.innerHTML = "";
+    opts.forEach((opt) => {
+      const b = document.createElement("button");
+      b.textContent = opt;
+      if (opt === activeOpt) b.classList.add("active");
+      b.onclick = () => {
+        opts.forEach((o) => (mixQty[o] = 0));
+        mixQty[opt] = 2;
+        wrap.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+        b.classList.add("active");
+        renderMixOptions(opts);
+        updateAddBtnPrice();
+      };
+      wrap.appendChild(b);
+    });
   }
 
   // Renders one +/- row per option for a mix_options item (see openItemSheet

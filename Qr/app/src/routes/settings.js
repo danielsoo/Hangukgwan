@@ -277,7 +277,19 @@ router.put("/escpos", requireOwner, async (req, res) => {
 // their printout matches what the owner configured, but only the owner can
 // change it. See buildTicketHtml()'s DEFAULT_TICKET_FONT_SIZES in
 // admin.js for what each key controls and its fallback value.
-const TICKET_FONT_KEYS = ["storeName", "meta", "itemName", "itemDetail", "total", "printTime"];
+const TICKET_FONT_KEYS = [
+  "storeName",
+  "tableNo",
+  "orderTypeBadge",
+  "time",
+  "itemName",
+  "itemDetail",
+  "itemNote",
+  "itemTakeout",
+  "total",
+  "orderNote",
+  "printTime",
+];
 
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
