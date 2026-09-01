@@ -24,12 +24,34 @@
   let currentQty = 1;
   let mixQty = {}; // { optionLabel: qty } — used instead of currentQty for mix_options items
   let activeOrderId = null;
+  // Whether this table already has an order in flight (from this phone or
+  // any other phone at the same table — see checkPriorOrder). Drives the
+  // griddle items' first-order minimum (see min_first_order_qty below).
+  // Defaults to false (= "treat as first order") so the safe direction on a
+  // slow/failed check is asking for the minimum, not silently skipping it.
+  let hasPriorOrder = false;
   let searchTerm = "";
   let statusPollTimer = null;
   let storeLat = null;
   let storeLng = null;
   let partySize = null;
   let onlinePaymentEnabled = false;
+
+  const PARTY_WARNING = {
+    zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
+    ko: (n) => `인원(${n}명)보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
+    en: (n) => `Your order has fewer items than your party size (${n}). Feel free to add more if you'd like.`,
+  };
+
+  // Shown when trying to add a griddle (불판) item below its
+  // min_first_order_qty on the table's first order (see openItemSheet /
+  // addToCartBtn below, and the matching server check in
+  // src/routes/orders.js).
+  const GRILL_MIN_MSG = {
+    zh: (n) => `首次點餐這道菜至少要 ${n} 份（可自由搭配比例）`,
+    ko: (n) => `첫 주문에서는 이 메뉴를 최소 ${n}인분 담아야 해요 (비율은 자유롭게 조절 가능)`,
+    en: (n) => `On your first order, this dish needs at least ${n} servings total (mix the ratio however you like)`,
+  };
 
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
@@ -135,6 +157,21 @@
     categories = await res.json();
     renderTabs();
     renderMenu();
+  }
+
+  // Whether this table already has an order in flight — determines whether
+  // griddle items (min_first_order_qty) enforce their minimum. Checked
+  // against the server rather than just the local activeOrderId, since
+  // everyone at the table usually orders from their own phone, not just the
+  // one that placed the very first order.
+  async function checkPriorOrder() {
+    try {
+      const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
+      const list = await res.json();
+      hasPriorOrder = Array.isArray(list) && list.length > 0;
+    } catch (e) {
+      /* leave hasPriorOrder at its safe default (false = enforce minimum) */
+    }
   }
 
   function renderTabs() {
@@ -246,7 +283,6 @@
     } else {
       allergensEl.hidden = true;
     }
-    $("#itemNote").value = "";
     const priceInfo = $("#itemPriceInfo");
     if (item.original_price && item.original_price > item.price) {
       priceInfo.innerHTML = priceHtml(item);
@@ -300,7 +336,7 @@
       renderMixOptions(opts);
     } else {
       mixWrap.hidden = true;
-      currentQty = 1;
+      currentQty = item.min_first_order_qty && !hasPriorOrder ? item.min_first_order_qty : 1;
       $("#qtyVal").textContent = String(currentQty);
       qtyRow.hidden = false;
       if (item.options) {
@@ -401,6 +437,11 @@
       document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((btn) => btn.classList.toggle("active", btn === b));
     };
   });
+  // Griddle items with a min_first_order_qty are NOT floored at that minimum
+  // here — the qty stepper moves freely like any other item (down to 1).
+  // The minimum is only enforced (with an explanatory toast) at add-to-cart
+  // time below, same as the mix_options items — clearer to customers than a
+  // stepper that mysteriously refuses to go lower.
   $("#qtyMinus").onclick = () => {
     currentQty = Math.max(1, currentQty - 1);
     $("#qtyVal").textContent = currentQty;
@@ -413,22 +454,31 @@
   };
 
   $("#addToCartBtn").onclick = () => {
-    const note = $("#itemNote").value.trim();
     if (currentItem.mix_options) {
       const opts = Object.keys(mixQty);
+      const totalQty = opts.reduce((sum, o) => sum + mixQty[o], 0);
+      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      if (totalQty < requiredMin) {
+        showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
+        return;
+      }
       opts.forEach((opt) => {
         if (mixQty[opt] > 0) {
-          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, note, orderType: currentOrderType });
+          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, orderType: currentOrderType });
         }
       });
     } else {
+      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      if (currentQty < requiredMin) {
+        showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
+        return;
+      }
       cart.push({
         itemId: currentItem.id,
         item: currentItem,
         qty: currentQty,
         option: currentOption,
         spice: currentSpiceOption,
-        note,
         orderType: currentOrderType,
       });
     }
@@ -479,7 +529,6 @@
       // is called out here, so a customer mixing both in one order can see
       // at a glance which lines are which without extra clutter on the rest.
       if (c.orderType === "takeout") metaParts.push(t("orderTypeTakeout"));
-      if (c.note) metaParts.push(c.note);
       row.innerHTML = `
         <div>
           <div class="cart-item-name">${nameFor(c.item)}</div>
@@ -494,6 +543,10 @@
         <div class="cart-item-right">${money(c.item.price * c.qty)}</div>
       `;
       row.querySelector('[data-act="minus"]').onclick = () => {
+        // No min_first_order_qty floor here either (see #qtyMinus above) —
+        // the server re-checks the minimum at submit and shows an
+        // explanatory alert (see #submitOrderBtn's grill_min_qty handling)
+        // if the cart ends up under it.
         c.qty = Math.max(1, c.qty - 1);
         renderCart();
         renderCartFab();
@@ -540,6 +593,10 @@
       return;
     }
 
+    if (partySize && cartCount() < partySize) {
+      showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
+    }
+
     let coords = null;
     if (storeLat != null && storeLng != null) {
       try {
@@ -552,6 +609,7 @@
 
     btn.disabled = true;
     btn.textContent = t("submitting");
+    let grillMinBody = null;
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -561,7 +619,7 @@
           // Each cart line carries its own orderType now (chosen per dish in
           // the item sheet) — see src/routes/orders.js, which validates and
           // stores order_type per item instead of once for the whole order.
-          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, note: c.note, orderType: c.orderType })),
+          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, orderType: c.orderType })),
           note: $("#orderNote").value.trim(),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
@@ -572,10 +630,15 @@
         if (body.error === "out_of_range") throw new Error("out_of_range");
         if (body.error === "location_required") throw new Error("location_required");
         if (body.error === "party_size_required") throw new Error("party_size_required");
+        if (body.error === "grill_min_qty") {
+          grillMinBody = body;
+          throw new Error("grill_min_qty");
+        }
         throw new Error("submit_failed");
       }
       const order = await res.json();
       activeOrderId = order.id;
+      hasPriorOrder = true;
       saveOrderToHistory(order.id);
       cart = [];
       renderCartFab();
@@ -585,7 +648,11 @@
       if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
       else if (e.message === "party_size_required") showPartySizeModal();
-      else alert(t("submitFailed"));
+      else if (e.message === "grill_min_qty" && grillMinBody) {
+        const mi = categories.flatMap((c) => c.items).find((i) => i.id === grillMinBody.itemId);
+        const name = mi ? nameFor(mi) : "";
+        alert((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(grillMinBody.min) + (name ? ` (${name})` : ""));
+      } else alert(t("submitFailed"));
     } finally {
       btn.disabled = false;
       btn.textContent = t("placeOrder");
@@ -851,4 +918,5 @@
   loadSettings();
   loadMenu();
   initPartySize();
+  checkPriorOrder();
 })();

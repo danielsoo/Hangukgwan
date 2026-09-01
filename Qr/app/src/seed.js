@@ -49,17 +49,16 @@ const ITEMS = {
     { code: "45", name_zh: "牛骨湯飯", name_ko: "사골곰탕", name_en: "Beef Bone Soup with Rice", price: 240 },
   ],
   bbq: [
-    // Griddle (불판) items: price is per single serving. These three used to
-    // carry a price_note ("min 2 on 1st order") plus a min_first_order_qty
-    // enforced in public/js/order.js / src/routes/orders.js — the owner
-    // asked to drop every ordering-time caution/notice shown to customers,
-    // so that enforcement and its on-menu text are both gone now.
-    // min_first_order_qty stays in the data model/admin editor (unused,
-    // harmless) in case the owner ever wants it back.
-    { code: "51", name_zh: "銅盤烤肉", name_ko: "동판불고기", name_en: "Korean BBQ Bulgogi", price: 250, options: "牛,豬", mix_options: 1, min_first_order_qty: 2 },
-    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 300, is_spicy: 1, min_first_order_qty: 2 },
+    // Griddle (불판) items: price is now per single serving. The first order
+    // from a table still needs to total >= min_first_order_qty servings of
+    // each of these (enforced in public/js/order.js and re-checked server
+    // side in src/routes/orders.js) — that used to be baked into the price
+    // itself (charged per 2 servings), which is why these three are the only
+    // items with min_first_order_qty set.
+    { code: "51", name_zh: "銅盤烤肉", name_ko: "동판불고기", name_en: "Korean BBQ Bulgogi", price: 250, price_note: "首次低消2份(可混搭牛豬) / min 2 on 1st order, mix ok", options: "牛,豬", mix_options: 1, min_first_order_qty: 2 },
+    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 300, price_note: "首次點餐低消2份 / min 2 on 1st order", is_spicy: 1, min_first_order_qty: 2 },
     { code: "53", name_zh: "雞排拌飯(加飯)", name_ko: "볶음밥 추가", name_en: "Fried Rice Add-on (for 辣炒雞排)", price: 80 },
-    { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, min_first_order_qty: 2 },
+    { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, price_note: "首次點餐低消2份 / min 2 on 1st order", min_first_order_qty: 2 },
   ],
   other: [
     { code: "71", name_zh: "部隊鍋", name_ko: "부대찌개", name_en: "Army Stew", price: 600, is_spicy: 1, is_signature: 1 },
