@@ -948,10 +948,29 @@
      "auto" since the roll cuts to whatever length the content needs. */
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  html, body { height: 100%; }
   body {
-    width: 80mm; margin: 0; padding: 3mm 4mm;
+    margin: 0;
     font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
     color: #000;
+    /* On-screen only (previewKitchenTicket's tab, or this tab before
+       Ctrl+P/print()): show the receipt as a paper card centered in the
+       middle of the window, on a gray "desk" background, so it's easy to
+       see how it'll actually look — @media print below strips all of this
+       back out for the real printed page, which is still just the bare
+       80mm-wide receipt content edge-to-edge like before. */
+    background: #dfe3e7;
+    min-height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 28px 0;
+  }
+  .receipt {
+    width: 80mm;
+    background: #fff;
+    padding: 3mm 4mm;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   }
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: 17px; font-weight: 900; }
@@ -968,17 +987,23 @@
   .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
   .print-time { text-align: center; font-size: 10px; color: #555; margin-top: 3mm; }
+  @media print {
+    body { background: none; min-height: 0; display: block; padding: 0; }
+    .receipt { width: 80mm; box-shadow: none; margin: 0; }
+  }
 </style>
 </head><body>
-  <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
-  <div class="divider"></div>
-  <div class="meta-row"><span>桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
-  <div class="meta-row"><span>${time}</span></div>
-  <div class="divider"></div>
-  ${itemRows}
-  <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
-  ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
-  <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
+  <div class="receipt">
+    <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
+    <div class="divider"></div>
+    <div class="meta-row"><span>桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    <div class="meta-row"><span>${time}</span></div>
+    <div class="divider"></div>
+    ${itemRows}
+    <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
+    ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
+    <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
+  </div>
 </body></html>`;
   }
 
