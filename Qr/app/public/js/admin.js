@@ -168,6 +168,9 @@
       soundToggleLabel: "🔔 신규 주문 알림음",
       autoPrintToggleLabel: "🖨️ 신규 주문 자동 인쇄",
       refreshBtn: "새로고침",
+      refreshingBtn: "⏳ 새로고침 중...",
+      refreshedBtn: "✅ 완료",
+      refreshFailedBtn: "⚠️ 실패",
       statusNew: "신규 주문",
       statusPreparing: "조리 중",
       statusServed: "서빙 완료",
@@ -182,6 +185,7 @@
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       collapseItemsBtn: "접기 ▲",
+      dragHandleTitle: "드래그해서 순서 변경",
       tableDetailTabActive: "현재 주문",
       tableDetailTabPaid: "이전 주문",
       tableDetailNoPaidHistory: "아직 결제 완료된 주문이 없습니다.",
@@ -481,6 +485,9 @@
       soundToggleLabel: "🔔 新訂單提示音",
       autoPrintToggleLabel: "🖨️ 新訂單自動列印",
       refreshBtn: "重新整理",
+      refreshingBtn: "⏳ 重新整理中...",
+      refreshedBtn: "✅ 完成",
+      refreshFailedBtn: "⚠️ 失敗",
       statusNew: "新訂單",
       statusPreparing: "製作中",
       statusServed: "已出餐",
@@ -495,6 +502,7 @@
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       collapseItemsBtn: "收合 ▲",
+      dragHandleTitle: "拖曳以調整順序",
       tableDetailTabActive: "目前訂單",
       tableDetailTabPaid: "先前訂單",
       tableDetailNoPaidHistory: "目前還沒有已結帳的訂單。",
@@ -1003,7 +1011,32 @@
 
   $("#soundToggle").onchange = (e) => (soundOn = e.target.checked);
   $("#autoPrintToggle").onchange = (e) => (autoPrintOn = e.target.checked);
-  $("#refreshOrders").onclick = loadOrders;
+  // Give the 새로고침 button explicit loading/done feedback — before, it did
+  // its thing silently, so staff had no way to tell whether a tap actually
+  // registered or whether the (identical-looking) board was already
+  // up to date.
+  $("#refreshOrders").onclick = async () => {
+    const btn = $("#refreshOrders");
+    if (btn.disabled) return; // ignore rapid re-taps while one is already in flight
+    btn.disabled = true;
+    btn.classList.add("is-loading");
+    btn.textContent = T("refreshingBtn");
+    try {
+      await loadOrders();
+      btn.classList.remove("is-loading");
+      btn.classList.add("is-done");
+      btn.textContent = T("refreshedBtn");
+    } catch (err) {
+      btn.classList.remove("is-loading");
+      btn.textContent = T("refreshFailedBtn");
+    } finally {
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove("is-done");
+        btn.textContent = T("refreshBtn");
+      }, 900);
+    }
+  };
 
   // ---------- Orders ----------
   async function loadOrders() {
@@ -1025,7 +1058,7 @@
       if (!stillNew.has(id)) printFailedOrderIds.delete(id);
     });
     // Skip re-rendering the order columns while a card is actively being
-    // dragged (see draggingOrderId / wireColumnDragDrop) — this 4-second
+    // dragged (see draggingOrderId / wireCardDrag) — this 4-second
     // poll used to wipe out and rebuild every .order-card from scratch
     // mid-drag, which yanks the very DOM node the browser is dragging out
     // from under it and silently aborts the drop (same reason
@@ -1083,19 +1116,26 @@
       const body = col.querySelector(".col-body");
       body.innerHTML = "";
       cols[status].forEach((o) => body.appendChild(renderOrderCard(o)));
-      wireColumnDragDrop(body);
     });
     renderPrintFailureBanner();
   }
 
   // ---------- Drag-to-reorder within one order-queue column ----------
-  // Classic "vanilla JS sortable list" trick: while dragging, figure out
-  // which existing card the pointer is currently above/below and move the
-  // dragged card there live in the DOM; on drop, read the column's final
-  // DOM order back out and persist it. Reassigned on every renderOrders()
-  // call (property assignment, not addEventListener) so there's never more
-  // than one live handler per column even though the cards get rebuilt
-  // from scratch every 4-second poll.
+  // Built on Pointer Events (pointerdown/pointermove/pointerup) instead of
+  // the native HTML5 draggable/dragstart/dragover/drop API. The native API
+  // only fires for a real mouse (or a mouse-emulating trackpad) — it does
+  // NOT recognize touch input on a tablet/touchscreen at all, in any
+  // browser. That was the actual cause behind "드래그는 되는데 드랍이
+  // 안돼" on a touch device: the card visibly followed the finger (the
+  // browser's own default touch handling) but no dragover/drop event ever
+  // fired, so the drop silently did nothing. Pointer Events unify mouse,
+  // touch, and pen under one event model, so the same code now works on
+  // both a desktop mouse and a kitchen tablet.
+  //
+  // Only the small ⠿ handle in the card's corner (not the whole card)
+  // starts a drag, so the rest of the card stays a normal tap target
+  // (opens the order detail) and a touch column can still be scrolled
+  // normally with a finger anywhere else on a card.
   function getDragAfterElement(container, y) {
     const candidates = [...container.querySelectorAll(".order-card:not(.dragging)")];
     return candidates.reduce(
@@ -1109,42 +1149,99 @@
     ).element;
   }
 
-  function wireColumnDragDrop(body) {
-    body.ondragover = (e) => {
-      if (body !== dragSourceColumnBody) return; // never drop into a different status column
+  // Reads the column's final DOM order back out and persists it — both to
+  // the server and into the in-memory `orders` array (so an intervening
+  // renderOrders() call, e.g. the next 4-second poll landing before the
+  // PATCH resolves, doesn't visually snap back: renderOrders() rebuilds
+  // each column by iterating `orders` in its current array order, so the
+  // array itself needs to reflect the drop too, not just the field the
+  // server will eventually re-sort by).
+  async function persistColumnOrder(body) {
+    const orderIds = [...body.querySelectorAll(".order-card")].map((el) => parseInt(el.dataset.orderId, 10));
+    const idsSet = new Set(orderIds);
+    let insertAt = 0;
+    for (const o of orders) {
+      if (idsSet.has(o.id)) break;
+      insertAt++;
+    }
+    const remaining = orders.filter((o) => !idsSet.has(o.id));
+    const reordered = orderIds.map((id) => orders.find((o) => o.id === id)).filter(Boolean);
+    reordered.forEach((o, index) => (o.queue_order = index));
+    orders = remaining.slice(0, insertAt).concat(reordered, remaining.slice(insertAt));
+    await fetch("/api/orders/reorder", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderIds }),
+    });
+  }
+
+  // Wires a single card's drag handle. Since the card is always moved
+  // within `dragSourceColumnBody` (captured once at drag start) regardless
+  // of where the pointer physically is on screen, a drag can never
+  // accidentally land in a different status column — the same guarantee
+  // the old same-column check gave, just as a natural side effect here.
+  function wireCardDrag(card, handle, o) {
+    let startY = 0;
+    let pointerId = null;
+    let moved = false;
+
+    const onPointerMove = (e) => {
+      if (pointerId === null || e.pointerId !== pointerId) return;
       e.preventDefault();
-      const dragging = body.querySelector(".dragging");
-      if (!dragging) return;
-      const afterElement = getDragAfterElement(body, e.clientY);
-      if (afterElement == null) body.appendChild(dragging);
-      else body.insertBefore(dragging, afterElement);
-    };
-    body.ondrop = async (e) => {
-      if (body !== dragSourceColumnBody) return;
-      e.preventDefault();
-      const orderIds = [...body.querySelectorAll(".order-card")].map((el) => parseInt(el.dataset.orderId, 10));
-      // Keep the in-memory list consistent with what's now on screen so an
-      // intervening renderOrders() call (e.g. the next poll landing before
-      // the PATCH below resolves) doesn't visually snap back. Updating
-      // queue_order alone isn't enough — renderOrders() rebuilds each
-      // column by iterating `orders` in its current array order, so the
-      // array itself needs to reflect the drop too, not just the field the
-      // server will eventually re-sort by.
-      const idsSet = new Set(orderIds);
-      let insertAt = 0;
-      for (const o of orders) {
-        if (idsSet.has(o.id)) break;
-        insertAt++;
+      if (!moved) {
+        // A few pixels of slack so a plain tap on the handle doesn't count
+        // as a drag.
+        if (Math.abs(e.clientY - startY) < 4) return;
+        moved = true;
+        draggingOrderId = o.id;
+        dragSourceColumnBody = card.parentElement;
+        card.classList.add("dragging");
       }
-      const remaining = orders.filter((o) => !idsSet.has(o.id));
-      const reordered = orderIds.map((id) => orders.find((o) => o.id === id)).filter(Boolean);
-      reordered.forEach((o, index) => (o.queue_order = index));
-      orders = remaining.slice(0, insertAt).concat(reordered, remaining.slice(insertAt));
-      await fetch("/api/orders/reorder", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderIds }),
-      });
+      const afterElement = getDragAfterElement(dragSourceColumnBody, e.clientY);
+      if (afterElement == null) dragSourceColumnBody.appendChild(card);
+      else dragSourceColumnBody.insertBefore(card, afterElement);
+    };
+
+    const finishDrag = async (e) => {
+      if (pointerId === null || (e && e.pointerId !== pointerId)) return;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", finishDrag);
+      window.removeEventListener("pointercancel", finishDrag);
+      pointerId = null;
+      card.classList.remove("dragging");
+      const wasDragging = moved;
+      moved = false;
+      draggingOrderId = null;
+      const body = dragSourceColumnBody;
+      dragSourceColumnBody = null;
+      if (wasDragging && body) await persistColumnOrder(body);
+      // Catch up on anything a poll skipped re-rendering while this drag
+      // was in progress (see the draggingOrderId guard in loadOrders()).
+      renderOrders();
+    };
+
+    handle.onclick = (e) => e.stopPropagation(); // don't also open the order detail
+    handle.onpointerdown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return; // left mouse button only (touch/pen have no `button`)
+      e.preventDefault();
+      e.stopPropagation();
+      startY = e.clientY;
+      pointerId = e.pointerId;
+      // Deliberately NOT handle.setPointerCapture(pointerId) here — capture
+      // ties later events to this exact element, but onPointerMove below
+      // moves `card` (the handle's ancestor) around in the DOM every time
+      // the drag crosses another card, via insertBefore/appendChild. That
+      // re-insertion is enough for the browser to drop the capture
+      // mid-gesture, which silently kills every pointermove/pointerup
+      // event after the first reposition — drag "starts" but the drop
+      // never registers. Same root cause as the render-vs-drag bug fixed
+      // earlier for the old native-DnD version, just tripped by a
+      // different API. Listening on window instead sidesteps it entirely:
+      // window is never removed from the document, so nothing here can
+      // ever interrupt the listener.
+      window.addEventListener("pointermove", onPointerMove);
+      window.addEventListener("pointerup", finishDrag);
+      window.addEventListener("pointercancel", finishDrag);
     };
   }
 
@@ -1174,25 +1271,6 @@
     const card = document.createElement("div");
     card.className = "order-card" + (printFailedOrderIds.has(o.id) ? " print-failed" : "");
     card.dataset.orderId = o.id;
-    // Drag-to-reorder within this same column (see wireColumnDragDrop()) —
-    // staff can bump a particular order up/down the queue by hand, e.g. a
-    // table that asked to rush their order.
-    card.draggable = true;
-    card.ondragstart = (e) => {
-      draggingOrderId = o.id;
-      dragSourceColumnBody = card.parentElement;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", String(o.id));
-      setTimeout(() => card.classList.add("dragging"), 0);
-    };
-    card.ondragend = () => {
-      card.classList.remove("dragging");
-      draggingOrderId = null;
-      dragSourceColumnBody = null;
-      // Catch up on anything a poll skipped re-rendering while this drag
-      // was in progress (see the draggingOrderId guard in loadOrders()).
-      renderOrders();
-    };
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1242,13 +1320,23 @@
       ? `<div class="order-card-print-fail">${T("printFailedCardMsg")}</div>`
       : "";
     card.innerHTML = `
-      <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}${typeBadge}</span><span class="order-card-time">${time}</span></div>
+      <div class="order-card-top">
+        <span>${T("tableLabel")} ${o.table_number}${typeBadge}</span>
+        <span class="order-card-top-right">
+          <span class="order-card-time">${time}</span>
+          <span class="order-card-drag-handle" title="${T("dragHandleTitle")}">⠿</span>
+        </span>
+      </div>
       ${printFailedNotice}
       <div class="order-card-items">${itemsHtml}</div>
       ${itemsToggleHtml}
       <div class="order-card-total">NT$${o.total}</div>
       <div class="order-card-actions" id="actions-${o.id}"></div>
     `;
+    // Drag-to-reorder within this same column, via the ⠿ handle above (see
+    // wireCardDrag()) — staff can bump a particular order up/down the
+    // queue by hand, e.g. a table that asked to rush their order.
+    wireCardDrag(card, card.querySelector(".order-card-drag-handle"), o);
     const itemsToggleBtn = card.querySelector("[data-toggle-items-id]");
     if (itemsToggleBtn) {
       itemsToggleBtn.onclick = (e) => {

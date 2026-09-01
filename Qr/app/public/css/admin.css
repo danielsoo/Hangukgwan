@@ -46,6 +46,10 @@ input, select, button, textarea { font-family: inherit; }
 /* Orders board */
 .orders-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-size: 18px; }
 .orders-toolbar button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+#refreshOrders { min-width: 110px; transition: background-color 0.15s, border-color 0.15s; }
+#refreshOrders:disabled { cursor: default; }
+#refreshOrders.is-loading { background: #f3f1ea; color: var(--muted); }
+#refreshOrders.is-done { background: #e6f4ea; border-color: var(--green); color: #1e7e34; font-weight: 700; }
 .orders-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .order-col { background: #f2ede2; border-radius: 12px; padding: 10px; min-height: 200px; }
 .order-col h3 { margin: 4px 6px 10px; font-size: 18px; display: flex; align-items: center; gap: 6px; }
@@ -492,10 +496,18 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .order-items-toggle:hover { color: var(--red); }
 
-/* 주문 큐 카드 드래그 정렬 (see .col-body drag handlers in admin.js) */
-.order-card { cursor: grab; }
-.order-card.dragging { opacity: 0.35; cursor: grabbing; }
-.order-card.drag-over-placeholder { border-top: 3px solid var(--navy); }
+/* 주문 큐 카드 드래그 정렬 (see wireCardDrag() in admin.js).
+   Pointer Events (not native HTML5 draggable/dragover/drop) so this works
+   the same way on a mouse/trackpad AND on a touchscreen tablet — the whole
+   card stays a normal tap target (opens the order detail), and only the
+   small ⠿ handle in the corner starts a drag. */
+.order-card.dragging { opacity: 0.35; }
+.order-card-top-right { display: flex; align-items: center; gap: 2px; }
+.order-card-drag-handle {
+  cursor: grab; touch-action: none; padding: 4px 8px; margin: -4px -6px -4px 0;
+  font-size: 17px; line-height: 1; color: var(--muted); user-select: none;
+}
+.order-card-drag-handle:active { cursor: grabbing; }
 
 /* 테이블 상세 진행중/완료 내역 탭 */
 .table-detail-tabs { display: flex; gap: 6px; margin: 10px 0 4px; }
