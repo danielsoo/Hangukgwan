@@ -25,6 +25,12 @@
   // fails is otherwise indistinguishable from "no new order came in" to
   // kitchen staff who only glance at the paper ticket.
   let printFailedOrderIds = new Set();
+  // 합산 결제 (pay several tables together, for one group split across
+  // tables) — see renderTables()/updateMergePayBar() and the
+  // #mergePayModeBtn handler below. Holds table *numbers* (strings), since
+  // that's what activeOrdersForTable() keys on.
+  let mergePayMode = false;
+  let mergePaySelected = new Set();
 
   // ---------- Admin-panel-wide font size (this browser only) ----------
   // A personal display preference, not a shared setting — stored in this
@@ -156,6 +162,13 @@
       unpaidTotalLabel: "현재 미결제 합계:",
       unpaidTotalLabel2: "미결제 합계:",
       payAllBtn: "전체 결제 완료",
+      mergePayModeBtn: "🧾 합산 결제",
+      mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
+      mergePayCancelBtn: "취소",
+      mergePayConfirmBtn: "합산 결제 완료",
+      manualOrderBtn: "📝 수기 주문",
+      manualOrderModalTitle: "수기 주문 — 테이블 선택",
+      manualOrderHint: "테이블을 선택하면 손님 주문 화면이 새 탭에서 열려요. 거기서 그대로 메뉴를 담아 주문을 넣으면 평소처럼 신규 주문에 뜨고 빌지도 나갑니다.",
       zoneAddBtnTitle: "테이블 추가",
       zoneAddBtnLabel: "+ 테이블",
       zoneDelTitle: "구역 삭제",
@@ -446,6 +459,13 @@
       unpaidTotalLabel: "目前未結帳金額：",
       unpaidTotalLabel2: "未結帳金額：",
       payAllBtn: "全部結帳完成",
+      mergePayModeBtn: "🧾 合併結帳",
+      mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
+      mergePayCancelBtn: "取消",
+      mergePayConfirmBtn: "確定合併結帳",
+      manualOrderBtn: "📝 手動點餐",
+      manualOrderModalTitle: "手動點餐 — 選擇桌號",
+      manualOrderHint: "選擇桌號後，會在新分頁開啟顧客點餐畫面。直接在那裡選餐送出，就會跟平常一樣出現在新訂單並自動出單。",
       zoneAddBtnTitle: "新增桌號",
       zoneAddBtnLabel: "+ 桌號",
       zoneDelTitle: "刪除區域",
@@ -689,6 +709,14 @@
     adminLang === "zh"
       ? `確定要將桌號 ${label} 的 ${n} 筆未結帳訂單全部標記為已結帳嗎？`
       : `테이블 ${label}의 미결제 주문 ${n}건을 모두 결제 완료로 처리하시겠습니까?`;
+  const fmtMergePaySummary = (tableCount, orderCount, total) =>
+    adminLang === "zh"
+      ? `已選 ${tableCount} 桌 · ${orderCount} 筆訂單 · 合計 NT$${total}`
+      : `${tableCount}개 테이블 선택 · 주문 ${orderCount}건 · 합계 NT$${total}`;
+  const fmtConfirmMergePay = (tableCount, orderCount) =>
+    adminLang === "zh"
+      ? `確定要將這 ${tableCount} 桌、共 ${orderCount} 筆未結帳訂單合併標記為已結帳嗎？`
+      : `이 ${tableCount}개 테이블의 미결제 주문 ${orderCount}건을 합산 결제 완료로 처리하시겠습니까?`;
   const fmtConfirmUnassignTable = (n) =>
     adminLang === "zh" ? `確定要將桌號 ${n} 移出此區域嗎？（桌號本身不會被刪除）` : `테이블 ${n}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`;
   const fmtConfirmDeleteZone = (name) =>
@@ -1663,9 +1691,10 @@
       // handler) and showing it here would make an empty table look
       // occupied, exactly the "비어있음인데 인원수가 남아있다" bug reported.
       const partyBadge = t.party_size && unpaid.length > 0 ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
-      const delBtn = canTableEdit() ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
-      chip.innerHTML = `${delBtn}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
-      if (canTableEdit()) {
+      const delBtn = canTableEdit() && !mergePayMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
+      const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
+      chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
+      if (canTableEdit() && !mergePayMode) {
         chip.querySelector(".del-btn").onclick = async (e) => {
           e.stopPropagation();
           if (!confirm(fmtConfirmDeleteTable(t.number))) return;
@@ -1673,7 +1702,25 @@
           loadTables();
         };
       }
-      chip.onclick = () => openTableDetail(t.number, t.label);
+      if (mergePayMode) {
+        // Only a table with something unpaid is worth combining into a
+        // group payment — an empty table has nothing to add to the total.
+        if (unpaid.length > 0) {
+          chip.classList.add("merge-selectable");
+          if (mergePaySelected.has(t.number)) chip.classList.add("merge-selected");
+          chip.onclick = () => {
+            if (mergePaySelected.has(t.number)) mergePaySelected.delete(t.number);
+            else mergePaySelected.add(t.number);
+            renderTables();
+            updateMergePayBar();
+          };
+        } else {
+          chip.classList.add("merge-disabled");
+          chip.onclick = null;
+        }
+      } else {
+        chip.onclick = () => openTableDetail(t.number, t.label);
+      }
       wrap.appendChild(chip);
     });
   }
@@ -2482,6 +2529,103 @@
     await loadZones();
     renderFloorPlan();
   };
+
+  // ---------- 합산 결제 (combine several tables' unpaid orders into one
+  // payment action, for a group that came in together but sat at more than
+  // one table) ----------
+  function updateMergePayBar() {
+    const bar = $("#mergePayBar");
+    if (!mergePayMode || mergePaySelected.size === 0) {
+      bar.hidden = true;
+      return;
+    }
+    let orderCount = 0;
+    let total = 0;
+    mergePaySelected.forEach((tableNumber) => {
+      activeOrdersForTable(tableNumber)
+        .filter((o) => o.status !== "paid")
+        .forEach((o) => {
+          orderCount++;
+          total += o.total;
+        });
+    });
+    $("#mergePaySummary").textContent = fmtMergePaySummary(mergePaySelected.size, orderCount, total);
+    bar.hidden = false;
+  }
+
+  $("#mergePayModeBtn").onclick = () => {
+    mergePayMode = !mergePayMode;
+    mergePaySelected = new Set();
+    $("#mergePayModeBtn").classList.toggle("active", mergePayMode);
+    $("#mergePayHint").hidden = !mergePayMode;
+    renderTables();
+    updateMergePayBar();
+  };
+  $("#mergePayCancelBtn").onclick = () => {
+    mergePayMode = false;
+    mergePaySelected = new Set();
+    $("#mergePayModeBtn").classList.remove("active");
+    $("#mergePayHint").hidden = true;
+    renderTables();
+    updateMergePayBar();
+  };
+  $("#mergePayConfirmBtn").onclick = async () => {
+    const allUnpaid = [...mergePaySelected].flatMap((tableNumber) =>
+      activeOrdersForTable(tableNumber).filter((o) => o.status !== "paid")
+    );
+    if (allUnpaid.length === 0) return;
+    if (!confirm(fmtConfirmMergePay(mergePaySelected.size, allUnpaid.length))) return;
+    // Same principle as the single-table 전체 결제 완료 button above: no
+    // separate "now also clear the party size" step here either. Each
+    // updateOrderStatus() call PATCHes that order to "paid", and the
+    // server's PATCH /api/orders/:id handler clears that order's own
+    // table's party_size the instant that table's last active order clears
+    // (src/routes/orders.js) — happens independently, per table, exactly as
+    // if 전체 결제 완료 had been pressed on each of these tables one by one.
+    // The table structure itself is untouched: this only changes which
+    // orders got marked "paid" together, not which table any order belongs
+    // to (the "결제할 때만 합치기" approach chosen over reassigning orders).
+    await Promise.all(allUnpaid.map((o) => updateOrderStatus(o.id, "paid")));
+    mergePayMode = false;
+    mergePaySelected = new Set();
+    $("#mergePayModeBtn").classList.remove("active");
+    $("#mergePayHint").hidden = true;
+    updateMergePayBar();
+    await loadOrders();
+    await loadTables();
+  };
+
+  // ---------- 수기 주문 (staff enters an order on a customer's behalf, e.g.
+  // no phone or prefers ordering in person) ----------
+  // Rather than rebuilding the menu/options/cart UI here, this opens the
+  // real customer order page for the chosen table in a new tab — same menu,
+  // same option/spice/mix pickers, same takeout toggle, same party-size
+  // prompt and location check. Whatever gets submitted there is a normal
+  // POST /api/orders call, so it lands in the queue as an ordinary "new"
+  // order and prints through the exact same auto-print/manual-print
+  // pipeline as any customer-placed order — no special-casing needed.
+  $("#manualOrderBtn").onclick = () => {
+    const grid = $("#manualOrderGrid");
+    grid.innerHTML = "";
+    [...tables]
+      .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10))
+      .forEach((t) => {
+        const btn = document.createElement("button");
+        btn.className = "table-picker-btn";
+        btn.textContent = t.label || t.number;
+        btn.onclick = () => {
+          window.open(`/t/${encodeURIComponent(t.number)}`, "_blank");
+          $("#manualOrderBackdrop").hidden = true;
+        };
+        grid.appendChild(btn);
+      });
+    $("#manualOrderBackdrop").hidden = false;
+  };
+  $("#manualOrderClose").onclick = () => ($("#manualOrderBackdrop").hidden = true);
+  $("#manualOrderBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "manualOrderBackdrop") $("#manualOrderBackdrop").hidden = true;
+  });
+
   // Explicit save button for the 배치도 floor plan — every drag/resize
   // already auto-saves on its own (see patchFloorPlan() above), but the
   // owner specifically asked for a visible save action with its own
