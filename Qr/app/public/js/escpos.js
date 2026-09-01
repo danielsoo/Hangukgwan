@@ -20,6 +20,12 @@
 //      print as blank boxes or garbage, that's the symptom — check the
 //      printer's own ESC/POS command reference for its Korean/Chinese
 //      code page command and it can be added near ESC_INIT below.
+//   3) The "└" character used below to mark meat-type/spice/note as a
+//      detail line under a dish (e.g. "牛" printing under "石鍋拌飯"). This
+//      is a standard Unicode box-drawing character, not CJK, so it's a
+//      separate risk from (2) — if it prints as a blank box while the
+//      Chinese text next to it prints fine, replace it with a plain
+//      character the printer's font is guaranteed to have, like "-".
 (function () {
   const ESC = "\x1B";
   const GS = "\x1D";
@@ -96,7 +102,7 @@
   }
 
   function orderTypeLabel(o) {
-    return o.order_type === "delivery" ? "배달" : "매장";
+    return o.order_type === "delivery" ? "外送" : "內用";
   }
 
   // Mirrors buildTicketHtml()'s own item-name preference (name_zh first —
@@ -106,30 +112,34 @@
     return it.name_zh || it.name_ko || it.name_en || "";
   }
 
+  // All fixed labels on this ticket are Traditional Chinese, matching
+  // buildTicketHtml() in admin.js — only dish names come from whichever
+  // language that menu item actually has (name_zh preferred). Each
+  // attribute (meat type, spice level, note) prints as its own "└"-marked
+  // sub-line under the dish, same as the HTML ticket, so it reads clearly
+  // as a *detail of that dish* and not a second item.
   function buildEscPosTicket(o, storeName) {
-    const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
+    const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
-    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} 주방 주문서` + CMD.BOLD_OFF + "\n";
+    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} 廚房出單` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
-    out += padLine(`테이블 ${o.table_number}번`, orderTypeLabel(o)) + "\n";
+    out += padLine(`桌號 ${o.table_number}`, orderTypeLabel(o)) + "\n";
     out += time + "\n";
     out += divider() + "\n";
 
     o.items.forEach((it) => {
       const name = truncateToWidth(itemName(it), LINE_WIDTH - 6);
       out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
-      const metaParts = [];
-      if (it.option_choice) metaParts.push(it.option_choice);
-      if (it.spice_choice) metaParts.push(it.spice_choice);
-      if (metaParts.length) out += "  " + metaParts.join(" / ") + "\n";
-      if (it.note) out += "  메모: " + it.note + "\n";
+      if (it.option_choice) out += "  └ " + it.option_choice + "\n";
+      if (it.spice_choice) out += "  └ " + it.spice_choice + "\n";
+      if (it.note) out += "  └ 備註：" + it.note + "\n";
     });
 
     out += divider() + "\n";
-    out += CMD.DOUBLE_ON + padLine("합계", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
-    if (o.note) out += "주문 메모: " + o.note + "\n";
-    out += CMD.ALIGN_CENTER + "인쇄: " + new Date().toLocaleString("ko-KR") + "\n";
+    out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+    if (o.note) out += "訂單備註：" + o.note + "\n";
+    out += CMD.ALIGN_CENTER + "列印時間：" + new Date().toLocaleString("zh-TW") + "\n";
     out += CMD.FEED_AND_CUT;
     return out;
   }

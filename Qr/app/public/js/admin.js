@@ -894,36 +894,46 @@
   }
 
   // ---------- Kitchen ticket printing (thermal receipt version) ----------
-  // Simple Korean-kitchen-bill-style ticket for a real narrow-roll thermal
-  // receipt printer (confirmed with the owner — not a regular A4 printer),
-  // replacing the earlier photo-overlay recreation of the paper order slip.
-  // The owner's spec: which table, when, each menu item's name + quantity,
-  // the order type (매장/dine-in vs 배달/delivery — all QR orders are
-  // dine-in for now, see order_type in src/routes/orders.js), and the
-  // 소/돼지 (option_choice) and 맵기 (spice_choice) distinctions per item.
+  // Simple kitchen-bill-style ticket for a real narrow-roll thermal receipt
+  // printer (confirmed with the owner — not a regular A4 printer), replacing
+  // the earlier photo-overlay recreation of the paper order slip. The
+  // owner's spec: which table, when, each menu item's name + quantity, the
+  // order type (內用/dine-in vs 外送/delivery — all QR orders are dine-in
+  // for now, see order_type in src/routes/orders.js), and the 소/돼지
+  // (option_choice) and 맵기 (spice_choice) distinctions per item, printed
+  // as clearly-labeled sub-lines (see "detail" comment below) so the kitchen
+  // never mistakes an item's meat-type/spice-level for a second item.
   // No more hand-measured coordinates onto a fixed photo — each ordered
   // line just flows down the narrow strip, so a menu item added after the
   // fact needs no special "extra items" handling like the old system did.
+  //
+  // Every fixed label on this ticket is in Traditional Chinese (this
+  // restaurant's kitchen staff read Chinese, not Korean) — only the dish
+  // names come from whichever language that menu item actually has
+  // (name_zh preferred, falling back to name_ko/name_en if a dish was never
+  // given a Chinese name).
   function orderTypeLabel(o) {
-    return o.order_type === "delivery" ? "배달" : "매장";
+    return o.order_type === "delivery" ? "外送" : "內用";
   }
 
   function buildTicketHtml(o) {
-    const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
+    const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
 
     const itemRows = o.items
       .map((it) => {
         const name = it.name_zh || it.name_ko || it.name_en || "";
-        const metaParts = [];
-        if (it.option_choice) metaParts.push(it.option_choice);
-        if (it.spice_choice) metaParts.push(it.spice_choice);
-        const meta = metaParts.length ? `<div class="item-meta">${metaParts.join(" · ")}</div>` : "";
-        const note = it.note ? `<div class="item-note">메모: ${it.note}</div>` : "";
+        // Each attribute of the item (meat type, spice level, note) gets
+        // its own indented "└" line instead of being crammed onto one line
+        // — the owner asked for this specifically so a busy kitchen can
+        // never mistake "牛" / "豬" / a spice level for a second dish.
+        const detailLines = [];
+        if (it.option_choice) detailLines.push(`<div class="item-detail">└ ${it.option_choice}</div>`);
+        if (it.spice_choice) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
+        if (it.note) detailLines.push(`<div class="item-detail item-note">└ 備註：${it.note}</div>`);
         return `<div class="item-row">
           <div class="item-main"><span class="item-name">${name}</span><span class="item-qty">x${it.qty}</span></div>
-          ${meta}
-          ${note}
+          ${detailLines.join("")}
         </div>`;
       })
       .join("");
@@ -953,22 +963,22 @@
   .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: 16px; font-weight: 900; }
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
-  .item-meta { font-size: 12px; color: #333; margin-top: 0.5mm; }
-  .item-note { font-size: 11px; color: #c0161f; margin-top: 0.5mm; }
+  .item-detail { font-size: 13px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
+  .item-note { color: #c0161f; }
   .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
   .print-time { text-align: center; font-size: 10px; color: #555; margin-top: 3mm; }
 </style>
 </head><body>
-  <div class="header"><div class="store-name">${storeName} 주방 주문서</div></div>
+  <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
   <div class="divider"></div>
-  <div class="meta-row"><span>테이블 ${o.table_number}번</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+  <div class="meta-row"><span>桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
   <div class="meta-row"><span>${time}</span></div>
   <div class="divider"></div>
   ${itemRows}
-  <div class="total-row"><span>합계</span><span>NT$${o.total}</span></div>
-  ${o.note ? `<div class="order-note">주문 메모: ${o.note}</div>` : ""}
-  <div class="print-time">인쇄: ${new Date().toLocaleString("ko-KR")}</div>
+  <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
+  ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
+  <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
 </body></html>`;
   }
 
