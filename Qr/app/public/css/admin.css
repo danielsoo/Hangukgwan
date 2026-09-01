@@ -71,6 +71,7 @@ input, select, button, textarea { font-family: inherit; }
 }
 .order-card-type-badge.takeout { background: #fff3cd; color: #8a6100; border: 1px solid #e3c07a; }
 .order-card-type-badge.delivery { background: #dbeafe; color: #1e429f; border: 1px solid #93b8f5; }
+.order-card-type-badge.mixed { background: #f3e8ff; color: #6b21a8; border: 1px solid #d3b3f0; }
 @keyframes flash { 0%,100% { box-shadow: 0 1px 3px rgba(0,0,0,0.06);} 50% { box-shadow: 0 0 0 4px rgba(181,35,44,0.35);} }
 
 /* Menu management */

@@ -111,6 +111,7 @@
       tableLabel: "테이블",
       orderCardTakeoutBadge: "포장",
       orderCardDeliveryBadge: "배달",
+      orderCardMixedBadge: "혼합",
       memoLabel: "메모",
       orderMemoLabel: "주문 메모",
       totalLabel: "합계",
@@ -390,6 +391,7 @@
       tableLabel: "桌號",
       orderCardTakeoutBadge: "外帶",
       orderCardDeliveryBadge: "外送",
+      orderCardMixedBadge: "混合",
       memoLabel: "備註",
       orderMemoLabel: "訂單備註",
       totalLabel: "合計",
@@ -911,18 +913,33 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+    // 매장(dine-in) is chosen per dish now, so one order can mix both — the
+    // header badge below only covers the uniform cases (order_type is
+    // "dine_in"/"takeout" when every item agrees, "mixed" otherwise, see
+    // src/routes/orders.js). For a mixed order we also tag each individual
+    // takeout line here, since the header badge alone can't say which dish
+    // needs to-go packaging.
     const itemsHtml = o.items
-      .map((it) => `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`)
+      .map((it) => {
+        const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`;
+        const perItemTag =
+          o.order_type === "mixed" && it.order_type === "takeout"
+            ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
+            : "";
+        return label + perItemTag;
+      })
       .join("<br/>");
     // 매장(dine-in) orders are the overwhelming default and stay unbadged;
-    // 포장(takeout) gets a badge right in the live queue so staff notice it
-    // needs to-go packaging without having to open/print the ticket first.
+    // 포장(takeout)/혼합(mixed) get a badge right in the live queue so staff
+    // notice to-go packaging is needed without opening/printing the ticket.
     const typeBadge =
       o.order_type === "takeout"
         ? `<span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
-        : o.order_type === "delivery"
-          ? `<span class="order-card-type-badge delivery">${T("orderCardDeliveryBadge")}</span>`
-          : "";
+        : o.order_type === "mixed"
+          ? `<span class="order-card-type-badge mixed">${T("orderCardMixedBadge")}</span>`
+          : o.order_type === "delivery"
+            ? `<span class="order-card-type-badge delivery">${T("orderCardDeliveryBadge")}</span>`
+            : "";
     card.innerHTML = `
       <div class="order-card-top"><span>${T("tableLabel")} ${o.table_number}${typeBadge}</span><span class="order-card-time">${time}</span></div>
       <div class="order-card-items">${itemsHtml}</div>
@@ -979,13 +996,17 @@
   // printer (confirmed with the owner — not a regular A4 printer), replacing
   // the earlier photo-overlay recreation of the paper order slip. The
   // owner's spec: which table, when, each menu item's name + quantity, the
-  // order type (內用/dine-in, 外帶/takeout — picked via the .order-type-tabs
-  // pill on order.html, or 外送/delivery, a possible future order_type value
-  // with no customer-facing UI yet — see order_type in src/routes/orders.js),
-  // and the 소/돼지 (option_choice) and 맵기 (spice_choice) distinctions per
-  // item, printed
-  // as clearly-labeled sub-lines (see "detail" comment below) so the kitchen
-  // never mistakes an item's meat-type/spice-level for a second item.
+  // order type (內用/dine-in, 外帶/takeout — picked per dish via the
+  // .order-type-tabs pill inside order.html's item sheet, or 外送/delivery,
+  // a possible future order_type value with no customer-facing UI yet — see
+  // order_type in src/routes/orders.js), and the 소/돼지 (option_choice) and
+  // 맵기 (spice_choice) distinctions per item, printed as clearly-labeled
+  // sub-lines (see "detail" comment below) so the kitchen never mistakes an
+  // item's meat-type/spice-level for a second item. Since order type is now
+  // chosen per dish, a single order can mix 內用 and 外帶 — the header badge
+  // shows the order-level summary (dine_in/takeout/mixed, see orders.js) and
+  // each individual takeout dish additionally gets its own "└ 外帶" line so
+  // the kitchen can't miss which specific item needs to-go packaging.
   // No more hand-measured coordinates onto a fixed photo — each ordered
   // line just flows down the narrow strip, so a menu item added after the
   // fact needs no special "extra items" handling like the old system did.
@@ -996,6 +1017,7 @@
   // (name_zh preferred, falling back to name_ko/name_en if a dish was never
   // given a Chinese name).
   function orderTypeLabel(o) {
+    if (o.order_type === "mixed") return "混合";
     if (o.order_type === "takeout") return "外帶";
     if (o.order_type === "delivery") return "外送";
     return "內用";
@@ -1041,6 +1063,12 @@
         const detailLines = [];
         if (it.option_choice) detailLines.push(`<div class="item-detail">└ ${it.option_choice}</div>`);
         if (it.spice_choice) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
+        // 매장(dine-in) is this dish's default and stays implicit — only
+        // 外帶(takeout) is called out per-dish, since that's the one that
+        // changes how the kitchen has to send it out. See the file-level
+        // comment above for why this exists even when the order-level badge
+        // already says takeout/mixed.
+        if (it.order_type === "takeout") detailLines.push(`<div class="item-detail item-takeout">└ 外帶</div>`);
         if (it.note) detailLines.push(`<div class="item-detail item-note">└ 備註：${it.note}</div>`);
         return `<div class="item-row">
           <div class="item-main"><span class="item-name">${name}</span><span class="item-qty">x${it.qty}</span></div>
@@ -1103,6 +1131,7 @@
   .item-qty { white-space: nowrap; }
   .item-detail { font-size: ${fs.itemDetail}px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-note { color: #c0161f; }
+  .item-takeout { font-weight: 900; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; color: #555; margin-top: 3mm; }
@@ -1187,13 +1216,16 @@
   function sampleTicketOrderForPreview() {
     return {
       table_number: "7",
-      order_type: "dine_in",
+      // "mixed" + one takeout item below, so this preview also shows what
+      // the new per-dish 外帶 sub-line (see buildTicketHtml's detailLines)
+      // looks like at whatever font sizes the owner is trying out.
+      order_type: "mixed",
       created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
       total: 780,
-      note: "外帶",
+      note: "",
       items: [
-        { name_zh: "石鍋拌飯", qty: 1, option_choice: "牛", spice_choice: "中辣" },
-        { name_zh: "辣炒年糕", qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥" },
+        { name_zh: "石鍋拌飯", qty: 1, option_choice: "牛", spice_choice: "中辣", order_type: "dine_in" },
+        { name_zh: "辣炒年糕", qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥", order_type: "takeout" },
       ],
     };
   }
@@ -1288,7 +1320,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )
@@ -1587,7 +1619,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${it.unit_price * it.qty}</span>
           </div>`
       )

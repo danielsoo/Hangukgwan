@@ -10,16 +10,17 @@
   // and moved on before the next party scans the QR code.
   let currency = "TWD";
   let categories = [];
-  let cart = []; // { itemId, qty, option, spice, note, item }
-  // 매장(dine-in) vs 포장(takeout) — see the .order-type-tabs pill at the top
-  // of the page. Always starts at "dine_in" and is never persisted, same
-  // reset-on-fresh-load behavior as lang/currency above — a customer sitting
-  // at the table should never see a stale "takeout" selection from whoever
-  // used this table before them.
-  let orderType = "dine_in";
+  let cart = []; // { itemId, qty, option, spice, note, orderType, item }
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
+  // 매장(dine-in) vs 포장(takeout) — chosen per dish (see the
+  // #itemOrderTypeTabs pill inside the item detail sheet), since a single
+  // order can now mix dine-in and takeout items — e.g. eating here but
+  // taking dessert home. Reset to "dine_in" every time openItemSheet() opens
+  // for a fresh item, same as currentOption/currentSpiceOption above, and
+  // carried onto the cart line itself (not a page-wide setting) when added.
+  let currentOrderType = "dine_in";
   let currentQty = 1;
   let mixQty = {}; // { optionLabel: qty } — used instead of currentQty for mix_options items
   let activeOrderId = null;
@@ -264,6 +265,10 @@
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
     currentSpiceOption = item.spice_options ? item.spice_options.split(",")[0].trim() : null;
+    currentOrderType = "dine_in";
+    document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.type === "dine_in");
+    });
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
     $("#itemName").textContent = nameFor(item);
@@ -397,6 +402,14 @@
   $("#itemSheetBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "itemSheetBackdrop") $("#itemSheetBackdrop").hidden = true;
   });
+  // Order-type tabs (매장/포장) inside the item sheet — wired once here;
+  // openItemSheet() above resets which one is active every time it opens.
+  document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((b) => {
+    b.onclick = () => {
+      currentOrderType = b.dataset.type;
+      document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((btn) => btn.classList.toggle("active", btn === b));
+    };
+  });
   // Griddle items with a min_first_order_qty are NOT floored at that minimum
   // here — the qty stepper moves freely like any other item (down to 1).
   // The minimum is only enforced (with an explanatory toast) at add-to-cart
@@ -425,7 +438,7 @@
       }
       opts.forEach((opt) => {
         if (mixQty[opt] > 0) {
-          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, note });
+          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, note, orderType: currentOrderType });
         }
       });
     } else {
@@ -441,6 +454,7 @@
         option: currentOption,
         spice: currentSpiceOption,
         note,
+        orderType: currentOrderType,
       });
     }
     $("#itemSheetBackdrop").hidden = true;
@@ -486,6 +500,10 @@
       const metaParts = [];
       if (c.option) metaParts.push(c.option);
       if (c.spice) metaParts.push(c.spice);
+      // 매장(dine-in) is the default and stays implicit; only 포장(takeout)
+      // is called out here, so a customer mixing both in one order can see
+      // at a glance which lines are which without extra clutter on the rest.
+      if (c.orderType === "takeout") metaParts.push(t("orderTypeTakeout"));
       if (c.note) metaParts.push(c.note);
       row.innerHTML = `
         <div>
@@ -574,9 +592,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tableNumber,
-          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, note: c.note })),
+          // Each cart line carries its own orderType now (chosen per dish in
+          // the item sheet) — see src/routes/orders.js, which validates and
+          // stores order_type per item instead of once for the whole order.
+          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, note: c.note, orderType: c.orderType })),
           note: $("#orderNote").value.trim(),
-          orderType,
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
         }),
@@ -716,14 +736,6 @@
     if (!confirm(t("payOnlineConfirm"))) return;
     location.href = `/api/payment/checkout?table=${encodeURIComponent(tableNumber)}`;
   };
-
-  // Order-type tabs (매장/포장)
-  document.querySelectorAll(".order-type-tab[data-type]").forEach((b) => {
-    b.onclick = () => {
-      orderType = b.dataset.type;
-      document.querySelectorAll(".order-type-tab[data-type]").forEach((btn) => btn.classList.toggle("active", btn === b));
-    };
-  });
 
   $("#historyBtn").onclick = openHistory;
   $("#historyClose").onclick = () => ($("#historyBackdrop").hidden = true);

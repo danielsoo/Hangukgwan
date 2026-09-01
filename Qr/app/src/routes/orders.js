@@ -38,7 +38,7 @@ function checkLocation(lat, lng) {
 
 // Customer: place a new order
 router.post("/", async (req, res) => {
-  const { tableNumber, items, note, lat, lng, orderType } = req.body || {};
+  const { tableNumber, items, note, lat, lng } = req.body || {};
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
   }
@@ -71,6 +71,11 @@ router.post("/", async (req, res) => {
       unit_price: mi.price,
       option_choice: it.option || null,
       spice_choice: it.spice || null,
+      // 매장(dine-in) vs 포장(takeout) — chosen per dish in the item sheet
+      // (see .order-type-tabs in order.html/order.js), not once for the
+      // whole order, so a single order can mix both. Anything else
+      // (missing, tampered, unrecognized) safely falls back to dine-in.
+      order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
       note: (it.note || "").slice(0, 200),
     });
   }
@@ -98,16 +103,24 @@ router.post("/", async (req, res) => {
     }
   }
 
+  // Order-level summary derived from each line's own order_type (see the
+  // validated.push above) — used for the quick badge in the admin queue and
+  // the header line on the printed ticket. "mixed" covers an order that
+  // combines dine-in and takeout dishes; the per-item detail (└ 外帶 on the
+  // ticket, a small tag on the admin card) is what actually tells the
+  // kitchen which specific dish needs packaging. A true delivery flow (a
+  // courier picking up from outside the restaurant) is still a possible
+  // future order_type value but has no per-item UI yet, so it never appears
+  // here — only dine_in/takeout/mixed can come out of this derivation.
+  const takeoutCount = validated.filter((v) => v.order_type === "takeout").length;
+  const orderTypeSummary =
+    takeoutCount === 0 ? "dine_in" : takeoutCount === validated.length ? "takeout" : "mixed";
+
   const order = {
     id: nextId("orders"),
     table_number: String(tableNumber),
     status: "new",
-    // 매장(dine-in) vs 포장(takeout) — see the .order-type-tabs pill at the
-    // top of order.html/order.js. Anything else (missing, tampered,
-    // unrecognized) safely falls back to dine-in. A true delivery flow
-    // (a courier picking up from outside the restaurant) is still a
-    // possible future order_type value but has no UI yet.
-    order_type: orderType === "takeout" ? "takeout" : "dine_in",
+    order_type: orderTypeSummary,
     total,
     note: (note || "").slice(0, 300),
     created_at: nowLocal(),

@@ -102,6 +102,7 @@
   }
 
   function orderTypeLabel(o) {
+    if (o.order_type === "mixed") return "混合";
     if (o.order_type === "takeout") return "外帶";
     if (o.order_type === "delivery") return "外送";
     return "內用";
@@ -135,6 +136,11 @@
       out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
       if (it.option_choice) out += "  └ " + it.option_choice + "\n";
       if (it.spice_choice) out += "  └ " + it.spice_choice + "\n";
+      // Order type is chosen per dish now (see order_type on each item in
+      // src/routes/orders.js), so one order can mix 內用/外帶 — 內用 is the
+      // default and stays implicit, only 外帶 is called out per dish, same
+      // as buildTicketHtml()'s HTML ticket in admin.js.
+      if (it.order_type === "takeout") out += CMD.BOLD_ON + "  └ 外帶" + CMD.BOLD_OFF + "\n";
       if (it.note) out += "  └ 備註：" + it.note + "\n";
     });
 
