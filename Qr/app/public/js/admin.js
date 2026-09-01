@@ -1024,7 +1024,13 @@
     printFailedOrderIds.forEach((id) => {
       if (!stillNew.has(id)) printFailedOrderIds.delete(id);
     });
-    renderOrders(); // also refreshes #printFailBanner, using prunedAny above
+    // Skip re-rendering the order columns while a card is actively being
+    // dragged (see draggingOrderId / wireColumnDragDrop) — this 4-second
+    // poll used to wipe out and rebuild every .order-card from scratch
+    // mid-drag, which yanks the very DOM node the browser is dragging out
+    // from under it and silently aborts the drop (same reason
+    // renderFloorPlan() below already skips itself during floorPlanDragging).
+    if (!draggingOrderId) renderOrders(); // also refreshes #printFailBanner, using prunedAny above
     renderTables();
     if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber);
@@ -1169,6 +1175,9 @@
       card.classList.remove("dragging");
       draggingOrderId = null;
       dragSourceColumnBody = null;
+      // Catch up on anything a poll skipped re-rendering while this drag
+      // was in progress (see the draggingOrderId guard in loadOrders()).
+      renderOrders();
     };
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
