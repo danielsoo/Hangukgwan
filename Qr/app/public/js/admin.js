@@ -897,7 +897,7 @@
       // a growing 正 is deliberately biased toward the top of its box (so
       // strokes 2-5 can stack below it), which looks off-center when it's
       // the only stroke on its own.
-      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M1,6 L23,6" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="square"/></svg>`;
+      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M1,6 L23,6" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="square"/></svg>`;
     }
     // A "1" that's actually the remainder after one or more completed 正
     // groups (e.g. qty 6, 11, 16...) is the first stroke of a NEW 正 in
@@ -905,8 +905,13 @@
     // not the standalone centered dash, otherwise it reads as a random
     // disconnected mark floating next to the completed 正 instead of the
     // start of the next one.
+    // stroke-width 6 (up from the original 2.6) makes the tally as bold as
+    // the red 金額合計 total (both are drawn in the same #c0161f red) —
+    // measured/verified this is the boldest it can go before the 4
+    // horizontal strokes of 正, spaced 7 viewBox units apart, start fusing
+    // into a solid block; anything above ~6 loses the tally shape entirely.
     const paths = TALLY_STROKES.slice(0, strokeCount)
-      .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="2.6" fill="none" stroke-linecap="square"/>`)
+      .map((d) => `<path d="${d}" stroke="currentColor" stroke-width="6" fill="none" stroke-linecap="square"/>`)
       .join("");
     return `<svg viewBox="0 0 24 28" class="tally-glyph">${paths}</svg>`;
   }
