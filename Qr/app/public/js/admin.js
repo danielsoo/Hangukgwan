@@ -882,12 +882,19 @@
   // identically on any printer regardless of what Chinese font is
   // installed, the same problem that caused rare characters to print
   // blank elsewhere in this ticket.
+  // Horizontal strokes run from x=-2 to x=26 (centered on the vertical
+  // spine's x=12) instead of the viewBox's own 1..23 — deliberately longer
+  // left-right than the 24-wide viewBox, relying on .tally-glyph's
+  // overflow:visible to let them bleed out a bit on each side. Checked this
+  // against the tightest real spot (the 51/11/15/17 groups' split 牛/豬
+  // half-cells, ~45px wide, shifted as far as -12.5px by
+  // .tally-overlay-group1-left) and it still clears that cell's edge.
   const TALLY_STROKES = [
-    "M1,4 L23,4", // 1: top horizontal (一)
+    "M-2,4 L26,4", // 1: top horizontal (一)
     "M12,4 L12,25", // 2: + vertical spine
-    "M1,11 L23,11", // 3: + upper-middle horizontal
-    "M1,18 L23,18", // 4: + lower-middle horizontal
-    "M1,25 L23,25", // 5: + bottom horizontal — now a complete 正
+    "M-2,11 L26,11", // 3: + upper-middle horizontal
+    "M-2,18 L26,18", // 4: + lower-middle horizontal
+    "M-2,25 L26,25", // 5: + bottom horizontal — now a complete 正
   ];
   function strokeGlyphSvg(strokeCount, isStandaloneOne) {
     if (strokeCount === 1 && isStandaloneOne) {
@@ -897,7 +904,7 @@
       // a growing 正 is deliberately biased toward the top of its box (so
       // strokes 2-5 can stack below it), which looks off-center when it's
       // the only stroke on its own.
-      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M1,6 L23,6" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="square"/></svg>`;
+      return `<svg viewBox="0 0 24 12" class="tally-glyph tally-glyph-single"><path d="M-2,6 L26,6" stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="square"/></svg>`;
     }
     // A "1" that's actually the remainder after one or more completed 正
     // groups (e.g. qty 6, 11, 16...) is the first stroke of a NEW 正 in
