@@ -159,8 +159,12 @@
       addTableToZoneEmpty: "배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.",
       addTableToZoneCancel: "취소",
       addTableToZoneConfirm: "확인",
-      settingsTabGeneral: "일반",
-      settingsTabAdmin: "관리자 전용",
+      settingsCatDisplay: "화면",
+      settingsCatStore: "매장 정보",
+      settingsCatAccount: "계정",
+      settingsCatNotify: "알림",
+      settingsCatPayment: "결제",
+      settingsCatPrint: "인쇄",
       livePreviewLabel: "미리보기 (손님 화면)",
       tabSettlement: "결산",
       settlementStartLabel: "시작일",
@@ -444,8 +448,12 @@
       addTableToZoneEmpty: "沒有可配置的桌號。<br/>請先在上方新增桌號。",
       addTableToZoneCancel: "取消",
       addTableToZoneConfirm: "確定",
-      settingsTabGeneral: "一般",
-      settingsTabAdmin: "僅限管理員",
+      settingsCatDisplay: "顯示",
+      settingsCatStore: "店家資訊",
+      settingsCatAccount: "帳號",
+      settingsCatNotify: "通知",
+      settingsCatPayment: "付款",
+      settingsCatPrint: "列印",
       livePreviewLabel: "預覽（顧客畫面）",
       tabSettlement: "結算",
       settlementStartLabel: "開始日期",
@@ -738,18 +746,14 @@
     document.body.classList.toggle("perm-no-settingsEdit", !canSettingsEdit());
     document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
     document.body.classList.toggle("perm-no-reservationManage", !canManageReservations());
-    // Staff can never see the 관리자 전용 settings sub-tab — force back to 일반.
+    // Staff can never see an owner-only settings category (알림/결제/인쇄)
+    // — if one of those was left selected, bounce back to 화면.
     if (currentRole !== "owner") {
-      const generalBtn = $('.settings-subtab-btn[data-subtab="general"]');
-      if (generalBtn) {
-        $$(".settings-subtab-btn").forEach((b) => b.classList.remove("active"));
-        generalBtn.classList.add("active");
+      const activeNav = $(".settings-nav-btn.active");
+      if (activeNav && activeNav.classList.contains("owner-only")) {
+        selectSettingsCategory("display");
       }
-      const generalPanel = $("#settings-general");
-      const adminPanel = $("#settings-admin");
-      if (generalPanel) generalPanel.hidden = false;
-      if (adminPanel) adminPanel.hidden = true;
-      // Same for the owner-only 결산 tab — bounce staff back to 실시간 주문.
+      // Same for the owner-only 결산 탭 — bounce staff back to 실시간 주문.
       const settlementTab = $('.admin-tabs button[data-tab="settlement"]');
       if (settlementTab && settlementTab.classList.contains("active")) {
         settlementTab.classList.remove("active");
@@ -815,17 +819,20 @@
     };
   });
 
-  // ---------- Settings sub-tabs (일반 / 관리자 전용) ----------
-  // The 관리자 전용 button itself is owner-only (hidden for staff via CSS),
-  // but we also guard the click handler and reset staff back to 일반 in
-  // applyRoleUI, in case a staff session ever has it focused/selected.
-  $$(".settings-subtab-btn").forEach((btn) => {
+  // ---------- Settings categories (left-hand nav: 화면/매장 정보/계정/
+  // 알림/결제/인쇄) ----------
+  // A few of these (알림/결제/인쇄) are owner-only, hidden for staff via CSS
+  // (.role-staff .owner-only) — but we also guard the click handler and
+  // reset staff back to 화면 in applyRoleUI, in case a staff session ever
+  // has one of them focused/selected already.
+  function selectSettingsCategory(name) {
+    $$(".settings-nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.category === name));
+    $$(".settings-category").forEach((p) => (p.hidden = p.id !== `settings-cat-${name}`));
+  }
+  $$(".settings-nav-btn").forEach((btn) => {
     btn.onclick = () => {
-      if (btn.dataset.subtab === "admin" && currentRole !== "owner") return;
-      $$(".settings-subtab-btn").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      $("#settings-general").hidden = btn.dataset.subtab !== "general";
-      $("#settings-admin").hidden = btn.dataset.subtab !== "admin";
+      if (btn.classList.contains("owner-only") && currentRole !== "owner") return;
+      selectSettingsCategory(btn.dataset.category);
     };
   });
 
@@ -1279,7 +1286,7 @@
     frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), { screenPreview: false });
   }
 
-  $$("#settings-admin input[id^='tfs']").forEach((el) => (el.oninput = updateTicketFontPreview));
+  $$("#settings-cat-print input[id^='tfs']").forEach((el) => (el.oninput = updateTicketFontPreview));
 
   // Called for every logged-in role (owner or staff) — see showDashboard()
   // below — because ticketFontSizes is the cache printKitchenTicket() and

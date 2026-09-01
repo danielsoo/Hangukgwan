@@ -126,6 +126,16 @@ router.post("/", async (req, res) => {
     created_at: nowLocal(),
     updated_at: nowLocal(),
     items: validated,
+    // Snapshot of the table's headcount at the moment this order was
+    // placed. table.party_size itself is transient (cleared once the table
+    // is settled — see the PATCH /:id handler below), so this is the only
+    // place a guest count survives long-term for reporting (결산). It's on
+    // every order rather than only stored once per visit because that's
+    // the unit 결산 already aggregates by; when it later needs a per-visit
+    // guest count instead of a per-order one, group by (table_number, day)
+    // the same way computeSettlement()'s turnover estimate does, and take
+    // one order's party_size per group rather than summing every order.
+    party_size: orderingTable.party_size,
   };
   store.orders.push(order);
   await save();

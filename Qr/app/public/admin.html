@@ -198,12 +198,18 @@
 
     <!-- SETTINGS TAB -->
     <section id="tab-settings" class="tab-panel" hidden>
-      <div class="settings-subtabs">
-        <button data-subtab="general" class="settings-subtab-btn active" data-i18n="settingsTabGeneral">일반</button>
-        <button data-subtab="admin" class="settings-subtab-btn owner-only" data-i18n="settingsTabAdmin">관리자 전용</button>
-      </div>
+      <div class="settings-shell">
+        <nav class="settings-nav">
+          <button data-category="display" class="settings-nav-btn active" data-i18n="settingsCatDisplay">화면</button>
+          <button data-category="store" class="settings-nav-btn" data-i18n="settingsCatStore">매장 정보</button>
+          <button data-category="account" class="settings-nav-btn" data-i18n="settingsCatAccount">계정</button>
+          <button data-category="notify" class="settings-nav-btn owner-only" data-i18n="settingsCatNotify">알림</button>
+          <button data-category="payment" class="settings-nav-btn owner-only" data-i18n="settingsCatPayment">결제</button>
+          <button data-category="print" class="settings-nav-btn owner-only" data-i18n="settingsCatPrint">인쇄</button>
+        </nav>
 
-      <div id="settings-general" class="settings-subpanel">
+        <div class="settings-content">
+        <div id="settings-cat-display" class="settings-category">
         <div class="settings-card">
           <h3 data-i18n="uiFontScaleTitle">화면 글자 크기</h3>
           <p class="settings-hint" data-i18n="uiFontScaleHint">이 관리자 화면 전체의 글자 크기를 조절해요. 이 컴퓨터/브라우저에서만 적용되고 다른 사람 화면에는 영향이 없어요.</p>
@@ -214,6 +220,9 @@
             <button type="button" id="uiFontScaleResetBtn" class="ui-font-scale-reset" data-i18n="uiFontScaleResetBtn">기본값</button>
           </div>
         </div>
+        </div>
+
+        <div id="settings-cat-store" class="settings-category" hidden>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsCoverTitle">손님 화면 상단 사진</h3>
           <p class="settings-hint" data-i18n="settingsCoverHint">주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.</p>
@@ -300,6 +309,9 @@
           <label><span data-i18n="labelRadius">허용 반경 (미터)</span><input id="s_order_radius_m" type="number" min="20" step="10" /></label>
           <p class="settings-hint" id="locationStatusText" data-i18n="locationNotSet">아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)</p>
         </div>
+        </div>
+
+        <div id="settings-cat-account" class="settings-category" hidden>
         <div class="settings-card staff-only">
           <h3 data-i18n="settingsPwTitle">비밀번호 변경</h3>
           <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="pw_current" type="password" /></label>
@@ -307,17 +319,14 @@
           <button id="changePwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
           <div class="save-msg" id="pwMsg" hidden></div>
         </div>
-      </div>
-
-      <div id="settings-admin" class="settings-subpanel owner-only" hidden>
-        <div class="settings-card">
+        <div class="settings-card owner-only">
           <h3 data-i18n="ownerPwTitle">사장 비밀번호 변경</h3>
           <label><span data-i18n="labelPwCurrent">현재 비밀번호</span><input id="owner_pw_current" type="password" /></label>
           <label><span data-i18n="labelPwNew">새 비밀번호 (6자 이상)</span><input id="owner_pw_new" type="password" /></label>
           <button id="changeOwnerPwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
           <div class="save-msg" id="ownerPwMsg" hidden></div>
         </div>
-        <div class="settings-card">
+        <div class="settings-card owner-only">
           <h3 data-i18n="staffPermTitle">직원 권한 관리</h3>
           <p class="settings-hint" data-i18n="staffPermHint">직원 계정으로 로그인하면 아래에서 켠 항목만 추가/삭제/변경할 수 있어요. 주문 확인, 상태 변경(조리 시작/서빙/결제 완료), 인쇄는 항상 가능합니다.</p>
           <label class="perm-toggle-row"><span data-i18n="permMenuEdit">메뉴 추가/수정/삭제</span><input type="checkbox" id="perm_menuEdit" /></label>
@@ -331,6 +340,9 @@
           <button id="setStaffPasswordBtn" data-i18n="staffPasswordSaveBtn">직원 비밀번호 저장</button>
           <div class="save-msg" id="staffPwMsg" hidden></div>
         </div>
+        </div>
+
+        <div id="settings-cat-notify" class="settings-category owner-only" hidden>
         <div class="settings-card">
           <h3 data-i18n="lineSettingsTitle">마감 자동 알림 (LINE)</h3>
           <p class="settings-hint" data-i18n="lineSettingsHint">매일 밤 마감 시간 이후 그날 매출/미결제 요약을, 아래 등록된 사람에게만 개별로 전송해요 (친구 추가한 모두에게 보내는 게 아니에요).</p>
@@ -359,6 +371,9 @@
           <h4 data-i18n="lineApprovedTitle">알림 받는 사람</h4>
           <div id="lineApprovedList" class="line-people-list"></div>
         </div>
+        </div>
+
+        <div id="settings-cat-payment" class="settings-category owner-only" hidden>
         <div class="settings-card">
           <h3 data-i18n="paymentSettingsTitle">온라인 결제 (ECPay)</h3>
           <p class="settings-hint" data-i18n="paymentSettingsHint">손님이 테이블 미결제 합계를 직접 신용카드/LINE Pay/JKOPay 등으로 결제할 수 있게 해요. 꺼두면 지금처럼 직원이 결제 완료를 눌러야 해요.</p>
@@ -367,6 +382,9 @@
           <button id="savePaymentSettingsBtn" data-i18n="saveBtn">저장</button>
           <div class="save-msg" id="paymentMsg" hidden></div>
         </div>
+        </div>
+
+        <div id="settings-cat-print" class="settings-category owner-only" hidden>
         <div class="settings-card">
           <h3 data-i18n="escposSettingsTitle">주방 프린터 직접 인쇄 (ESC/POS · QZ Tray)</h3>
           <p class="settings-hint" data-i18n="escposSettingsHint">
@@ -412,6 +430,8 @@
           <button id="saveTicketFontSizesBtn" data-i18n="saveBtn">저장</button>
           <button id="resetTicketFontSizesBtn" type="button" data-i18n="ticketFontResetBtn">기본값으로</button>
           <div class="save-msg" id="ticketFontSizesMsg" hidden></div>
+        </div>
+        </div>
         </div>
       </div>
     </section>
