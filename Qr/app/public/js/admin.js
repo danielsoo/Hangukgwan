@@ -97,6 +97,7 @@
       alertTableNumberRequired: "테이블 번호를 입력하세요",
       alertUnluckyNumber: "숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).",
       alertTableExists: "이미 존재하는 테이블 번호입니다",
+      alertFloorPlanSaveFailed: "배치 저장에 실패했어요. 방금 옮긴 자리가 원래대로 되돌아갑니다 — 다시 시도해주세요.",
       tableEmptyBadge: "비어있음",
       tableDelTitle: "삭제",
       noOrdersYetAdmin: "아직 주문이 없습니다.",
@@ -345,6 +346,7 @@
       alertTableNumberRequired: "請輸入桌號",
       alertUnluckyNumber: "桌號不能包含數字「4」（在台灣被視為不吉利的數字）。",
       alertTableExists: "此桌號已經存在",
+      alertFloorPlanSaveFailed: "版面儲存失敗，剛剛移動的位置會還原——請再試一次。",
       tableEmptyBadge: "空桌",
       tableDelTitle: "刪除",
       noOrdersYetAdmin: "目前尚無訂單。",
@@ -1328,6 +1330,33 @@
   // look like it teleports back to its last saved spot, so we skip that
   // rebuild until the interaction finishes.
   let floorPlanDragging = false;
+
+  // Shared save helper for every floor-plan edit (dragging/resizing a table
+  // or zone, renaming a zone, unassigning a table). Every call site already
+  // updates the local `tables`/`zones` model optimistically before this
+  // resolves. If the PATCH fails, this un-does that local change and
+  // rebuilds the floor plan from the (now-reverted) model, then tells the
+  // owner — previously a failed save had NO feedback at all, so the move
+  // just quietly vanished the next time the page reloaded or the 4s poll
+  // rebuilt the floor plan ("자꾸 바꿨는데 다시 되돌아간다"). Returns true/false
+  // so a caller that needs a re-render on SUCCESS too (e.g. unassigning a
+  // table moves it to a different container) can decide that itself.
+  async function patchFloorPlan(url, body, revert) {
+    try {
+      const res = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("save_failed");
+      return true;
+    } catch (e) {
+      revert();
+      alert(T("alertFloorPlanSaveFailed"));
+      renderFloorPlan();
+      return false;
+    }
+  }
   // Generic drag helper: mousedown+drag moves the element (position: absolute
   // inside a position: relative parent); a small movement threshold tells a
   // real drag apart from a plain click, so tapping a table still opens its
@@ -1725,13 +1754,12 @@
       el.querySelector(".table-unassign").onclick = async (e) => {
         e.stopPropagation();
         if (!confirm(fmtConfirmUnassignTable(t.label || t.number))) return;
-        await fetch(`/api/tables/${t.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ zoneId: null }),
-        });
+        const prevZoneId = t.zone_id;
         t.zone_id = null;
-        renderFloorPlan();
+        const ok = await patchFloorPlan(`/api/tables/${t.id}`, { zoneId: null }, () => {
+          t.zone_id = prevZoneId;
+        });
+        if (ok) renderFloorPlan();
       };
     }
 
@@ -1750,12 +1778,13 @@
         snapEnabled: true,
         getSnapSiblings,
         onEnd: async (x, y) => {
+          const prevX = t.x;
+          const prevY = t.y;
           t.x = x;
           t.y = y;
-          await fetch(`/api/tables/${t.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ x, y }),
+          await patchFloorPlan(`/api/tables/${t.id}`, { x, y }, () => {
+            t.x = prevX;
+            t.y = prevY;
           });
         },
         onClick: () => openTableDetail(t.number, t.label),
@@ -1767,12 +1796,13 @@
         snapEnabled: true,
         getSnapSiblings,
         onEnd: async (width, height) => {
+          const prevWidth = t.width;
+          const prevHeight = t.height;
           t.width = width;
           t.height = height;
-          await fetch(`/api/tables/${t.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ width, height }),
+          await patchFloorPlan(`/api/tables/${t.id}`, { width, height }, () => {
+            t.width = prevWidth;
+            t.height = prevHeight;
           });
         },
       });
@@ -1917,12 +1947,11 @@
         el.querySelector(".zone-label").onclick = async () => {
           const name = prompt(T("promptZoneName"), z.name);
           if (name && name.trim() && name.trim() !== z.name) {
+            const prevName = z.name;
             z.name = name.trim();
             el.querySelector(".zone-label").textContent = z.name;
-            await fetch(`/api/zones/${z.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name: z.name }),
+            await patchFloorPlan(`/api/zones/${z.id}`, { name: z.name }, () => {
+              z.name = prevName;
             });
           }
         };
@@ -1941,12 +1970,13 @@
 
         makeDraggable(el, {
           onEnd: async (x, y) => {
+            const prevX = z.x;
+            const prevY = z.y;
             z.x = x;
             z.y = y;
-            await fetch(`/api/zones/${z.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ x, y }),
+            await patchFloorPlan(`/api/zones/${z.id}`, { x, y }, () => {
+              z.x = prevX;
+              z.y = prevY;
             });
           },
         });
@@ -1962,12 +1992,13 @@
           minWidth: requiredWidth,
           minHeight: requiredHeight,
           onEnd: async (width, height) => {
+            const prevWidth = z.width;
+            const prevHeight = z.height;
             z.width = width;
             z.height = height;
-            await fetch(`/api/zones/${z.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ width, height }),
+            await patchFloorPlan(`/api/zones/${z.id}`, { width, height }, () => {
+              z.width = prevWidth;
+              z.height = prevHeight;
             });
           },
         });

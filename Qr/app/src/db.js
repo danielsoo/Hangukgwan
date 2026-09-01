@@ -129,6 +129,38 @@ async function refreshAndSave(mutate) {
   await save();
 }
 
+// Updates a handful of fields on ONE item inside a top-level array field of
+// the main store document (e.g. store.tables, store.zones) via MongoDB's
+// positional $ operator, instead of overwriting the entire store document
+// the way save() does. This matters specifically for the 배치도 floor-plan
+// editor: dragging/resizing a table or zone fires a PATCH per drop, and a
+// person rearranging several tables fires several of these in quick
+// succession. Two overlapping full-document save() calls can race — the
+// second request reads the store (via the per-request refreshStore()) before
+// the first request's save() has landed, then writes its own now-stale
+// snapshot back over the top, silently discarding the first request's
+// change. That's the "자꾸 바꿨는데 다시 되돌아간다" symptom: nothing errors,
+// a change just quietly vanishes a moment after it was made. A positional
+// update only ever touches the one array entry being edited, so two
+// concurrent edits to two different tables/zones can no longer clobber each
+// other this way (editing the exact same item from two places at once can
+// still race, but that's not the reported scenario and is inherent to any
+// last-write-wins store).
+// Also updates the in-memory `store` copy so the rest of this request
+// (the res.json(...) the caller sends back) reflects the change immediately
+// without needing another round-trip to Mongo.
+async function patchArrayItem(arrayField, id, updates) {
+  await connectDB();
+  const setDoc = {};
+  for (const [key, val] of Object.entries(updates)) {
+    setDoc[`${arrayField}.$.${key}`] = val;
+  }
+  await db.collection("store").updateOne({ _id: "main", [`${arrayField}.id`]: id }, { $set: setDoc });
+  const item = (store[arrayField] || []).find((it) => it.id === id);
+  if (item) Object.assign(item, updates);
+  return item;
+}
+
 function nextId(collection) {
   return store.nextId[collection]++;
 }
@@ -157,4 +189,4 @@ async function deletePhoto(id) {
   await db.collection("photos").deleteOne({ _id: new ObjectId(id) });
 }
 
-module.exports = { connectDB, refreshStore, store, save, refreshAndSave, nextId, savePhoto, getPhoto, deletePhoto };
+module.exports = { connectDB, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId, savePhoto, getPhoto, deletePhoto };

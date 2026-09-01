@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId, getPhoto } = require("../db");
+const { store, save, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const canEditTables = requirePermission("tableEdit");
@@ -44,24 +44,55 @@ router.patch("/:id", canEditTables, async (req, res) => {
   const table = store.tables.find((t) => t.id === id);
   if (!table) return res.status(404).json({ error: "not_found" });
   const { x, y, width, height, label, zoneId } = req.body || {};
+  // Collects only the fields this call actually changes, then writes them
+  // with a targeted per-item DB update (see patchArrayItem() in src/db.js)
+  // instead of save()'s full-document replace. The 배치도 floor plan fires
+  // one of these PATCHes per drag/resize, often several in quick
+  // succession while rearranging tables — a full-document save() can race
+  // with another one in flight and silently overwrite it with stale data,
+  // which is what caused rearranged tables to randomly "revert".
+  const updates = {};
   if (zoneId !== undefined) {
     if (zoneId === null) {
       table.zone_id = null;
+      updates.zone_id = null;
     } else {
       const zone = store.zones.find((z) => z.id === parseInt(zoneId, 10));
       if (!zone) return res.status(400).json({ error: "zone_not_found" });
       table.zone_id = zone.id;
-      if (table.x == null) table.x = 10;
-      if (table.y == null || table.y < 34) table.y = 34; // stay clear of the zone's header strip
+      updates.zone_id = zone.id;
+      if (table.x == null) {
+        table.x = 10;
+        updates.x = 10;
+      }
+      if (table.y == null || table.y < 34) {
+        table.y = 34; // stay clear of the zone's header strip
+        updates.y = 34;
+      }
     }
   }
-  if (x != null) table.x = Math.max(0, Number(x));
+  if (x != null) {
+    table.x = Math.max(0, Number(x));
+    updates.x = table.x;
+  }
   // Stay clear of the zone's header strip (label / + 테이블 / ✕ buttons).
-  if (y != null) table.y = table.zone_id != null ? Math.max(34, Number(y)) : Math.max(0, Number(y));
-  if (width != null) table.width = Math.max(40, Number(width));
-  if (height != null) table.height = Math.max(40, Number(height));
-  if (label != null) table.label = String(label).slice(0, 20) || null;
-  await save();
+  if (y != null) {
+    table.y = table.zone_id != null ? Math.max(34, Number(y)) : Math.max(0, Number(y));
+    updates.y = table.y;
+  }
+  if (width != null) {
+    table.width = Math.max(40, Number(width));
+    updates.width = table.width;
+  }
+  if (height != null) {
+    table.height = Math.max(40, Number(height));
+    updates.height = table.height;
+  }
+  if (label != null) {
+    table.label = String(label).slice(0, 20) || null;
+    updates.label = table.label;
+  }
+  if (Object.keys(updates).length) await patchArrayItem("tables", id, updates);
   res.json(table);
 });
 

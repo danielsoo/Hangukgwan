@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId } = require("../db");
+const { store, save, patchArrayItem, nextId } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const canEditTables = requirePermission("tableEdit");
 
@@ -31,12 +31,33 @@ router.patch("/:id", canEditTables, async (req, res) => {
   const zone = store.zones.find((z) => z.id === id);
   if (!zone) return res.status(404).json({ error: "not_found" });
   const { name, x, y, width, height } = req.body || {};
-  if (name != null) zone.name = String(name).slice(0, 30);
-  if (x != null) zone.x = Math.max(0, Number(x));
-  if (y != null) zone.y = Math.max(0, Number(y));
-  if (width != null) zone.width = Math.max(60, Number(width));
-  if (height != null) zone.height = Math.max(60, Number(height));
-  await save();
+  // Targeted per-item update (see patchArrayItem() in src/db.js) instead of
+  // save()'s full-document replace — same reasoning as tables.js's PATCH:
+  // dragging/resizing zones on the 배치도 floor plan fires many of these in
+  // quick succession, and two overlapping full-document saves can race and
+  // silently undo each other.
+  const updates = {};
+  if (name != null) {
+    zone.name = String(name).slice(0, 30);
+    updates.name = zone.name;
+  }
+  if (x != null) {
+    zone.x = Math.max(0, Number(x));
+    updates.x = zone.x;
+  }
+  if (y != null) {
+    zone.y = Math.max(0, Number(y));
+    updates.y = zone.y;
+  }
+  if (width != null) {
+    zone.width = Math.max(60, Number(width));
+    updates.width = zone.width;
+  }
+  if (height != null) {
+    zone.height = Math.max(60, Number(height));
+    updates.height = zone.height;
+  }
+  if (Object.keys(updates).length) await patchArrayItem("zones", id, updates);
   res.json(zone);
 });
 
