@@ -20,6 +20,46 @@
   let knownOrderIds = new Set();
   let openTableNumber = null;
 
+  // ---------- Admin-panel-wide font size (this browser only) ----------
+  // A personal display preference, not a shared setting — stored in this
+  // browser's localStorage (never sent to the server), so adjusting it can
+  // never affect anyone else's screen or another device. Separate from the
+  // kitchen-ticket font sizes further down, which ARE shared/server-side —
+  // a printed ticket is a real document everyone who prints it needs to
+  // see rendered the same way, unlike this screen-only preference.
+  const UI_FONT_SCALE_KEY = "hangukgwan_admin_ui_font_scale";
+  const UI_FONT_SCALE_MIN = 0.8;
+  const UI_FONT_SCALE_MAX = 1.6;
+  const UI_FONT_SCALE_STEP = 0.1;
+
+  function getUiFontScale() {
+    let v = parseFloat(localStorage.getItem(UI_FONT_SCALE_KEY));
+    if (!Number.isFinite(v)) v = 1;
+    return Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, v));
+  }
+  function applyUiFontScale(v) {
+    document.body.style.zoom = v;
+    const label = $("#uiFontScaleValue");
+    if (label) label.textContent = Math.round(v * 100) + "%";
+  }
+  function setUiFontScale(v) {
+    v = Math.round(v * 10) / 10;
+    v = Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, v));
+    try {
+      localStorage.setItem(UI_FONT_SCALE_KEY, String(v));
+    } catch (e) {
+      // Private browsing / storage blocked — still applies for this page
+      // view, it just won't be remembered on the next visit.
+    }
+    applyUiFontScale(v);
+  }
+  applyUiFontScale(getUiFontScale());
+  if ($("#uiFontScaleDecBtn")) {
+    $("#uiFontScaleDecBtn").onclick = () => setUiFontScale(getUiFontScale() - UI_FONT_SCALE_STEP);
+    $("#uiFontScaleIncBtn").onclick = () => setUiFontScale(getUiFontScale() + UI_FONT_SCALE_STEP);
+    $("#uiFontScaleResetBtn").onclick = () => setUiFontScale(1);
+  }
+
   // ---------- Role / permissions ----------
   // "owner" (사장) always has every permission; "staff" (직원) only has
   // whatever the owner has switched on below. Populated from /api/auth/me
@@ -294,6 +334,20 @@
       testEscposBtn: "🖨️ 테스트 인쇄",
       escposTestSuccess: "✔ 테스트 인쇄를 보냈어요. 프린터를 확인해보세요.",
       escposTestFailed: "✘ 인쇄 실패 — QZ Tray가 실행 중인지, 프린터 이름이 맞는지 확인해주세요.",
+      uiFontScaleTitle: "화면 글자 크기",
+      uiFontScaleHint: "이 관리자 화면 전체의 글자 크기를 조절해요. 이 컴퓨터/브라우저에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
+      uiFontScaleResetBtn: "기본값",
+      ticketFontSizesTitle: "빌지(주방 티켓) 글자 크기",
+      ticketFontSizesHint:
+        "항목별로 글자 크기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요. 브라우저 인쇄(미리보기 인쇄)에만 적용되고, ESC/POS 직접 인쇄에는 적용되지 않아요 — 프린터 자체 글꼴이라 크기를 이렇게 세밀하게 조절할 수 없어요.",
+      tfsStoreName: "상호명 (헤더)",
+      tfsMeta: "테이블 · 주문유형 · 시간",
+      tfsItemName: "메뉴 이름",
+      tfsItemDetail: "세부사항 (└ 표시)",
+      tfsTotal: "합계",
+      tfsPrintTime: "인쇄 시간",
+      ticketFontSavedMsg: "저장되었습니다",
+      ticketFontResetBtn: "기본값으로",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
@@ -557,6 +611,20 @@
       testEscposBtn: "🖨️ 測試列印",
       escposTestSuccess: "✔ 已送出測試列印，請確認印表機。",
       escposTestFailed: "✘ 列印失敗 — 請確認 QZ Tray 是否執行中，以及印表機名稱是否正確。",
+      uiFontScaleTitle: "畫面文字大小",
+      uiFontScaleHint: "調整整個管理後台畫面的文字大小。只影響這台電腦/瀏覽器，不會影響其他人的畫面。",
+      uiFontScaleResetBtn: "預設值",
+      ticketFontSizesTitle: "廚房出單文字大小",
+      ticketFontSizesHint:
+        "可以個別調整每個項目的文字大小，右邊的預覽是實際列印大小。只影響瀏覽器列印（預覽列印），不影響 ESC/POS 直接列印 — 因為印表機本身的字型無法這樣細部調整大小。",
+      tfsStoreName: "店名（標題）",
+      tfsMeta: "桌號 · 內用外送 · 時間",
+      tfsItemName: "菜品名稱",
+      tfsItemDetail: "細項（└ 標示）",
+      tfsTotal: "合計",
+      tfsPrintTime: "列印時間",
+      ticketFontSavedMsg: "已儲存",
+      ticketFontResetBtn: "恢復預設值",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
@@ -681,7 +749,7 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
-    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings()]);
+    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings(), loadTicketFontSizes()]);
     if (currentRole === "owner") {
       loadStaffPermissions();
       loadLineSettings();
@@ -916,7 +984,33 @@
     return o.order_type === "delivery" ? "外送" : "內用";
   }
 
-  function buildTicketHtml(o) {
+  // Per-component font sizes (px) for the kitchen ticket — adjustable by
+  // the owner in Settings > "빌지 글자 크기" (see loadTicketFontSizes() /
+  // #saveTicketFontSizesBtn below), independently of each other, with a
+  // live actual-size preview in that settings card. These are the
+  // fallback/default values (= this ticket's original fixed sizes) used
+  // until the owner changes them, or if the setting fails to load.
+  const DEFAULT_TICKET_FONT_SIZES = {
+    storeName: 17, // header line ("한국관 廚房出單")
+    meta: 13, // 桌號/內用-外送/time rows
+    itemName: 16, // each dish's name + quantity
+    itemDetail: 13, // └ meat-type/spice/note lines under a dish
+    total: 16, // 合計 row
+    printTime: 10, // footer 列印時間 line
+  };
+  let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
+
+  // `opts.screenPreview` controls only the on-screen "paper on a desk"
+  // chrome (gray background, drop shadow, 2.4x zoom, flex-centering) —
+  // it's on (default) for the real previewKitchenTicket()/printKitchenTicket()
+  // tab, and off for the small actual-size live preview embedded directly
+  // in the Settings > 빌지 글자 크기 card (an <iframe>, already exactly
+  // 80mm wide in its own box, where zooming/centering would be wrong).
+  // `fontSizes` overrides individual component sizes — pass a partial
+  // object; anything not given falls back to DEFAULT_TICKET_FONT_SIZES.
+  function buildTicketHtml(o, fontSizes, opts) {
+    const fs = Object.assign({}, DEFAULT_TICKET_FONT_SIZES, fontSizes || {});
+    const screenPreview = !opts || opts.screenPreview !== false;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
 
@@ -938,6 +1032,32 @@
       })
       .join("");
 
+    // Only the standalone preview/print tab gets the gray "desk" background
+    // + shadow + 2.4x zoom + centering — the embedded Settings-card preview
+    // needs none of that (it's already a small fixed-size box at true 1x
+    // scale), and none of it should ever reach the real printed page.
+    const screenChromeCss = screenPreview
+      ? `
+  html, body { height: 100%; }
+  body {
+    background: #dfe3e7;
+    min-height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 28px 0;
+  }
+  .receipt {
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
+    zoom: 2.4;
+  }
+  @media print {
+    html, body { height: auto; }
+    body { background: none; min-height: 0; display: block; padding: 0; }
+    .receipt { box-shadow: none; margin: 0; zoom: 1; }
+  }`
+      : "";
+
     return `<!DOCTYPE html>
 <html><head><meta charset="utf-8" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -948,69 +1068,28 @@
      "auto" since the roll cuts to whatever length the content needs. */
   @page { size: 80mm auto; margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
-  html, body { height: 100%; }
   body {
     margin: 0;
     font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
     color: #000;
-    /* On-screen only (previewKitchenTicket's tab, or this tab before
-       Ctrl+P/print()): show the receipt as a paper card centered in the
-       middle of the window, on a gray "desk" background, so it's easy to
-       see how it'll actually look — @media print below strips all of this
-       back out for the real printed page, which is still just the bare
-       80mm-wide receipt content edge-to-edge like before.
-       align-items is flex-start (not "center") on purpose: a long order
-       zoomed to 2.4x can be much taller than the window, and centering a
-       taller-than-container flex item makes it overflow equally off the
-       TOP and bottom — the top half (table number, order type, first
-       items) becomes literally unreachable by scrolling in Chrome. Anchor
-       to the top instead so scrolling down always reveals the rest, no
-       matter how long the ticket is. */
-    background: #dfe3e7;
-    min-height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding: 28px 0;
   }
-  .receipt {
-    width: 80mm;
-    background: #fff;
-    padding: 3mm 4mm;
-    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
-    /* On-screen only — blows the paper mockup up to a size that actually
-       uses the screen instead of a tiny 80mm-wide strip lost in empty gray
-       space. zoom (not transform) scales real layout, not just pixels, so
-       the flex-centering above still measures the enlarged box correctly.
-       Reset to 1 for print below — the physical page must stay 80mm. */
-    zoom: 2.4;
-  }
+  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; }
   .header { text-align: center; margin-bottom: 2mm; }
-  .store-name { font-size: 17px; font-weight: 900; }
+  .store-name { font-size: ${fs.storeName}px; font-weight: 900; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
-  .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700; margin-bottom: 1mm; }
-  .order-type-badge { display: inline-block; font-size: 13px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; font-size: ${fs.meta}px; font-weight: 700; margin-bottom: 1mm; }
+  .order-type-badge { display: inline-block; font-size: ${fs.meta}px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
   .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
   .item-row:last-child { border-bottom: none; }
-  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: 16px; font-weight: 900; }
+  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: 900; }
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
-  .item-detail { font-size: 13px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
+  .item-detail { font-size: ${fs.itemDetail}px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-note { color: #c0161f; }
-  .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
+  .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: 11px; color: #c0161f; margin-top: 2mm; }
-  .print-time { text-align: center; font-size: 10px; color: #555; margin-top: 3mm; }
-  @media print {
-    /* html/body's height:100% above (needed to vertically-center the
-       on-screen preview) forces the print engine to treat the page as
-       exactly one screen-height tall instead of letting @page's "auto"
-       grow to fit the real content — on a long order (many items) that
-       silently cuts the ticket off partway down instead of printing the
-       rest. Reset to auto here so a long ticket always prints in full. */
-    html, body { height: auto; }
-    body { background: none; min-height: 0; display: block; padding: 0; }
-    .receipt { width: 80mm; box-shadow: none; margin: 0; zoom: 1; }
-  }
+  .print-time { text-align: center; font-size: ${fs.printTime}px; color: #555; margin-top: 3mm; }
+  ${screenChromeCss}
 </style>
 </head><body>
   <div class="receipt">
@@ -1042,7 +1121,7 @@
     const win = window.open("", "_blank");
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
     win.document.open();
-    win.document.write(buildTicketHtml(o));
+    win.document.write(buildTicketHtml(o, ticketFontSizes));
     win.document.close();
 
     // Wait for the receipt fonts (Noto Sans KR/TC) to finish loading before
@@ -1064,8 +1143,118 @@
     const win = window.open("", "_blank");
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
     win.document.open();
-    win.document.write(buildTicketHtml(o));
+    win.document.write(buildTicketHtml(o, ticketFontSizes));
     win.document.close();
+  }
+
+  // ---------- Kitchen-ticket per-component font sizes (Settings >
+  // 관리자 전용 > 빌지 글자 크기 — owner-editable, server-stored so every
+  // print, on every login, uses the same sizes; see /api/settings/ticket-print
+  // in settings.js and DEFAULT_TICKET_FONT_SIZES next to buildTicketHtml
+  // above). Only affects the browser-print ticket — ESC/POS direct
+  // printing (escpos.js) uses fixed printer character sizes instead, since
+  // a thermal printer's font table doesn't support arbitrary px sizes. ----------
+  const TICKET_FONT_INPUT_IDS = {
+    storeName: "tfsStoreName",
+    meta: "tfsMeta",
+    itemName: "tfsItemName",
+    itemDetail: "tfsItemDetail",
+    total: "tfsTotal",
+    printTime: "tfsPrintTime",
+  };
+
+  // A small sample order for the live actual-size preview in the settings
+  // card — deliberately touches every element a real ticket can have (two
+  // dishes, a meat-type choice, a spice-level choice, and a note) so every
+  // font-size field's effect is visible in the preview at once.
+  function sampleTicketOrderForPreview() {
+    return {
+      table_number: "7",
+      order_type: "dine_in",
+      created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
+      total: 780,
+      note: "外帶",
+      items: [
+        { name_zh: "石鍋拌飯", qty: 1, option_choice: "牛", spice_choice: "中辣" },
+        { name_zh: "辣炒年糕", qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥" },
+      ],
+    };
+  }
+
+  function readTicketFontInputs() {
+    const out = {};
+    for (const k of Object.keys(TICKET_FONT_INPUT_IDS)) {
+      const el = $("#" + TICKET_FONT_INPUT_IDS[k]);
+      const v = el ? parseInt(el.value, 10) : NaN;
+      if (Number.isFinite(v)) out[k] = v;
+    }
+    return out;
+  }
+
+  function setTicketFontInputs(sizes) {
+    for (const k of Object.keys(TICKET_FONT_INPUT_IDS)) {
+      const el = $("#" + TICKET_FONT_INPUT_IDS[k]);
+      if (el && sizes[k] != null) el.value = sizes[k];
+    }
+  }
+
+  // screenPreview:false here — the settings-card preview is an <iframe>
+  // already fixed at 80mm wide, so it should show the ticket at true 1x
+  // size, not the 2.4x-zoomed "paper on a desk" look of the real preview tab.
+  function updateTicketFontPreview() {
+    const frame = $("#ticketFontPreviewFrame");
+    if (!frame) return;
+    frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), { screenPreview: false });
+  }
+
+  $$("#settings-admin input[id^='tfs']").forEach((el) => (el.oninput = updateTicketFontPreview));
+
+  // Called for every logged-in role (owner or staff) — see showDashboard()
+  // below — because ticketFontSizes is the cache printKitchenTicket() and
+  // previewKitchenTicket() actually print with, not just settings-card
+  // display data. Only owners see/edit the settings card itself, but a
+  // staff member's printout still needs to match whatever the owner set.
+  async function loadTicketFontSizes() {
+    const res = await fetch("/api/settings/ticket-print");
+    if (res.ok) {
+      const data = await res.json();
+      ticketFontSizes = Object.assign({}, DEFAULT_TICKET_FONT_SIZES, data);
+    }
+    setTicketFontInputs(ticketFontSizes);
+    updateTicketFontPreview();
+  }
+
+  const saveTicketFontSizesBtn = $("#saveTicketFontSizesBtn");
+  if (saveTicketFontSizesBtn) {
+    saveTicketFontSizesBtn.onclick = async () => {
+      const res = await fetch("/api/settings/ticket-print", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(readTicketFontInputs()),
+      });
+      const msg = $("#ticketFontSizesMsg");
+      if (res.ok) {
+        const data = await res.json();
+        ticketFontSizes = Object.assign({}, DEFAULT_TICKET_FONT_SIZES, data);
+        setTicketFontInputs(ticketFontSizes);
+        updateTicketFontPreview();
+        msg.style.color = "#1a8a44";
+        msg.textContent = T("ticketFontSavedMsg");
+      } else {
+        msg.style.color = "#b5232c";
+        msg.textContent = T("staffPasswordFailed");
+      }
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2500);
+    };
+  }
+
+  const resetTicketFontSizesBtn = $("#resetTicketFontSizesBtn");
+  if (resetTicketFontSizesBtn) {
+    resetTicketFontSizesBtn.onclick = () => {
+      setTicketFontInputs(DEFAULT_TICKET_FONT_SIZES);
+      updateTicketFontPreview();
+    };
   }
 
   async function updateOrderStatus(id, status) {

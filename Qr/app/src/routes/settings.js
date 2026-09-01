@@ -271,4 +271,37 @@ router.put("/escpos", requireOwner, async (req, res) => {
   res.json(escposStatus());
 });
 
+// Kitchen-ticket font sizes (per component, in px) — owner-editable, same
+// GET-is-requireAdmin/PUT-is-requireOwner split as /escpos above: every
+// login that can print a ticket (staff included) needs to read this so
+// their printout matches what the owner configured, but only the owner can
+// change it. See buildTicketHtml()'s DEFAULT_TICKET_FONT_SIZES in
+// admin.js for what each key controls and its fallback value.
+const TICKET_FONT_KEYS = ["storeName", "meta", "itemName", "itemDetail", "total", "printTime"];
+
+function ticketFontSizesStatus() {
+  const saved = store.settings.ticket_font_sizes || {};
+  const out = {};
+  for (const k of TICKET_FONT_KEYS) if (typeof saved[k] === "number") out[k] = saved[k];
+  return out;
+}
+
+router.get("/ticket-print", requireAdmin, (req, res) => {
+  res.json(ticketFontSizesStatus());
+});
+
+router.put("/ticket-print", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  store.settings.ticket_font_sizes = store.settings.ticket_font_sizes || {};
+  for (const k of TICKET_FONT_KEYS) {
+    const v = Number(b[k]);
+    // Sane bounds so a typo (or a stray huge/negative number) can't produce
+    // an unreadable or paper-wasting ticket — 8px..40px covers everything
+    // from "tiny footer note" to "shout it across the kitchen".
+    if (Number.isFinite(v)) store.settings.ticket_font_sizes[k] = Math.max(8, Math.min(40, Math.round(v)));
+  }
+  await save();
+  res.json(ticketFontSizesStatus());
+});
+
 module.exports = router;

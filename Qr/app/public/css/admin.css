@@ -236,6 +236,44 @@ body:not(.role-staff) .staff-only { display: none !important; }
   margin: 0 16px 0; background: var(--ink); color: #fff; padding: 10px 14px;
   border-radius: 10px; font-size: 16px; line-height: 1.5;
 }
+
+/* Admin-panel-wide font size control (settings > 일반) — see
+   applyUiFontScale()/setUiFontScale() in admin.js. A simple −/100%/+
+   stepper, not a slider, so it matches the small discrete steps the JS
+   actually applies (10% per click). */
+.ui-font-scale-row { display: flex; align-items: center; gap: 12px; }
+.ui-font-scale-btn {
+  width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); font-size: 22px; font-weight: 700;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.ui-font-scale-btn:hover { background: #f3f3f3; }
+.ui-font-scale-value { min-width: 56px; text-align: center; font-size: 18px; font-weight: 700; }
+.ui-font-scale-reset {
+  margin-left: auto; padding: 8px 14px; border: 1px solid var(--line); background: #fff;
+  color: var(--muted); border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 14px;
+}
+.ui-font-scale-reset:hover { background: #f3f3f3; }
+
+/* Per-component kitchen-ticket font size editor (settings > 관리자 전용) —
+   fields on the left, an actual-size (1x, not zoomed) live preview of the
+   real ticket HTML on the right, same "실제 크기" idea as .phone-preview-wrap
+   above. See updateTicketFontPreview() in admin.js. */
+.ticket-font-editor { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin: 4px 0 16px; }
+.ticket-font-fields { display: flex; flex-direction: column; gap: 10px; flex: 1; min-width: 220px; }
+.ticket-font-field { display: flex !important; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 0 !important; }
+.ticket-font-field span { flex: 1; font-size: 15px; }
+.ticket-font-field input {
+  width: 64px; flex: none; margin-top: 0; text-align: center; font-size: 16px;
+}
+.ticket-font-preview-wrap {
+  flex-shrink: 0; background: #dfe3e7; border-radius: 10px; padding: 16px;
+  display: flex; justify-content: center;
+}
+.ticket-font-preview-frame {
+  width: 302px; height: 440px; border: none; background: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
 .notice-preview-banner:empty { display: none; }
 .notice-preview-empty { text-align: center; margin: 0 16px; }
 
