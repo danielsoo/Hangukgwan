@@ -1,5 +1,15 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/admin", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/admin" },
+    { "source": "/t/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/t/:path*" },
+    { "source": "/order.html", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/order.html" },
+    { "source": "/api/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/api/:path*" },
+    { "source": "/css/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/css/:path*" },
+    { "source": "/js/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/js/:path*" },
+    { "source": "/images/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/images/:path*" },
+    { "source": "/uploads/:path*", "destination": "https://REPLACE_WITH_QR_APP_DOMAIN.example/uploads/:path*" }
+  ]
 }

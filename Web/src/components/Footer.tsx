@@ -1,7 +1,7 @@
 'use client'
 
 import { useLanguage } from '@/context/LanguageContext'
-import { ORDER_URL } from '@/lib/config'
+import { ORDER_URL, ADMIN_URL } from '@/lib/config'
 
 export default function Footer() {
   const { tr } = useLanguage()
@@ -120,6 +120,14 @@ export default function Footer() {
             © 2026 韓國館 Hangukgwan · Zhubei, Hsinchu
           </p>
           <p style={{ fontSize: 12.5, color: 'var(--ink-a35)', margin: 0 }}>{tr.footer.rights}</p>
+          <a
+            href={ADMIN_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: 11.5, color: 'var(--ink-a35)', letterSpacing: '0.04em' }}
+          >
+            관리자
+          </a>
         </div>
       </div>
     </footer>
