@@ -197,9 +197,14 @@ router.delete("/:id", canEditTables, async (req, res) => {
 // own host — so it always works regardless of what domain the app ends
 // up deployed on. Open this page and use the browser's Print > Save as PDF.
 router.get("/qr-sheet", requireAdmin, async (req, res) => {
-  // 포장 카운터 isn't a real table — it has its own dedicated print page
-  // (GET /counter-qr below), so it's left out of this per-table grid.
-  const tables = [...store.tables].filter((t) => !t.is_counter).sort((a, b) => a.sort_order - b.sort_order);
+  // 포장 카운터 is included here too (auto-provisioned if it doesn't exist
+  // yet) so the owner gets every QR code — tables and the takeout counter —
+  // in one print job instead of having to separately open GET /counter-qr.
+  // Its sort_order of 0 naturally puts it first in the grid; the
+  // is_counter flag drives the distinct badge/border below so it doesn't
+  // get mistaken for an actual table number when handed to a customer.
+  await getOrCreateCounterTable();
+  const tables = [...store.tables].sort((a, b) => a.sort_order - b.sort_order);
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
   // Load the store logo once (if the owner uploaded one from Admin >
@@ -210,12 +215,16 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
     tables.map(async (t) => {
       const url = `${baseUrl}/t/${encodeURIComponent(t.number)}`;
       const svg = await buildQrSvg(url, logoDataUri);
+      // The label sits ABOVE the QR in normal document flow now, not
+      // overlaid on top of it — it used to be absolutely positioned over
+      // the QR's top-left corner, which is exactly where one of the three
+      // finder-pattern squares a scanner needs lives, and could make the
+      // code harder (or, printed slightly larger/offset, impossible) to
+      // scan. A label above the code can never cover any part of it.
       return `
-        <div class="card">
-          <div class="qr-wrap">
-            <div class="table-no-badge">${t.label || t.number}</div>
-            ${svg}
-          </div>
+        <div class="card${t.is_counter ? " counter-card" : ""}">
+          <div class="table-no-badge${t.is_counter ? " counter-badge" : ""}">${t.label || t.number}</div>
+          <div class="qr-wrap">${svg}</div>
           <div class="url">${url}</div>
         </div>`;
     })
@@ -235,14 +244,15 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
     border: 2px dashed #999; border-radius: 12px; padding: 16px; text-align: center;
     page-break-inside: avoid; display:flex; flex-direction:column; align-items:center; gap:8px;
   }
-  .qr-wrap { position: relative; width: 200px; height: 200px; }
+  .counter-card { border-color: #16213e; border-style: solid; }
+  .qr-wrap { width: 200px; height: 200px; }
   .qr-wrap svg { width: 200px; height: 200px; display: block; }
   .table-no-badge {
-    position: absolute; top: -10px; left: -10px; min-width: 30px; height: 30px; padding: 0 6px;
+    min-width: 30px; height: 30px; padding: 0 10px; white-space: nowrap;
     border-radius: 999px; background: #b5232c; color: #fff; font-size: 15px; font-weight: 800;
-    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;
+    display: flex; align-items: center; justify-content: center;
   }
+  .table-no-badge.counter-badge { background: #16213e; }
   .url { font-size: 10px; color: #666; word-break: break-all; }
   @media print {
     .toolbar { display: none; }
@@ -279,16 +289,15 @@ router.get("/counter-qr", requireAdmin, async (req, res) => {
   .toolbar { margin-bottom: 4px; }
   button { padding: 10px 18px; font-size: 14px; cursor: pointer; }
   .card {
-    border: 2px dashed #999; border-radius: 12px; padding: 28px; text-align: center;
+    border: 2px solid #16213e; border-radius: 12px; padding: 28px; text-align: center;
     display:flex; flex-direction:column; align-items:center; gap:14px;
   }
-  .qr-wrap { position: relative; width: 320px; height: 320px; }
+  .qr-wrap { width: 320px; height: 320px; }
   .qr-wrap svg { width: 320px; height: 320px; display: block; }
   .counter-badge {
-    position: absolute; top: -16px; left: 50%; transform: translateX(-50%); padding: 6px 16px; white-space: nowrap;
-    border-radius: 999px; background: #b5232c; color: #fff; font-size: 16px; font-weight: 800;
-    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;
+    padding: 6px 16px; white-space: nowrap;
+    border-radius: 999px; background: #16213e; color: #fff; font-size: 16px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
   }
   .url { font-size: 12px; color: #666; word-break: break-all; }
   @media print { .toolbar { display: none; } }
@@ -297,10 +306,8 @@ router.get("/counter-qr", requireAdmin, async (req, res) => {
 <body>
   <div class="toolbar"><button onclick="window.print()">列印 / Print QR code</button></div>
   <div class="card">
-    <div class="qr-wrap">
-      <div class="counter-badge">${table.label || "포장"}</div>
-      ${svg}
-    </div>
+    <div class="counter-badge">${table.label || "포장"}</div>
+    <div class="qr-wrap">${svg}</div>
     <div class="url">${url}</div>
   </div>
 </body>
