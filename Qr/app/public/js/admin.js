@@ -185,7 +185,8 @@
       previewBtn: "👁️ 미리보기",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       collapseItemsBtn: "접기 ▲",
-      dragHandleTitle: "드래그해서 순서 변경",
+      dragHandleTitle: "드래그해서 순서/단계 변경",
+      orderStatusChangeFailed: "상태 변경에 실패했습니다. 다시 시도해 주세요.",
       tableDetailTabActive: "현재 주문",
       tableDetailTabPaid: "이전 주문",
       tableDetailNoPaidHistory: "아직 결제 완료된 주문이 없습니다.",
@@ -502,7 +503,8 @@
       previewBtn: "👁️ 預覽",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       collapseItemsBtn: "收合 ▲",
-      dragHandleTitle: "拖曳以調整順序",
+      dragHandleTitle: "拖曳以調整順序/階段",
+      orderStatusChangeFailed: "狀態變更失敗，請再試一次。",
       tableDetailTabActive: "目前訂單",
       tableDetailTabPaid: "先前訂單",
       tableDetailNoPaidHistory: "目前還沒有已結帳的訂單。",
@@ -1039,10 +1041,24 @@
   };
 
   // ---------- Orders ----------
+  // loadOrders() now gets called from two places that can overlap: the
+  // steady 4-second poll below, and a one-off call right after a drag
+  // changes an order's status (see wireCardDrag) so the board updates
+  // immediately instead of waiting out the rest of the poll interval.
+  // Two in-flight requests can resolve out of order — if the poll's
+  // request happened to be sent just before the drag's PATCH landed, its
+  // response can still arrive AFTER the drag's own follow-up loadOrders(),
+  // carrying the pre-drag status and silently snapping the card back to
+  // its old column a moment later. ordersRequestSeq makes only the most
+  // recently SENT request's response actually get applied; anything that
+  // resolves late gets dropped instead of overwriting fresher data.
+  let ordersRequestSeq = 0;
   async function loadOrders() {
+    const seq = ++ordersRequestSeq;
     const res = await fetch("/api/orders");
     if (res.status === 401) return showLogin();
     const fresh = await res.json();
+    if (seq !== ordersRequestSeq) return; // a newer request has since been sent — this response is stale, discard it
 
     const isFirstLoad = orders.length === 0 && knownOrderIds.size === 0;
     const newlyArrived = fresh.filter((o) => !knownOrderIds.has(o.id) && o.status === "new");
@@ -1237,8 +1253,16 @@
         if (targetStatus && targetStatus !== o.status) {
           // Dropped into a different stage's column — change status, same
           // as pressing 다음 단계 (works backwards too, to undo a mistake).
+          const previousStatus = o.status;
           o.status = targetStatus; // reflect locally so the render below doesn't flicker back to the old column first
-          await updateOrderStatus(o.id, targetStatus);
+          const ok = await updateOrderStatus(o.id, targetStatus);
+          if (!ok) {
+            // The server rejected it — undo the optimistic change instead of
+            // silently leaving the card wherever it was dropped, so staff
+            // get a clear reason instead of watching it quietly snap back.
+            o.status = previousStatus;
+            await showAlert(T("orderStatusChangeFailed"));
+          }
           await loadOrders(); // re-renders with the server's fresh state, no need to also renderOrders() below
           return;
         }
@@ -1794,11 +1818,12 @@
   }
 
   async function updateOrderStatus(id, status) {
-    await fetch(`/api/orders/${id}`, {
+    const res = await fetch(`/api/orders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
+    return res.ok; // callers that optimistically updated the UI (e.g. drag-to-change-status) need to know if it should be undone
   }
 
   function openOrderDetail(o) {
