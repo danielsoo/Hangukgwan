@@ -1120,17 +1120,22 @@
     renderPrintFailureBanner();
   }
 
-  // ---------- Drag-to-reorder within one order-queue column ----------
+  // ---------- Drag-to-move-or-reorder in the order queue ----------
   // Built on Pointer Events (pointerdown/pointermove/pointerup) instead of
   // the native HTML5 draggable/dragstart/dragover/drop API. The native API
-  // only fires for a real mouse (or a mouse-emulating trackpad) — it does
-  // NOT recognize touch input on a tablet/touchscreen at all, in any
-  // browser. That was the actual cause behind "드래그는 되는데 드랍이
-  // 안돼" on a touch device: the card visibly followed the finger (the
-  // browser's own default touch handling) but no dragover/drop event ever
-  // fired, so the drop silently did nothing. Pointer Events unify mouse,
-  // touch, and pen under one event model, so the same code now works on
-  // both a desktop mouse and a kitchen tablet.
+  // only fires for a real mouse — it does NOT recognize touch input on a
+  // tablet/touchscreen at all, in any browser. Pointer Events unify mouse,
+  // touch, and pen under one event model, so the same code works on both
+  // a desktop mouse/trackpad and a kitchen tablet.
+  //
+  // Dropping a card into a DIFFERENT status column (신규 주문 → 조리 중,
+  // etc.) changes its status, exactly like pressing 다음 단계 — including
+  // dragging it back a stage to undo a mistake, which the button alone
+  // can't do. Dropping it back into the SAME column just reorders it
+  // within that column's queue (bump a rushed table up, etc.) — this is
+  // what "그 전이나 뒤로 옮길 수 있게" turned out to mean the first time
+  // this was built, but staff actually meant moving a card to an earlier
+  // or later STAGE, not just up/down a priority list, hence both.
   //
   // Only the small ⠿ handle in the card's corner (not the whole card)
   // starts a drag, so the rest of the card stays a normal tap target
@@ -1175,15 +1180,24 @@
     });
   }
 
-  // Wires a single card's drag handle. Since the card is always moved
-  // within `dragSourceColumnBody` (captured once at drag start) regardless
-  // of where the pointer physically is on screen, a drag can never
-  // accidentally land in a different status column — the same guarantee
-  // the old same-column check gave, just as a natural side effect here.
+  // Hit-tests which order-queue column body the pointer is currently over
+  // (if any), so a drag can preview moving the card into a different
+  // status column live, the same way a normal Kanban board works.
+  function columnBodyAtPoint(x, y) {
+    const el = document.elementFromPoint(x, y);
+    const col = el && el.closest(".order-col");
+    return col ? col.querySelector(".col-body") : null;
+  }
+
+  // Wires a single card's drag handle.
   function wireCardDrag(card, handle, o) {
     let startY = 0;
     let pointerId = null;
     let moved = false;
+    // Which column body the card is currently previewed inside — starts as
+    // its own column, but can change mid-drag as the pointer crosses into
+    // a different one (see columnBodyAtPoint()).
+    dragSourceColumnBody = null;
 
     const onPointerMove = (e) => {
       if (pointerId === null || e.pointerId !== pointerId) return;
@@ -1197,9 +1211,13 @@
         dragSourceColumnBody = card.parentElement;
         card.classList.add("dragging");
       }
-      const afterElement = getDragAfterElement(dragSourceColumnBody, e.clientY);
-      if (afterElement == null) dragSourceColumnBody.appendChild(card);
-      else dragSourceColumnBody.insertBefore(card, afterElement);
+      // Hit-test BEFORE moving the card, so this reads the real layout the
+      // pointer is over rather than wherever the card last landed.
+      const overBody = columnBodyAtPoint(e.clientX, e.clientY) || dragSourceColumnBody;
+      dragSourceColumnBody = overBody;
+      const afterElement = getDragAfterElement(overBody, e.clientY);
+      if (afterElement == null) overBody.appendChild(card);
+      else overBody.insertBefore(card, afterElement);
     };
 
     const finishDrag = async (e) => {
@@ -1214,7 +1232,19 @@
       draggingOrderId = null;
       const body = dragSourceColumnBody;
       dragSourceColumnBody = null;
-      if (wasDragging && body) await persistColumnOrder(body);
+      if (wasDragging && body) {
+        const targetStatus = body.closest(".order-col")?.dataset.status;
+        if (targetStatus && targetStatus !== o.status) {
+          // Dropped into a different stage's column — change status, same
+          // as pressing 다음 단계 (works backwards too, to undo a mistake).
+          o.status = targetStatus; // reflect locally so the render below doesn't flicker back to the old column first
+          await updateOrderStatus(o.id, targetStatus);
+          await loadOrders(); // re-renders with the server's fresh state, no need to also renderOrders() below
+          return;
+        }
+        // Dropped back into the same column — just a priority reorder.
+        await persistColumnOrder(body);
+      }
       // Catch up on anything a poll skipped re-rendering while this drag
       // was in progress (see the draggingOrderId guard in loadOrders()).
       renderOrders();
