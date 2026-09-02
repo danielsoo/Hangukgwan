@@ -7,7 +7,7 @@
 // unified under it (see vercel.json — its rewrites need the same URL),
 // this can point at a path on that same domain instead of the QR app's
 // own *.vercel.app URL.
-const QR_APP_BASE_URL = process.env.NEXT_PUBLIC_QR_APP_URL || 'https://REPLACE_WITH_QR_APP_DOMAIN.example'
+const QR_APP_BASE_URL = process.env.NEXT_PUBLIC_QR_APP_URL || 'https://hangukgwan.vercel.app'
 
 // "Order online" — the takeout counter, not a dine-in table.
 export const ORDER_URL = `${QR_APP_BASE_URL}/t/COUNTER`
