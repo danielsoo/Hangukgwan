@@ -1,25 +1,21 @@
-import Navbar from '@/components/Navbar'
-import Hero from '@/components/Hero'
-import About from '@/components/About'
-import SignatureMenu from '@/components/SignatureMenu'
-import ValuesSection from '@/components/ValuesSection'
-import LocationSection from '@/components/LocationSection'
-import ContactSection from '@/components/ContactSection'
-import Footer from '@/components/Footer'
+import Hero from '@/components/home/Hero'
+import InfoStrip from '@/components/home/InfoStrip'
+import SignatureSection from '@/components/home/SignatureSection'
+import PullQuoteBand from '@/components/home/PullQuoteBand'
+import AboutTeaser from '@/components/home/AboutTeaser'
+import QrOrderSection from '@/components/home/QrOrderSection'
+import LocationsTeaser from '@/components/home/LocationsTeaser'
 
 export default function Home() {
   return (
-    <>
-      <Navbar />
-      <main>
-        <Hero />
-        <About />
-        <SignatureMenu />
-        <ValuesSection />
-        <LocationSection />
-        <ContactSection />
-      </main>
-      <Footer />
-    </>
+    <main>
+      <Hero />
+      <InfoStrip />
+      <SignatureSection />
+      <PullQuoteBand />
+      <AboutTeaser />
+      <QrOrderSection />
+      <LocationsTeaser />
+    </main>
   )
 }

@@ -1,155 +1,126 @@
-const ko = {
-  nav: {
-    home: '홈',
-    menu: '메뉴',
-    about: '소개',
-    locations: '위치',
-    contact: '문의',
-  },
+import type { TranslationsType } from './types'
+
+const ko: TranslationsType = {
+  nav: { home: '홈', menu: '메뉴', about: '소개', loc: '오시는 길', group: '단체 예약' },
   hero: {
-    eyebrow: '신죽 · 대만',
-    title: '한국관',
-    romanized: 'HANGUKGWAN',
-    tagline: '대만에서 만나는 정통 한국의 맛',
-    cta: '메뉴 보기',
+    eyebrow: 'Zhubei · Hsinchu · 한식 가정 요리',
+    tag: '정갈한 한식 가정 요리를 정성으로 차려냅니다.',
+    cta1: '대표 메뉴',
+    cta2: 'QR 주문',
+  },
+  info: {
+    hours: '영업시간',
+    closed: '휴무',
+    closedVal: '매주 월요일',
+    booking: '예약',
+    bookingVal: '예약 없이 방문 · 현장 대기',
+    min: '최소 주문',
+    perPerson: '1인',
+    phoneLabel: '전화',
+  },
+  member: {
+    nav: '회원',
+    label: 'VIP Members',
+    title: '로그인하고 VIP 할인카드를 등록하세요',
+    body: 'Google 계정으로 로그인한 뒤 가지고 계신 실물 VIP 할인카드를 등록하면, 매장에서 QR로 주문할 때 할인이 자동으로 적용됩니다. 카드를 따로 보여주실 필요가 없습니다.',
+    google: 'Google 계정으로 로그인',
+    privacy: '카드 등록을 위해 이름과 이메일만 확인합니다.',
+    signedIn: 'Google 계정 연결됨',
+    cardLabel: '카드 번호',
+    cardHint: '카드 뒷면의 12자리 숫자를 입력하세요.',
+    register: '카드 등록',
+    doneCard: '계정에 등록되었습니다',
+    doneBody: '완료되었습니다. 다음 방문에서 QR로 주문하시면 결제 금액에 할인이 자동 적용됩니다.',
+    doneCta: '주문 페이지 열기',
+  },
+  sig: {
+    label: '대표 메뉴',
+    badge: '대표',
+    title: '가장 자신 있는 몇 가지',
+    all: '전체 메뉴',
+    note: '전체 49가지 메뉴와 가격은 테이블의 QR 주문 시스템에서 보실 수 있습니다. 계절과 재료에 따라 조금씩 달라집니다.',
+  },
+  qr: {
+    label: '테이블 주문',
+    title: '휴대폰으로 바로 주문하세요',
+    body: '테이블의 QR 코드를 스캔하면 중국어 · 한국어 · 영어 메뉴를 보고 그 자리에서 주방으로 주문을 보낼 수 있습니다.',
+    cta: '주문 페이지 열기',
+    steps: [
+      { n: 1, text: '테이블의 QR 코드를 스캔' },
+      { n: 2, text: '메뉴와 수량, 요청사항 선택' },
+      { n: 3, text: '주문 후 자리에서 기다리기' },
+    ],
   },
   about: {
-    label: '우리의 이야기',
-    title: '정성껏 준비한\n한국의 맛',
-    p1: '한국관은 신죽 지역에서 정통 한국 가정식을 선보이고 있습니다. 오랜 시간 이어진 한국의 전통 요리법을 바탕으로, 매일 신선한 재료로 음식을 정성껏 준비합니다.',
-    p2: '삼성, TSMC 등 기업 임직원 여러분께 따뜻한 한국의 정과 맛을 전달하는 것이 저희의 사명입니다.',
-  },
-  menu: {
-    label: '대표 메뉴',
-    title: '정통의 맛을\n경험하세요',
-    items: [
-      { name: '김치찌개', desc: '깊고 진한 국물의 정통 김치찌개' },
-      { name: '불고기', desc: '부드러운 양념 소불고기' },
-      { name: '비빔밥', desc: '신선한 나물의 돌솥 비빔밥' },
-      { name: '갈비탕', desc: '오래 끓인 진한 갈비탕' },
-      { name: '잡채', desc: '고소한 참기름 잡채' },
-      { name: '된장찌개', desc: '구수하고 깊은 된장찌개' },
+    label: '한국관 소개',
+    title: '가족이 운영하는 식당, 한 분 한 분을 살핍니다',
+    p1: '한국관은 주부시 시엔정주로 골목에 있는 가족이 운영하는 한식당입니다. 국물, 양념, 반찬은 매일 아침 새로 준비하고 하루를 넘기지 않습니다.',
+    p2: '넓은 곳은 아니지만 깨끗하고 조용하고 편하게 정리해 두었습니다. 테이블 사이를 조금 넓히고 조명을 조금 따뜻하게 해서, 한 끼를 천천히 드실 수 있도록 했습니다.',
+    p3: '단지에서 퇴근한 직장인, 주말에 아이와 오시는 가족, 고향 음식이 그리운 한국 분들이 여기서 식사하셨습니다. 단골손님의 입맛도, 처음 오신 분도 함께 살핍니다.',
+    more: '더 알아보기',
+    pull: '「테이블은 조금 넓게, 조명은 조금 따뜻하게 — 한 끼를 천천히.」',
+    valuesLabel: '우리가 지키는 것',
+    valuesTitle: '작은 것을 제대로 하는 것이 기본입니다',
+    values: [
+      { n: 1, t: '청결', d: '매일 개점 전과 폐점 후 전체를 정리하고, 식기와 불판, 테이블을 하나하나 확인합니다.' },
+      { n: 2, t: '당일 준비', d: '국물과 반찬은 그날 준비해 그날 씁니다. 남기기보다 다 팔고 마칩니다.' },
+      { n: 3, t: '재촉하지 않습니다', d: '테이블 간격이 넓어 조용히 식사하기에도, 아이와 함께 오시기에도 편합니다.' },
     ],
   },
-  values: {
-    label: '한국관의 가치',
-    title: '우리가 지키는 것들',
-    items: [
-      {
-        title: '정통의 맛',
-        desc: '대를 이어온 전통 레시피로 진정한 한국의 맛을 전달합니다.',
-      },
-      {
-        title: '정성 서비스',
-        desc: '모든 손님을 가족처럼 따뜻하게 맞이합니다.',
-      },
-      {
-        title: '따뜻한 환대',
-        desc: '고향의 따뜻함이 느껴지는 편안한 공간을 만들겠습니다.',
-      },
+  loc: {
+    label: '오시는 길',
+    title: '주부에 두 곳',
+    intro: '본점은 누구나 오실 수 있고, 태원일가의 지점은 인근 단지 기업 임직원 전용입니다.',
+    mainLabel: '본점',
+    branchLabel: '기업 전용점',
+    mapCta: '지도 열기',
+    accessLabel: '이용 대상',
+    branchAccess: '단지 기업 임직원',
+    nearby: '인근',
+    branchNote: '이 지점은 기업 제휴 매장으로 삼성, TSMC 등 인근 단지 임직원만 이용 가능하며 회사 계정이 필요합니다. 일반 고객은 시엔정주로 본점으로 오세요.',
+  },
+  group: {
+    label: '단체 · 기업 예약',
+    title: '10인 이상은 미리 전화 주세요',
+    p1: '부대찌개, 동판불고기, 닭갈비는 단체 손님이 가장 많이 찾는 메뉴로 함께 나눠 먹기 좋습니다. 인원이 많으면 미리 재료를 준비하고 자리를 붙여 두겠습니다.',
+    p2: '회사 회식, 부서 모임, 가족 모임 모두 환영합니다. 식사 하루 전에 인원과 시간을 알려 주세요.',
+    cta: '전화 문의',
+    ctaNote: '영업시간 내 통화 · 월요일 휴무',
+    rows: [
+      { k: '권장 인원', v: '10 – 30명 (초과 시 먼저 전화 확인)' },
+      { k: '예약 방법', v: '인원 · 날짜 · 시간만 전화로, 예약금 없음' },
+      { k: '연락 시점', v: '식사 하루 전 권장' },
+      { k: '최소 주문', v: 'NT$200 / 1인' },
     ],
+    dishesLabel: '단체 인기 메뉴',
+    dishesTitle: '나눠 먹기 좋은 세 가지',
+    d1: '햄, 소시지, 김치, 라면을 한 냄비에. 약간 매콤하고 3 – 4인이 나눠 먹기 좋습니다.',
+    d2: '동판에 바로 굽습니다. 소 또는 돼지, 2인분부터.',
+    d3: '철판 닭갈비. 마무리로 볶음밥 추가 가능 (NT$80).',
   },
-  locations: {
-    label: '찾아오시는 길',
-    title: '두 곳에서\n만나세요',
-    main: {
-      label: '본점',
-      addr: '신죽현 죽북시 현정구로 135항 32호',
-      addrZh: '新竹縣竹北市縣政九路135巷32號',
-      hours: '화 – 일  11:00 – 14:00, 17:00 – 21:00',
-      hoursNote: '매주 월요일 정기 휴무',
-      mapCta: '지도에서 보기',
-    },
-    branch: {
-      label: '직영점 (기업 전용)',
-      addr: '신죽현 죽북시 태원1가 7호',
-      addrZh: '新竹縣竹北市太元一街7號',
-      hours: '기업 임직원 전용',
-      hoursNote: '삼성 · TSMC 인근',
-      mapCta: '지도에서 보기',
-      note: '이 지점은 인근 기업 (삼성, TSMC 등) 임직원만 이용 가능합니다.',
-    },
-  },
-  contact: {
-    label: '문의하기',
-    title: '궁금한 점이\n있으신가요?',
-    namePlaceholder: '이름',
-    phonePlaceholder: '연락처',
-    messagePlaceholder: '메시지를 입력해 주세요',
-    submit: '보내기',
-    success: '감사합니다. 곧 연락 드리겠습니다.',
+  menuPage: {
+    label: '메뉴',
+    title: '대표 메뉴와 메뉴 분류',
+    intro: '가장 많이 찾으시는 메뉴입니다. 전체 49가지의 이름, 가격, 사진은 테이블의 QR 주문 시스템에서 항상 최신으로 보실 수 있습니다.',
+    catsTitle: '메뉴 분류',
+    catsNote: '분류별 품목 수와 가격대입니다. 실제 내용은 매장 QR 주문 시스템을 기준으로 합니다.',
+    cta: '전체 메뉴 열기',
+    ctaNote: '테이블의 QR 코드를 스캔하셔도 됩니다',
+    cats: [
+      { zh: '飯類', ko: '밥류', en: 'Rice', count: '8종', range: 'NT$210 – 250' },
+      { zh: '麵類', ko: '면류', en: 'Noodles', count: '9종', range: 'NT$180 – 280' },
+      { zh: '鍋類', ko: '찌개류', en: 'Stews', count: '5종', range: 'NT$230 – 400' },
+      { zh: '烤肉類', ko: '구이류', en: 'BBQ', count: '4종', range: 'NT$80 – 620' },
+      { zh: '其他', ko: '기타', en: 'Other', count: '13종', range: 'NT$150 – 540' },
+      { zh: '飲料 · 酒類', ko: '음료', en: 'Drinks', count: '10종', range: 'NT$20 – 300' },
+    ],
   },
   footer: {
-    tagline: '대만에서 만나는 정통 한국의 맛',
-    rights: '© 2025 한국관. All rights reserved.',
+    tag: '한식 가정 요리 · 신주 주부',
+    storesLabel: '매장',
+    rights: '예약 없이 방문 · 현장 대기',
+    orderLink: 'QR 주문',
   },
 }
 
 export default ko
-
-export interface TranslationsType {
-  nav: {
-    home: string
-    menu: string
-    about: string
-    locations: string
-    contact: string
-  }
-  hero: {
-    eyebrow: string
-    title: string
-    romanized: string
-    tagline: string
-    cta: string
-  }
-  about: {
-    label: string
-    title: string
-    p1: string
-    p2: string
-  }
-  menu: {
-    label: string
-    title: string
-    items: Array<{ name: string; desc: string }>
-  }
-  values: {
-    label: string
-    title: string
-    items: Array<{ title: string; desc: string }>
-  }
-  locations: {
-    label: string
-    title: string
-    main: {
-      label: string
-      addr: string
-      addrZh: string
-      hours: string
-      hoursNote: string
-      mapCta: string
-    }
-    branch: {
-      label: string
-      addr: string
-      addrZh: string
-      hours: string
-      hoursNote: string
-      mapCta: string
-      note?: string
-    }
-  }
-  contact: {
-    label: string
-    title: string
-    namePlaceholder: string
-    phonePlaceholder: string
-    messagePlaceholder: string
-    submit: string
-    success: string
-  }
-  footer: {
-    tagline: string
-    rights: string
-  }
-}
