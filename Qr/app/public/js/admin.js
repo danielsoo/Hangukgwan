@@ -806,6 +806,22 @@
   // language rather than through the flat T() dictionary above.
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
   const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
+  // 포장 카운터 orders carry their own pickup_number/customer_name (assigned
+  // server-side in src/routes/orders.js) instead of a table number — this is
+  // what staff actually call out at pickup, so every place that would
+  // otherwise show "테이블 COUNTER" shows this instead. Falls back to the
+  // counter's generic label for an order placed before this feature existed
+  // (no pickup_number/customer_name stored on it yet).
+  function isCounterOrder(o) {
+    return tables.some((t) => t.is_counter && t.number === o.table_number);
+  }
+  function fmtCounterOrderTag(o) {
+    if (o.pickup_number && o.customer_name) {
+      return adminLang === "zh" ? `📦 ${o.pickup_number}號 · ${o.customer_name}` : `📦 ${o.pickup_number}번 · ${o.customer_name}`;
+    }
+    const counterTable = tables.find((t) => t.is_counter);
+    return (counterTable && counterTable.label) || T("counterSectionTitle");
+  }
   const fmtPrintFailBanner = (n, tableNumbers) => {
     const tables = tableNumbers.join(", ");
     return adminLang === "zh"
@@ -1403,11 +1419,8 @@
       ? `<div class="order-card-print-fail">${T("printFailedCardMsg")}</div>`
       : "";
     // 포장 카운터 orders aren't a real table — "테이블 COUNTER" would be
-    // meaningless to staff, so show the counter's own label instead.
-    const isCounterOrder = tables.some((t) => t.is_counter && t.number === o.table_number);
-    const tableTag = isCounterOrder
-      ? tables.find((t) => t.is_counter).label || T("counterSectionTitle")
-      : `${T("tableLabel")} ${o.table_number}`;
+    // meaningless to staff, so show its pickup number + name instead.
+    const tableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}`;
     card.innerHTML = `
       <div class="order-card-top">
         <span>${tableTag}${typeBadge}</span>
@@ -1650,7 +1663,13 @@
   <div class="receipt">
     <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
     <div class="divider"></div>
-    <div class="meta-row"><span class="table-no">${tables.some((t) => t.is_counter && t.number === o.table_number) ? "外帶櫃檯" : `桌號 ${o.table_number}`}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    <div class="meta-row"><span class="table-no">${
+      isCounterOrder(o)
+        ? o.pickup_number && o.customer_name
+          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          : "外帶櫃檯"
+        : `桌號 ${o.table_number}`
+    }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
     <div class="meta-row"><span class="order-time">${time}</span></div>
     <div class="divider"></div>
     ${itemRows}
@@ -1872,9 +1891,7 @@
           </div>`
       )
       .join("");
-    const detailTableTag = tables.some((t) => t.is_counter && t.number === o.table_number)
-      ? T("counterSectionTitle").replace(/^📦 /, "")
-      : `${T("tableLabel")} ${o.table_number}`;
+    const detailTableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}`;
     $("#orderDetailBody").innerHTML = `
       <h2>${detailTableTag}</h2>
       <p style="color:#999;font-size:15px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
@@ -2017,9 +2034,7 @@
       renderDraft();
     };
 
-    const editTableTag = tables.some((t) => t.is_counter && t.number === order.table_number)
-      ? T("counterSectionTitle").replace(/^📦 /, "")
-      : `${T("tableLabel")} ${order.table_number}`;
+    const editTableTag = isCounterOrder(order) ? fmtCounterOrderTag(order) : `${T("tableLabel")} ${order.table_number}`;
     $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${editTableTag}`;
     $("#orderEditMsg").hidden = true;
     renderDraft();
@@ -2385,9 +2400,15 @@
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
     // Same "only while actually occupied" rule as the table-list badge above.
     const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
-    const payAllBtn = unpaidOrders.length
-      ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
-      : "";
+    // 포장 카운터의 "미결제 주문"은 서로 무관한 손님들 것이라 한 번에 묶어
+    // 결제 완료 처리하면 안 된다 (한 명만 계산해도 나머지 손님 주문까지 같이
+    // 결제완료로 넘어가버림) — 진짜 테이블(같은 일행)에서만 이 일괄 버튼을
+    // 보여주고, 카운터는 각 주문 카드의 개별 "결제 완료로 변경" 버튼으로만
+    // 처리하도록 한다 (아래 renderTableOrderBlock의 data-advance-id 버튼).
+    const payAllBtn =
+      unpaidOrders.length && !(table && table.is_counter)
+        ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
+        : "";
     // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
     // label already says what it is.
     const titleText = table && table.is_counter ? label || tableNumber : `${T("tableLabel")} ${label || tableNumber}`;
@@ -2504,10 +2525,14 @@
       o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
+    // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
+    // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
+    // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
+    const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)} · ` : "";
     return `
       <div style="border-top:1px solid var(--line);padding:14px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:15px;">${time} · ${statusLabel(o.status)}</span>
+          <span style="font-weight:700;font-size:15px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</span>
           <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}

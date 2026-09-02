@@ -183,6 +183,21 @@
     </div>
   </div>
 
+  <!-- Counter/takeout pickup name (asked once per fresh page load instead of
+       the party-size prompt above, only when this QR is the 포장 카운터 — see
+       initPartySize()'s is_counter branch in order.js). Required so staff
+       have something to call out at pickup, alongside the auto-assigned
+       pickup number shown on the kitchen ticket / admin queue. -->
+  <div class="sheet-backdrop lock-backdrop" id="counterNameBackdrop" hidden>
+    <div class="lock-card">
+      <div class="lock-icon">📦</div>
+      <h2 data-i18n="counterNameTitle">성함을 알려주세요</h2>
+      <p data-i18n="counterNameHint" style="color:var(--muted, #888);font-size:14px;margin-top:-8px;">포장 준비가 완료되면 성함으로 불러드려요</p>
+      <input type="text" id="counterNameInput" data-i18n-placeholder="counterNamePlaceholder" placeholder="예: 홍길동" maxlength="20" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #ddd;font-size:16px;margin:14px 0;" />
+      <button class="add-btn" id="counterNameConfirmBtn" data-i18n="counterNameConfirm">확인</button>
+    </div>
+  </div>
+
   <!-- Session lock (shown after 3 minutes of inactivity — must re-scan the
        table's QR code to continue; there is no way to dismiss this except
        reloading the page, which is exactly the point). -->

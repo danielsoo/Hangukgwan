@@ -1,7 +1,7 @@
 const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireAdmin } = require("../auth");
-const { nowLocal } = require("../time");
+const { nowLocal, taipeiDateString } = require("../time");
 
 const router = express.Router();
 
@@ -52,6 +52,17 @@ router.post("/", async (req, res) => {
   const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
   if (!orderingTable || (!orderingTable.is_counter && !orderingTable.party_size)) {
     return res.status(400).json({ error: "party_size_required" });
+  }
+
+  // 포장 카운터 orders have no table to identify them by, so a pickup name
+  // is required instead — this is what staff call out, alongside the
+  // auto-assigned pickup_number computed below. Enforced here too, not just
+  // in the customer page's counter-name modal (public/js/order.js), same as
+  // every other check on this route.
+  let customerName = null;
+  if (orderingTable.is_counter) {
+    customerName = String((req.body || {}).customerName || "").trim().slice(0, 20);
+    if (!customerName) return res.status(400).json({ error: "customer_name_required" });
   }
 
   const locationError = checkLocation(lat, lng);
@@ -119,6 +130,14 @@ router.post("/", async (req, res) => {
   const orderTypeSummary =
     takeoutCount === 0 ? "dine_in" : takeoutCount === validated.length ? "takeout" : "mixed";
 
+  // 포장 카운터 orders get a short daily pickup number (resets to 1 each
+  // business day, Taipei time) instead of a table number — shown alongside
+  // customerName in the kitchen queue/ticket so staff have something short
+  // to call out ("3번 홍길동님") without reading a full name off every card.
+  const pickupNumber = orderingTable.is_counter
+    ? store.orders.filter((o) => o.table_number === orderingTable.number && o.created_at.slice(0, 10) === taipeiDateString()).length + 1
+    : null;
+
   const order = {
     id: nextId("orders"),
     table_number: String(tableNumber),
@@ -139,6 +158,10 @@ router.post("/", async (req, res) => {
     // the same way computeSettlement()'s turnover estimate does, and take
     // one order's party_size per group rather than summing every order.
     party_size: orderingTable.party_size,
+    // Only set for 포장 카운터 orders (null for every real table) — see the
+    // customerName/pickupNumber derivation above.
+    customer_name: customerName,
+    pickup_number: pickupNumber,
   };
   store.orders.push(order);
   await save();

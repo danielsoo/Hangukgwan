@@ -41,6 +41,10 @@
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
   // Skips the headcount prompt entirely and defaults every item to 포장.
   let isCounterTable = false;
+  // Required pickup name for a counter/takeout order — collected via
+  // #counterNameBackdrop (see showCounterNameModal below) instead of the
+  // headcount prompt real tables get.
+  let counterCustomerName = null;
 
   const PARTY_WARNING = {
     zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
@@ -170,6 +174,20 @@
   // everyone at the table usually orders from their own phone, not just the
   // one that placed the very first order.
   async function checkPriorOrder() {
+    // The 포장 카운터 QR is shared by every walk-in customer, so unlike a
+    // real table, "does this table already have an order?" can't be
+    // answered from the shared /api/orders/table/:tableNumber endpoint —
+    // that would count a completely different customer's order and
+    // incorrectly waive the griddle first-order minimum for this one.
+    // Scoped instead to this device's own placed orders (see
+    // saveOrderToHistory below). Relies on isCounterTable already being set
+    // by initPartySize() — see the .then(checkPriorOrder) chain at the
+    // bottom of this file.
+    if (isCounterTable) {
+      const myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
+      hasPriorOrder = myIds.length > 0;
+      return;
+    }
     try {
       const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
       const list = await res.json();
@@ -600,6 +618,11 @@
       showPartySizeModal();
       return;
     }
+    // Same belt-and-suspenders idea for the counter's required pickup name.
+    if (isCounterTable && !counterCustomerName) {
+      showCounterNameModal();
+      return;
+    }
 
     if (!isCounterTable && partySize && cartCount() < partySize) {
       showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
@@ -631,6 +654,9 @@
           note: $("#orderNote").value.trim(),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
+          // Only meaningful (and only required server-side) for a counter
+          // order — see is_counter handling in src/routes/orders.js.
+          customerName: isCounterTable ? counterCustomerName : undefined,
         }),
       });
       if (!res.ok) {
@@ -638,6 +664,7 @@
         if (body.error === "out_of_range") throw new Error("out_of_range");
         if (body.error === "location_required") throw new Error("location_required");
         if (body.error === "party_size_required") throw new Error("party_size_required");
+        if (body.error === "customer_name_required") throw new Error("customer_name_required");
         if (body.error === "grill_min_qty") {
           grillMinBody = body;
           throw new Error("grill_min_qty");
@@ -656,6 +683,11 @@
       if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
       else if (e.message === "party_size_required") showPartySizeModal();
+      else if (e.message === "customer_name_required") {
+        counterCustomerName = null;
+        sessionStorage.removeItem(COUNTER_NAME_KEY);
+        showCounterNameModal();
+      }
       else if (e.message === "grill_min_qty" && grillMinBody) {
         const mi = categories.flatMap((c) => c.items).find((i) => i.id === grillMinBody.itemId);
         const name = mi ? nameFor(mi) : "";
@@ -723,15 +755,36 @@
   // Order history — this table's running (unpaid) receipt, shared by anyone
   // ordering from this table. Disappears once the table is settled, since
   // the endpoint only returns non-paid, non-cancelled orders.
+  //
+  // The 포장 카운터 is the one exception: "shared by anyone ordering from
+  // this table" is exactly the problem there, since "this table" is really
+  // every unrelated walk-in customer. Showing them the combined
+  // /api/orders/table/COUNTER list would mix in whatever a completely
+  // different customer just ordered, with a wrong combined total to match.
+  // So for the counter, only this device's own placed orders are shown —
+  // the same locally-tracked id list saveOrderToHistory() already keeps.
   async function openHistory() {
-    $("#historyTableLabel").textContent = `${t("table")} ${tableNumber}`;
+    $("#historyTableLabel").textContent = isCounterTable ? t("counterBadge") : `${t("table")} ${tableNumber}`;
     const list = $("#historyList");
     list.innerHTML = `<div class="loading">…</div>`;
     $("#historyTotalBig").textContent = money(0);
     $("#historyBackdrop").hidden = false;
     try {
-      const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
-      const ordersForTable = await res.json();
+      let ordersForTable;
+      if (isCounterTable) {
+        const myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
+        const results = await Promise.all(
+          myIds.map((id) =>
+            fetch(`/api/orders/${id}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null)
+          )
+        );
+        ordersForTable = results.filter((o) => o && o.status !== "paid" && o.status !== "cancelled");
+      } else {
+        const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
+        ordersForTable = await res.json();
+      }
       renderHistory(ordersForTable);
     } catch (e) {
       list.innerHTML = `<div class="history-empty">${t("networkErrorMsg")}</div>`;
@@ -838,18 +891,37 @@
     $("#partySizeVal").textContent = partySizeStep;
     $("#partySizeBackdrop").hidden = false;
   }
+
+  // Counter/takeout QR: instead of a headcount, every order needs the
+  // customer's name — that's what staff call out at pickup, alongside the
+  // auto-assigned pickup number the server stamps onto the order (see
+  // src/routes/orders.js). Kept in sessionStorage (not localStorage) so it's
+  // asked fresh for a genuinely new visit but survives an accidental reload
+  // of the same tab/visit.
+  const COUNTER_NAME_KEY = "hgk_counter_name";
+  function showCounterNameModal() {
+    $("#counterNameInput").value = "";
+    $("#counterNameBackdrop").hidden = false;
+    setTimeout(() => $("#counterNameInput").focus(), 50);
+  }
   async function initPartySize() {
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
       const data = await res.json();
       if (res.ok && data.is_counter) {
-        // Counter/takeout QR — no headcount to ask for at all. Skip the
-        // modal entirely and set a dummy partySize so the belt-and-suspenders
-        // check in #submitOrderBtn (above) doesn't re-open it.
+        // No headcount at all for the counter — skip that modal entirely,
+        // and set a dummy partySize so the belt-and-suspenders check in
+        // #submitOrderBtn (below) doesn't mistake this for "not asked yet".
         isCounterTable = true;
         partySize = 1;
         $("#itemOrderTypeTabs").hidden = true;
         applyStaticI18n(); // re-render the badge now that we know this is the counter
+        const savedName = (sessionStorage.getItem(COUNTER_NAME_KEY) || "").trim();
+        if (savedName) {
+          counterCustomerName = savedName;
+        } else {
+          showCounterNameModal();
+        }
         return;
       }
       if (res.ok && data.party_size) {
@@ -861,6 +933,17 @@
     }
     showPartySizeModal();
   }
+  $("#counterNameConfirmBtn").onclick = () => {
+    const name = $("#counterNameInput").value.trim();
+    if (!name) {
+      alert(t("counterNameRequiredMsg"));
+      return;
+    }
+    counterCustomerName = name.slice(0, 20);
+    sessionStorage.setItem(COUNTER_NAME_KEY, counterCustomerName);
+    $("#counterNameBackdrop").hidden = true;
+    resetIdleTimer();
+  };
   $("#partySizeMinus").onclick = () => {
     partySizeStep = Math.max(1, partySizeStep - 1);
     $("#partySizeVal").textContent = partySizeStep;
@@ -946,6 +1029,8 @@
   applyStaticI18n();
   loadSettings();
   loadMenu();
-  initPartySize();
-  checkPriorOrder();
+  // checkPriorOrder() must run after initPartySize() resolves — it branches
+  // on isCounterTable (see the comment inside checkPriorOrder), which
+  // initPartySize() is what sets.
+  initPartySize().then(checkPriorOrder);
 })();
