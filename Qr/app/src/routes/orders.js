@@ -46,8 +46,11 @@ router.post("/", async (req, res) => {
   // Party size is required before a table can order at all (see the
   // party-size modal in public/js/order.js) — enforced here too so it can
   // never be bypassed by a direct API call, not just hidden in the UI.
+  // The 포장 카운터 (is_counter, see src/routes/tables.js) is the one
+  // exception: there's no headcount to ask a takeout customer for, and
+  // public/js/order.js's initPartySize() already skips that modal for it.
   const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
-  if (!orderingTable || !orderingTable.party_size) {
+  if (!orderingTable || (!orderingTable.is_counter && !orderingTable.party_size)) {
     return res.status(400).json({ error: "party_size_required" });
   }
 

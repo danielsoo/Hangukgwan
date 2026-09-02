@@ -6,6 +6,36 @@ const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
 
+// The single 포장 카운터 "table" — not a real dine-in table (no floor-plan
+// spot, no headcount prompt; see is_counter checks in src/routes/orders.js
+// and the party-size route below), but stored as a table row anyway so the
+// entire existing ordering/kitchen-queue/payment pipeline works for it
+// unchanged. Lazily created on first use (POST /counter or GET
+// /counter-qr, both idempotent) rather than seeded, so upgrading an
+// existing restaurant doesn't need a migration step.
+async function getOrCreateCounterTable() {
+  let table = store.tables.find((t) => t.is_counter);
+  if (table) return table;
+  await refreshAndSave((s) => {
+    table = s.tables.find((t) => t.is_counter);
+    if (table) return;
+    table = {
+      id: nextId("tables"),
+      number: "COUNTER",
+      label: "포장 카운터",
+      sort_order: 0,
+      zone_id: null,
+      x: 10,
+      y: 10,
+      width: 70,
+      height: 70,
+      is_counter: true,
+    };
+    s.tables.push(table);
+  });
+  return table;
+}
+
 router.get("/", requireAdmin, (req, res) => {
   res.json([...store.tables].sort((a, b) => a.sort_order - b.sort_order));
 });
@@ -42,6 +72,15 @@ router.post("/", canEditTables, async (req, res) => {
     s.tables.push(table);
   });
   if (dupe) return res.status(400).json({ error: "table_exists" });
+  res.status(201).json(table);
+});
+
+// Admin: create (or, if it already exists, just return) the 포장 카운터.
+// Called from the "포장 카운터 QR 만들기" button in Admin > 테이블 / QR 코드
+// (public/js/admin.js's renderCounterSection) — idempotent, so a second
+// click or a page reload never creates a duplicate.
+router.post("/counter", canEditTables, async (req, res) => {
+  const table = await getOrCreateCounterTable();
   res.status(201).json(table);
 });
 
@@ -127,7 +166,10 @@ router.put("/:tableNumber/party-size", async (req, res) => {
 router.get("/:tableNumber/party-size", (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
-  res.json({ party_size: table.party_size || null });
+  // is_counter tells the customer page (see initPartySize in public/js/order.js)
+  // this QR is the 포장 카운터, not a real table — it skips the headcount
+  // prompt entirely rather than treating a missing party_size as "not asked yet".
+  res.json({ party_size: table.party_size || null, is_counter: !!table.is_counter });
 });
 
 // Clears the registered party size — called once a table is fully settled
@@ -155,7 +197,9 @@ router.delete("/:id", canEditTables, async (req, res) => {
 // own host — so it always works regardless of what domain the app ends
 // up deployed on. Open this page and use the browser's Print > Save as PDF.
 router.get("/qr-sheet", requireAdmin, async (req, res) => {
-  const tables = [...store.tables].sort((a, b) => a.sort_order - b.sort_order);
+  // 포장 카운터 isn't a real table — it has its own dedicated print page
+  // (GET /counter-qr below), so it's left out of this per-table grid.
+  const tables = [...store.tables].filter((t) => !t.is_counter).sort((a, b) => a.sort_order - b.sort_order);
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
   // Load the store logo once (if the owner uploaded one from Admin >
@@ -209,6 +253,56 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
 <body>
   <div class="toolbar"><button onclick="window.print()">列印 / Print all QR codes</button></div>
   <div class="grid">${cards.join("")}</div>
+</body>
+</html>`);
+});
+
+// Printable single QR code for the 포장 카운터 — separate from the per-table
+// grid above since this isn't a table (see getOrCreateCounterTable at the
+// top of this file). Auto-provisions the counter on first visit, so there's
+// nothing to set up beforehand: clicking "포장 QR 코드 보기/인쇄" in Admin >
+// 테이블 / QR 코드 just works.
+router.get("/counter-qr", requireAdmin, async (req, res) => {
+  const table = await getOrCreateCounterTable();
+  const baseUrl = `${req.protocol}://${req.get("host")}`;
+  const url = `${baseUrl}/t/${encodeURIComponent(table.number)}`;
+  const logoDataUri = await getLogoDataUri(store, getPhoto);
+  const svg = await buildQrSvg(url, logoDataUri);
+
+  res.send(`<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<title>外帶櫃檯 QR Code</title>
+<style>
+  body { font-family: 'Noto Sans TC', Arial, sans-serif; margin: 0; padding: 24px; background:#fff; display:flex; flex-direction:column; align-items:center; gap:20px; }
+  .toolbar { margin-bottom: 4px; }
+  button { padding: 10px 18px; font-size: 14px; cursor: pointer; }
+  .card {
+    border: 2px dashed #999; border-radius: 12px; padding: 28px; text-align: center;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  .qr-wrap { position: relative; width: 320px; height: 320px; }
+  .qr-wrap svg { width: 320px; height: 320px; display: block; }
+  .counter-badge {
+    position: absolute; top: -16px; left: 50%; transform: translateX(-50%); padding: 6px 16px; white-space: nowrap;
+    border-radius: 999px; background: #b5232c; color: #fff; font-size: 16px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3); z-index: 2;
+  }
+  .url { font-size: 12px; color: #666; word-break: break-all; }
+  @media print { .toolbar { display: none; } }
+</style>
+</head>
+<body>
+  <div class="toolbar"><button onclick="window.print()">列印 / Print QR code</button></div>
+  <div class="card">
+    <div class="qr-wrap">
+      <div class="counter-badge">${table.label || "포장"}</div>
+      ${svg}
+    </div>
+    <div class="url">${url}</div>
+  </div>
 </body>
 </html>`);
 });

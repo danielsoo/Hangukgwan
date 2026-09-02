@@ -139,6 +139,22 @@ input, select, button, textarea { font-family: inherit; }
 .table-party-badge { margin-top: 4px; font-size: 14px; color: var(--muted); font-weight: 600; }
 .table-detail-modal { max-width: 480px; }
 
+/* 포장 카운터 QR box — a separate, non-table order source (see
+   renderCounterSection in admin.js), so it sits in its own card above the
+   regular table grid rather than mixed into it. */
+.counter-section:empty { display: none; }
+.counter-card {
+  display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap;
+  background: #fff; border: 1px dashed var(--navy); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; cursor: pointer;
+}
+.counter-card:hover { background: #f7f8fd; }
+.counter-card-empty { cursor: default; }
+.counter-card-empty:hover { background: #fff; }
+.counter-card-text strong { font-size: 17px; }
+.counter-card-text p { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.counter-card-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.counter-card-right .print-qr-btn { font-size: 14px; padding: 8px 14px; }
+
 /* 합산 결제 (multi-table combined payment) — see mergePayMode in admin.js.
    Only tables with an unpaid order are selectable; picking several and
    confirming pays every one of their unpaid orders off in one action,

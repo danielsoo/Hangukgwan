@@ -235,6 +235,10 @@
       alertTableExists: "이미 존재하는 테이블 번호입니다",
       alertFloorPlanSaveFailed: "배치 저장에 실패했어요. 방금 옮긴 자리가 원래대로 되돌아갑니다 — 다시 시도해주세요.",
       tableEmptyBadge: "비어있음",
+      counterSectionTitle: "📦 포장 카운터 QR",
+      counterSectionHint: "테이블이 아닌, 카운터 포장 전용 주문 QR 코드예요. 손님이 자리 없이 바로 포장 주문할 수 있어요.",
+      counterCreateBtn: "포장 카운터 QR 만들기",
+      counterQrBtn: "🖨️ 포장 QR 코드 보기/인쇄",
       tableDelTitle: "삭제",
       noOrdersYetAdmin: "아직 주문이 없습니다.",
       unpaidTotalLabel: "현재 미결제 합계:",
@@ -553,6 +557,10 @@
       alertTableExists: "此桌號已經存在",
       alertFloorPlanSaveFailed: "版面儲存失敗，剛剛移動的位置會還原——請再試一次。",
       tableEmptyBadge: "空桌",
+      counterSectionTitle: "📦 外帶櫃檯 QR Code",
+      counterSectionHint: "不是桌號，是專門給櫃檯外帶點餐用的 QR Code，客人不需要坐下就能直接點外帶。",
+      counterCreateBtn: "建立外帶櫃檯 QR Code",
+      counterQrBtn: "🖨️ 查看/列印外帶 QR Code",
       tableDelTitle: "刪除",
       noOrdersYetAdmin: "目前尚無訂單。",
       unpaidTotalLabel: "目前未結帳金額：",
@@ -914,6 +922,12 @@
     $("#dashboard").hidden = false;
     applyRoleUI();
     await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings(), loadTicketFontSizes()]);
+    // loadOrders() and loadTables() run concurrently above, so the order
+    // queue's very first render can land before `tables` is populated —
+    // harmless before this feature, but renderOrderCard now looks up
+    // is_counter on `tables` to label 포장 카운터 orders, so re-render once
+    // both are guaranteed to be in.
+    renderOrders();
     if (currentRole === "owner") {
       loadStaffPermissions();
       loadLineSettings();
@@ -1388,9 +1402,15 @@
     const printFailedNotice = printFailedOrderIds.has(o.id)
       ? `<div class="order-card-print-fail">${T("printFailedCardMsg")}</div>`
       : "";
+    // 포장 카운터 orders aren't a real table — "테이블 COUNTER" would be
+    // meaningless to staff, so show the counter's own label instead.
+    const isCounterOrder = tables.some((t) => t.is_counter && t.number === o.table_number);
+    const tableTag = isCounterOrder
+      ? tables.find((t) => t.is_counter).label || T("counterSectionTitle")
+      : `${T("tableLabel")} ${o.table_number}`;
     card.innerHTML = `
       <div class="order-card-top">
-        <span>${T("tableLabel")} ${o.table_number}${typeBadge}</span>
+        <span>${tableTag}${typeBadge}</span>
         <span class="order-card-top-right">
           <span class="order-card-time">${time}</span>
           <span class="order-card-drag-handle" title="${T("dragHandleTitle")}">⠿</span>
@@ -1630,7 +1650,7 @@
   <div class="receipt">
     <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
     <div class="divider"></div>
-    <div class="meta-row"><span class="table-no">桌號 ${o.table_number}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    <div class="meta-row"><span class="table-no">${tables.some((t) => t.is_counter && t.number === o.table_number) ? "外帶櫃檯" : `桌號 ${o.table_number}`}</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
     <div class="meta-row"><span class="order-time">${time}</span></div>
     <div class="divider"></div>
     ${itemRows}
@@ -1852,8 +1872,11 @@
           </div>`
       )
       .join("");
+    const detailTableTag = tables.some((t) => t.is_counter && t.number === o.table_number)
+      ? T("counterSectionTitle").replace(/^📦 /, "")
+      : `${T("tableLabel")} ${o.table_number}`;
     $("#orderDetailBody").innerHTML = `
-      <h2>${T("tableLabel")} ${o.table_number}</h2>
+      <h2>${detailTableTag}</h2>
       <p style="color:#999;font-size:15px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
       ${itemsHtml}
       ${o.note ? `<p style="margin-top:10px;"><strong>${T("memoLabel")}:</strong>${o.note}</p>` : ""}
@@ -1994,7 +2017,10 @@
       renderDraft();
     };
 
-    $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${T("tableLabel")} ${order.table_number}`;
+    const editTableTag = tables.some((t) => t.is_counter && t.number === order.table_number)
+      ? T("counterSectionTitle").replace(/^📦 /, "")
+      : `${T("tableLabel")} ${order.table_number}`;
+    $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${editTableTag}`;
     $("#orderEditMsg").hidden = true;
     renderDraft();
     $("#orderEditBackdrop").hidden = false;
@@ -2231,10 +2257,70 @@
       .sort((a, b) => new Date(a.created_at.replace(" ", "T")) - new Date(b.created_at.replace(" ", "T")));
   }
 
+  // The 포장 카운터 "table" (see renderCounterSection below) isn't a real
+  // dine-in table — it never appears in the regular list/floor plan/합산 결제,
+  // only in its own dedicated box above them.
+  function realTables() {
+    return tables.filter((t) => !t.is_counter);
+  }
+
+  // 포장 카운터 box above the regular table list — shows a "만들기" button
+  // until one exists (lazily provisioned via POST /api/tables/counter, see
+  // src/routes/tables.js), then its own live-order badge and QR print link.
+  function renderCounterSection() {
+    const wrap = $("#counterSection");
+    if (!wrap) return;
+    const counterTable = tables.find((t) => t.is_counter);
+    if (!counterTable) {
+      wrap.innerHTML = `
+        <div class="counter-card counter-card-empty">
+          <div class="counter-card-text">
+            <strong>${T("counterSectionTitle")}</strong>
+            <p>${T("counterSectionHint")}</p>
+          </div>
+          ${canTableEdit() ? `<button type="button" id="createCounterBtn" class="primary-btn">${T("counterCreateBtn")}</button>` : ""}
+        </div>
+      `;
+      const btn = $("#createCounterBtn");
+      if (btn) {
+        btn.onclick = async () => {
+          btn.disabled = true;
+          try {
+            await fetch("/api/tables/counter", { method: "POST" });
+            await loadTables();
+          } finally {
+            btn.disabled = false;
+          }
+        };
+      }
+      return;
+    }
+    const counterOrders = activeOrdersForTable(counterTable.number);
+    const unpaid = counterOrders.filter((o) => o.status !== "paid");
+    const badge =
+      unpaid.length > 0
+        ? `<div class="table-order-badge active">${fmtOrderCount(unpaid.length, unpaid.reduce((s, o) => s + o.total, 0))}</div>`
+        : `<div class="table-order-badge empty">${T("tableEmptyBadge")}</div>`;
+    wrap.innerHTML = `
+      <div class="counter-card">
+        <div class="counter-card-text">
+          <strong>${T("counterSectionTitle")}</strong>
+          <p>${T("counterSectionHint")}</p>
+        </div>
+        <div class="counter-card-right">
+          ${badge}
+          <a href="/api/tables/counter-qr" target="_blank" class="print-qr-btn" onclick="event.stopPropagation()">${T("counterQrBtn")}</a>
+        </div>
+      </div>
+    `;
+    wrap.querySelector(".counter-card").onclick = () => openTableDetail(counterTable.number, counterTable.label);
+  }
+
   function renderTables() {
+    renderCounterSection();
     const wrap = $("#tablesList");
     wrap.innerHTML = "";
-    tables.forEach((t) => {
+    realTables().forEach((t) => {
       const tableOrders = activeOrdersForTable(t.number);
       const unpaid = tableOrders.filter((o) => o.status !== "paid");
       const chip = document.createElement("div");
@@ -2302,8 +2388,11 @@
     const payAllBtn = unpaidOrders.length
       ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
       : "";
+    // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
+    // label already says what it is.
+    const titleText = table && table.is_counter ? label || tableNumber : `${T("tableLabel")} ${label || tableNumber}`;
     const header = `
-      <h2>${T("tableLabel")} ${label || tableNumber}${partyText}</h2>
+      <h2>${titleText}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
         ${payAllBtn}
@@ -2969,7 +3058,7 @@
   }
 
   function addTableToZone(zone) {
-    const unplaced = tables.filter((t) => t.zone_id == null);
+    const unplaced = tables.filter((t) => t.zone_id == null && !t.is_counter);
     const selected = new Set();
     $("#addTableToZoneTitle").textContent = fmtAddTableToZoneTitle(zone.name);
     const grid = $("#addTableToZoneGrid");
@@ -3223,8 +3312,16 @@
   $("#manualOrderBtn").onclick = () => {
     const grid = $("#manualOrderGrid");
     grid.innerHTML = "";
+    // 포장 카운터 (is_counter) belongs in this picker too — staff can open it
+    // on behalf of a phone-less takeout customer the same way as any table —
+    // but its number isn't numeric, so it's sorted to the end instead of
+    // joining the parseInt comparison below.
     [...tables]
-      .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10))
+      .sort((a, b) => {
+        if (a.is_counter) return 1;
+        if (b.is_counter) return -1;
+        return parseInt(a.number, 10) - parseInt(b.number, 10);
+      })
       .forEach((t) => {
         const btn = document.createElement("button");
         btn.className = "table-picker-btn";

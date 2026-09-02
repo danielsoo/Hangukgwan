@@ -36,6 +36,11 @@
   let storeLng = null;
   let partySize = null;
   let onlinePaymentEnabled = false;
+  // True when this QR points at the counter's takeout-only order flow
+  // instead of a real dine-in table (see the "포장 카운터" section in Admin >
+  // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
+  // Skips the headcount prompt entirely and defaults every item to 포장.
+  let isCounterTable = false;
 
   const PARTY_WARNING = {
     zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
@@ -72,7 +77,7 @@
     document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
       el.placeholder = t(el.dataset.i18nPlaceholder);
     });
-    $("#tableBadge").textContent = `${t("table")} ${tableNumber}`;
+    $("#tableBadge").textContent = isCounterTable ? t("counterBadge") : `${t("table")} ${tableNumber}`;
     $("#langPillLabel").textContent = LANG_PILL_LABEL[lang] || "Language";
     document.querySelectorAll(".lang-option").forEach((b) => {
       if (b.dataset.lang) b.classList.toggle("active", b.dataset.lang === lang);
@@ -265,9 +270,12 @@
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
     currentSpiceOption = item.spice_options ? item.spice_options.split(",")[0].trim() : null;
-    currentOrderType = "dine_in";
+    // A counter/takeout QR has no dine-in seat to speak of, so every item
+    // defaults to 포장 there instead of the usual 매장 default — the toggle
+    // itself is hidden for the same reason (see initPartySize below).
+    currentOrderType = isCounterTable ? "takeout" : "dine_in";
     document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((b) => {
-      b.classList.toggle("active", b.dataset.type === "dine_in");
+      b.classList.toggle("active", b.dataset.type === currentOrderType);
     });
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
@@ -593,7 +601,7 @@
       return;
     }
 
-    if (partySize && cartCount() < partySize) {
+    if (!isCounterTable && partySize && cartCount() < partySize) {
       showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
     }
 
@@ -834,6 +842,16 @@
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
       const data = await res.json();
+      if (res.ok && data.is_counter) {
+        // Counter/takeout QR — no headcount to ask for at all. Skip the
+        // modal entirely and set a dummy partySize so the belt-and-suspenders
+        // check in #submitOrderBtn (above) doesn't re-open it.
+        isCounterTable = true;
+        partySize = 1;
+        $("#itemOrderTypeTabs").hidden = true;
+        applyStaticI18n(); // re-render the badge now that we know this is the counter
+        return;
+      }
       if (res.ok && data.party_size) {
         partySize = data.party_size;
         return; // already registered for this table's current party — don't ask again
