@@ -432,6 +432,41 @@
       paymentTestModeStatus: "⚠ 테스트 모드 — ECPay 정식 가맹점 정보가 아직 설정되지 않아 실제 결제는 되지 않습니다 (서버 환경변수에 ECPAY_MERCHANT_ID 등을 추가하면 실결제로 전환돼요).",
       paymentLiveModeStatus: "✔ 실결제 모드 — ECPay 정식 가맹점 정보로 연결되어 있습니다.",
       paymentSavedMsg: "저장되었습니다",
+      tabVip: "회원(VIP)",
+      vipTabHint:
+        "여기서는 이미 발급한 실물 VIP 카드의 번호를 등록해서 \"손님이 온라인에서 등록할 수 있는 상태\"로 만들어요. 카드 자체를 새로 발급하는 기능이 아니라, 발급된 카드번호를 시스템에 알려주는 화면이에요. 손님은 주문 페이지에서 구글로 로그인한 뒤 이 카드번호를 입력해서 본인 계정에 연결해요. 유효기간은 발급일로부터 1년입니다.",
+      vipCardNumberPlaceholder: "카드번호 (예: V0001)",
+      vipDiscountPlaceholder: "할인율 (%)",
+      vipNotePlaceholder: "메모 (선택, 예: 홍길동에게 발급)",
+      vipAddCardBtn: "+ 카드 등록",
+      vipNoCards: "등록된 VIP 카드가 없습니다.",
+      vipStatusActive: "✔ 등록됨 · 유효",
+      vipStatusExpired: "등록됨 · 기간 만료",
+      vipStatusUnclaimed: "미등록 (대기 중)",
+      vipDiscountLabel: "할인율",
+      vipIssueDateLabel: "발급일",
+      vipExpiryDateLabel: "만료일",
+      vipNoteLabelShort: "메모",
+      vipEditBtn: "수정",
+      vipUnlinkBtn: "등록 해제",
+      vipDeleteBtn: "삭제",
+      vipUnlinkConfirm: "이 카드의 온라인 등록을 해제할까요? 손님은 다시 카드번호로 등록해야 해요.",
+      vipDeleteConfirm: "이 카드를 삭제하시겠습니까?",
+      vipCannotDeleteClaimed: "이미 손님이 등록한 카드는 삭제할 수 없어요. 먼저 '등록 해제'를 눌러주세요.",
+      vipAddInvalid: "카드번호, 발급일, 할인율(1~100)을 모두 올바르게 입력해주세요.",
+      vipEditInvalid: "발급일과 할인율(1~100)을 올바르게 입력해주세요.",
+      vipCardNumberTaken: "이미 등록된 카드번호입니다.",
+      settingsCatVip: "회원(VIP) 로그인",
+      vipSettingsTitle: "회원(VIP) 구글 로그인 설정 (Firebase)",
+      vipSettingsHint:
+        "손님이 주문 페이지에서 구글로 로그인해 VIP 카드를 등록하려면 Firebase 프로젝트가 필요해요. 1) Firebase 콘솔(console.firebase.google.com)에서 새 프로젝트를 만들고, 2) Authentication에서 \"Google\" 로그인 방법을 켜고, 3) 웹 앱을 추가한 뒤 나오는 firebaseConfig 코드를 통째로 복사해서 아래에 붙여넣으세요. 추가로 4) 프로젝트 설정 > 서비스 계정에서 \"새 비공개 키 생성\"으로 받은 JSON 파일 내용은 여기가 아니라 배포 서버(Vercel)의 환경변수 FIREBASE_SERVICE_ACCOUNT에 등록해야 해요 (보안 정보라 이 화면에는 넣지 않아요).",
+      vipConfigLabel: "firebaseConfig (JSON)",
+      vipConfigPlaceholder: '{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}',
+      vipConfigNotSet: "아직 설정되지 않았습니다 — 손님은 구글 로그인을 사용할 수 없어요.",
+      vipConfigSet: "✔ 설정되어 있습니다.",
+      vipConfigInvalid: "⚠ 형식이 올바르지 않아요 (apiKey, projectId가 포함된 JSON이어야 해요).",
+      vipConfigInvalidJson: "JSON 형식이 올바르지 않아요. Firebase 콘솔에서 복사한 내용을 다시 확인해주세요.",
+      vipSettingsSavedMsg: "저장되었습니다",
       escposSettingsTitle: "주방 프린터 직접 인쇄 (ESC/POS · QZ Tray)",
       escposSettingsHint:
         "켜두면 확인창 없이 영수증 프린터로 바로 인쇄돼요 (커팅 자동 포함). 이 컴퓨터에 <strong>QZ Tray</strong> 프로그램이 설치되어 실행 중이어야 하고, 프린터 이름은 QZ Tray가 인식한 이름 그대로 입력해야 해요. 꺼두거나 QZ Tray 연결이 안 되면 지금처럼 브라우저 인쇄(미리보기 인쇄)로 자동 전환돼요.",
@@ -754,6 +789,41 @@
       paymentTestModeStatus: "⚠ 測試模式 — 尚未設定綠界正式特店資訊，不會產生真實扣款（在伺服器環境變數加入 ECPAY_MERCHANT_ID 等即可切換為正式付款）。",
       paymentLiveModeStatus: "✔ 正式付款模式 — 已連接綠界正式特店資訊。",
       paymentSavedMsg: "已儲存",
+      tabVip: "會員(VIP)",
+      vipTabHint:
+        "這裡是把已經印製好的實體 VIP 卡卡號登記進系統，讓「顧客可以在線上註冊」。這不是發行新卡片的功能，只是把已發出的卡號告訴系統。顧客會在點餐頁面用 Google 登入後輸入這個卡號，連結到自己的帳號。有效期限是從發卡日起算 1 年。",
+      vipCardNumberPlaceholder: "卡號（例：V0001）",
+      vipDiscountPlaceholder: "折扣率 (%)",
+      vipNotePlaceholder: "備註（選填，例：發給某某人）",
+      vipAddCardBtn: "+ 新增卡片",
+      vipNoCards: "目前沒有登記的 VIP 卡。",
+      vipStatusActive: "✔ 已註冊 · 有效",
+      vipStatusExpired: "已註冊 · 已過期",
+      vipStatusUnclaimed: "未註冊（等待中）",
+      vipDiscountLabel: "折扣率",
+      vipIssueDateLabel: "發卡日",
+      vipExpiryDateLabel: "到期日",
+      vipNoteLabelShort: "備註",
+      vipEditBtn: "編輯",
+      vipUnlinkBtn: "解除註冊",
+      vipDeleteBtn: "刪除",
+      vipUnlinkConfirm: "要解除這張卡片的線上註冊嗎？顧客需要重新用卡號註冊。",
+      vipDeleteConfirm: "確定要刪除這張卡片嗎？",
+      vipCannotDeleteClaimed: "顧客已經註冊的卡片無法刪除，請先按「解除註冊」。",
+      vipAddInvalid: "請正確輸入卡號、發卡日與折扣率（1~100）。",
+      vipEditInvalid: "請正確輸入發卡日與折扣率（1~100）。",
+      vipCardNumberTaken: "這個卡號已經登記過了。",
+      settingsCatVip: "會員(VIP) 登入",
+      vipSettingsTitle: "會員(VIP) Google 登入設定（Firebase）",
+      vipSettingsHint:
+        "要讓顧客在點餐頁面用 Google 登入並註冊 VIP 卡，需要一個 Firebase 專案。1) 到 Firebase 主控台（console.firebase.google.com）建立新專案，2) 在 Authentication 開啟「Google」登入方式，3) 新增網頁應用程式後，把出現的 firebaseConfig 程式碼整段複製貼到下面。另外 4) 在專案設定 > 服務帳戶用「產生新的私密金鑰」取得的 JSON 檔內容，不要貼在這裡，要設定到部署伺服器（Vercel）的環境變數 FIREBASE_SERVICE_ACCOUNT（這是機密資訊，這個畫面不會儲存）。",
+      vipConfigLabel: "firebaseConfig (JSON)",
+      vipConfigPlaceholder: '{"apiKey": "...", "authDomain": "...", "projectId": "...", ...}',
+      vipConfigNotSet: "尚未設定 — 顧客目前無法使用 Google 登入。",
+      vipConfigSet: "✔ 已設定。",
+      vipConfigInvalid: "⚠ 格式不正確（必須是包含 apiKey、projectId 的 JSON）。",
+      vipConfigInvalidJson: "JSON 格式不正確，請重新確認從 Firebase 主控台複製的內容。",
+      vipSettingsSavedMsg: "已儲存",
       escposSettingsTitle: "廚房出單機直接列印（ESC/POS · QZ Tray）",
       escposSettingsHint:
         "開啟後會直接送到出單機列印，不會跳出確認視窗（自動切紙）。這台電腦需要安裝並執行 <strong>QZ Tray</strong> 程式，且印表機名稱要和 QZ Tray 顯示的名稱完全一致。關閉或 QZ Tray 未連線時，會自動改回目前的瀏覽器列印（預覽列印）方式。",
@@ -983,13 +1053,14 @@
   // ---------- Tabs ----------
   $$(".admin-tabs button").forEach((btn) => {
     btn.onclick = () => {
-      if (btn.dataset.tab === "settlement" && currentRole !== "owner") return;
+      if ((btn.dataset.tab === "settlement" || btn.dataset.tab === "vip") && currentRole !== "owner") return;
       $$(".admin-tabs button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
       $(`#tab-${btn.dataset.tab}`).hidden = false;
       if (btn.dataset.tab === "settlement") loadSettlement();
       if (btn.dataset.tab === "reservations") loadReservations();
+      if (btn.dataset.tab === "vip") loadVipCards();
     };
   });
 
@@ -3481,7 +3552,229 @@
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     refreshLogoPreview();
     renderNoticePreview($("#s_store_notice").value);
+    $("#vipFirebaseConfigInput").value = s.firebase_web_config || "";
+    renderVipConfigStatus(s.firebase_web_config || "");
   }
+
+  // ---------- VIP (회원) Google 로그인 설정 — firebaseConfig is not secret
+  // (see the comment on PUBLIC_KEYS in src/routes/settings.js), so it rides
+  // the same generic GET/PUT /api/settings as everything else in
+  // loadSettings()/saveSettingsBtn rather than needing its own route like
+  // payment/escpos below. Just a JSON blob the owner pastes in — this only
+  // sanity-checks it parses and has the two fields a Firebase web config
+  // always has, so a copy-paste mistake shows up immediately instead of
+  // silently breaking Google sign-in on the customer page.
+  function renderVipConfigStatus(raw) {
+    const el = $("#vipConfigStatus");
+    if (!el) return;
+    if (!raw || !raw.trim()) {
+      el.textContent = T("vipConfigNotSet");
+      el.style.color = "";
+      return;
+    }
+    try {
+      const cfg = JSON.parse(raw);
+      if (cfg && cfg.apiKey && cfg.projectId) {
+        el.textContent = T("vipConfigSet");
+        el.style.color = "#1a8a44";
+      } else {
+        el.textContent = T("vipConfigInvalid");
+        el.style.color = "#b5232c";
+      }
+    } catch (e) {
+      el.textContent = T("vipConfigInvalid");
+      el.style.color = "#b5232c";
+    }
+  }
+
+  $("#saveVipSettingsBtn").onclick = async () => {
+    const raw = $("#vipFirebaseConfigInput").value.trim();
+    const msg = $("#vipSettingsMsg");
+    if (raw) {
+      try {
+        JSON.parse(raw);
+      } catch (e) {
+        msg.style.color = "#b5232c";
+        msg.textContent = T("vipConfigInvalidJson");
+        msg.hidden = false;
+        setTimeout(() => (msg.hidden = true), 3000);
+        return;
+      }
+    }
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ firebase_web_config: raw }),
+    });
+    renderVipConfigStatus(raw);
+    msg.style.color = "#1a8a44";
+    msg.textContent = T("vipSettingsSavedMsg");
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // ---------- VIP (회원) 카드 관리 (owner only) ----------
+  // Cards are keyed by their own `id`, not the customer — a row starts as
+  // "issued, unclaimed" the moment the owner types a physical card's number
+  // in here, and stays that way until a customer claims it from the order
+  // page's 회원 modal (src/routes/members.js POST /register-card). See the
+  // long comment on vipCards in src/db.js for the full model.
+  let vipCards = [];
+  let vipEditingId = null;
+
+  async function loadVipCards() {
+    const res = await fetch("/api/vip-cards");
+    if (!res.ok) return;
+    vipCards = await res.json();
+    renderVipCards();
+  }
+
+  function renderVipCards() {
+    const wrap = $("#vipCardsList");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    if (!vipCards.length) {
+      wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("vipNoCards")}</p>`;
+      return;
+    }
+    vipCards.forEach((c) => {
+      const row = document.createElement("div");
+      row.className = "vip-card-row";
+      if (vipEditingId === c.id) {
+        row.innerHTML = `
+          <div class="vip-card-main vip-card-edit-form">
+            <div class="vip-card-number">${c.card_number}</div>
+            <label>${T("vipDiscountLabel")}
+              <input type="number" min="1" max="100" class="vip-edit-discount" />
+            </label>
+            <label>${T("vipIssueDateLabel")}
+              <input type="date" class="vip-edit-issuedate" />
+            </label>
+            <label>${T("vipNoteLabelShort")}
+              <input type="text" class="vip-edit-note" />
+            </label>
+          </div>
+          <div class="vip-card-actions">
+            <button class="primary-btn vip-save-btn" data-id="${c.id}">${T("saveBtn")}</button>
+            <button class="vip-cancel-btn" data-id="${c.id}">${T("cancelBtn")}</button>
+          </div>
+        `;
+        wrap.appendChild(row);
+        // Set values via properties rather than baking them into the HTML
+        // string above — discount_percent is numeric (safe either way) but
+        // note is free-typed admin text that could contain quotes, and this
+        // sidesteps needing an attribute-escaping helper for one spot.
+        row.querySelector(".vip-edit-discount").value = c.discount_percent;
+        row.querySelector(".vip-edit-issuedate").value = c.issue_date || "";
+        row.querySelector(".vip-edit-note").value = c.note || "";
+        return;
+      }
+      const statusText = c.google_uid ? (c.expired ? T("vipStatusExpired") : T("vipStatusActive")) : T("vipStatusUnclaimed");
+      const statusClass = c.google_uid ? (c.expired ? "vip-expired" : "vip-active") : "vip-unclaimed";
+      const customerLine = c.google_uid
+        ? `<div class="vip-card-customer">${c.customer_name || ""} · ${c.customer_email || ""}</div>`
+        : "";
+      row.innerHTML = `
+        <div class="vip-card-main">
+          <div class="vip-card-number">${c.card_number}</div>
+          <div class="vip-card-meta">
+            <span class="vip-badge ${statusClass}">${statusText}</span>
+            <span>${T("vipDiscountLabel")} <strong>${c.discount_percent}%</strong></span>
+            <span>${T("vipIssueDateLabel")} ${c.issue_date}</span>
+            <span>${T("vipExpiryDateLabel")} ${c.expiry_date || "-"}</span>
+          </div>
+          ${customerLine}
+          ${c.note ? `<div class="vip-card-note">${c.note}</div>` : ""}
+        </div>
+        <div class="vip-card-actions">
+          <button class="vip-edit-btn" data-id="${c.id}">${T("vipEditBtn")}</button>
+          ${c.google_uid ? `<button class="vip-unlink-btn" data-id="${c.id}">${T("vipUnlinkBtn")}</button>` : ""}
+          ${!c.google_uid ? `<button class="del-btn vip-del-btn" data-id="${c.id}" title="${T("vipDeleteBtn")}">✕</button>` : ""}
+        </div>
+      `;
+      wrap.appendChild(row);
+    });
+
+    wrap.querySelectorAll(".vip-edit-btn").forEach((btn) => {
+      btn.onclick = () => {
+        // c.id (from JSON) is a number; dataset.id is always a string —
+        // parseInt so the `vipEditingId === c.id` check below actually
+        // matches instead of every row silently failing to enter edit mode.
+        vipEditingId = parseInt(btn.dataset.id, 10);
+        renderVipCards();
+      };
+    });
+    wrap.querySelectorAll(".vip-cancel-btn").forEach((btn) => {
+      btn.onclick = () => {
+        vipEditingId = null;
+        renderVipCards();
+      };
+    });
+    wrap.querySelectorAll(".vip-save-btn").forEach((btn) => {
+      btn.onclick = async () => {
+        const row = btn.closest(".vip-card-row");
+        const discount = parseInt(row.querySelector(".vip-edit-discount").value, 10);
+        const issueDate = row.querySelector(".vip-edit-issuedate").value;
+        const note = row.querySelector(".vip-edit-note").value.trim();
+        if (!discount || discount < 1 || discount > 100 || !issueDate) {
+          await showAlert(T("vipEditInvalid"));
+          return;
+        }
+        await fetch(`/api/vip-cards/${btn.dataset.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ discountPercent: discount, issueDate, note }),
+        });
+        vipEditingId = null;
+        loadVipCards();
+      };
+    });
+    wrap.querySelectorAll(".vip-unlink-btn").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!(await showConfirm(T("vipUnlinkConfirm")))) return;
+        await fetch(`/api/vip-cards/${btn.dataset.id}/unlink`, { method: "POST" });
+        loadVipCards();
+      };
+    });
+    wrap.querySelectorAll(".vip-del-btn").forEach((btn) => {
+      btn.onclick = async () => {
+        if (!(await showConfirm(T("vipDeleteConfirm")))) return;
+        const res = await fetch(`/api/vip-cards/${btn.dataset.id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          if (data.error === "cannot_delete_claimed_card") await showAlert(T("vipCannotDeleteClaimed"));
+          return;
+        }
+        loadVipCards();
+      };
+    });
+  }
+
+  $("#vipAddCardBtn").onclick = async () => {
+    const cardNumber = $("#vipNewCardNumber").value.trim();
+    const issueDate = $("#vipNewIssueDate").value;
+    const discountPercent = parseInt($("#vipNewDiscount").value, 10);
+    const note = $("#vipNewNote").value.trim();
+    if (!cardNumber || !issueDate || !discountPercent || discountPercent < 1 || discountPercent > 100) {
+      await showAlert(T("vipAddInvalid"));
+      return;
+    }
+    const res = await fetch("/api/vip-cards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cardNumber, issueDate, discountPercent, note }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      await showAlert(data.error === "card_exists" ? T("vipCardNumberTaken") : T("vipAddInvalid"));
+      return;
+    }
+    $("#vipNewCardNumber").value = "";
+    $("#vipNewIssueDate").value = "";
+    $("#vipNewDiscount").value = "";
+    $("#vipNewNote").value = "";
+    loadVipCards();
+  };
 
   // Live "실제 코드 UI" previews — show the cover photo and logo exactly as
   // they'll actually render for a customer, instead of a raw image thumbnail.

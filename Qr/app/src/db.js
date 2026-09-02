@@ -17,7 +17,7 @@ const uri = process.env.MONGODB_URI;
 function defaultStore() {
   return {
     _id: "main",
-    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1, reservations: 1, payments: 1 },
+    nextId: { categories: 1, menuItems: 1, tables: 1, orders: 1, zones: 1, daily_settlements: 1, reservations: 1, payments: 1, vip_cards: 1 },
     categories: [],
     menuItems: [],
     tables: [],
@@ -35,6 +35,17 @@ function defaultStore() {
     // Manually-logged phone/walk-in reservations (name/phone/date/time/party
     // size), managed from the admin 예약 tab — see src/routes/reservations.js.
     reservations: [],
+    // VIP membership cards — each row starts as a physical card the owner
+    // has already printed/issued (card_number + discount_percent + the date
+    // printed on the card), created from Admin > 회원(VIP) with no customer
+    // attached yet. A customer later "claims" one by signing in with Google
+    // (Firebase Authentication, see src/firebaseAdmin.js) and entering the
+    // card_number from public/js/order.js's 회원 modal — see
+    // src/routes/members.js's POST /register-card, which is the only thing
+    // that ever fills in google_uid/customer_name/customer_email below.
+    // 1-year validity is computed from issue_date (not from when it was
+    // claimed online), per the owner's existing physical-card program.
+    vipCards: [],
     settings: {},
   };
 }

@@ -2,6 +2,8 @@ const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireAdmin } = require("../auth");
 const { nowLocal, taipeiDateString } = require("../time");
+const { verifyIdToken } = require("../firebaseAdmin");
+const { isActive: isVipActive } = require("../vip");
 
 const router = express.Router();
 
@@ -67,6 +69,24 @@ router.post("/", async (req, res) => {
 
   const locationError = checkLocation(lat, lng);
   if (locationError) return res.status(403).json({ error: locationError });
+
+  // VIP membership discount — a customer signed in with Google (see the
+  // 회원 modal in public/js/order.js) who has an active linked card gets
+  // their card's own discount_percent applied automatically, computed here
+  // rather than trusted from the client (which has every incentive to just
+  // claim a discount). An expired/unclaimed card or no token at all is
+  // identical to "not a member" — never an error, since ordering without
+  // being a member is the normal case for most customers.
+  let vipCard = null;
+  const authHeader = req.headers.authorization || "";
+  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+  if (idToken) {
+    const firebaseUser = await verifyIdToken(idToken);
+    if (firebaseUser) {
+      const candidate = store.vipCards.find((c) => c.google_uid === firebaseUser.uid);
+      if (candidate && isVipActive(candidate)) vipCard = candidate;
+    }
+  }
 
   const validated = [];
   let total = 0;
@@ -138,12 +158,22 @@ router.post("/", async (req, res) => {
     ? store.orders.filter((o) => o.table_number === orderingTable.number && o.created_at.slice(0, 10) === taipeiDateString()).length + 1
     : null;
 
+  // `total` above (from the items loop) is the pre-discount sum — kept as
+  // `subtotal` so the kitchen ticket/admin views can show "소계 → VIP 할인 →
+  // 합계" instead of a single number that silently doesn't match what the
+  // line items add up to. `total` becomes the actual payable amount.
+  const subtotal = total;
+  const finalTotal = vipCard ? Math.round((subtotal * (100 - vipCard.discount_percent)) / 100) : subtotal;
+
   const order = {
     id: nextId("orders"),
     table_number: String(tableNumber),
     status: "new",
     order_type: orderTypeSummary,
-    total,
+    subtotal,
+    total: finalTotal,
+    vip_card_number: vipCard ? vipCard.card_number : null,
+    vip_discount_percent: vipCard ? vipCard.discount_percent : null,
     note: (note || "").slice(0, 300),
     created_at: nowLocal(),
     updated_at: nowLocal(),
@@ -335,7 +365,13 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   const takeoutCount = validated.filter((v) => v.order_type === "takeout").length;
   order.order_type = takeoutCount === 0 ? "dine_in" : takeoutCount === validated.length ? "takeout" : "mixed";
   order.items = validated;
-  order.total = total;
+  // Re-apply whatever VIP discount this order was originally placed with
+  // (order.vip_discount_percent, set once at POST / time and never changed
+  // here) so editing the item list — adding/removing a dish — doesn't
+  // silently drop or re-grant a member's discount depending on who happens
+  // to be signed in on the admin's browser while editing.
+  order.subtotal = total;
+  order.total = order.vip_discount_percent ? Math.round((total * (100 - order.vip_discount_percent)) / 100) : total;
   order.updated_at = nowLocal();
 
   await save();

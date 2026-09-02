@@ -46,6 +46,22 @@
   // headcount prompt real tables get.
   let counterCustomerName = null;
 
+  // ---------- Membership (회원/VIP) — optional Google sign-in ----------
+  // Firebase Authentication only; all real data (VIP cards, discounts,
+  // orders) stays in the existing MongoDB — see src/firebaseAdmin.js and
+  // src/routes/members.js. Ordering never requires any of this: every
+  // variable below just stays at its default (signed out, no membership)
+  // when the store hasn't configured firebaseConfig yet, or a customer
+  // never signs in.
+  let firebaseAuth = null;
+  // { name, email } once signed in via Google, else null.
+  let memberUser = null;
+  // The linked VIP card's public shape from GET /api/members/me, e.g.
+  // { card_number, discount_percent, issue_date, expiry_date, active }, or
+  // null when signed in but no card is linked yet.
+  let membership = null;
+  let membershipInitAttempted = false;
+
   const PARTY_WARNING = {
     zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
     ko: (n) => `인원(${n}명)보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
@@ -88,6 +104,12 @@
       if (b.dataset.currency) b.classList.toggle("active", b.dataset.currency === currency);
     });
     $("#currencyPillLabel").textContent = CURRENCY_SYMBOL[currency] || "NT$";
+    // #memberBtn deliberately isn't [data-i18n] (its label depends on
+    // membership.active, not just the current language) — updateMemberBtnLabel
+    // and renderMemberSheet below cover its own text on every language
+    // switch, same as the rest of this function covers everything else.
+    updateMemberBtnLabel();
+    renderMemberSheet();
   }
 
   function money(n) {
@@ -158,6 +180,15 @@
       banner.hidden = false;
     } else {
       banner.hidden = true;
+    }
+    // loadSettings() re-runs on every language switch (see the lang-option
+    // handler below), but Firebase only needs to be initialized once per
+    // page load — re-calling firebase.initializeApp() with the same config
+    // throws, and there's nothing to redo anyway since it's not
+    // language-dependent.
+    if (!membershipInitAttempted) {
+      membershipInitAttempted = true;
+      initMembership(s.firebase_web_config);
     }
   }
 
@@ -518,6 +549,17 @@
   function cartCount() {
     return cart.reduce((sum, c) => sum + c.qty, 0);
   }
+  // Preview only — matches the math src/routes/orders.js actually applies
+  // (see finalTotal there), but the server independently recomputes and
+  // enforces it from the verified ID token at submit time, never trusting
+  // anything the client sends. Falls back to the plain subtotal whenever
+  // there's no active linked VIP card, i.e. for every customer who never
+  // touches this feature at all.
+  function estimatedCartTotal() {
+    const subtotal = cartTotal();
+    const pct = membership && membership.active ? membership.discount_percent : 0;
+    return pct ? Math.round((subtotal * (100 - pct)) / 100) : subtotal;
+  }
 
   function renderCartFab() {
     const fab = $("#cartFab");
@@ -527,7 +569,7 @@
     }
     fab.hidden = false;
     $("#cartCount").textContent = cartCount();
-    $("#cartTotal").textContent = money(cartTotal());
+    $("#cartTotal").textContent = money(estimatedCartTotal());
   }
 
   $("#cartFab").onclick = () => {
@@ -589,7 +631,16 @@
       };
       wrap.appendChild(row);
     });
-    $("#cartTotalBig").textContent = money(cartTotal());
+    const subtotal = cartTotal();
+    const pct = membership && membership.active ? membership.discount_percent : 0;
+    const discountRow = $("#cartVipDiscountRow");
+    if (pct) {
+      discountRow.hidden = false;
+      $("#cartVipDiscountLabel").textContent = `${t("memberDiscountAppliedPrefix")} -${pct}% (-${money(subtotal - estimatedCartTotal())})`;
+    } else {
+      discountRow.hidden = true;
+    }
+    $("#cartTotalBig").textContent = money(estimatedCartTotal());
     $("#submitOrderBtn").disabled = cart.length === 0;
   }
 
@@ -641,10 +692,25 @@
     btn.disabled = true;
     btn.textContent = t("submitting");
     let grillMinBody = null;
+    // Signed-in customers carry their Firebase ID token along so the server
+    // can independently verify it and look up their linked VIP card itself
+    // (see src/routes/orders.js) — the discount is never something the
+    // client asserts. Harmless to always attempt this when signed in, even
+    // with no card linked yet: the server just finds nothing and charges
+    // full price, same as any other customer.
+    const authHeaders = { "Content-Type": "application/json" };
+    if (firebaseAuth && firebaseAuth.currentUser) {
+      try {
+        const idToken = await firebaseAuth.currentUser.getIdToken();
+        authHeaders.Authorization = `Bearer ${idToken}`;
+      } catch (e) {
+        /* couldn't refresh the token — submit as a normal (non-VIP) order rather than blocking checkout over it */
+      }
+    }
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: authHeaders,
         body: JSON.stringify({
           tableNumber,
           // Each cart line carries its own orderType now (chosen per dish in
@@ -794,12 +860,19 @@
   function renderHistory(ordersForTable) {
     const list = $("#historyList");
     list.innerHTML = "";
+    // Summed from each order's own authoritative `total` (post-VIP-discount,
+    // computed server-side at submit time — see src/routes/orders.js), NOT
+    // recomputed from the per-item unit prices below. Those are still shown
+    // per line for a normal itemized read-out; once a VIP discount applies
+    // to an order they'll naturally add up to more than this grand total,
+    // same as any receipt with a discount line — the total here is what
+    // actually matters, since it's what #payOnlineBtn charges.
     let total = 0;
     let anyItem = false;
+    let anyVipDiscount = false;
     ordersForTable.forEach((o) => {
       o.items.forEach((it) => {
         anyItem = true;
-        total += it.unit_price * it.qty;
         const name = it[`name_${lang}`] || it.name_zh || it.name_en || it.name_ko || "";
         const row = document.createElement("div");
         row.className = "history-item";
@@ -809,9 +882,16 @@
         `;
         list.appendChild(row);
       });
+      total += o.total;
+      if (o.vip_discount_percent) anyVipDiscount = true;
     });
     if (!anyItem) {
       list.innerHTML = `<div class="history-empty">${t("noOrdersYet")}</div>`;
+    } else if (anyVipDiscount) {
+      const note = document.createElement("div");
+      note.className = "history-vip-note";
+      note.textContent = t("historyVipDiscountAppliedMsg");
+      list.appendChild(note);
     }
     $("#historyTotalBig").textContent = money(total);
     $("#payOnlineBtn").hidden = !(onlinePaymentEnabled && total > 0);
@@ -834,6 +914,166 @@
   $("#storeInfoBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "storeInfoBackdrop") $("#storeInfoBackdrop").hidden = true;
   });
+
+  // ---------- Membership (회원/VIP) sheet ----------
+  // Sets up Firebase Authentication from the store's own firebaseConfig
+  // (Admin > 설정 > 회원(VIP) 로그인 — see PUBLIC_KEYS in src/routes/settings.js
+  // for why that config is safe to ship to every customer). A store that
+  // hasn't configured it yet — the overwhelming common case until the owner
+  // does the one-time Firebase Console setup — leaves rawConfig empty and
+  // this whole feature quietly never turns on: #memberBtn stays hidden,
+  // firebaseAuth stays null, and every VIP-related check elsewhere in this
+  // file already treats that as "not signed in / no membership".
+  function initMembership(rawConfig) {
+    if (!rawConfig) return;
+    let config;
+    try {
+      config = JSON.parse(rawConfig);
+    } catch (e) {
+      return;
+    }
+    if (!config || !config.apiKey || !config.projectId) return;
+    if (typeof firebase === "undefined") return; // SDK script failed to load (e.g. offline) — degrade to no login
+    try {
+      firebase.initializeApp(config);
+      firebaseAuth = firebase.auth();
+    } catch (e) {
+      firebaseAuth = null;
+      return;
+    }
+    $("#memberBtn").hidden = false;
+    firebaseAuth.onAuthStateChanged(async (user) => {
+      memberUser = user ? { name: user.displayName || user.email, email: user.email } : null;
+      membership = null;
+      if (user) await refreshMembership();
+      renderMemberSheet();
+      updateMemberBtnLabel();
+      renderCart();
+      renderCartFab();
+    });
+  }
+
+  async function refreshMembership() {
+    if (!firebaseAuth || !firebaseAuth.currentUser) {
+      membership = null;
+      return;
+    }
+    try {
+      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const res = await fetch("/api/members/me", { headers: { Authorization: `Bearer ${idToken}` } });
+      membership = res.ok ? (await res.json()).membership : null;
+    } catch (e) {
+      membership = null;
+    }
+  }
+
+  function updateMemberBtnLabel() {
+    const btn = $("#memberBtn");
+    if (!btn) return;
+    btn.textContent = membership && membership.active ? `⭐ ${t("memberBtnLabel")}` : t("memberBtnLabel");
+  }
+
+  function renderMemberSheet() {
+    const signedOutEl = $("#memberSignedOut");
+    const signedInEl = $("#memberSignedIn");
+    if (!signedOutEl || !signedInEl) return; // firebase never initialized — nothing to render
+    const signedIn = !!memberUser;
+    signedOutEl.hidden = signedIn;
+    signedInEl.hidden = !signedIn;
+    if (!signedIn) return;
+    $("#memberAccountLine").textContent = memberUser.name || memberUser.email || "";
+    const hasCard = !!(membership && membership.card_number);
+    $("#memberNoCard").hidden = hasCard;
+    $("#memberHasCard").hidden = !hasCard;
+    if (hasCard) {
+      const badgeEl = $("#memberCardBadge");
+      badgeEl.textContent = membership.active ? t("memberActiveBadge") : t("memberExpiredBadge");
+      badgeEl.className = "member-card-badge" + (membership.active ? " active" : " expired");
+      $("#memberCardInfo").innerHTML = `
+        <div>${t("memberCardNumberLabel")} ${membership.card_number}</div>
+        <div>${t("memberDiscountLabel")} ${membership.discount_percent}%</div>
+        <div>${t("memberExpiryLabel")} ${membership.expiry_date || "-"}</div>
+      `;
+    }
+  }
+
+  const MEMBER_REGISTER_ERR = {
+    card_not_found: "memberErrorCardNotFound",
+    card_already_claimed: "memberErrorCardClaimed",
+    already_registered: "memberErrorAlreadyRegistered",
+  };
+
+  $("#memberBtn").onclick = () => {
+    renderMemberSheet();
+    $("#memberBackdrop").hidden = false;
+  };
+  $("#memberClose").onclick = () => ($("#memberBackdrop").hidden = true);
+  $("#memberBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "memberBackdrop") $("#memberBackdrop").hidden = true;
+  });
+
+  $("#googleSignInBtn").onclick = async () => {
+    if (!firebaseAuth) return;
+    const msg = $("#memberSignInMsg");
+    msg.hidden = true;
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await firebaseAuth.signInWithPopup(provider);
+      // onAuthStateChanged above picks up the result and re-renders.
+    } catch (e) {
+      // Includes the ordinary case of the customer just closing the Google
+      // popup themselves — not worth alarming wording for that, so this
+      // stays a plain, low-key message either way.
+      msg.textContent = t("memberSignInFailedMsg");
+      msg.hidden = false;
+    }
+  };
+
+  $("#memberSignOutBtn").onclick = async () => {
+    if (firebaseAuth) await firebaseAuth.signOut();
+  };
+
+  $("#memberRegisterBtn").onclick = async () => {
+    const cardNumber = $("#memberCardInput").value.trim();
+    const msg = $("#memberRegisterMsg");
+    msg.style.color = "";
+    if (!cardNumber) {
+      msg.textContent = t("memberCardNumberRequiredMsg");
+      msg.hidden = false;
+      return;
+    }
+    if (!firebaseAuth || !firebaseAuth.currentUser) return;
+    const btn = $("#memberRegisterBtn");
+    btn.disabled = true;
+    try {
+      const idToken = await firebaseAuth.currentUser.getIdToken();
+      const res = await fetch("/api/members/register-card", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ cardNumber }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.style.color = "#b3261e";
+        msg.textContent = t(MEMBER_REGISTER_ERR[data.error] || "memberRegisterErrorGeneric");
+        msg.hidden = false;
+        return;
+      }
+      membership = data.membership;
+      $("#memberCardInput").value = "";
+      msg.hidden = true;
+      renderMemberSheet();
+      updateMemberBtnLabel();
+      renderCart();
+      renderCartFab();
+    } catch (e) {
+      msg.style.color = "#b3261e";
+      msg.textContent = t("networkErrorMsg");
+      msg.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  };
 
   // Language sheet
   $("#langPillBtn").onclick = () => ($("#langBackdrop").hidden = false);

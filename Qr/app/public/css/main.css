@@ -378,6 +378,8 @@ body {
 .cart-item-qty-ctrl button { width: 24px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
 .cart-empty { text-align: center; color: var(--muted); padding: 30px 0; }
 .cart-total-row { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-bottom: 14px; }
+.cart-vip-row { display: flex; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--red); margin: -6px 0 8px; }
+.history-vip-note { text-align: right; font-size: 12px; font-weight: 700; color: var(--red); margin-top: 4px; }
 
 /* Order history (receipt) */
 .history-sheet h2 { margin: 0 0 2px; }
@@ -420,6 +422,32 @@ body {
 .status-step.done .status-dot { background: var(--ink); }
 .status-step-label { font-size: 10px; color: var(--muted); }
 .status-step.done .status-step-label { color: var(--ink); font-weight: 700; }
+
+/* Membership (회원/VIP) sheet */
+.member-sheet h2 { margin-top: 0; }
+.member-hint { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.google-signin-btn {
+  width: 100%; background: #fff; color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+  padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.member-msg { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.member-account-line { font-size: 13px; color: var(--muted); margin: 0 0 16px; font-weight: 600; }
+#memberNoCard input, #memberNoCard { margin-bottom: 4px; }
+#memberCardInput {
+  width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+  font-size: 15px; font-family: inherit; margin-bottom: 10px;
+}
+.member-card-badge {
+  display: inline-block; font-size: 12px; font-weight: 800; padding: 4px 12px; border-radius: 999px;
+  background: #f0f0f0; color: var(--muted); margin-bottom: 10px;
+}
+.member-card-badge.active { background: #e7f6ec; color: #1a8a44; }
+.member-card-badge.expired { background: #fdecea; color: var(--red); }
+.member-card-info { font-size: 14px; line-height: 1.9; margin-bottom: 16px; }
+.member-signout-btn {
+  width: 100%; background: none; border: 1px solid var(--line); color: var(--muted); border-radius: 12px;
+  padding: 11px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
 
 /* Store info sheet */
 .info-rows { margin-top: 8px; }

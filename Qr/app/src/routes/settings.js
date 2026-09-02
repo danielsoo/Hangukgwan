@@ -22,6 +22,15 @@ const PUBLIC_KEYS = [
   "store_lat",
   "store_lng",
   "order_radius_m",
+  // The Firebase web app config snippet (apiKey/authDomain/projectId/etc.)
+  // Admin > 설정 > 회원(VIP) 로그인 설정 lets the owner paste in, straight
+  // from their Firebase Console. Not a secret — Firebase's own docs note
+  // this config only identifies which project a client belongs to; the
+  // actual trust boundary is server-side ID-token verification (see
+  // src/firebaseAdmin.js), which needs a separate, genuinely secret service
+  // account key set as the FIREBASE_SERVICE_ACCOUNT env var instead — never
+  // stored here, never sent to the customer page.
+  "firebase_web_config",
 ];
 
 function publicSettings() {

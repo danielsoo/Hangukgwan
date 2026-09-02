@@ -72,6 +72,8 @@ app.use("/api/reservations", require("./src/routes/reservations"));
 app.use("/api/line/webhook", require("./src/routes/lineWebhook"));
 app.use("/api/payment", require("./src/routes/payments"));
 app.use("/api/photo", require("./src/routes/photos"));
+app.use("/api/vip-cards", require("./src/routes/vipCards"));
+app.use("/api/members", require("./src/routes/members"));
 
 // Customer ordering page — table number is read client-side from the URL
 app.get("/t/:tableNumber", (req, res) => {

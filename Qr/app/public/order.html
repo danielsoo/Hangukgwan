@@ -24,6 +24,11 @@
       <div class="table-badge" id="tableBadge">桌號 --</div>
     </div>
     <button class="store-info-btn" id="storeInfoBtn" data-i18n="storeInfo">店家資訊</button>
+    <!-- 회원(VIP) — optional Google sign-in entry point. Hidden until
+         initMembership() in order.js confirms the store has a working
+         firebaseConfig (Admin > 설정 > 회원(VIP) 로그인); a store that hasn't
+         set this up yet shows no trace of the feature. -->
+    <button class="store-info-btn" id="memberBtn" hidden>회원</button>
   </div>
 
   <div class="notice-banner" id="noticeBanner" hidden></div>
@@ -121,6 +126,13 @@
       <h2 data-i18n="yourOrder">您的訂單</h2>
       <div id="cartItems" class="cart-items"></div>
       <textarea id="orderNote" data-i18n-placeholder="orderNotePlaceholder" placeholder="整單備註（選填）" maxlength="300"></textarea>
+      <!-- Shown only when signed in with an active VIP card (see
+           renderCartTotals() in order.js) — the discount itself is always
+           computed and enforced server-side at submit time; this is just a
+           preview so it isn't a surprise at checkout. -->
+      <div class="cart-vip-row" id="cartVipDiscountRow" hidden>
+        <span id="cartVipDiscountLabel"></span>
+      </div>
       <div class="cart-total-row">
         <span data-i18n="total">總計</span>
         <span id="cartTotalBig">$0</span>
@@ -152,6 +164,45 @@
         <span id="historyTotalBig">$0</span>
       </div>
       <button class="submit-btn" id="payOnlineBtn" data-i18n="payOnlineBtn" hidden>線上付款</button>
+    </div>
+  </div>
+
+  <!-- Membership (회원/VIP) — optional Google sign-in to register an
+       already-issued physical VIP card and get its discount applied
+       automatically at checkout. Ordering never requires this. See
+       initMembership()/renderMemberSheet() in order.js. Only reachable via
+       #memberBtn, which stays hidden until Firebase is actually configured
+       (Admin > 설정 > 회원(VIP) 로그인). -->
+  <div class="sheet-backdrop" id="memberBackdrop" hidden>
+    <div class="sheet member-sheet">
+      <button class="sheet-close" id="memberClose">✕</button>
+      <h2 data-i18n="memberTitle">회원(VIP)</h2>
+
+      <div id="memberSignedOut">
+        <p class="member-hint" data-i18n="memberSignedOutHint">구글로 로그인하면 보유한 VIP 카드를 등록해서 자동 할인을 받을 수 있어요.</p>
+        <button class="google-signin-btn" id="googleSignInBtn">
+          <span data-i18n="googleSignInBtn">구글로 로그인</span>
+        </button>
+        <p class="member-msg" id="memberSignInMsg" hidden></p>
+      </div>
+
+      <div id="memberSignedIn" hidden>
+        <p class="member-account-line" id="memberAccountLine"></p>
+
+        <div id="memberNoCard">
+          <p class="member-hint" data-i18n="memberNoCardHint">보유한 실물 VIP 카드번호를 입력해서 등록하세요.</p>
+          <input type="text" id="memberCardInput" data-i18n-placeholder="memberCardPlaceholder" placeholder="카드번호" maxlength="30" />
+          <button class="add-btn" id="memberRegisterBtn" data-i18n="memberRegisterBtn">카드 등록</button>
+          <p class="member-msg" id="memberRegisterMsg" hidden></p>
+        </div>
+
+        <div id="memberHasCard" hidden>
+          <div class="member-card-badge" id="memberCardBadge"></div>
+          <div class="member-card-info" id="memberCardInfo"></div>
+        </div>
+
+        <button class="member-signout-btn" id="memberSignOutBtn" data-i18n="memberSignOutBtn">로그아웃</button>
+      </div>
     </div>
   </div>
 
@@ -237,6 +288,14 @@
 
 </div>
 
+<!-- Firebase Authentication only (see src/firebaseAdmin.js) — all real data
+     (VIP cards, orders, etc.) stays in the existing MongoDB. Loaded from
+     Google's own CDN unconditionally; initMembership() in order.js is a
+     no-op (and #memberBtn stays hidden) whenever the store hasn't pasted a
+     firebaseConfig into Admin > 설정 > 회원(VIP) 로그인 yet, so this costs a
+     store that isn't using the feature nothing but the script fetch. -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="/js/i18n.js"></script>
 <script src="/js/allergens.js"></script>
 <script src="/js/season.js"></script>
