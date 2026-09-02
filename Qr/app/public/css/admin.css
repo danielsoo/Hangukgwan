@@ -65,9 +65,18 @@ input, select, button, textarea { font-family: inherit; }
 .order-card-time { color: var(--muted); font-weight: 400; font-size: 14px; }
 .order-card-items { font-size: 16px; color: #55504a; margin-bottom: 6px; line-height: 1.5; }
 .order-card-total { font-weight: 700; font-size: 17px; }
-.order-card-actions { display: flex; gap: 6px; margin-top: 8px; }
-.order-card-actions button { flex: 1; font-size: 14px; padding: 6px 4px; border-radius: 6px; border: 1px solid var(--line); background: #f7f5f0; cursor: pointer; }
-.order-card-actions button.primary { background: var(--navy); color: #fff; border-color: var(--navy); }
+/* Squeezing every button (다음 단계/취소/수정/인쇄/미리보기) into one flex
+   row forced each into a sliver too narrow for its label, wrapping "결제
+   완료로 변경" onto three lines and leaving the buttons looking crammed
+   together — a 2-column grid gives each one real width and breathing
+   room, with the 다음 단계 button (the main action, and usually the
+   longest label) spanning the full row above the rest. */
+.order-card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.order-card-actions button {
+  font-size: 14px; padding: 9px 6px; border-radius: 8px; border: 1px solid var(--line);
+  background: #f7f5f0; cursor: pointer; line-height: 1.3;
+}
+.order-card-actions button.primary { grid-column: 1 / -1; padding: 10px 6px; font-weight: 700; background: var(--navy); color: #fff; border-color: var(--navy); }
 .order-card.flash { animation: flash 1.2s ease-in-out 2; }
 .order-card-type-badge {
   display: inline-block; margin-left: 8px; vertical-align: middle;
