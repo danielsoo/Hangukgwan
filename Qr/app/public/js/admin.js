@@ -1253,6 +1253,18 @@
         if (targetStatus && targetStatus !== o.status) {
           // Dropped into a different stage's column — change status, same
           // as pressing 다음 단계 (works backwards too, to undo a mistake).
+          //
+          // ordersRequestSeq++ here — BEFORE the PATCH below is even sent —
+          // matters: the steady 4-second poll's own GET can already be in
+          // flight at this exact moment, and if it resolves while we're
+          // still awaiting our PATCH, it has nothing "newer" to lose to yet
+          // (a later loadOrders() call is what normally bumps the counter),
+          // so it would apply normally and briefly flash the card back to
+          // its old column before our own refresh corrects it a beat
+          // later — the "왔다갔다 한 번" this was reported as. Bumping the
+          // counter immediately marks any request already in flight as
+          // stale right away, so that flash never happens.
+          ordersRequestSeq++;
           const previousStatus = o.status;
           o.status = targetStatus; // reflect locally so the render below doesn't flicker back to the old column first
           const ok = await updateOrderStatus(o.id, targetStatus);
@@ -1267,6 +1279,9 @@
           return;
         }
         // Dropped back into the same column — just a priority reorder.
+        // Same reasoning as above — persistColumnOrder() also mutates
+        // `orders` optimistically before its own PATCH resolves.
+        ordersRequestSeq++;
         await persistColumnOrder(body);
       }
       // Catch up on anything a poll skipped re-rendering while this drag
