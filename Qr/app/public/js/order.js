@@ -295,6 +295,22 @@
     return item.photo_url ? `background-image:url('${item.photo_url}')` : "";
   }
 
+  // 牛/豬 icons shown right next to the dish name in the menu list, matching
+  // the official printed menu (which puts the same 🐂🐷 right after the dish
+  // title, e.g. "石鍋拌飯 🐂🐷") — this is what the owner actually meant by
+  // "메뉴에 표시되는 동물 사진에 넣어달라" (put it in the animal picture
+  // shown on the menu list), not the option picker inside the item sheet,
+  // which already had these icons from an earlier round.
+  function meatIconsHtml(item) {
+    if (!item.options) return "";
+    const icons = item.options
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => OPTION_ICONS[o])
+      .map((o) => optionLabel(o));
+    return icons.length ? `<span class="item-meat-icons">${icons.join("")}</span>` : "";
+  }
+
   function itemMatchesSearch(item) {
     if (!searchTerm) return true;
     const haystack = [item.name_zh, item.name_ko, item.name_en, item.desc_zh, item.desc_ko, item.desc_en]
@@ -327,6 +343,7 @@
           <div class="item-row-text">
             <div class="item-name-row">
               <span class="item-name">${nameFor(item)}</span>
+              ${meatIconsHtml(item)}
               ${item.is_signature ? `<span class="badge badge-signature">★ ${t("signature")}</span>` : ""}
               ${item.is_spicy ? `<span class="badge badge-spicy">🌶 ${t("spicy")}</span>` : ""}
             </div>

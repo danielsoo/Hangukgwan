@@ -231,6 +231,10 @@ body {
 .badge { font-size: 10px; padding: 2px 7px; border-radius: 5px; font-weight: 700; }
 .badge-spicy { background: #f6e2df; color: var(--red); }
 .badge-signature { background: none; border: 1px solid var(--gold); color: var(--gold); }
+/* 牛/豬 icons next to the dish name in the menu list — matches the official
+   printed menu, which puts the same icons right after the dish title. */
+.item-meat-icons { display: inline-flex; align-items: center; gap: 2px; }
+.item-meat-icons .option-icon { height: 16px; }
 .item-price { font-weight: 800; font-size: 14px; margin-bottom: 4px; color: var(--red); }
 .item-price-note { font-size: 11px; color: var(--muted); font-weight: 400; margin-left: 4px; }
 .item-price-original { font-size: 12px; color: var(--muted); font-weight: 400; text-decoration: line-through; margin-right: 5px; }
