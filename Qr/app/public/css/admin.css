@@ -546,6 +546,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 2px;
 }
 .order-edit-item-row-meta:empty { display: none; }
+.order-edit-item-row-ordertype { padding-left: 2px; }
 /* Pill-button toggle groups for option/spice/order-type — matches the
    customer order page's own choice picker (.options-list button in
    main.css) instead of a native <select>, which read as visibly
@@ -559,6 +560,23 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .order-edit-pill-btn:hover { border-color: var(--navy); }
 .order-edit-pill-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+/* 매장내/포장 (dine-in/takeout) gets a segmented-switch look instead of the
+   plain pill style above — same visual language as the customer order
+   page's own .order-type-tabs (main.css) — because it's a fundamentally
+   different kind of choice from the dish's option/spice pills (which one
+   plate is this), not just another item in that same row of buttons. Its
+   own row (order-edit-item-row-ordertype) plus this distinct style is what
+   makes which one is currently selected actually readable at a glance
+   (2026-09 피드백: "포장인지 매장인지 안나와있고 2개의 다른 옵션이 한
+   열에 있어"). */
+.order-edit-ordertype-group {
+  display: flex; gap: 0; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 999px; padding: 3px; width: fit-content;
+}
+.order-edit-ordertype-group .order-edit-pill-btn {
+  border: none; border-radius: 999px; background: none; padding: 4px 14px;
+}
+.order-edit-ordertype-group .order-edit-pill-btn.active { background: var(--ink); color: #fff; }
 /* 牛/豬 face icons (cropped from the restaurant's own PDF menu, see
    optionLabel() in order.js/admin.js) shown inside pill buttons/badges. */
 .option-icon { height: 16px; width: auto; vertical-align: middle; display: inline-block; }

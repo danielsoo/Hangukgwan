@@ -2262,8 +2262,8 @@
         // dressed up (plus its chevron rendered oversized without an
         // explicit background-size — the immediate bug report), so this
         // swaps it out entirely instead of just patching the chevron.
-        const pillGroup = (field, values, current, labelFor) =>
-          `<div class="order-edit-pill-group" data-idx="${idx}" data-field="${field}">${values
+        const pillGroup = (field, values, current, labelFor, extraClass) =>
+          `<div class="order-edit-pill-group${extraClass ? ` ${extraClass}` : ""}" data-idx="${idx}" data-field="${field}">${values
             .map(
               (v) =>
                 `<button type="button" class="order-edit-pill-btn${v === current ? " active" : ""}" data-value="${v}">${labelFor ? labelFor(v) : v}</button>`
@@ -2295,14 +2295,22 @@
         // order was first placed (see .order-type-tabs in order.html) — the
         // server already stores/accepts order_type per item (see
         // src/routes/orders.js PATCH /:id/items), this was just missing from
-        // the edit UI itself (2026-09 피드백).
+        // the edit UI itself (2026-09 피드백). Given its own segmented-switch
+        // look (order-edit-ordertype-group, styled like the customer page's
+        // .order-type-tabs) and its own row, separate from the option/spice
+        // pills above — sharing one plain pill style with everything else
+        // made it read as just more options for the dish instead of a
+        // completely different kind of choice, and it's easy to miss which
+        // one is currently selected when it's inline with several other
+        // pills (2026-09 피드백: "포장인지 매장인지 안나와있고").
         const dineInLabel = adminLang === "zh" ? "內用" : "매장내";
         const takeoutLabel = adminLang === "zh" ? "外帶" : "포장";
         const orderTypeHtml = pillGroup(
           "orderType",
           ["dine_in", "takeout"],
           it.order_type === "takeout" ? "takeout" : "dine_in",
-          (v) => (v === "takeout" ? takeoutLabel : dineInLabel)
+          (v) => (v === "takeout" ? takeoutLabel : dineInLabel),
+          "order-edit-ordertype-group"
         );
         const addonsHtml =
           it.selected_addons && it.selected_addons.length
@@ -2333,6 +2341,8 @@
             ${optionsHtml}
             ${spiceHtml}
             ${addonsHtml}
+          </div>
+          <div class="order-edit-item-row-ordertype">
             ${orderTypeHtml}
           </div>
         `;
