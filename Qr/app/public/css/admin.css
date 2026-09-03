@@ -406,6 +406,27 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .settlement-items-table { width: 100%; border-collapse: collapse; font-size: 17px; }
 .settlement-items-table th, .settlement-items-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
 .settlement-items-table th { color: var(--muted); font-weight: 600; font-size: 16px; }
+/* 지난 정산 기록 — grouped into one <details> "folder" per year-month
+   (see fmtHistoryMonthLabel()/loadSettlementHistory() in admin.js) instead
+   of one long flat list, so browsing months of history means opening the
+   month you want rather than scrolling past every day ever saved (owner:
+   "파일 폴더처럼 날짜별로 들어가서 볼 수 있게 해줬으면 좋겠어"). */
+.settlement-history-month { border-bottom: 1px solid var(--line); }
+.settlement-history-month:last-child { border-bottom: none; }
+.settlement-history-month-summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 12px 6px; cursor: pointer; font-weight: 700; font-size: 17px; border-radius: 8px;
+  list-style: none;
+}
+.settlement-history-month-summary::-webkit-details-marker { display: none; }
+.settlement-history-month-summary:hover { background: #f7f5f1; }
+.settlement-history-month-summary::before {
+  content: "▸"; margin-right: 8px; color: var(--muted); display: inline-block;
+  transition: transform 0.15s;
+}
+.settlement-history-month[open] > .settlement-history-month-summary::before { transform: rotate(90deg); }
+.settlement-history-month-stats { font-weight: 500; font-size: 15px; color: var(--muted); }
+.settlement-history-month-days { padding-left: 22px; padding-bottom: 4px; }
 .settlement-history-row {
   display: flex; align-items: center; gap: 16px; padding: 10px 6px; border-bottom: 1px solid var(--line);
   font-size: 17px; cursor: pointer; border-radius: 8px;

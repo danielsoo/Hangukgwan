@@ -4925,6 +4925,13 @@
     return d.toISOString().slice(0, 10);
   }
 
+  // Year-month label for a settlement-history folder, e.g. "2026-09" ->
+  // "2026년 9월" / "2026年9月".
+  const fmtHistoryMonthLabel = (ym) => {
+    const [y, m] = ym.split("-");
+    return adminLang === "zh" ? `${y}年${parseInt(m, 10)}月` : `${y}년 ${parseInt(m, 10)}월`;
+  };
+
   async function loadSettlementHistory() {
     const res = await fetch("/api/settlements/history");
     if (!res.ok) return;
@@ -4936,16 +4943,52 @@
       el.innerHTML = `<p class="settings-hint">${T("settlementHistoryEmpty")}</p>`;
       return;
     }
-    el.innerHTML = list
-      .map(
-        (s) => `
-          <div class="settlement-history-row" data-date="${s.date}">
-            <span class="settlement-history-date">${s.date}</span>
-            <span>NT$${Number(s.total_revenue || 0).toLocaleString()}</span>
-            <span>${T("settlementHistoryPaid")} ${s.paid_order_count}</span>
-            <span class="${s.problem_order_count > 0 ? "settlement-history-warn" : ""}">${T("settlementHistoryProblem")} ${s.problem_order_count}</span>
-          </div>`
-      )
+    // Grouped into one collapsible "folder" per year-month instead of one
+    // long flat list of every saved day — a few months in, that list was
+    // long enough to just scroll past rather than actually browse (owner:
+    // "파일 폴더처럼 날짜별로 들어가서 볼 수 있게 해줬으면 좋겠어"). `list`
+    // already arrives newest-day-first (GET /api/settlements/history), so
+    // the first time a year-month is seen is always its most recent day —
+    // a plain Map preserves that insertion order, so months come out
+    // newest-first with no extra sort needed. Only the most recent month
+    // starts open; older months are collapsed <details> the owner clicks
+    // into, same "go in and look" feel as opening a folder.
+    const months = new Map();
+    list.forEach((s) => {
+      const ym = s.date.slice(0, 7);
+      if (!months.has(ym)) months.set(ym, { revenue: 0, paidCount: 0, days: [] });
+      const g = months.get(ym);
+      g.revenue += Number(s.total_revenue || 0);
+      g.paidCount += Number(s.paid_order_count || 0);
+      g.days.push(s);
+    });
+    let isFirstMonth = true;
+    el.innerHTML = [...months.entries()]
+      .map(([ym, g]) => {
+        const openAttr = isFirstMonth ? " open" : "";
+        isFirstMonth = false;
+        const dayCountLabel = adminLang === "zh" ? `${g.days.length}天` : `${g.days.length}일`;
+        return `
+          <details class="settlement-history-month"${openAttr}>
+            <summary class="settlement-history-month-summary">
+              <span class="settlement-history-month-label">📁 ${fmtHistoryMonthLabel(ym)}</span>
+              <span class="settlement-history-month-stats">NT$${g.revenue.toLocaleString()} · ${T("settlementHistoryPaid")} ${g.paidCount} · ${dayCountLabel}</span>
+            </summary>
+            <div class="settlement-history-month-days">
+              ${g.days
+                .map(
+                  (s) => `
+                <div class="settlement-history-row" data-date="${s.date}">
+                  <span class="settlement-history-date">${s.date}</span>
+                  <span>NT$${Number(s.total_revenue || 0).toLocaleString()}</span>
+                  <span>${T("settlementHistoryPaid")} ${s.paid_order_count}</span>
+                  <span class="${s.problem_order_count > 0 ? "settlement-history-warn" : ""}">${T("settlementHistoryProblem")} ${s.problem_order_count}</span>
+                </div>`
+                )
+                .join("")}
+            </div>
+          </details>`;
+      })
       .join("");
     $$(".settlement-history-row").forEach((row) => {
       row.onclick = () => loadSettlement(row.dataset.date, row.dataset.date);
