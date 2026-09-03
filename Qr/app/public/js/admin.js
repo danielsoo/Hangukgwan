@@ -884,6 +884,20 @@
   // language rather than through the flat T() dictionary above.
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
   const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
+  // spice_options (and an order line's saved spice_choice) are stored as raw
+  // Chinese text — same convention as options ("牛,豬") — which reads fine on
+  // the kitchen ticket (always Chinese, see buildTicketHtml's file comment)
+  // but looked wrong to the owner in the 주문 수정 modal, a Korean-language
+  // screen (2026-09 피드백). This only relabels the *display* text for a
+  // known set of values; the underlying value saved/matched against the menu
+  // item's spice_options is always left untouched. Any spice text an admin
+  // types into 메뉴 관리 that isn't in this map just shows as-is in both
+  // languages, so nothing can "disappear" from an unrecognized value.
+  const SPICE_LABELS = {
+    "基本": "기본", "不辣": "안 맵게", "小辣": "약간 맵게",
+    "中辣": "중간 맵게", "大辣": "많이 맵게", "辣": "맵게",
+  };
+  const spiceLabel = (raw) => (adminLang === "ko" && SPICE_LABELS[raw]) || raw;
   // 포장 카운터 orders carry their own pickup_number/customer_name (assigned
   // server-side in src/routes/orders.js) instead of a table number — this is
   // what staff actually call out at pickup, so every place that would
@@ -2061,7 +2075,32 @@
     }
     // Edited entirely on a local draft copy — nothing reaches the server
     // until Save, so closing/cancelling this modal never has a side effect.
-    const draftItems = order.items.map((it) => ({ ...it }));
+    // Lines that are genuinely identical (same dish, same option/spice/order
+    // type, same note, same addons) get folded into one row with a summed
+    // qty — customers often add the same dish to the cart more than once,
+    // which used to show as several visually-identical rows in a row and
+    // just added confusion (2026-09 피드백). Anything that differs in any of
+    // those fields — including a note — stays its own row, so nothing about
+    // a distinct line is ever silently combined away.
+    const addonsKey = (it) =>
+      (it.selected_addons || [])
+        .map((a) => a.name)
+        .sort()
+        .join("|");
+    const draftItems = [];
+    order.items.forEach((it) => {
+      const existing = draftItems.find(
+        (d) =>
+          d.item_id === it.item_id &&
+          d.option_choice === it.option_choice &&
+          d.spice_choice === it.spice_choice &&
+          d.order_type === it.order_type &&
+          (d.note || "") === (it.note || "") &&
+          addonsKey(d) === addonsKey(it)
+      );
+      if (existing) existing.qty += it.qty;
+      else draftItems.push({ ...it });
+    });
     const allItems = flatMenuItems();
     // Includes any selected_addons (사리면 추가 등) already on the line —
     // this modal doesn't offer a UI to change addons (that's chosen once at
@@ -2082,25 +2121,25 @@
         // exists to sidestep, so only qty/removal are offered for those.
         const optionsHtml =
           mi && mi.options && !mi.mix_options
-            ? `<select data-idx="${idx}" data-field="option">${mi.options
+            ? `<select data-idx="${idx}" data-field="option" class="order-edit-choice-select">${mi.options
                 .split(",")
                 .map((o) => o.trim())
                 .filter(Boolean)
                 .map((o) => `<option value="${o}" ${it.option_choice === o ? "selected" : ""}>${o}</option>`)
                 .join("")}</select>`
             : it.option_choice
-              ? `<span style="font-size:13px;color:var(--muted);">(${it.option_choice})</span>`
+              ? `<span class="order-edit-meta-badge">${it.option_choice}</span>`
               : "";
         const spiceHtml =
           mi && mi.spice_options
-            ? `<select data-idx="${idx}" data-field="spice">${mi.spice_options
+            ? `<select data-idx="${idx}" data-field="spice" class="order-edit-choice-select">${mi.spice_options
                 .split(",")
                 .map((o) => o.trim())
                 .filter(Boolean)
-                .map((o) => `<option value="${o}" ${it.spice_choice === o ? "selected" : ""}>${o}</option>`)
+                .map((o) => `<option value="${o}" ${it.spice_choice === o ? "selected" : ""}>${spiceLabel(o)}</option>`)
                 .join("")}</select>`
             : it.spice_choice
-              ? `<span style="font-size:13px;color:var(--muted);">(${it.spice_choice})</span>`
+              ? `<span class="order-edit-meta-badge">${spiceLabel(it.spice_choice)}</span>`
               : "";
         // 매장내/포장 (dine-in/takeout) is chosen per line, same as when the
         // order was first placed (see .order-type-tabs in order.html) — the
@@ -2115,23 +2154,35 @@
         </select>`;
         const addonsHtml =
           it.selected_addons && it.selected_addons.length
-            ? `<span style="font-size:12px;color:var(--muted);">(+${it.selected_addons.map((a) => a.name).join(", ")})</span>`
+            ? `<span class="order-edit-meta-badge">+${it.selected_addons.map((a) => a.name).join(", ")}</span>`
             : "";
+        // Two-tier layout so the qty/price/delete controls always land in
+        // exactly the same place: a fixed "main" row (name — qty — price —
+        // delete), plus a "meta" row underneath for however many/few
+        // option/spice/order-type/addon controls this particular line has.
+        // Previously these were all one flex-wrap row, so an item with a
+        // spice dropdown (wider) would push the delete button onto its own
+        // line while a plain item kept it inline — same button, different
+        // spot from row to row (2026-09 피드백).
         const row = document.createElement("div");
         row.className = "order-edit-item-row";
         row.innerHTML = `
-          <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}</span>
-          ${optionsHtml}
-          ${spiceHtml}
-          ${addonsHtml}
-          ${orderTypeHtml}
-          <div class="order-edit-qty-group">
-            <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="dec">−</button>
-            <span class="order-edit-qty-value">${it.qty}</span>
-            <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="inc">+</button>
+          <div class="order-edit-item-row-main">
+            <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}</span>
+            <div class="order-edit-qty-group">
+              <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="dec">−</button>
+              <span class="order-edit-qty-value">${it.qty}</span>
+              <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="inc">+</button>
+            </div>
+            <span class="order-edit-item-price">NT$${itemTotal(it)}</span>
+            <button type="button" class="order-edit-remove-btn" data-idx="${idx}" title="${T("cancelBtn")}">✕</button>
           </div>
-          <span class="order-edit-item-price">NT$${itemTotal(it)}</span>
-          <button type="button" class="order-edit-remove-btn" data-idx="${idx}" title="${T("cancelBtn")}">✕</button>
+          <div class="order-edit-item-row-meta">
+            ${optionsHtml}
+            ${spiceHtml}
+            ${addonsHtml}
+            ${orderTypeHtml}
+          </div>
         `;
         wrap.appendChild(row);
       });

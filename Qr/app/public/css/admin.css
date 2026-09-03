@@ -532,12 +532,31 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .table-picker-empty { color: var(--muted); font-size: 17px; padding: 16px 0; text-align: center; }
 
 /* 주문 수정 (edit an already-placed order's items) — see openOrderEdit()
-   in admin.js. */
+   in admin.js. Two-tier layout: order-edit-item-row-main always holds
+   name/qty/price/delete in the same fixed spots regardless of how many
+   option/spice/order-type controls a line has; those live in their own
+   order-edit-item-row-meta strip below, free to wrap on their own without
+   ever moving the delete button (2026-09 피드백). */
 .order-edit-item-row {
-  display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px;
 }
-.order-edit-item-name { flex: 1; min-width: 120px; font-weight: 700; font-size: 15px; }
-.order-edit-item-row select { width: auto; padding: 4px 6px; font-size: 13px; }
+.order-edit-item-row-main { display: flex; align-items: center; gap: 10px; }
+.order-edit-item-name { flex: 1; min-width: 100px; font-weight: 700; font-size: 15px; }
+.order-edit-item-row-meta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 2px;
+}
+.order-edit-item-row-meta:empty { display: none; }
+.order-edit-choice-select, .order-edit-type-select {
+  appearance: none; -webkit-appearance: none; width: auto; padding: 5px 24px 5px 10px; font-size: 13px;
+  font-weight: 600; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 8px center; cursor: pointer;
+}
+.order-edit-choice-select:hover, .order-edit-type-select:hover { border-color: var(--navy); }
+.order-edit-meta-badge {
+  font-size: 13px; font-weight: 600; color: var(--muted); background: var(--cream);
+  border: 1px solid var(--line); border-radius: 14px; padding: 4px 10px;
+}
 .order-edit-qty-group { display: flex; align-items: center; gap: 6px; }
 .order-edit-qty-btn {
   width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--line); background: #fff; cursor: pointer;
@@ -548,6 +567,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .order-edit-item-price { font-size: 13px; color: var(--muted); min-width: 60px; text-align: right; }
 .order-edit-remove-btn {
   background: none; border: none; color: var(--red); font-size: 18px; font-weight: 800; cursor: pointer; padding: 0 4px;
+  flex-shrink: 0;
 }
 .order-edit-add-row { display: flex; gap: 8px; margin-top: 14px; }
 .order-edit-add-row select { flex: 1; }
