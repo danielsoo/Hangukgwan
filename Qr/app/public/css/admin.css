@@ -559,6 +559,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .order-edit-pill-btn:hover { border-color: var(--navy); }
 .order-edit-pill-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+/* 牛/豬 face icons (cropped from the restaurant's own PDF menu, see
+   optionLabel() in order.js/admin.js) shown inside pill buttons/badges. */
+.option-icon { height: 16px; width: auto; vertical-align: middle; display: inline-block; }
 .order-edit-meta-badge {
   font-size: 13px; font-weight: 600; color: var(--muted); background: var(--cream);
   border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;

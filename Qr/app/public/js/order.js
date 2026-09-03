@@ -35,15 +35,22 @@
       return sum + (match ? match.price : 0);
     }, 0);
   }
-  // 牛/豬 (beef/pork) option buttons show as emoji instead of the raw
-  // Chinese text — matching the restaurant's own printed menu, which
-  // already marks every 牛/豬-choice dish with these same two emoji next
+  // 牛/豬 (beef/pork) option buttons show a small face icon instead of the
+  // raw Chinese text — matching the restaurant's own printed menu, which
+  // already marks every 牛/豬-choice dish with these same two icons next
   // to its name (2026-09 피드백, confirmed against the official PDF menu).
+  // These were originally the plain 🐂/🐷 Unicode emoji, but the owner
+  // pointed out the emoji rendered as a side-profile animal (font/platform
+  // dependent) instead of the front-facing head shown on the printed menu
+  // ("소 옆 모습말고 pdf 그대로") — so the icons are now cropped directly
+  // from the restaurant's own PDF menu (public/images/cow-face.png,
+  // pig-face.png) for guaranteed pixel-identical rendering everywhere.
   // Display-only: the value sent to the server/matched against the menu
   // item's own options stays the raw "牛"/"豬" string. Any other option
   // value (e.g. 鮪魚/蝦仁 on 오므라이스) is untouched.
-  const OPTION_LABELS = { "牛": "🐂", "豬": "🐷" };
-  const optionLabel = (raw) => OPTION_LABELS[raw] || raw;
+  const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
+  const optionLabel = (raw) =>
+    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : raw;
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
@@ -465,7 +472,7 @@
         optWrap.hidden = false;
         item.options.split(",").forEach((opt, i) => {
           const b = document.createElement("button");
-          b.textContent = optionLabel(opt.trim());
+          b.innerHTML = optionLabel(opt.trim());
           if (i === 0) b.classList.add("active");
           b.onclick = () => {
             currentOption = opt.trim();
@@ -493,7 +500,7 @@
     wrap.innerHTML = "";
     opts.forEach((opt) => {
       const b = document.createElement("button");
-      b.textContent = optionLabel(opt);
+      b.innerHTML = optionLabel(opt);
       if (opt === activeOpt) b.classList.add("active");
       b.onclick = () => {
         opts.forEach((o) => (mixQty[o] = 0));

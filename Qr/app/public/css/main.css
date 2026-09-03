@@ -340,6 +340,10 @@ body {
   padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13px;
 }
 .options-list button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+/* 牛/豬 face icons (cropped from the restaurant's own PDF menu, see
+   optionLabel() in order.js) shown inside option/mix-option buttons. */
+.option-icon { height: 18px; width: auto; vertical-align: middle; display: inline-block; }
+.mix-option-name .option-icon { height: 22px; }
 #itemNote, #orderNote {
   width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 13px;
   resize: none; min-height: 44px; font-family: inherit; margin-bottom: 14px;

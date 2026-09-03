@@ -898,11 +898,14 @@
     "中辣": "중간 맵게", "大辣": "많이 맵게", "辣": "맵게",
   };
   const spiceLabel = (raw) => (adminLang === "ko" && SPICE_LABELS[raw]) || raw;
-  // 牛/豬 (beef/pork) option choices show as emoji, matching the customer
-  // order page and the restaurant's own printed menu (see optionLabel() in
-  // order.js for the full rationale). Display-only, same as spiceLabel.
-  const OPTION_LABELS = { "牛": "🐂", "豬": "🐷" };
-  const optionLabel = (raw) => OPTION_LABELS[raw] || raw;
+  // 牛/豬 (beef/pork) option choices show as a small face icon, matching
+  // the customer order page and the restaurant's own printed menu (see
+  // optionLabel() in order.js for the full rationale, including why these
+  // are cropped PDF images rather than the plain 🐂/🐷 Unicode emoji).
+  // Display-only, same as spiceLabel.
+  const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
+  const optionLabel = (raw) =>
+    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : raw;
   // 포장 카운터 orders carry their own pickup_number/customer_name (assigned
   // server-side in src/routes/orders.js) instead of a table number — this is
   // what staff actually call out at pickup, so every place that would
