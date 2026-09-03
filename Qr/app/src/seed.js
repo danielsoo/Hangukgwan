@@ -18,17 +18,17 @@ const CATEGORIES = [
 // options: comma separated choice list shown to the customer as radio buttons
 const ITEMS = {
   rice: [
-    { code: "11", name_zh: "石鍋拌飯", name_ko: "돌솥비빔밥", name_en: "Stone Pot Bibimbap", price: 230, options: "牛,豬", is_signature: 1 },
-    { code: "12", name_zh: "韓式拌飯", name_ko: "비빔밥(돼지)", name_en: "Bibimbap (Pork)", price: 210 },
-    { code: "13", name_zh: "辣炒肉飯", name_ko: "제육덮밥", name_en: "Spicy Pork Rice Bowl", price: 240, is_spicy: 1 },
+    { code: "11", name_zh: "石鍋拌飯", name_ko: "돌솥비빔밥", name_en: "Stone Pot Bibimbap", price: 230, options: "牛,豬", is_signature: 1, spice_options: "基本,不辣" },
+    { code: "12", name_zh: "韓式拌飯", name_ko: "비빔밥(돼지)", name_en: "Bibimbap (Pork)", price: 210, spice_options: "基本,不辣" },
+    { code: "13", name_zh: "辣炒肉飯", name_ko: "제육덮밥", name_en: "Spicy Pork Rice Bowl", price: 240, is_spicy: 1, spice_options: "基本,小辣" },
     { code: "14", name_zh: "魷魚燴飯", name_ko: "오징어덮밥", name_en: "Squid Rice Bowl", price: 250 },
     { code: "15", name_zh: "韓式烤肉飯", name_ko: "뚝배기 불고기", name_en: "Bulgogi Rice Bowl", price: 240, options: "牛,豬", addons: "飯換冬粉(免費):0" },
-    { code: "16", name_zh: "泡菜炒飯", name_ko: "김치볶음밥", name_en: "Kimchi Fried Rice", price: 230, is_spicy: 1 },
+    { code: "16", name_zh: "泡菜炒飯", name_ko: "김치볶음밥", name_en: "Kimchi Fried Rice", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
     { code: "17", name_zh: "蛋包飯", name_ko: "오므라이스", name_en: "Omurice (Rice Omelette)", price: 210, options: "鮪魚,蝦仁" },
-    { code: "18", name_zh: "冬粉蓋飯", name_ko: "잡채덮밥", name_en: "Japchae Rice Bowl", price: 230, is_spicy: 1 },
+    { code: "18", name_zh: "冬粉蓋飯", name_ko: "잡채덮밥", name_en: "Japchae Rice Bowl", price: 230, is_spicy: 1, spice_options: "基本,不辣" },
   ],
   noodle: [
-    { code: "21", name_zh: "辛拉麵(泡麵)", name_ko: "신라면", name_en: "Shin Ramyun", price: 180 },
+    { code: "21", name_zh: "辛拉麵(泡麵)", name_ko: "신라면", name_en: "Shin Ramyun", price: 180, spice_options: "基本,不辣,小辣" },
     // Priced as a set discount off buying 신라면(21, 180)+김밥(82, 150)
     // separately (330 total) — original_price lets the menu show that
     // discount instead of just the flat set price (see public/js/order.js).
@@ -36,10 +36,10 @@ const ITEMS = {
     { code: "23", name_zh: "大滷麵", name_ko: "우동면", name_en: "Seafood Udon (not spicy)", price: 230, desc_zh: "海鮮麵不辣", desc_ko: "맵지 않아요", desc_en: "Not spicy" },
     { code: "24", name_zh: "韓式炸醬麵", name_ko: "짜장면", name_en: "Korean Black Bean Noodles", price: 230 },
     { code: "25", name_zh: "韓式炸醬飯", name_ko: "짜장밥", name_en: "Korean Black Bean Rice", price: 230 },
-    { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1 },
-    { code: "27", name_zh: "韓式海鮮飯", name_ko: "짬뽕밥", name_en: "Spicy Seafood Rice", price: 230, is_spicy: 1 },
+    { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
+    { code: "27", name_zh: "韓式海鮮飯", name_ko: "짬뽕밥", name_en: "Spicy Seafood Rice", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
     { code: "28", name_zh: "韓式水冷麵 🐄", name_ko: "냉면 🐄", name_en: "Cold Noodle Soup 🐄", price: 230 },
-    { code: "29", name_zh: "韓式拌麵 🐄", name_ko: "비빔냉면 🐄", name_en: "Spicy Cold Mixed Noodles 🐄", price: 230, is_spicy: 1 },
+    { code: "29", name_zh: "韓式拌麵 🐄", name_ko: "비빔냉면 🐄", name_en: "Spicy Cold Mixed Noodles 🐄", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
   ],
   hotpot: [
     { code: "41", name_zh: "泡菜火鍋", name_ko: "김치찌개", name_en: "Kimchi Stew", price: 230, is_spicy: 1 },
@@ -56,22 +56,22 @@ const ITEMS = {
     // itself (charged per 2 servings), which is why these three are the only
     // items with min_first_order_qty set.
     { code: "51", name_zh: "銅盤烤肉", name_ko: "동판불고기", name_en: "Korean BBQ Bulgogi", price: 250, price_note: "首次低消2份(可混搭牛豬) / min 2 on 1st order, mix ok", options: "牛,豬", mix_options: 1, min_first_order_qty: 2 },
-    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 300, price_note: "首次點餐低消2份 / min 2 on 1st order", is_spicy: 1, min_first_order_qty: 2, addons: "加點炒飯:80,加點泡麵:50" },
-    { code: "53", name_zh: "雞排拌飯(加飯)", name_ko: "볶음밥 추가", name_en: "Fried Rice Add-on (for 辣炒雞排)", price: 80 },
+    { code: "52", name_zh: "辣炒雞排", name_ko: "닭갈비", name_en: "Spicy Stir-fried Chicken", price: 300, price_note: "首次點餐低消2份 / min 2 on 1st order", is_spicy: 1, min_first_order_qty: 2, addons: "加點炒飯:80,加點泡麵:50", spice_options: "基本,小辣" },
+    { code: "53", name_zh: "雞排拌飯(加飯)", name_ko: "볶음밥 추가", name_en: "Fried Rice Add-on (for 辣炒雞排)", price: 80, spice_options: "基本,小辣" },
     { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, price_note: "首次點餐低消2份 / min 2 on 1st order", min_first_order_qty: 2 },
   ],
   other: [
     { code: "71", name_zh: "部隊鍋", name_ko: "부대찌개", name_en: "Army Stew", price: 600, is_spicy: 1, is_signature: 1, addons: "加點泡麵:50" },
     { code: "72", name_zh: "青椒牛肉片", name_ko: "소고기 볶음", name_en: "Beef with Green Pepper", price: 380 },
     { code: "73", name_zh: "辣炒魷魚", name_ko: "오징어볶음", name_en: "Spicy Stir-fried Squid", price: 400, is_spicy: 1 },
-    { code: "74", name_zh: "辣炒年糕", name_ko: "떡볶이", name_en: "Spicy Rice Cakes (Tteokbokki)", price: 380, is_spicy: 1, addons: "加點泡麵:50" },
-    { code: "75", name_zh: "起司辣炒年糕", name_ko: "치즈떡볶이", name_en: "Cheese Tteokbokki", price: 420, is_spicy: 1, addons: "加點泡麵:50" },
-    { code: "76", name_zh: "辣炒肉片", name_ko: "제육볶음", name_en: "Spicy Stir-fried Pork", price: 360, is_spicy: 1 },
+    { code: "74", name_zh: "辣炒年糕", name_ko: "떡볶이", name_en: "Spicy Rice Cakes (Tteokbokki)", price: 380, is_spicy: 1, addons: "加點泡麵:50", spice_options: "基本,小辣" },
+    { code: "75", name_zh: "起司辣炒年糕", name_ko: "치즈떡볶이", name_en: "Cheese Tteokbokki", price: 420, is_spicy: 1, addons: "加點泡麵:50", spice_options: "基本,小辣" },
+    { code: "76", name_zh: "辣炒肉片", name_ko: "제육볶음", name_en: "Spicy Stir-fried Pork", price: 360, is_spicy: 1, spice_options: "基本,小辣" },
     { code: "77", name_zh: "海鮮煎餅", name_ko: "해물파전", name_en: "Seafood Pancake", price: 240, is_signature: 1 },
     { code: "78", name_zh: "泡菜煎餅", name_ko: "김치전", name_en: "Kimchi Pancake", price: 230, is_spicy: 1 },
     { code: "79", name_zh: "蔬菜煎餅", name_ko: "야채전", name_en: "Vegetable Pancake", price: 210 },
     { code: "80", name_zh: "泡菜豆腐", name_ko: "두부김치", name_en: "Tofu with Kimchi", price: 300, is_spicy: 1 },
-    { code: "81", name_zh: "韓式冬粉 🌶️", name_ko: "잡채 🌶️", name_en: "Japchae (Glass Noodles) 🌶️", price: 300 },
+    { code: "81", name_zh: "韓式冬粉 🌶️", name_ko: "잡채 🌶️", name_en: "Japchae (Glass Noodles) 🌶️", price: 300, spice_options: "基本,小辣" },
     { code: "82", name_zh: "韓式紫菜捲", name_ko: "김밥", name_en: "Korean Seaweed Rice Roll (Kimbap)", price: 150 },
     { code: "83", name_zh: "涼拌雪螺", name_ko: "골뱅이무침", name_en: "Spicy Whelk Salad", price: 540, is_spicy: 1 },
   ],

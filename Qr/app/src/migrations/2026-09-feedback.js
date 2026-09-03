@@ -153,7 +153,35 @@ async function applyFeedback202609(store, { save, nextId, savePhoto }) {
   renameIfPlain("99", { name_zh: "Pororo ZERO兒童飲料(草莓)", name_ko: "뽀로로 제로 음료(딸기)", name_en: "Pororo ZERO Kids Drink (Strawberry)" });
   renameIfPlain("100", { name_zh: "Pororo ZERO兒童飲料(牛奶)", name_ko: "뽀로로 제로 음료(밀크)", name_en: "Pororo ZERO Kids Drink (Milk)" });
 
-  // ---- 4. 짜장밥(25) 사진을 카톡에 올린 사진으로 교체 (item 16) ----
+  // ---- 4. 맵기 선택 (기본/不辣/小辣) 옵션 추가 (item 17) ----
+  // Same single-choice-radio mechanism as options (src/routes/menu.js /
+  // public/js/order.js already fully support spice_options end-to-end) — this
+  // step just populates the field for the specific items the user picked off
+  // a photo of the printed menu with 不辣/小辣 handwritten next to them.
+  // First entry in each list is the default selection.
+  const SPICE_OPTIONS = {
+    11: "基本,不辣",
+    12: "基本,不辣",
+    18: "基本,不辣",
+    21: "基本,不辣,小辣",
+    13: "基本,小辣",
+    16: "基本,小辣",
+    26: "基本,小辣",
+    27: "基本,小辣",
+    29: "基本,小辣",
+    52: "基本,小辣",
+    53: "基本,小辣",
+    74: "基本,小辣",
+    75: "基本,小辣",
+    76: "基本,小辣",
+    81: "基本,小辣",
+  };
+  for (const [code, spiceOptions] of Object.entries(SPICE_OPTIONS)) {
+    const item = store.menuItems.find((m) => m.code === code);
+    if (item && !item.spice_options) item.spice_options = spiceOptions;
+  }
+
+  // ---- 5. 짜장밥(25) 사진을 카톡에 올린 사진으로 교체 (item 16) ----
   // Unlike upsertDrink()'s "only fill in if empty" merge, item 25 already has
   // a photo_url (it's aliased to code 24's photo via seed.js's PHOTO_ALIAS),
   // so it has to be explicitly overwritten rather than skipped.
