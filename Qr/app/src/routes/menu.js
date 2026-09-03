@@ -70,6 +70,13 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     options: b.options || null,
     mix_options: b.mix_options ? 1 : 0,
     spice_options: b.spice_options || null,
+    // Multi-select paid (or free) extras a customer can add to this dish —
+    // e.g. "볶음밥 추가:80,사리면 추가:50" or a free swap like
+    // "飯換冬粉:0". Format: comma-separated "Name:Price" pairs, parsed by
+    // parseAddons() below and rendered as checkboxes (unlike options/
+    // spice_options, which are single-choice radios) — see order.js
+    // #itemAddonsList and the price recompute in this file / orders.js.
+    addons: b.addons || null,
     min_first_order_qty: b.min_first_order_qty || null,
     allergens: Array.isArray(b.allergens) ? b.allergens : [],
     is_spicy: b.is_spicy ? 1 : 0,
@@ -89,7 +96,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const fields = [
     "category_id", "code", "name_zh", "name_ko", "name_en",
     "desc_zh", "desc_ko", "desc_en", "price", "price_note", "original_price", "options",
-    "spice_options", "min_first_order_qty", "sort_order",
+    "spice_options", "addons", "min_first_order_qty", "sort_order",
   ];
   // Re-fetches the latest data right before writing (see refreshAndSave() in
   // src/db.js) instead of mutating the `item` this request loaded at the

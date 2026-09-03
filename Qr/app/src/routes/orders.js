@@ -4,6 +4,23 @@ const { requireAdmin } = require("../auth");
 const { nowLocal, taipeiDateString } = require("../time");
 const { verifyIdToken } = require("../firebaseAdmin");
 const { isActive: isVipActive } = require("../vip");
+const { parseAddons } = require("../addons");
+
+// Re-prices whatever addon names the client sent against the menu item's own
+// `addons` definition (see src/addons.js) — never trusts a price the client
+// might send, same principle as every other field validated in this file.
+// Unknown/removed addon names are silently dropped rather than erroring, so
+// an item edited after being added to someone's order doesn't 400 them.
+function resolveSelectedAddons(mi, requestedNames) {
+  if (!Array.isArray(requestedNames) || requestedNames.length === 0) return [];
+  const available = parseAddons(mi.addons);
+  const chosen = [];
+  for (const name of requestedNames) {
+    const match = available.find((a) => a.name === name);
+    if (match && !chosen.some((c) => c.name === match.name)) chosen.push(match);
+  }
+  return chosen;
+}
 
 const router = express.Router();
 
@@ -61,10 +78,16 @@ router.post("/", async (req, res) => {
   // auto-assigned pickup_number computed below. Enforced here too, not just
   // in the customer page's counter-name modal (public/js/order.js), same as
   // every other check on this route.
+  // Phone number requested alongside the name (2026-09 피드백) so staff can
+  // reach a takeout customer about their order — same required-for-counter,
+  // trusted-only-from-here pattern as customerName above.
   let customerName = null;
+  let customerPhone = null;
   if (orderingTable.is_counter) {
     customerName = String((req.body || {}).customerName || "").trim().slice(0, 20);
     if (!customerName) return res.status(400).json({ error: "customer_name_required" });
+    customerPhone = String((req.body || {}).customerPhone || "").trim().slice(0, 20);
+    if (!customerPhone) return res.status(400).json({ error: "customer_phone_required" });
   }
 
   const locationError = checkLocation(lat, lng);
@@ -94,7 +117,9 @@ router.post("/", async (req, res) => {
     const mi = store.menuItems.find((m) => m.id === parseInt(it.itemId, 10) && m.available);
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
-    total += mi.price * qty;
+    const selectedAddons = resolveSelectedAddons(mi, it.addons);
+    const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
+    total += (mi.price + addonsPricePerUnit) * qty;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -105,6 +130,10 @@ router.post("/", async (req, res) => {
       unit_price: mi.price,
       option_choice: it.option || null,
       spice_choice: it.spice || null,
+      // Selected multi-select extras (사리면 추가, 밥→당면 교체, etc. — see
+      // src/addons.js) — a list of { name, price } re-priced from the menu
+      // item's own definition above, never trusted from the client.
+      selected_addons: selectedAddons,
       // 매장(dine-in) vs 포장(takeout) — chosen per dish in the item sheet
       // (see .order-type-tabs in order.html/order.js), not once for the
       // whole order, so a single order can mix both. Anything else
@@ -191,6 +220,7 @@ router.post("/", async (req, res) => {
     // Only set for 포장 카운터 orders (null for every real table) — see the
     // customerName/pickupNumber derivation above.
     customer_name: customerName,
+    customer_phone: customerPhone,
     pickup_number: pickupNumber,
   };
   store.orders.push(order);
@@ -345,7 +375,9 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     const mi = store.menuItems.find((m) => m.id === parseInt(it.itemId, 10) && m.available);
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
-    total += mi.price * qty;
+    const selectedAddons = resolveSelectedAddons(mi, it.addons);
+    const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
+    total += (mi.price + addonsPricePerUnit) * qty;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -356,6 +388,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       unit_price: mi.price,
       option_choice: it.option || null,
       spice_choice: it.spice || null,
+      selected_addons: selectedAddons,
       order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
       note: (it.note || "").slice(0, 200),
     });

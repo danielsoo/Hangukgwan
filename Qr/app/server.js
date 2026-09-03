@@ -4,8 +4,9 @@ const path = require("path");
 const express = require("express");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
-const { refreshStore } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, store } = require("./src/db");
 const seed = require("./src/seed");
+const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 
 const app = express();
 
@@ -26,12 +27,23 @@ app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 // needs to actually run its first-time setup once per process (its own
 // internal checks make repeat calls cheap no-ops either way).
 let seededOnce = false;
+let migratedOnce = false;
 app.use(async (req, res, next) => {
   try {
     await refreshStore();
     if (!seededOnce) {
       await seed();
       seededOnce = true;
+    }
+    // One-time data migrations against an already-live database — see the
+    // file-level comment in src/migrations/2026-09-feedback.js for why this
+    // is separate from seed() above (seed() only ever does anything on a
+    // completely empty database). Each migration is internally idempotent
+    // (checks its own store.settings flag), so calling it again is always
+    // safe even if this per-process guard somehow ran more than once.
+    if (!migratedOnce) {
+      await applyFeedback202609(store, { save, nextId, savePhoto });
+      migratedOnce = true;
     }
     next();
   } catch (e) {

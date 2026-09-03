@@ -10,10 +10,39 @@
   // and moved on before the next party scans the QR code.
   let currency = "TWD";
   let categories = [];
-  let cart = []; // { itemId, qty, option, spice, note, orderType, item }
+  let cart = []; // { itemId, qty, option, spice, note, orderType, addons, item }
+
+  // Mirrors src/addons.js's server-side parser exactly — a menu item's
+  // `addons` field is "Name:Price" pairs separated by commas (e.g.
+  // "볶음밥 추가:80,사리면 추가:50", or a free swap like "飯換冬粉:0").
+  function parseAddons(addonsStr) {
+    if (!addonsStr) return [];
+    return addonsStr
+      .split(",")
+      .map((pair) => {
+        const [name, priceStr] = pair.split(":");
+        const trimmedName = (name || "").trim();
+        const price = parseInt((priceStr || "0").trim(), 10);
+        return trimmedName ? { name: trimmedName, price: Number.isNaN(price) ? 0 : price } : null;
+      })
+      .filter(Boolean);
+  }
+  function addonsPriceFor(item, selectedNames) {
+    if (!selectedNames || selectedNames.length === 0) return 0;
+    const available = parseAddons(item && item.addons);
+    return selectedNames.reduce((sum, name) => {
+      const match = available.find((a) => a.name === name);
+      return sum + (match ? match.price : 0);
+    }, 0);
+  }
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
+  // Multi-select extras (사리면 추가, 밥→당면 교체 등) currently checked in the
+  // item sheet — array of addon name strings. See parseAddons() below,
+  // which mirrors src/addons.js's server-side parser exactly so the price
+  // shown here always matches what the server will actually charge.
+  let currentAddons = [];
   // 매장(dine-in) vs 포장(takeout) — chosen per dish (see the
   // #itemOrderTypeTabs pill inside the item detail sheet), since a single
   // order can now mix dine-in and takeout items — e.g. eating here but
@@ -45,6 +74,7 @@
   // #counterNameBackdrop (see showCounterNameModal below) instead of the
   // headcount prompt real tables get.
   let counterCustomerName = null;
+  let counterCustomerPhone = null;
 
   // ---------- Membership (회원/VIP) — optional Google sign-in ----------
   // Firebase Authentication only; all real data (VIP cards, discounts,
@@ -374,6 +404,32 @@
       spiceWrap.hidden = true;
     }
 
+    // Multi-select paid/free extras (사리면 추가, 밥→당면 교체 등) — checkboxes,
+    // unlike options/spice_options above which are single-choice radios,
+    // since a customer can pick any number of these at once.
+    currentAddons = [];
+    const addonWrap = $("#itemAddons");
+    const addonList = $("#addonsList");
+    addonList.innerHTML = "";
+    const availableAddons = parseAddons(item.addons);
+    if (availableAddons.length) {
+      addonWrap.hidden = false;
+      availableAddons.forEach((a) => {
+        const b = document.createElement("button");
+        b.textContent = a.price > 0 ? `${a.name} +${money(a.price)}` : a.name;
+        b.onclick = () => {
+          const idx = currentAddons.indexOf(a.name);
+          if (idx === -1) currentAddons.push(a.name);
+          else currentAddons.splice(idx, 1);
+          b.classList.toggle("active");
+          updateAddBtnPrice();
+        };
+        addonList.appendChild(b);
+      });
+    } else {
+      addonWrap.hidden = true;
+    }
+
     if (item.mix_options && item.options) {
       // e.g. 동판불고기: 牛/豬 get their own independent +/- counters instead
       // of a single radio choice, so a table can mix both in one line item.
@@ -474,11 +530,12 @@
 
   function updateAddBtnPrice() {
     if (!currentItem) return;
+    const addonsPrice = addonsPriceFor(currentItem, currentAddons);
     if (currentItem.mix_options) {
       const totalQty = Object.values(mixQty).reduce((sum, q) => sum + q, 0);
-      $("#addToCartPrice").textContent = money(currentItem.price * totalQty);
+      $("#addToCartPrice").textContent = money((currentItem.price + addonsPrice) * totalQty);
     } else {
-      $("#addToCartPrice").textContent = money(currentItem.price * currentQty);
+      $("#addToCartPrice").textContent = money((currentItem.price + addonsPrice) * currentQty);
     }
   }
 
@@ -521,7 +578,7 @@
       }
       opts.forEach((opt) => {
         if (mixQty[opt] > 0) {
-          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, orderType: currentOrderType });
+          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, orderType: currentOrderType, addons: [...currentAddons] });
         }
       });
     } else {
@@ -537,6 +594,7 @@
         option: currentOption,
         spice: currentSpiceOption,
         orderType: currentOrderType,
+        addons: [...currentAddons],
       });
     }
     $("#itemSheetBackdrop").hidden = true;
@@ -544,7 +602,7 @@
   };
 
   function cartTotal() {
-    return cart.reduce((sum, c) => sum + c.item.price * c.qty, 0);
+    return cart.reduce((sum, c) => sum + (c.item.price + addonsPriceFor(c.item, c.addons)) * c.qty, 0);
   }
   function cartCount() {
     return cart.reduce((sum, c) => sum + c.qty, 0);
@@ -593,6 +651,7 @@
       const metaParts = [];
       if (c.option) metaParts.push(c.option);
       if (c.spice) metaParts.push(c.spice);
+      if (c.addons && c.addons.length) metaParts.push(`+${c.addons.join(", ")}`);
       // 매장(dine-in) is the default and stays implicit; only 포장(takeout)
       // is called out here, so a customer mixing both in one order can see
       // at a glance which lines are which without extra clutter on the rest.
@@ -608,7 +667,7 @@
             <button data-act="remove" style="margin-left:8px;">${t("remove")}</button>
           </div>
         </div>
-        <div class="cart-item-right">${money(c.item.price * c.qty)}</div>
+        <div class="cart-item-right">${money((c.item.price + addonsPriceFor(c.item, c.addons)) * c.qty)}</div>
       `;
       row.querySelector('[data-act="minus"]').onclick = () => {
         // No min_first_order_qty floor here either (see #qtyMinus above) —
@@ -659,7 +718,24 @@
     });
   }
 
-  $("#submitOrderBtn").onclick = async () => {
+  // Blocking version of the old auto-dismissing toast (2026-09 피드백:
+  // "인원수에 맞춰서 주문하라는 메시지창을 본인이 ok 누르고 닫을수 있도록") — the
+  // customer must tap the button themselves to close it, instead of it
+  // silently vanishing after 3.5s whether or not they saw it. Confirming
+  // continues on to actually submit the order (this is a heads-up, not a
+  // hard block on ordering less than the headcount).
+  function showPartyWarningModal(onConfirm) {
+    $("#partyWarningMsg").textContent = (PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize);
+    $("#partyWarningBackdrop").hidden = false;
+    $("#partyWarningConfirmBtn").onclick = () => {
+      $("#partyWarningBackdrop").hidden = true;
+      onConfirm();
+    };
+  }
+
+  $("#submitOrderBtn").onclick = () => submitOrderFlow(false);
+
+  async function submitOrderFlow(skipPartyWarning) {
     if (cart.length === 0) return;
     const btn = $("#submitOrderBtn");
 
@@ -675,8 +751,9 @@
       return;
     }
 
-    if (!isCounterTable && partySize && cartCount() < partySize) {
-      showToast((PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize));
+    if (!skipPartyWarning && !isCounterTable && partySize && cartCount() < partySize) {
+      showPartyWarningModal(() => submitOrderFlow(true));
+      return;
     }
 
     let coords = null;
@@ -716,13 +793,14 @@
           // Each cart line carries its own orderType now (chosen per dish in
           // the item sheet) — see src/routes/orders.js, which validates and
           // stores order_type per item instead of once for the whole order.
-          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, orderType: c.orderType })),
+          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, orderType: c.orderType, addons: c.addons || [] })),
           note: $("#orderNote").value.trim(),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
           // Only meaningful (and only required server-side) for a counter
           // order — see is_counter handling in src/routes/orders.js.
           customerName: isCounterTable ? counterCustomerName : undefined,
+          customerPhone: isCounterTable ? counterCustomerPhone : undefined,
         }),
       });
       if (!res.ok) {
@@ -731,6 +809,7 @@
         if (body.error === "location_required") throw new Error("location_required");
         if (body.error === "party_size_required") throw new Error("party_size_required");
         if (body.error === "customer_name_required") throw new Error("customer_name_required");
+        if (body.error === "customer_phone_required") throw new Error("customer_phone_required");
         if (body.error === "grill_min_qty") {
           grillMinBody = body;
           throw new Error("grill_min_qty");
@@ -749,9 +828,11 @@
       if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
       else if (e.message === "party_size_required") showPartySizeModal();
-      else if (e.message === "customer_name_required") {
+      else if (e.message === "customer_name_required" || e.message === "customer_phone_required") {
         counterCustomerName = null;
+        counterCustomerPhone = null;
         sessionStorage.removeItem(COUNTER_NAME_KEY);
+        sessionStorage.removeItem(COUNTER_PHONE_KEY);
         showCounterNameModal();
       }
       else if (e.message === "grill_min_qty" && grillMinBody) {
@@ -876,9 +957,10 @@
         const name = it[`name_${lang}`] || it.name_zh || it.name_en || it.name_ko || "";
         const row = document.createElement("div");
         row.className = "history-item";
+        const addonsSuffix = (it.selected_addons || []).length ? ` +${it.selected_addons.map((a) => a.name).join(", ")}` : "";
         row.innerHTML = `
-          <span class="history-item-name">${name}${it.option_choice ? ` (${it.option_choice})` : ""}<span class="history-item-qty">x${it.qty}</span></span>
-          <span class="history-item-price">${money(it.unit_price * it.qty)}</span>
+          <span class="history-item-name">${name}${it.option_choice ? ` (${it.option_choice})` : ""}${addonsSuffix}<span class="history-item-qty">x${it.qty}</span></span>
+          <span class="history-item-price">${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}</span>
         `;
         list.appendChild(row);
       });
@@ -1139,8 +1221,13 @@
   // asked fresh for a genuinely new visit but survives an accidental reload
   // of the same tab/visit.
   const COUNTER_NAME_KEY = "hgk_counter_name";
+  // Phone number requested alongside the name (2026-09 피드백) so staff can
+  // reach a takeout customer if there's an issue with their order — kept in
+  // the same sessionStorage-per-visit pattern as the name above.
+  const COUNTER_PHONE_KEY = "hgk_counter_phone";
   function showCounterNameModal() {
     $("#counterNameInput").value = "";
+    $("#counterPhoneInput").value = "";
     $("#counterNameBackdrop").hidden = false;
     setTimeout(() => $("#counterNameInput").focus(), 50);
   }
@@ -1157,8 +1244,10 @@
         $("#itemOrderTypeTabs").hidden = true;
         applyStaticI18n(); // re-render the badge now that we know this is the counter
         const savedName = (sessionStorage.getItem(COUNTER_NAME_KEY) || "").trim();
-        if (savedName) {
+        const savedPhone = (sessionStorage.getItem(COUNTER_PHONE_KEY) || "").trim();
+        if (savedName && savedPhone) {
           counterCustomerName = savedName;
+          counterCustomerPhone = savedPhone;
         } else {
           showCounterNameModal();
         }
@@ -1175,12 +1264,19 @@
   }
   $("#counterNameConfirmBtn").onclick = () => {
     const name = $("#counterNameInput").value.trim();
+    const phone = $("#counterPhoneInput").value.trim();
     if (!name) {
       alert(t("counterNameRequiredMsg"));
       return;
     }
+    if (!phone) {
+      alert(t("counterPhoneRequiredMsg"));
+      return;
+    }
     counterCustomerName = name.slice(0, 20);
+    counterCustomerPhone = phone.slice(0, 20);
     sessionStorage.setItem(COUNTER_NAME_KEY, counterCustomerName);
+    sessionStorage.setItem(COUNTER_PHONE_KEY, counterCustomerPhone);
     $("#counterNameBackdrop").hidden = true;
     resetIdleTimer();
   };

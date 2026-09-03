@@ -54,6 +54,12 @@ input, select, button, textarea { font-family: inherit; }
 .order-col { background: #f2ede2; border-radius: 12px; padding: 10px; min-height: 200px; }
 .order-col h3 { margin: 4px 6px 10px; font-size: 18px; display: flex; align-items: center; gap: 6px; }
 .col-count { color: var(--muted); font-weight: 400; }
+.paid-settlement-row { display: flex; gap: 6px; margin: 0 6px 10px; }
+.settle-quick-btn {
+  flex: 1; padding: 6px 4px; font-size: 12px; font-weight: 700; border-radius: 8px;
+  border: 1px solid #d8cfba; background: #fff; cursor: pointer;
+}
+.settle-quick-btn:hover { background: #f6ead2; }
 .order-card {
   background: #fff; border-radius: 10px; padding: 10px; margin-bottom: 8px; cursor: pointer;
   border-left: 4px solid var(--red); box-shadow: 0 1px 3px rgba(0,0,0,0.06);

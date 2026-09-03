@@ -95,6 +95,13 @@
           <div class="options-label" data-i18n="chooseSpiceOption">請選擇辣度</div>
           <div class="options-list" id="spiceOptionsList"></div>
         </div>
+        <!-- Multi-select extras (사리면 추가, 밥→당면 교체 등) — checkboxes, not
+             radios, since more than one can be picked at once. See
+             parseAddons()/openItemSheet() in order.js. -->
+        <div class="options" id="itemAddons" hidden>
+          <div class="options-label" data-i18n="chooseAddons">加點</div>
+          <div class="options-list" id="addonsList"></div>
+        </div>
         <div class="qty-row" id="qtyRow">
           <button id="qtyMinus">−</button>
           <span id="qtyVal">1</span>
@@ -220,6 +227,18 @@
     </div>
   </div>
 
+  <!-- Party-size reminder (shown at submit time when the cart has fewer
+       items than the registered headcount) — must be closed with the button
+       itself, doesn't auto-dismiss. See showPartyWarningModal() /
+       submitOrderFlow() in order.js. -->
+  <div class="sheet-backdrop lock-backdrop" id="partyWarningBackdrop" hidden>
+    <div class="lock-card">
+      <div class="lock-icon">🍽️</div>
+      <p id="partyWarningMsg" style="font-size:16px;line-height:1.5;margin:8px 0 16px;"></p>
+      <button class="add-btn" id="partyWarningConfirmBtn" data-i18n="partyWarningConfirmBtn">확인</button>
+    </div>
+  </div>
+
   <!-- Party size (asked once per fresh page load, before ordering) -->
   <div class="sheet-backdrop lock-backdrop" id="partySizeBackdrop" hidden>
     <div class="lock-card">
@@ -244,7 +263,8 @@
       <div class="lock-icon">📦</div>
       <h2 data-i18n="counterNameTitle">성함을 알려주세요</h2>
       <p data-i18n="counterNameHint" style="color:var(--muted, #888);font-size:14px;margin-top:-8px;">포장 준비가 완료되면 성함으로 불러드려요</p>
-      <input type="text" id="counterNameInput" data-i18n-placeholder="counterNamePlaceholder" placeholder="예: 홍길동" maxlength="20" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #ddd;font-size:16px;margin:14px 0;" />
+      <input type="text" id="counterNameInput" data-i18n-placeholder="counterNamePlaceholder" placeholder="예: 홍길동" maxlength="20" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #ddd;font-size:16px;margin:14px 0 8px;" />
+      <input type="tel" id="counterPhoneInput" data-i18n-placeholder="counterPhonePlaceholder" placeholder="예: 0912345678" maxlength="20" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;border:1px solid #ddd;font-size:16px;margin:0 0 14px;" />
       <button class="add-btn" id="counterNameConfirmBtn" data-i18n="counterNameConfirm">확인</button>
     </div>
   </div>

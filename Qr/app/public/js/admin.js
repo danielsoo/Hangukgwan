@@ -164,6 +164,8 @@
       tabMenu: "메뉴 관리",
       tabTables: "테이블 / QR 코드",
       tabSettings: "설정",
+      settleAmBtn: "🌅 오전 정산",
+      settlePmBtn: "🌙 오후 정산",
       logoutBtn: "로그아웃",
       soundToggleLabel: "🔔 신규 주문 알림음",
       autoPrintToggleLabel: "🖨️ 신규 주문 자동 인쇄",
@@ -362,6 +364,8 @@
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
       itemSpiceOptionsLabel: "맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)",
       itemSpiceOptionsPlaceholder: "맵기 옵션이 없으면 비워두세요",
+      itemAddonsLabel: "추가 옵션 (이름:가격, 쉼표로 구분, 예: 볶음밥 추가:80,사리면 추가:50)",
+      itemAddonsPlaceholder: "추가 옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
       itemMixOptionsLabel: "옵션별 개별 수량(+/-) 허용",
       itemAllergensLabel: "알러지 / 육류 표시 (손님 화면에 표시돼요)",
@@ -521,6 +525,8 @@
       tabMenu: "菜單管理",
       tabTables: "桌號 / QR Code",
       tabSettings: "設定",
+      settleAmBtn: "🌅 上午結算",
+      settlePmBtn: "🌙 下午結算",
       logoutBtn: "登出",
       soundToggleLabel: "🔔 新訂單提示音",
       autoPrintToggleLabel: "🖨️ 新訂單自動列印",
@@ -719,6 +725,8 @@
       itemOptionsPlaceholder: "沒有選項請留空",
       itemSpiceOptionsLabel: "辣度選項（用逗號分隔，例如：不辣,普通,辣）",
       itemSpiceOptionsPlaceholder: "沒有辣度選項請留空",
+      itemAddonsLabel: "加點選項（名稱:價格，用逗號分隔，例如：加點炒飯:80,加點泡麵:50）",
+      itemAddonsPlaceholder: "沒有加點選項請留空",
       itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
       itemMixOptionsLabel: "允許各選項獨立增減數量(+/-)",
       itemAllergensLabel: "過敏原 / 肉類標示（會顯示在顧客畫面）",
@@ -1194,6 +1202,52 @@
     }
   }
 
+  // "YYYY-MM-DD" in the browser's own local timezone (the admin device is
+  // physically at the restaurant, so this matches Taipei time in practice)
+  // — used to keep the 결제완료 column to today only, and by the 오전/오후
+  // 정산 buttons below.
+  function localDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  // Quick AM/PM settlement check, right inside 실시간주문 (2026-09 피드백:
+  // "오전장사 끝나고 정산버튼/저녁장사끝나고 정산버튼 눌러서 합계 확인 가능하게") —
+  // sums today's already-loaded `orders` (paid status, updated_at in the
+  // given hour range) without a separate API round-trip. This is a quick
+  // on-the-spot total, not a replacement for the full 결산 탭 (which has the
+  // permanent nightly snapshot, item breakdown, etc.).
+  function computeHalfDaySettlement(startHour, endHour) {
+    const todayLocalStr = localDateStr(new Date());
+    const matching = orders.filter((o) => {
+      if (o.status !== "paid") return false;
+      const d = new Date(o.updated_at.replace(" ", "T"));
+      if (localDateStr(d) !== todayLocalStr) return false;
+      const hour = d.getHours();
+      return hour >= startHour && hour <= endHour;
+    });
+    const total = matching.reduce((sum, o) => sum + (o.total || 0), 0);
+    return { count: matching.length, total };
+  }
+  $("#settleAmBtn").onclick = () => {
+    const { count, total } = computeHalfDaySettlement(0, 11);
+    showAlert(
+      adminLang === "zh"
+        ? `🌅 今日上午（00:00–11:59）已結帳 ${count} 筆，合計 NT$${total}`
+        : `🌅 오늘 오전(00:00~11:59) 결제 ${count}건, 합계 NT$${total}`
+    );
+  };
+  $("#settlePmBtn").onclick = () => {
+    const { count, total } = computeHalfDaySettlement(12, 23);
+    showAlert(
+      adminLang === "zh"
+        ? `🌙 今日下午（12:00–23:59）已結帳 ${count} 筆，合計 NT$${total}`
+        : `🌙 오늘 오후(12:00~23:59) 결제 ${count}건, 합계 NT$${total}`
+    );
+  };
+
   const NEXT_STATUS = { new: "preparing", preparing: "served", served: "paid" };
   const statusLabel = (s) => T("status" + s.charAt(0).toUpperCase() + s.slice(1));
   const nextLabel = (s) => T("next" + s.charAt(0).toUpperCase() + s.slice(1));
@@ -1203,6 +1257,12 @@
     orders.forEach((o) => {
       if (cols[o.status]) cols[o.status].push(o);
     });
+
+    // 결제완료 칼럼은 오늘 결제된 주문만 보여준다 (2026-09 피드백) — 그 전에는
+    // 전체 기간이 다 쌓여서 어제/그제 결제 건까지 계속 보였다. 지난 날짜의
+    // 결제 내역은 테이블 상세 > 이전 주문 탭이나 결산 탭에서 계속 확인 가능.
+    const todayLocalStr = localDateStr(new Date());
+    cols.paid = cols.paid.filter((o) => localDateStr(new Date(o.updated_at.replace(" ", "T"))) === todayLocalStr);
 
     // 결제완료 칼럼은 같은 테이블의 과거 결제 기록이 계속 쌓이면 헷갈리므로,
     // 테이블당 가장 최근에 결제된 주문 1건만 보여준다. 나머지 이력은
@@ -1654,6 +1714,7 @@
         const detailLines = [];
         if (it.option_choice) detailLines.push(`<div class="item-detail">└ ${it.option_choice}</div>`);
         if (it.spice_choice) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
+        (it.selected_addons || []).forEach((a) => detailLines.push(`<div class="item-detail">└ +${a.name}</div>`));
         // 매장(dine-in) is this dish's default and stays implicit — only
         // 外帶(takeout) is called out per-dish, since that's the one that
         // changes how the kitchen has to send it out. See the file-level
@@ -1741,6 +1802,7 @@
           : "外帶櫃檯"
         : `桌號 ${o.table_number}`
     }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    ${isCounterOrder(o) && o.customer_phone ? `<div class="meta-row"><span class="order-time">☎ ${o.customer_phone}</span></div>` : ""}
     <div class="meta-row"><span class="order-time">${time}</span></div>
     <div class="divider"></div>
     ${itemRows}
@@ -1812,11 +1874,18 @@
     markPrintSucceeded(o.id);
   }
 
-  // Opens the exact same ticket HTML in a new tab, without triggering the
-  // print dialog — a fast way to check the layout after a tweak without
-  // needing to actually print a physical page each time.
+  // Opens the exact same ticket HTML in its own small popup WINDOW (not a
+  // browser tab) — a fast way to check the layout after a tweak without
+  // needing to actually print a physical page each time. Passing a real
+  // features string (width/height/etc.) is what makes browsers render this
+  // as a separate window instead of a new tab in the current window; a bare
+  // window.open("", "_blank") with no features string opens as a tab.
   function previewKitchenTicket(o) {
-    const win = window.open("", "_blank");
+    const win = window.open(
+      "",
+      "_blank",
+      "width=420,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
+    );
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
     win.document.open();
     win.document.write(buildTicketHtml(o, ticketFontSizes));
@@ -1957,8 +2026,8 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
-            <span>NT$${it.unit_price * it.qty}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>NT$${(it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty}</span>
           </div>`
       )
       .join("");
@@ -1994,7 +2063,12 @@
     // until Save, so closing/cancelling this modal never has a side effect.
     const draftItems = order.items.map((it) => ({ ...it }));
     const allItems = flatMenuItems();
-    const itemTotal = (it) => it.unit_price * it.qty;
+    // Includes any selected_addons (사리면 추가 등) already on the line —
+    // this modal doesn't offer a UI to change addons (that's chosen once at
+    // order time on the customer page), it just needs to keep the price
+    // consistent with what the server will recompute on save.
+    const itemTotal = (it) =>
+      (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
     const grandTotal = () => draftItems.reduce((s, it) => s + itemTotal(it), 0);
 
     function renderDraft() {
@@ -2028,12 +2102,29 @@
             : it.spice_choice
               ? `<span style="font-size:13px;color:var(--muted);">(${it.spice_choice})</span>`
               : "";
+        // 매장내/포장 (dine-in/takeout) is chosen per line, same as when the
+        // order was first placed (see .order-type-tabs in order.html) — the
+        // server already stores/accepts order_type per item (see
+        // src/routes/orders.js PATCH /:id/items), this was just missing from
+        // the edit UI itself (2026-09 피드백).
+        const dineInLabel = adminLang === "zh" ? "內用" : "매장내";
+        const takeoutLabel = adminLang === "zh" ? "外帶" : "포장";
+        const orderTypeHtml = `<select data-idx="${idx}" data-field="orderType" class="order-edit-type-select">
+          <option value="dine_in" ${it.order_type !== "takeout" ? "selected" : ""}>${dineInLabel}</option>
+          <option value="takeout" ${it.order_type === "takeout" ? "selected" : ""}>${takeoutLabel}</option>
+        </select>`;
+        const addonsHtml =
+          it.selected_addons && it.selected_addons.length
+            ? `<span style="font-size:12px;color:var(--muted);">(+${it.selected_addons.map((a) => a.name).join(", ")})</span>`
+            : "";
         const row = document.createElement("div");
         row.className = "order-edit-item-row";
         row.innerHTML = `
           <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}</span>
           ${optionsHtml}
           ${spiceHtml}
+          ${addonsHtml}
+          ${orderTypeHtml}
           <div class="order-edit-qty-group">
             <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="dec">−</button>
             <span class="order-edit-qty-value">${it.qty}</span>
@@ -2073,6 +2164,11 @@
       wrap.querySelectorAll("select[data-field='spice']").forEach((sel) => {
         sel.onchange = () => {
           draftItems[parseInt(sel.dataset.idx, 10)].spice_choice = sel.value;
+        };
+      });
+      wrap.querySelectorAll("select[data-field='orderType']").forEach((sel) => {
+        sel.onchange = () => {
+          draftItems[parseInt(sel.dataset.idx, 10)].order_type = sel.value;
         };
       });
 
@@ -2124,6 +2220,10 @@
           spice: it.spice_choice,
           orderType: it.order_type,
           note: it.note || "",
+          // Names only — the server re-resolves prices from the menu item's
+          // own addons definition (src/addons.js), same as the customer
+          // order page does. Round-trips whatever this line already had.
+          addons: (it.selected_addons || []).map((a) => a.name),
         })),
       };
       const res = await fetch(`/api/orders/${order.id}/items`, {
@@ -2220,6 +2320,7 @@
     $("#f_original_price").value = item?.original_price || "";
     $("#f_options").value = item?.options || "";
     $("#f_spice_options").value = item?.spice_options || "";
+    $("#f_addons").value = item?.addons || "";
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
     $("#f_is_signature").checked = !!item?.is_signature;
@@ -2286,6 +2387,7 @@
       original_price: parseInt($("#f_original_price").value, 10) || null,
       options: $("#f_options").value.trim() || null,
       spice_options: $("#f_spice_options").value.trim() || null,
+      addons: $("#f_addons").value.trim() || null,
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,
       is_signature: $("#f_is_signature").checked,
@@ -2572,8 +2674,8 @@
     const itemLines = o.items.map(
       (it) =>
         `<div style="display:flex;justify-content:space-between;font-size:16px;padding:5px 0;">
-          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
-          <span>NT$${it.unit_price * it.qty}</span>
+          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+          <span>NT$${(it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty}</span>
         </div>`
     );
     // Same fixed-size-by-default treatment as the order-queue cards (see
