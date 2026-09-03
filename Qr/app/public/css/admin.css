@@ -532,21 +532,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .table-picker-empty { color: var(--muted); font-size: 17px; padding: 16px 0; text-align: center; }
 
 /* 주문 수정 (edit an already-placed order's items) — see openOrderEdit()
-   in admin.js. Two-tier layout: order-edit-item-row-main always holds
-   name/qty/price/delete in the same fixed spots regardless of how many
-   option/spice/order-type controls a line has; those live in their own
-   order-edit-item-row-meta strip below, free to wrap on their own without
-   ever moving the delete button (2026-09 피드백). */
+   in admin.js. order-edit-item-row-main always holds name/qty/price/delete
+   in the same fixed spots; each option/spice/addons/order-type control gets
+   its own order-edit-item-row-choice row below, free to wrap on its own
+   without ever moving the delete button (2026-09 피드백). */
 .order-edit-item-row {
   padding: 12px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px;
 }
 .order-edit-item-row-main { display: flex; align-items: center; gap: 10px; }
 .order-edit-item-name { flex: 1; min-width: 100px; font-weight: 700; font-size: 15px; }
-.order-edit-item-row-meta {
+/* One row per attribute (option, spice, addons, order-type) — see the
+   comment above renderDraft()'s row.innerHTML in admin.js for why these
+   used to share a row and don't anymore. A line that doesn't have a given
+   attribute (no addons, say) renders an empty row here, which just
+   collapses instead of leaving a gap. */
+.order-edit-item-row-choice {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 2px;
 }
-.order-edit-item-row-meta:empty { display: none; }
-.order-edit-item-row-ordertype { padding-left: 2px; }
+.order-edit-item-row-choice:empty { display: none; }
 /* Pill-button toggle groups for option/spice/order-type — matches the
    customer order page's own choice picker (.options-list button in
    main.css) instead of a native <select>, which read as visibly
@@ -560,23 +563,29 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .order-edit-pill-btn:hover { border-color: var(--navy); }
 .order-edit-pill-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
-/* 매장내/포장 (dine-in/takeout) gets a segmented-switch look instead of the
-   plain pill style above — same visual language as the customer order
-   page's own .order-type-tabs (main.css) — because it's a fundamentally
+/* 매장내/포장 (dine-in/takeout) originally got this segmented-switch look
+   instead of the plain pill style above, since it's a fundamentally
    different kind of choice from the dish's option/spice pills (which one
-   plate is this), not just another item in that same row of buttons. Its
-   own row (order-edit-item-row-ordertype) plus this distinct style is what
-   makes which one is currently selected actually readable at a glance
-   (2026-09 피드백: "포장인지 매장인지 안나와있고 2개의 다른 옵션이 한
-   열에 있어"). */
-.order-edit-ordertype-group {
+   plate is this) — same visual language as the customer order page's own
+   .order-type-tabs (main.css). The owner liked it enough to ask for the
+   same look on every choice group once each got its own row, not just
+   order-type (2026-09 피드백: "토글 디자인은 현재 매장내 포장이 좋아.
+   그걸로 다른 애들도 적용해줘"), so this is now a shared modifier class —
+   applied via pillGroup()'s extraClass param to option/spice/order-type
+   alike in the order-edit item row. The add-item side panel's own
+   option/spice/addon pickers (openAddPicker's pillPicker/renderAddons)
+   weren't part of that feedback and keep the plain .order-edit-pill-group
+   look — addons there is a multi-select list, which this single-row
+   segmented-switch shape doesn't represent well. */
+.order-edit-pill-group-segmented {
   display: flex; gap: 0; background: var(--surface); border: 1px solid var(--line);
   border-radius: 999px; padding: 3px; width: fit-content;
 }
-.order-edit-ordertype-group .order-edit-pill-btn {
-  border: none; border-radius: 999px; background: none; padding: 4px 14px;
+.order-edit-pill-group-segmented .order-edit-pill-btn {
+  border: none; border-radius: 999px; background: none; padding: 5px 14px;
 }
-.order-edit-ordertype-group .order-edit-pill-btn.active { background: var(--ink); color: #fff; }
+.order-edit-pill-group-segmented .order-edit-pill-btn:hover { border-color: transparent; color: var(--navy); }
+.order-edit-pill-group-segmented .order-edit-pill-btn.active { background: var(--ink); color: #fff; }
 /* 牛/豬 face icons (cropped from the restaurant's own PDF menu, see
    optionLabel() in order.js/admin.js) shown inside pill buttons/badges. */
 .option-icon { height: 16px; width: auto; vertical-align: middle; display: inline-block; }

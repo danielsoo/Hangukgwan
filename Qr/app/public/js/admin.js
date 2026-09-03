@@ -2299,7 +2299,8 @@
                 "option",
                 mi.options.split(",").map((o) => o.trim()).filter(Boolean),
                 it.option_choice,
-                optionLabel
+                optionLabel,
+                "order-edit-pill-group-segmented"
               )
             : it.option_choice
               ? `<span class="order-edit-meta-badge">${optionLabel(it.option_choice)}</span>`
@@ -2310,7 +2311,8 @@
                 "spice",
                 mi.spice_options.split(",").map((o) => o.trim()).filter(Boolean),
                 it.spice_choice,
-                spiceLabel
+                spiceLabel,
+                "order-edit-pill-group-segmented"
               )
             : it.spice_choice
               ? `<span class="order-edit-meta-badge">${spiceLabel(it.spice_choice)}</span>`
@@ -2319,14 +2321,7 @@
         // order was first placed (see .order-type-tabs in order.html) — the
         // server already stores/accepts order_type per item (see
         // src/routes/orders.js PATCH /:id/items), this was just missing from
-        // the edit UI itself (2026-09 피드백). Given its own segmented-switch
-        // look (order-edit-ordertype-group, styled like the customer page's
-        // .order-type-tabs) and its own row, separate from the option/spice
-        // pills above — sharing one plain pill style with everything else
-        // made it read as just more options for the dish instead of a
-        // completely different kind of choice, and it's easy to miss which
-        // one is currently selected when it's inline with several other
-        // pills (2026-09 피드백: "포장인지 매장인지 안나와있고").
+        // the edit UI itself (2026-09 피드백).
         const dineInLabel = adminLang === "zh" ? "內用" : "매장내";
         const takeoutLabel = adminLang === "zh" ? "外帶" : "포장";
         const orderTypeHtml = pillGroup(
@@ -2334,7 +2329,7 @@
           ["dine_in", "takeout"],
           it.order_type === "takeout" ? "takeout" : "dine_in",
           (v) => (v === "takeout" ? takeoutLabel : dineInLabel),
-          "order-edit-ordertype-group"
+          "order-edit-pill-group-segmented"
         );
         const addonsHtml =
           it.selected_addons && it.selected_addons.length
@@ -2342,12 +2337,24 @@
             : "";
         // Two-tier layout so the qty/price/delete controls always land in
         // exactly the same place: a fixed "main" row (name — qty — price —
-        // delete), plus a "meta" row underneath for however many/few
-        // option/spice/order-type/addon controls this particular line has.
-        // Previously these were all one flex-wrap row, so an item with a
-        // spice dropdown (wider) would push the delete button onto its own
-        // line while a plain item kept it inline — same button, different
-        // spot from row to row (2026-09 피드백).
+        // delete), plus one "choice" row per attribute below it (option,
+        // spice, addons, order-type — whichever apply to this line). These
+        // used to share a single row: first option+spice+addons all packed
+        // into one flex-wrap line, then order-type got pulled onto its own
+        // row and its own segmented-switch look because it read as just
+        // another option pill otherwise and it was easy to miss which one
+        // was selected (2026-09 피드백: "포장인지 매장인지 안나와있고 2개의
+        // 다른 옵션이 한 열에 있어"). The owner then asked for the same
+        // treatment across the board — every different kind of choice on
+        // its own row, and the order-type segmented-switch look reused for
+        // all of them, not just order-type (2026-09 피드백: "소 돼지랑
+        // 맵기랑 포장 매장 전부 다른 거여서 다 다른 열에 나열해줘야돼.
+        // 그리고 토글 디자인은 현재 매장내 포장이 좋아. 그걸로 다른 애들도
+        // 적용해줘") — so option/spice/order-type all render via the same
+        // "order-edit-pill-group-segmented" extraClass now (see the CSS
+        // comment in admin.css), each in its own .order-edit-item-row-choice
+        // row, and an empty row (a line with no option, say) simply
+        // collapses via the :empty rule instead of leaving a gap.
         const row = document.createElement("div");
         row.className = "order-edit-item-row";
         row.innerHTML = `
@@ -2361,14 +2368,10 @@
             <span class="order-edit-item-price">NT$${itemTotal(it)}</span>
             <button type="button" class="order-edit-remove-btn" data-idx="${idx}" title="${T("cancelBtn")}">✕</button>
           </div>
-          <div class="order-edit-item-row-meta">
-            ${optionsHtml}
-            ${spiceHtml}
-            ${addonsHtml}
-          </div>
-          <div class="order-edit-item-row-ordertype">
-            ${orderTypeHtml}
-          </div>
+          <div class="order-edit-item-row-choice">${optionsHtml}</div>
+          <div class="order-edit-item-row-choice">${spiceHtml}</div>
+          <div class="order-edit-item-row-choice">${addonsHtml}</div>
+          <div class="order-edit-item-row-choice">${orderTypeHtml}</div>
         `;
         wrap.appendChild(row);
       });
