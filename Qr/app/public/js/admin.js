@@ -898,14 +898,18 @@
     "中辣": "중간 맵게", "大辣": "많이 맵게", "辣": "맵게",
   };
   const spiceLabel = (raw) => (adminLang === "ko" && SPICE_LABELS[raw]) || raw;
-  // 牛/豬 (beef/pork) option choices show as a small face icon, matching
-  // the customer order page and the restaurant's own printed menu (see
-  // optionLabel() in order.js for the full rationale, including why these
-  // are cropped PDF images rather than the plain 🐂/🐷 Unicode emoji).
-  // Display-only, same as spiceLabel.
+  // 牛/豬 (beef/pork) face icons — see optionLabel()/optionIconHtml() in
+  // order.js for the full rationale. Two different helpers, deliberately:
+  // optionIconHtml() (the cropped PDF image) is only for an at-a-glance
+  // badge next to a dish's NAME; optionLabel() (plain text) is for the
+  // actual option pills/badges a staff member picks from or reads as the
+  // recorded choice — the owner asked those stay text, not images, since a
+  // control you're actively selecting needs to read unambiguously ("사진은
+  // 간단히 확인하라고 있는거고 선택해서 하는 건 확실하게 글로 해야 돼").
   const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
-  const optionLabel = (raw) =>
-    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : raw;
+  const optionIconHtml = (raw) =>
+    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : "";
+  const optionLabel = (raw) => raw;
   // 냉면/비빔냉면(28/29) — see BEEF_BROTH_ICON_CODES in order.js for the
   // full rationale (originally a 🐄 baked into the name, pulled back out by
   // the 2026-09-followup migration for rendering as a side-view dairy cow).
@@ -922,8 +926,8 @@
       .split(",")
       .map((o) => o.trim())
       .filter((o) => OPTION_ICONS[o])
-      .map((o) => optionLabel(o));
-    if (BEEF_BROTH_ICON_CODES.includes(mi.code)) icons.push(optionLabel("牛"));
+      .map((o) => optionIconHtml(o));
+    if (BEEF_BROTH_ICON_CODES.includes(mi.code)) icons.push(optionIconHtml("牛"));
     return icons.length ? `<span class="item-meat-icons">${icons.join("")}</span>` : "";
   };
   // 포장 카운터 orders carry their own pickup_number/customer_name (assigned

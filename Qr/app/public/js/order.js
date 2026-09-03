@@ -35,22 +35,29 @@
       return sum + (match ? match.price : 0);
     }, 0);
   }
-  // 牛/豬 (beef/pork) option buttons show a small face icon instead of the
-  // raw Chinese text — matching the restaurant's own printed menu, which
-  // already marks every 牛/豬-choice dish with these same two icons next
-  // to its name (2026-09 피드백, confirmed against the official PDF menu).
-  // These were originally the plain 🐂/🐷 Unicode emoji, but the owner
-  // pointed out the emoji rendered as a side-profile animal (font/platform
-  // dependent) instead of the front-facing head shown on the printed menu
-  // ("소 옆 모습말고 pdf 그대로") — so the icons are now cropped directly
-  // from the restaurant's own PDF menu (public/images/cow-face.png,
-  // pig-face.png) for guaranteed pixel-identical rendering everywhere.
-  // Display-only: the value sent to the server/matched against the menu
-  // item's own options stays the raw "牛"/"豬" string. Any other option
-  // value (e.g. 鮪魚/蝦仁 on 오므라이스) is untouched.
+  // 牛/豬 (beef/pork) face icons, cropped directly from the restaurant's own
+  // PDF menu (public/images/cow-face.png, pig-face.png) for guaranteed
+  // pixel-identical rendering everywhere — originally plain 🐂/🐷 Unicode
+  // emoji, replaced once the owner pointed out the emoji rendered as a
+  // side-profile animal on some fonts/platforms instead of the front-facing
+  // head the printed menu shows ("소 옆 모습말고 pdf 그대로").
+  //
+  // Used two different ways, deliberately not the same function:
+  //  - optionIconHtml(): the image, for an at-a-glance badge next to a dish's
+  //    NAME (menu list, item sheet title) — nothing to choose there, just a
+  //    quick visual "this dish has a meat choice" ("사진은 간단히 확인하라고
+  //    있는거").
+  //  - optionLabel(): plain text, for the actual option buttons a customer
+  //    picks from — the owner asked these stay text, not images, since a
+  //    control you're actively selecting needs to read unambiguously
+  //    ("선택해서 하는 건 확실하게 글로 해야 돼"). The raw stored value is
+  //    already the dish's real option text (牛/豬, same as any other option
+  //    like 鮪魚/蝦仁 on 오므라이스), so this is a no-op today — kept as a
+  //    function in case a future option value ever needs localizing.
   const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
-  const optionLabel = (raw) =>
-    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : raw;
+  const optionIconHtml = (raw) =>
+    OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : "";
+  const optionLabel = (raw) => raw;
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
@@ -315,8 +322,8 @@
       .split(",")
       .map((o) => o.trim())
       .filter((o) => OPTION_ICONS[o])
-      .map((o) => optionLabel(o));
-    if (BEEF_BROTH_ICON_CODES.includes(item.code)) icons.push(optionLabel("牛"));
+      .map((o) => optionIconHtml(o));
+    if (BEEF_BROTH_ICON_CODES.includes(item.code)) icons.push(optionIconHtml("牛"));
     return icons.length ? `<span class="item-meat-icons">${icons.join("")}</span>` : "";
   }
 
@@ -498,7 +505,7 @@
         optWrap.hidden = false;
         item.options.split(",").forEach((opt, i) => {
           const b = document.createElement("button");
-          b.innerHTML = optionLabel(opt.trim());
+          b.textContent = optionLabel(opt.trim());
           if (i === 0) b.classList.add("active");
           b.onclick = () => {
             currentOption = opt.trim();
@@ -526,7 +533,7 @@
     wrap.innerHTML = "";
     opts.forEach((opt) => {
       const b = document.createElement("button");
-      b.innerHTML = optionLabel(opt);
+      b.textContent = optionLabel(opt);
       if (opt === activeOpt) b.classList.add("active");
       b.onclick = () => {
         opts.forEach((o) => (mixQty[o] = 0));
