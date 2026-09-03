@@ -898,6 +898,11 @@
     "中辣": "중간 맵게", "大辣": "많이 맵게", "辣": "맵게",
   };
   const spiceLabel = (raw) => (adminLang === "ko" && SPICE_LABELS[raw]) || raw;
+  // 牛/豬 (beef/pork) option choices show as emoji, matching the customer
+  // order page and the restaurant's own printed menu (see optionLabel() in
+  // order.js for the full rationale). Display-only, same as spiceLabel.
+  const OPTION_LABELS = { "牛": "🐂", "豬": "🐷" };
+  const optionLabel = (raw) => OPTION_LABELS[raw] || raw;
   // 포장 카운터 orders carry their own pickup_number/customer_name (assigned
   // server-side in src/routes/orders.js) instead of a table number — this is
   // what staff actually call out at pickup, so every place that would
@@ -2068,6 +2073,132 @@
     return categories.flatMap((c) => c.items);
   }
 
+  // Mirrors src/addons.js / order.js's parseAddons() exactly — see the
+  // file-level comment there for the "Name:Price" format.
+  function parseAddons(addonsStr) {
+    if (!addonsStr) return [];
+    return addonsStr
+      .split(",")
+      .map((pair) => {
+        const [name, priceStr] = pair.split(":");
+        const trimmedName = (name || "").trim();
+        const price = parseInt((priceStr || "0").trim(), 10);
+        return trimmedName ? { name: trimmedName, price: Number.isNaN(price) ? 0 : price } : null;
+      })
+      .filter(Boolean);
+  }
+
+  // The "add a dish to this order" side panel — opened from the quick-add
+  // row in openOrderEdit() below. Shows the dish's photo/name plus its own
+  // option/spice/addon pickers and a qty stepper (same idea as the customer
+  // order page's item sheet in order.js), and only calls onCommit(line) —
+  // which the caller uses to push the finished line onto its draft list —
+  // when "+ 추가" *inside this panel* is pressed. Self-contained: doesn't
+  // touch draftItems directly, so openOrderEdit's Save flow doesn't need to
+  // know anything changed here beyond the one onCommit call.
+  function openAddPicker(mi, onCommit) {
+    const backdrop = $("#orderEditPickerModal");
+    let qty = mi.min_first_order_qty || 1;
+    let option = mi.options ? mi.options.split(",")[0].trim() : null;
+    let spice = mi.spice_options ? mi.spice_options.split(",")[0].trim() : null;
+    let addons = [];
+    const availableAddons = parseAddons(mi.addons);
+
+    $("#orderEditPickerPhoto").style.backgroundImage = mi.photo_url ? `url('${mi.photo_url}')` : "";
+    $("#orderEditPickerName").textContent = `${mi.code ? `${mi.code} ` : ""}${itemName(mi)}`;
+
+    const pillPicker = (wrapId, values, current, onPick, labelFor) => {
+      const wrap = $(wrapId);
+      if (!values.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+      wrap.innerHTML = `<div class="order-edit-pill-group">${values
+        .map(
+          (v) =>
+            `<button type="button" class="order-edit-pill-btn${v === current ? " active" : ""}" data-value="${v}">${labelFor ? labelFor(v) : v}</button>`
+        )
+        .join("")}</div>`;
+      wrap.querySelectorAll(".order-edit-pill-btn").forEach((btn) => {
+        btn.onclick = () => {
+          onPick(btn.dataset.value);
+          wrap.querySelectorAll(".order-edit-pill-btn").forEach((b) => b.classList.remove("active"));
+          btn.classList.add("active");
+          updateCommitLabel();
+        };
+      });
+    };
+    const renderAddons = () => {
+      const wrap = $("#orderEditPickerAddons");
+      if (!availableAddons.length) {
+        wrap.innerHTML = "";
+        return;
+      }
+      wrap.innerHTML = `<div class="order-edit-pill-group">${availableAddons
+        .map(
+          (a) =>
+            `<button type="button" class="order-edit-pill-btn${addons.includes(a.name) ? " active" : ""}" data-name="${a.name}">${a.name}${a.price > 0 ? ` +${a.price}` : ""}</button>`
+        )
+        .join("")}</div>`;
+      wrap.querySelectorAll(".order-edit-pill-btn").forEach((btn) => {
+        btn.onclick = () => {
+          const name = btn.dataset.name;
+          const idx = addons.indexOf(name);
+          if (idx === -1) addons.push(name);
+          else addons.splice(idx, 1);
+          btn.classList.toggle("active");
+          updateCommitLabel();
+        };
+      });
+    };
+    const updateCommitLabel = () => {
+      const addonsPrice = addons.reduce((s, name) => {
+        const a = availableAddons.find((x) => x.name === name);
+        return s + (a ? a.price : 0);
+      }, 0);
+      $("#orderEditPickerQty").textContent = String(qty);
+      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${(mi.price + addonsPrice) * qty}`;
+    };
+
+    pillPicker("#orderEditPickerOptions", mi.options ? mi.options.split(",").map((o) => o.trim()).filter(Boolean) : [], option, (v) => (option = v), optionLabel);
+    pillPicker("#orderEditPickerSpice", mi.spice_options ? mi.spice_options.split(",").map((o) => o.trim()).filter(Boolean) : [], spice, (v) => (spice = v), spiceLabel);
+    renderAddons();
+    updateCommitLabel();
+
+    $("#orderEditPickerDec").onclick = () => {
+      if (qty > 1) qty--;
+      updateCommitLabel();
+    };
+    $("#orderEditPickerInc").onclick = () => {
+      if (qty < 20) qty++;
+      updateCommitLabel();
+    };
+    const close = () => (backdrop.hidden = true);
+    $("#orderEditPickerClose").onclick = close;
+    $("#orderEditPickerCancel").onclick = close;
+    $("#orderEditPickerCommit").onclick = () => {
+      onCommit({
+        item_id: mi.id,
+        code: mi.code || null,
+        name_zh: mi.name_zh,
+        name_ko: mi.name_ko,
+        name_en: mi.name_en,
+        qty,
+        unit_price: mi.price,
+        option_choice: option,
+        spice_choice: spice,
+        order_type: "dine_in",
+        note: "",
+        selected_addons: addons.map((name) => {
+          const a = availableAddons.find((x) => x.name === name);
+          return { name, price: a ? a.price : 0 };
+        }),
+      });
+      close();
+    };
+    backdrop.hidden = false;
+  }
+
   function openOrderEdit(order) {
     if (order.status === "paid" || order.status === "cancelled") {
       showAlert(T("orderEditNotEditable"));
@@ -2140,10 +2271,11 @@
             ? pillGroup(
                 "option",
                 mi.options.split(",").map((o) => o.trim()).filter(Boolean),
-                it.option_choice
+                it.option_choice,
+                optionLabel
               )
             : it.option_choice
-              ? `<span class="order-edit-meta-badge">${it.option_choice}</span>`
+              ? `<span class="order-edit-meta-badge">${optionLabel(it.option_choice)}</span>`
               : "";
         const spiceHtml =
           mi && mi.spice_options
@@ -2249,28 +2381,22 @@
     addSelect.innerHTML = addable
       .map((mi) => `<option value="${mi.id}">${mi.code ? `${mi.code} ` : ""}${itemName(mi)} — NT$${mi.price}</option>`)
       .join("");
+    // Picking a dish and pressing "+ 추가" used to drop it straight onto the
+    // list with whatever option/spice happened to be first and no way to
+    // choose addons at all. Now it opens a second same-size panel beside
+    // this one showing that dish's photo/name and its own option/spice/
+    // addon pickers + qty (mirroring the customer order page's item sheet)
+    // — only pressing "+ 추가" *inside* that panel actually commits the line
+    // (2026-09 피드백). See openAddPicker() below.
     $("#orderEditAddBtn").onclick = () => {
       const mi = allItems.find((m) => m.id === parseInt(addSelect.value, 10));
-      if (!mi) return;
-      draftItems.push({
-        item_id: mi.id,
-        code: mi.code || null,
-        name_zh: mi.name_zh,
-        name_ko: mi.name_ko,
-        name_en: mi.name_en,
-        qty: 1,
-        unit_price: mi.price,
-        option_choice: mi.options ? mi.options.split(",")[0].trim() : null,
-        spice_choice: mi.spice_options ? mi.spice_options.split(",")[0].trim() : null,
-        order_type: "dine_in",
-        note: "",
-      });
-      renderDraft();
+      if (mi) openAddPicker(mi, (line) => { draftItems.push(line); renderDraft(); });
     };
 
     const editTableTag = isCounterOrder(order) ? fmtCounterOrderTag(order) : `${T("tableLabel")} ${order.table_number}`;
     $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${editTableTag}`;
     $("#orderEditMsg").hidden = true;
+    $("#orderEditPickerModal").hidden = true;
     renderDraft();
     $("#orderEditBackdrop").hidden = false;
 
@@ -2306,6 +2432,7 @@
         return;
       }
       $("#orderEditBackdrop").hidden = true;
+      $("#orderEditPickerModal").hidden = true;
       // loadOrders() already re-opens the table-detail modal for whatever
       // table is currently shown (see openTableNumber), so no separate
       // refresh call is needed here even when this was opened from there.
@@ -2313,10 +2440,14 @@
       await loadTables();
     };
   }
-  $("#orderEditClose").onclick = () => ($("#orderEditBackdrop").hidden = true);
-  $("#orderEditCancel").onclick = () => ($("#orderEditBackdrop").hidden = true);
+  const closeOrderEdit = () => {
+    $("#orderEditBackdrop").hidden = true;
+    $("#orderEditPickerModal").hidden = true;
+  };
+  $("#orderEditClose").onclick = closeOrderEdit;
+  $("#orderEditCancel").onclick = closeOrderEdit;
   $("#orderEditBackdrop").addEventListener("click", (e) => {
-    if (e.target.id === "orderEditBackdrop") $("#orderEditBackdrop").hidden = true;
+    if (e.target.id === "orderEditBackdrop") closeOrderEdit();
   });
 
   // ---------- Menu management ----------

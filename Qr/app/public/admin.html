@@ -634,22 +634,51 @@
      choice, plus adding more simple items. A griddle/mix-option item like
      동판불고기 can only have its quantity changed or be removed here; adding
      a brand-new mix line still needs the full picker, so that goes through
-     수기 주문 instead (see orderEditAddHint below). -->
+     수기 주문 instead (see orderEditAddHint below).
+
+     Adding an item is a two-panel flow (2026-09 피드백): pick a dish from
+     the select + press + 추가, and instead of dropping straight onto the
+     list with default option/spice, a second same-size panel opens beside
+     this one (#orderEditPickerModal) showing that dish's photo/name and its
+     own option/spice/addon pickers + qty -- mirroring the customer order
+     page's item sheet. Only pressing "+ 추가" *inside* that panel commits
+     the line (with whatever was chosen there) onto the list on the left.
+     Both panels are plain siblings inside one flex backdrop, so the browser
+     lays them out side by side with no extra positioning code. -->
 <div id="orderEditBackdrop" class="modal-backdrop" hidden>
-  <div class="modal order-detail-modal">
-    <button class="modal-close" id="orderEditClose">✕</button>
-    <h2 id="orderEditTitle" data-i18n="orderEditModalTitle">주문 수정</h2>
-    <div id="orderEditItems"></div>
-    <div class="order-edit-add-row">
-      <select id="orderEditAddSelect"></select>
-      <button id="orderEditAddBtn" type="button" data-i18n="orderEditAddBtn">+ 추가</button>
+  <div class="order-edit-panels">
+    <div class="modal order-detail-modal">
+      <button class="modal-close" id="orderEditClose">✕</button>
+      <h2 id="orderEditTitle" data-i18n="orderEditModalTitle">주문 수정</h2>
+      <div id="orderEditItems"></div>
+      <div class="order-edit-add-row">
+        <select id="orderEditAddSelect"></select>
+        <button id="orderEditAddBtn" type="button" data-i18n="orderEditAddBtn">+ 추가</button>
+      </div>
+      <p class="settings-hint" data-i18n="orderEditAddHint">동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.</p>
+      <div class="order-edit-total" id="orderEditTotal"></div>
+      <div class="save-msg" id="orderEditMsg" hidden></div>
+      <div class="modal-actions">
+        <button class="danger-btn" id="orderEditCancel" data-i18n="orderEditCancel">취소</button>
+        <button class="primary-btn" id="orderEditSave" data-i18n="orderEditSave">저장</button>
+      </div>
     </div>
-    <p class="settings-hint" data-i18n="orderEditAddHint">동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.</p>
-    <div class="order-edit-total" id="orderEditTotal"></div>
-    <div class="save-msg" id="orderEditMsg" hidden></div>
-    <div class="modal-actions">
-      <button class="danger-btn" id="orderEditCancel" data-i18n="orderEditCancel">취소</button>
-      <button class="primary-btn" id="orderEditSave" data-i18n="orderEditSave">저장</button>
+    <div class="modal order-detail-modal order-edit-picker-modal" id="orderEditPickerModal" hidden>
+      <button class="modal-close" id="orderEditPickerClose">✕</button>
+      <div class="order-edit-picker-photo" id="orderEditPickerPhoto"></div>
+      <h2 id="orderEditPickerName"></h2>
+      <div id="orderEditPickerOptions"></div>
+      <div id="orderEditPickerSpice"></div>
+      <div id="orderEditPickerAddons"></div>
+      <div class="order-edit-qty-group order-edit-picker-qty">
+        <button type="button" class="order-edit-qty-btn" id="orderEditPickerDec">−</button>
+        <span class="order-edit-qty-value" id="orderEditPickerQty">1</span>
+        <button type="button" class="order-edit-qty-btn" id="orderEditPickerInc">+</button>
+      </div>
+      <div class="modal-actions">
+        <button class="danger-btn" id="orderEditPickerCancel" data-i18n="orderEditCancel">취소</button>
+        <button class="primary-btn" id="orderEditPickerCommit" data-i18n="orderEditAddBtn">+ 추가</button>
+      </div>
     </div>
   </div>
 </div>

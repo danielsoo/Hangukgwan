@@ -35,6 +35,15 @@
       return sum + (match ? match.price : 0);
     }, 0);
   }
+  // 牛/豬 (beef/pork) option buttons show as emoji instead of the raw
+  // Chinese text — matching the restaurant's own printed menu, which
+  // already marks every 牛/豬-choice dish with these same two emoji next
+  // to its name (2026-09 피드백, confirmed against the official PDF menu).
+  // Display-only: the value sent to the server/matched against the menu
+  // item's own options stays the raw "牛"/"豬" string. Any other option
+  // value (e.g. 鮪魚/蝦仁 on 오므라이스) is untouched.
+  const OPTION_LABELS = { "牛": "🐂", "豬": "🐷" };
+  const optionLabel = (raw) => OPTION_LABELS[raw] || raw;
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
@@ -456,7 +465,7 @@
         optWrap.hidden = false;
         item.options.split(",").forEach((opt, i) => {
           const b = document.createElement("button");
-          b.textContent = opt.trim();
+          b.textContent = optionLabel(opt.trim());
           if (i === 0) b.classList.add("active");
           b.onclick = () => {
             currentOption = opt.trim();
@@ -484,7 +493,7 @@
     wrap.innerHTML = "";
     opts.forEach((opt) => {
       const b = document.createElement("button");
-      b.textContent = opt;
+      b.textContent = optionLabel(opt);
       if (opt === activeOpt) b.classList.add("active");
       b.onclick = () => {
         opts.forEach((o) => (mixQty[o] = 0));
@@ -507,7 +516,7 @@
       const row = document.createElement("div");
       row.className = "mix-option-row";
       row.innerHTML = `
-        <span class="mix-option-name">${opt}</span>
+        <span class="mix-option-name">${optionLabel(opt)}</span>
         <div class="qty-row">
           <button data-act="minus">−</button>
           <span class="mix-qty-val">${mixQty[opt]}</span>
