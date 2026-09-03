@@ -295,6 +295,15 @@
     return item.photo_url ? `background-image:url('${item.photo_url}')` : "";
   }
 
+  // 냉면/비빔밥(28/29) contain beef broth and originally got a 🐄 emoji
+  // baked straight onto their name (2026-09-feedback.js's ICON_APPEND) —
+  // pulled back out by the 2026-09-followup migration once it turned out 🐄
+  // renders as a side-view dairy cow on most platforms, the exact same
+  // "옆 모습" problem 牛/豬 had. Shown here instead as the same cropped,
+  // front-facing cow-face.png used everywhere else, same as meatIconsHtml()
+  // below — a rendered image, not more emoji text baked into the name.
+  const BEEF_BROTH_ICON_CODES = ["28", "29"];
+
   // 牛/豬 icons shown right next to the dish name in the menu list, matching
   // the official printed menu (which puts the same 🐂🐷 right after the dish
   // title, e.g. "石鍋拌飯 🐂🐷") — this is what the owner actually meant by
@@ -302,12 +311,12 @@
   // shown on the menu list), not the option picker inside the item sheet,
   // which already had these icons from an earlier round.
   function meatIconsHtml(item) {
-    if (!item.options) return "";
-    const icons = item.options
+    const icons = (item.options || "")
       .split(",")
       .map((o) => o.trim())
       .filter((o) => OPTION_ICONS[o])
       .map((o) => optionLabel(o));
+    if (BEEF_BROTH_ICON_CODES.includes(item.code)) icons.push(optionLabel("牛"));
     return icons.length ? `<span class="item-meat-icons">${icons.join("")}</span>` : "";
   }
 
@@ -391,7 +400,7 @@
     });
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
-    $("#itemName").textContent = nameFor(item);
+    $("#itemName").innerHTML = `${nameFor(item)}${meatIconsHtml(item)}`;
     $("#itemSubNames").textContent = [item.name_zh, item.name_ko, item.name_en]
       .filter((n) => n && n !== nameFor(item))
       .join(" · ");

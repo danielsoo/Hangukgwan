@@ -7,6 +7,7 @@ const MongoStore = require("connect-mongo");
 const { refreshStore, save, nextId, savePhoto, store } = require("./src/db");
 const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
+const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use(async (req, res, next) => {
     // safe even if this per-process guard somehow ran more than once.
     if (!migratedOnce) {
       await applyFeedback202609(store, { save, nextId, savePhoto });
+      await applyFollowup202609(store, { save });
       migratedOnce = true;
     }
     next();

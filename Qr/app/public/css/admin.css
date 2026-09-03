@@ -580,6 +580,10 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 牛/豬 face icons (cropped from the restaurant's own PDF menu, see
    optionLabel() in order.js/admin.js) shown inside pill buttons/badges. */
 .option-icon { height: 16px; width: auto; vertical-align: middle; display: inline-block; }
+/* Same icons next to a dish's name wherever admin shows it standalone
+   (order-edit item rows, the add-item picker panel name) — see
+   meatIconsHtml() in admin.js. */
+.item-meat-icons { display: inline-flex; align-items: center; gap: 2px; margin-left: 4px; }
 .order-edit-meta-badge {
   font-size: 13px; font-weight: 600; color: var(--muted); background: var(--cream);
   border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;

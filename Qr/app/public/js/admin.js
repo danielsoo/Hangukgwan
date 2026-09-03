@@ -906,6 +906,26 @@
   const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
   const optionLabel = (raw) =>
     OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : raw;
+  // 냉면/비빔냉면(28/29) — see BEEF_BROTH_ICON_CODES in order.js for the
+  // full rationale (originally a 🐄 baked into the name, pulled back out by
+  // the 2026-09-followup migration for rendering as a side-view dairy cow).
+  const BEEF_BROTH_ICON_CODES = ["28", "29"];
+  // Same 牛/豬 (+ 냉면/비빔냉면) icon(s) shown next to a dish's name anywhere
+  // admin displays it standalone (order-edit item rows, the add-item picker
+  // panel) — matches the customer order page's menu list/item sheet, so a
+  // dish's meat-choice is visible wherever its name shows, not just inside
+  // its own option picker (2026-09 피드백: "메뉴에 표시되는 동물 사진에
+  // 넣어달라는 거였어").
+  const meatIconsHtml = (mi) => {
+    if (!mi) return "";
+    const icons = (mi.options || "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter((o) => OPTION_ICONS[o])
+      .map((o) => optionLabel(o));
+    if (BEEF_BROTH_ICON_CODES.includes(mi.code)) icons.push(optionLabel("牛"));
+    return icons.length ? `<span class="item-meat-icons">${icons.join("")}</span>` : "";
+  };
   // 포장 카운터 orders carry their own pickup_number/customer_name (assigned
   // server-side in src/routes/orders.js) instead of a table number — this is
   // what staff actually call out at pickup, so every place that would
@@ -2108,7 +2128,7 @@
     const availableAddons = parseAddons(mi.addons);
 
     $("#orderEditPickerPhoto").style.backgroundImage = mi.photo_url ? `url('${mi.photo_url}')` : "";
-    $("#orderEditPickerName").textContent = `${mi.code ? `${mi.code} ` : ""}${itemName(mi)}`;
+    $("#orderEditPickerName").innerHTML = `${mi.code ? `${mi.code} ` : ""}${itemName(mi)}${meatIconsHtml(mi)}`;
 
     const pillPicker = (wrapId, values, current, onPick, labelFor) => {
       const wrap = $(wrapId);
@@ -2328,7 +2348,7 @@
         row.className = "order-edit-item-row";
         row.innerHTML = `
           <div class="order-edit-item-row-main">
-            <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}</span>
+            <span class="order-edit-item-name">${it.code ? `${it.code} ` : ""}${itemName(it)}${meatIconsHtml(mi)}</span>
             <div class="order-edit-qty-group">
               <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="dec">−</button>
               <span class="order-edit-qty-value">${it.qty}</span>

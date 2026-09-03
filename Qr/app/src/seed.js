@@ -38,8 +38,8 @@ const ITEMS = {
     { code: "25", name_zh: "韓式炸醬飯", name_ko: "짜장밥", name_en: "Korean Black Bean Rice", price: 230 },
     { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
     { code: "27", name_zh: "韓式海鮮飯", name_ko: "짬뽕밥", name_en: "Spicy Seafood Rice", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
-    { code: "28", name_zh: "韓式水冷麵 🐄", name_ko: "냉면 🐄", name_en: "Cold Noodle Soup 🐄", price: 230 },
-    { code: "29", name_zh: "韓式拌麵 🐄", name_ko: "비빔냉면 🐄", name_en: "Spicy Cold Mixed Noodles 🐄", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
+    { code: "28", name_zh: "韓式水冷麵", name_ko: "냉면", name_en: "Cold Noodle Soup", price: 230 },
+    { code: "29", name_zh: "韓式拌麵", name_ko: "비빔냉면", name_en: "Spicy Cold Mixed Noodles", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
   ],
   hotpot: [
     { code: "41", name_zh: "泡菜火鍋", name_ko: "김치찌개", name_en: "Kimchi Stew", price: 230, is_spicy: 1 },
