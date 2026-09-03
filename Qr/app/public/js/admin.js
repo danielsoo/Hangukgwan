@@ -898,18 +898,28 @@
     "中辣": "중간 맵게", "大辣": "많이 맵게", "辣": "맵게",
   };
   const spiceLabel = (raw) => (adminLang === "ko" && SPICE_LABELS[raw]) || raw;
+  // Same relabel-only-the-display pattern as SPICE_LABELS above, for the
+  // option_choice values used across the menu (options: "牛,豬" for
+  // meat-choice dishes, "鮪魚,蝦仁" for 오므라이스) — the owner pointed out
+  // the admin dashboard was still showing raw Chinese option text even with
+  // 한국어 selected, e.g. an order card reading "x1(牛)" (2026-09 피드백:
+  // "언어가 한국어나 중국어로 세팅되면 모든 보이는 언어가 다 그걸로
+  // 적용되어야 해"). Same fallback as spiceLabel: an option value not in
+  // this map (or 中文 mode) just shows as-is.
+  const OPTION_LABELS = { "牛": "소", "豬": "돼지", "鮪魚": "참치", "蝦仁": "새우" };
   // 牛/豬 (beef/pork) face icons — see optionLabel()/optionIconHtml() in
   // order.js for the full rationale. Two different helpers, deliberately:
   // optionIconHtml() (the cropped PDF image) is only for an at-a-glance
-  // badge next to a dish's NAME; optionLabel() (plain text) is for the
-  // actual option pills/badges a staff member picks from or reads as the
+  // badge next to a dish's NAME; optionLabel() (plain text, now localized
+  // via OPTION_LABELS same as spiceLabel) is for the actual option
+  // pills/badges/order-card text a staff member picks from or reads as the
   // recorded choice — the owner asked those stay text, not images, since a
   // control you're actively selecting needs to read unambiguously ("사진은
   // 간단히 확인하라고 있는거고 선택해서 하는 건 확실하게 글로 해야 돼").
   const OPTION_ICONS = { "牛": "cow-face.png", "豬": "pig-face.png" };
   const optionIconHtml = (raw) =>
     OPTION_ICONS[raw] ? `<img class="option-icon" src="/images/${OPTION_ICONS[raw]}" alt="${raw}">` : "";
-  const optionLabel = (raw) => raw;
+  const optionLabel = (raw) => (adminLang === "ko" && OPTION_LABELS[raw]) || raw;
   // 냉면/비빔냉면(28/29) — see BEEF_BROTH_ICON_CODES in order.js for the
   // full rationale (originally a 🐄 baked into the name, pulled back out by
   // the 2026-09-followup migration for rendering as a side-view dairy cow).
@@ -1558,7 +1568,7 @@
     // takeout line here, since the header badge alone can't say which dish
     // needs to-go packaging.
     const itemLines = o.items.map((it) => {
-      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${it.option_choice})` : ""}`;
+      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}`;
       const perItemTag =
         o.order_type === "mixed" && it.order_type === "takeout"
           ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
@@ -2079,7 +2089,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${(it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty}</span>
           </div>`
       )
@@ -2919,7 +2929,7 @@
     const itemLines = o.items.map(
       (it) =>
         `<div style="display:flex;justify-content:space-between;font-size:16px;padding:5px 0;">
-          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${it.option_choice})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+          <span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
           <span>NT$${(it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty}</span>
         </div>`
     );
