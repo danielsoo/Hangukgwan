@@ -1759,7 +1759,14 @@
         // never mistake "牛" / "豬" / a spice level for a second dish.
         const detailLines = [];
         if (it.option_choice) detailLines.push(`<div class="item-detail">└ ${it.option_choice}</div>`);
-        if (it.spice_choice) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
+        // 基本(default spice level) stays implicit and is never printed —
+        // every menu item's spice_options starts with "基本" (see seed.js),
+        // so an unprinted spice line already means "기본맛, 안 바뀜" to the
+        // kitchen. Only a spice choice that actually differs from that
+        // default (不辣/小辣/中辣/大辣/辣) is worth a line, same "only the
+        // exception gets called out" pattern already used for 매장/外帶
+        // below (owner: "특별히 맵기 안 바꾸면 기본맛이야").
+        if (it.spice_choice && it.spice_choice !== "基本") detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
         (it.selected_addons || []).forEach((a) => detailLines.push(`<div class="item-detail">└ +${a.name}</div>`));
         // 매장(dine-in) is this dish's default and stays implicit — only
         // 外帶(takeout) is called out per-dish, since that's the one that
