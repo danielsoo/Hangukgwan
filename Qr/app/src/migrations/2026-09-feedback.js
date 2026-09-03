@@ -191,6 +191,19 @@ async function applyFeedback202609(store, { save, nextId, savePhoto }) {
     jjajangbap.photo_url = `/api/photo/${photoId}`;
   }
 
+  // ---- 6. 해물파전/야채전/김치전(77/78/79) 소개 문구 추가 ----
+  // Transcribed verbatim from the official PDF menu (2026-04-28) — the app
+  // had no desc_zh for these three items even though the printed menu does.
+  const DESC_ZH = {
+    77: "魷魚、蝦仁等營養海鮮豐富添加的海鮮煎餅，韓國人習慣下雨天搭配瑪格麗(韓國米酒)吃",
+    78: "獨家手做泡菜、金針菇等蔬菜做的營養泡菜煎餅，泡菜的酸味並不是壞掉的！每個泡菜都有自己的發酵度",
+    79: "不只有素食者可以吃！大陸妹和紅蘿蔔的健康材料脆脆的口感，健康美味的一餐！",
+  };
+  for (const [code, desc] of Object.entries(DESC_ZH)) {
+    const item = store.menuItems.find((m) => m.code === code);
+    if (item && !item.desc_zh) item.desc_zh = desc;
+  }
+
   store.settings[MIGRATION_FLAG] = true;
   await save();
   console.log("Applied 2026-09 feedback migration.");
