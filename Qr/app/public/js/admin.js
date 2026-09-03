@@ -2119,25 +2119,40 @@
         // already had — changing that would mean re-splitting quantities
         // across multiple lines, which is exactly the complexity 수기 주문
         // exists to sidestep, so only qty/removal are offered for those.
+        // Small fixed choice lists (2-3 values) read as pill-button toggle
+        // groups instead of a native <select> — the same interaction/look
+        // the customer order page already uses for this exact kind of
+        // choice (.options-list button in order.html/main.css) — rather
+        // than a mismatched bare dropdown (2026-09 피드백: "10년 전 코드
+        // 같다"). Native <select> stayed unstyled-looking however it's
+        // dressed up (plus its chevron rendered oversized without an
+        // explicit background-size — the immediate bug report), so this
+        // swaps it out entirely instead of just patching the chevron.
+        const pillGroup = (field, values, current, labelFor) =>
+          `<div class="order-edit-pill-group" data-idx="${idx}" data-field="${field}">${values
+            .map(
+              (v) =>
+                `<button type="button" class="order-edit-pill-btn${v === current ? " active" : ""}" data-value="${v}">${labelFor ? labelFor(v) : v}</button>`
+            )
+            .join("")}</div>`;
         const optionsHtml =
           mi && mi.options && !mi.mix_options
-            ? `<select data-idx="${idx}" data-field="option" class="order-edit-choice-select">${mi.options
-                .split(",")
-                .map((o) => o.trim())
-                .filter(Boolean)
-                .map((o) => `<option value="${o}" ${it.option_choice === o ? "selected" : ""}>${o}</option>`)
-                .join("")}</select>`
+            ? pillGroup(
+                "option",
+                mi.options.split(",").map((o) => o.trim()).filter(Boolean),
+                it.option_choice
+              )
             : it.option_choice
               ? `<span class="order-edit-meta-badge">${it.option_choice}</span>`
               : "";
         const spiceHtml =
           mi && mi.spice_options
-            ? `<select data-idx="${idx}" data-field="spice" class="order-edit-choice-select">${mi.spice_options
-                .split(",")
-                .map((o) => o.trim())
-                .filter(Boolean)
-                .map((o) => `<option value="${o}" ${it.spice_choice === o ? "selected" : ""}>${spiceLabel(o)}</option>`)
-                .join("")}</select>`
+            ? pillGroup(
+                "spice",
+                mi.spice_options.split(",").map((o) => o.trim()).filter(Boolean),
+                it.spice_choice,
+                spiceLabel
+              )
             : it.spice_choice
               ? `<span class="order-edit-meta-badge">${spiceLabel(it.spice_choice)}</span>`
               : "";
@@ -2148,10 +2163,12 @@
         // the edit UI itself (2026-09 피드백).
         const dineInLabel = adminLang === "zh" ? "內用" : "매장내";
         const takeoutLabel = adminLang === "zh" ? "外帶" : "포장";
-        const orderTypeHtml = `<select data-idx="${idx}" data-field="orderType" class="order-edit-type-select">
-          <option value="dine_in" ${it.order_type !== "takeout" ? "selected" : ""}>${dineInLabel}</option>
-          <option value="takeout" ${it.order_type === "takeout" ? "selected" : ""}>${takeoutLabel}</option>
-        </select>`;
+        const orderTypeHtml = pillGroup(
+          "orderType",
+          ["dine_in", "takeout"],
+          it.order_type === "takeout" ? "takeout" : "dine_in",
+          (v) => (v === "takeout" ? takeoutLabel : dineInLabel)
+        );
         const addonsHtml =
           it.selected_addons && it.selected_addons.length
             ? `<span class="order-edit-meta-badge">+${it.selected_addons.map((a) => a.name).join(", ")}</span>`
@@ -2207,20 +2224,19 @@
           renderDraft();
         };
       });
-      wrap.querySelectorAll("select[data-field='option']").forEach((sel) => {
-        sel.onchange = () => {
-          draftItems[parseInt(sel.dataset.idx, 10)].option_choice = sel.value;
-        };
-      });
-      wrap.querySelectorAll("select[data-field='spice']").forEach((sel) => {
-        sel.onchange = () => {
-          draftItems[parseInt(sel.dataset.idx, 10)].spice_choice = sel.value;
-        };
-      });
-      wrap.querySelectorAll("select[data-field='orderType']").forEach((sel) => {
-        sel.onchange = () => {
-          draftItems[parseInt(sel.dataset.idx, 10)].order_type = sel.value;
-        };
+      // Pill-button toggle groups (option/spice/orderType) — one click sets
+      // that line's field and re-renders (same pattern as qty +/-/delete
+      // above) so the newly-active pill highlights immediately.
+      const PILL_FIELD_KEY = { option: "option_choice", spice: "spice_choice", orderType: "order_type" };
+      wrap.querySelectorAll(".order-edit-pill-group").forEach((group) => {
+        const idx = parseInt(group.dataset.idx, 10);
+        const key = PILL_FIELD_KEY[group.dataset.field];
+        group.querySelectorAll(".order-edit-pill-btn").forEach((btn) => {
+          btn.onclick = () => {
+            draftItems[idx][key] = btn.dataset.value;
+            renderDraft();
+          };
+        });
       });
 
       $("#orderEditTotal").textContent = `${T("totalLabel")} NT$${grandTotal()}`;

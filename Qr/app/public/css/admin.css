@@ -546,16 +546,22 @@ body:not(.role-staff) .staff-only { display: none !important; }
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-left: 2px;
 }
 .order-edit-item-row-meta:empty { display: none; }
-.order-edit-choice-select, .order-edit-type-select {
-  appearance: none; -webkit-appearance: none; width: auto; padding: 5px 24px 5px 10px; font-size: 13px;
-  font-weight: 600; color: var(--ink); border: 1px solid var(--line); border-radius: 14px; background: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 8px center; cursor: pointer;
+/* Pill-button toggle groups for option/spice/order-type — matches the
+   customer order page's own choice picker (.options-list button in
+   main.css) instead of a native <select>, which read as visibly
+   out-of-place next to the rest of this UI and needed a hand-drawn
+   chevron that rendered oversized with no background-size set
+   (2026-09 피드백: "드롭다운 화살표가 기괴하게 커" / "10년 전 코드 같다"). */
+.order-edit-pill-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.order-edit-pill-btn {
+  padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff;
+  font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
 }
-.order-edit-choice-select:hover, .order-edit-type-select:hover { border-color: var(--navy); }
+.order-edit-pill-btn:hover { border-color: var(--navy); }
+.order-edit-pill-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
 .order-edit-meta-badge {
   font-size: 13px; font-weight: 600; color: var(--muted); background: var(--cream);
-  border: 1px solid var(--line); border-radius: 14px; padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px;
 }
 .order-edit-qty-group { display: flex; align-items: center; gap: 6px; }
 .order-edit-qty-btn {
@@ -569,8 +575,27 @@ body:not(.role-staff) .staff-only { display: none !important; }
   background: none; border: none; color: var(--red); font-size: 18px; font-weight: 800; cursor: pointer; padding: 0 4px;
   flex-shrink: 0;
 }
+/* Quick-add row (pick a menu item + "+ 추가") — previously a bare native
+   <select> and <button> with zero styling, sitting right below a
+   carefully-styled item list and looking noticeably dated by comparison
+   (2026-09 피드백). Select gets the same rounded/bordered treatment as
+   every other form field in this admin (.modal-form input/select), with
+   a correctly-sized custom chevron this time; the button reuses the
+   site's actual primary-action look instead of the browser default. */
 .order-edit-add-row { display: flex; gap: 8px; margin-top: 14px; }
-.order-edit-add-row select { flex: 1; }
+.order-edit-add-row select {
+  flex: 1; appearance: none; -webkit-appearance: none; padding: 10px 32px 10px 12px;
+  font-size: 15px; font-weight: 600; color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; background-color: #fff; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='1.6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 11px 7px;
+}
+.order-edit-add-row select:hover { border-color: var(--navy); }
+.order-edit-add-row button {
+  background: var(--red); color: #fff; border: none; padding: 10px 18px; border-radius: 8px;
+  cursor: pointer; font-weight: 700; font-size: 15px; white-space: nowrap;
+}
+.order-edit-add-row button:hover { background: #9b1e26; }
 .order-edit-total { text-align: right; font-weight: 800; font-size: 17px; margin-top: 12px; padding-top: 10px; border-top: 2px solid var(--ink); }
 
 /* 인앱 확인/알림 (see showConfirm()/showAlert() in admin.js) */
