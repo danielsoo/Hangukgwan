@@ -2980,7 +2980,12 @@
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
     // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
-    const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)} · ` : "";
+    // 사장님 요청: "주문시 이름과 전화번호를 같이 넣도록 했으니 포장 같은
+    // 경우는 결제하는 이 화면에서 전화번호까지 볼 수 있도록" — 메인 주문
+    // 큐 카드(위 renderOrderCard, ☎ 표시)와 같은 필드(o.customer_phone)를
+    // 여기 결제 화면의 픽업 번호/성함 태그 옆에도 붙여준다.
+    const counterPhone = isCounterOrder(o) && o.customer_phone ? ` · ☎${o.customer_phone}` : "";
+    const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)}${counterPhone} · ` : "";
     return `
       <div style="border-top:1px solid var(--line);padding:14px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
