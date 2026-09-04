@@ -301,6 +301,7 @@
       settlementHistoryTitle: "지난 정산 기록 추이",
       settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능). 왼쪽에서 날짜를 골라 들어가 보세요.",
       settlementHistoryEmpty: "아직 저장된 정산 기록이 없습니다.",
+      settlementHistoryProblem: "미결제",
       settingsCoverTitle: "손님 화면 상단 사진",
       settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
       seasonalTaegeukLabel: "헤더 로고 계절 설정",
@@ -660,6 +661,7 @@
       settlementHistoryTitle: "過往結算趨勢",
       settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。從左側選擇日期即可查看。",
       settlementHistoryEmpty: "尚無已儲存的結算紀錄。",
+      settlementHistoryProblem: "未結帳",
       settingsCoverTitle: "顧客畫面頂部照片",
       settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
       seasonalTaegeukLabel: "頁首標誌季節設定",
@@ -4993,7 +4995,12 @@
                 .map((s) => {
                   const day = parseInt(s.date.slice(8, 10), 10);
                   const dayLabel = adminLang === "zh" ? `${day}日` : `${day}일`;
-                  const warn = s.problem_order_count > 0 ? ` · <b class="settlement-history-warn">⚠${s.problem_order_count}</b>` : "";
+                  // A bare "⚠18" read as ambiguous — could look like a table
+                  // number or some other count entirely — so this spells out
+                  // what it counts instead of leaning on the icon alone
+                  // (owner: "느낌표가 테이블 번호를 나타내려고 하는 거
+                  // 같은데 뭔가 오류의 개수를 나타내는 거 같아서 헷갈려").
+                  const warn = s.problem_order_count > 0 ? ` · <b class="settlement-history-warn">⚠ ${T("settlementHistoryProblem")} ${s.problem_order_count}</b>` : "";
                   return `
                 <button type="button" class="settlement-history-row" data-date="${s.date}">
                   <span class="settlement-history-date">${dayLabel}</span>
