@@ -365,6 +365,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 
 /* Settlement (결산) — wider, dashboard-style layout (1100px vs the 640px
    settings cards) since charts and tables benefit from the extra room. */
+/* 지난 정산 기록을 오른쪽 콘텐츠와 나란히 놓는 왼쪽 탭 sidebar — 예전엔
+   이 날짜 목록이 페이지 맨 아래에 있어서 날짜를 클릭해도 위쪽 요약
+   카드가 바뀌는 게 화면 밖이라 안 보였음 (2026-09 피드백: "누르고
+   위에가 바뀌는 것도 안보이고 위 아래 왔다갔다 하는 거 별로야 ...
+   왼쪽 탭 느낌으로"). .settings-shell/.settings-nav와 같은 뼈대 —
+   sidebar가 sticky로 붙어 있고 옆의 콘텐츠만 갱신되니 스크롤 위치가
+   그대로 유지된다. */
+.settlement-shell { display: flex; align-items: flex-start; gap: 24px; }
+.settlement-nav {
+  display: flex; flex-direction: column; gap: 2px; flex: 0 0 220px;
+  position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto;
+  background: #fff; border-radius: 14px; padding: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.settlement-content { flex: 1; min-width: 0; }
+@media (max-width: 1100px) {
+  .settlement-shell { flex-direction: column; }
+  .settlement-nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; position: static; width: 100%; max-height: none; }
+}
 .settlement-toolbar {
   display: flex; align-items: center; gap: 10px; max-width: 1560px; margin: 0 auto 20px; flex-wrap: wrap;
   background: #fff; border-radius: 12px; padding: 14px 18px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
@@ -406,33 +424,33 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .settlement-items-table { width: 100%; border-collapse: collapse; font-size: 17px; }
 .settlement-items-table th, .settlement-items-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
 .settlement-items-table th { color: var(--muted); font-weight: 600; font-size: 16px; }
-/* 지난 정산 기록 — grouped into one <details> "folder" per year-month
-   (see fmtHistoryMonthLabel()/loadSettlementHistory() in admin.js) instead
-   of one long flat list, so browsing months of history means opening the
-   month you want rather than scrolling past every day ever saved (owner:
-   "파일 폴더처럼 날짜별로 들어가서 볼 수 있게 해줬으면 좋겠어"). */
-.settlement-history-month { border-bottom: 1px solid var(--line); }
-.settlement-history-month:last-child { border-bottom: none; }
+/* 지난 정산 기록 — lives inside .settlement-nav now (the 왼쪽 탭 sidebar
+   above), grouped into one <details> "folder" per year-month (see
+   fmtHistoryMonthLabel()/loadSettlementHistory() in admin.js) so browsing
+   months of history means opening the month you want rather than scrolling
+   past every day ever saved (owner: "파일 폴더처럼 날짜별로 들어가서 볼
+   수 있게 해줬으면 좋겠어"). Each day is a compact two-line button — date
+   on top, revenue (and a ⚠ warn count when relevant) below — sized for the
+   narrow sidebar rather than the wide flat rows this used to be. */
+.settlement-history-month { }
 .settlement-history-month-summary {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  padding: 12px 6px; cursor: pointer; font-weight: 700; font-size: 17px; border-radius: 8px;
+  padding: 8px 8px; cursor: pointer; font-weight: 700; font-size: 15px; border-radius: 8px;
   list-style: none;
 }
 .settlement-history-month-summary::-webkit-details-marker { display: none; }
-.settlement-history-month-summary:hover { background: #f7f5f1; }
-.settlement-history-month-summary::before {
-  content: "▸"; margin-right: 8px; color: var(--muted); display: inline-block;
-  transition: transform 0.15s;
-}
-.settlement-history-month[open] > .settlement-history-month-summary::before { transform: rotate(90deg); }
-.settlement-history-month-stats { font-weight: 500; font-size: 15px; color: var(--muted); }
-.settlement-history-month-days { padding-left: 22px; padding-bottom: 4px; }
+.settlement-history-month-summary:hover { background: #f0f0f0; }
+.settlement-history-month-days { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 6px 4px; }
 .settlement-history-row {
-  display: flex; align-items: center; gap: 16px; padding: 10px 6px; border-bottom: 1px solid var(--line);
-  font-size: 17px; cursor: pointer; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%;
+  text-align: left; background: none; border: none; border-radius: 8px;
+  padding: 6px 10px; cursor: pointer; font: inherit; color: var(--ink);
 }
-.settlement-history-row:hover { background: #f7f5f1; }
-.settlement-history-date { font-weight: 700; min-width: 90px; }
+.settlement-history-row:hover { background: #f0f0f0; }
+.settlement-history-row.active { background: var(--navy); color: #fff; }
+.settlement-history-row.active .settlement-history-row-sub { color: rgba(255, 255, 255, 0.8); }
+.settlement-history-row.active .settlement-history-warn { color: #ffd7d3; }
+.settlement-history-date { font-weight: 700; font-size: 14px; }
+.settlement-history-row-sub { font-size: 12px; color: var(--muted); }
 .settlement-history-warn { color: #b3261e; font-weight: 700; }
 
 .settlement-charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1560px; margin: 0 auto 20px; }

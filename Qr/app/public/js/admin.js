@@ -298,11 +298,9 @@
       settlementHourlyHint: "막대에 마우스를 올리면 그 시간대에 잘 팔린 메뉴를 볼 수 있어요.",
       settlementHourlyOrders: "주문 수",
       settlementHourlyTopItems: "인기 메뉴",
-      settlementHistoryTitle: "지난 정산 기록",
-      settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능).",
+      settlementHistoryTitle: "지난 정산 기록 추이",
+      settlementHistoryHint: "매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능). 왼쪽에서 날짜를 골라 들어가 보세요.",
       settlementHistoryEmpty: "아직 저장된 정산 기록이 없습니다.",
-      settlementHistoryPaid: "결제",
-      settlementHistoryProblem: "미결제",
       settingsCoverTitle: "손님 화면 상단 사진",
       settingsCoverHint: "주문 페이지 맨 위에 표시되는 매장 대표 사진입니다.",
       seasonalTaegeukLabel: "헤더 로고 계절 설정",
@@ -659,11 +657,9 @@
       settlementHourlyHint: "將滑鼠移到長條上，可以看到該時段熱賣的品項。",
       settlementHourlyOrders: "訂單數",
       settlementHourlyTopItems: "熱門品項",
-      settlementHistoryTitle: "過往結算紀錄",
-      settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。",
+      settlementHistoryTitle: "過往結算趨勢",
+      settlementHistoryHint: "每天打烊時間後會自動儲存紀錄（也可以手動儲存）。從左側選擇日期即可查看。",
       settlementHistoryEmpty: "尚無已儲存的結算紀錄。",
-      settlementHistoryPaid: "已結帳",
-      settlementHistoryProblem: "未結帳",
       settingsCoverTitle: "顧客畫面頂部照片",
       settingsCoverHint: "顯示在點餐頁面最上方的店家代表照片。",
       seasonalTaegeukLabel: "頁首標誌季節設定",
@@ -4896,8 +4892,22 @@
 
   const fmtOrderTableTag = (n) => (adminLang === "zh" ? `桌號 ${n}` : `${n}번 테이블`);
 
+  // Which single saved day (if any) the 왼쪽 탭 sidebar should currently
+  // highlight as "open" — set by loadSettlement() below, read by
+  // loadSettlementHistory() when it re-renders. Stays null for a multi-day
+  // range (지난 7일 등), since that doesn't correspond to one sidebar row.
+  let activeSettlementHistoryDate = null;
+  // Which year-month folders the sidebar currently has expanded — persists
+  // across re-renders (every loadSettlement() call re-renders the sidebar)
+  // so clicking a day in an older month doesn't collapse that month right
+  // back on you. null until first render, which seeds it with just the
+  // newest month open.
+  let openHistoryMonths = null;
+
   // start/end default to today when omitted. Pass the same date for both to
-  // view a single day (e.g. from clicking a row in 지난 정산 기록).
+  // view a single day (e.g. from clicking a row in 지난 정산 기록 — the
+  // sidebar to the left of this tab's content, see settlement-shell in
+  // admin.html).
   async function loadSettlement(start, end) {
     const params = new URLSearchParams();
     if (start) params.set("start", start);
@@ -4906,6 +4916,7 @@
     const res = await fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
     if (!res.ok) return;
     renderSettlement(await res.json());
+    activeSettlementHistoryDate = start && end && start === end ? start : null;
     loadSettlementHistory();
   }
 
@@ -4946,13 +4957,15 @@
     // Grouped into one collapsible "folder" per year-month instead of one
     // long flat list of every saved day — a few months in, that list was
     // long enough to just scroll past rather than actually browse (owner:
-    // "파일 폴더처럼 날짜별로 들어가서 볼 수 있게 해줬으면 좋겠어"). `list`
-    // already arrives newest-day-first (GET /api/settlements/history), so
-    // the first time a year-month is seen is always its most recent day —
-    // a plain Map preserves that insertion order, so months come out
-    // newest-first with no extra sort needed. Only the most recent month
-    // starts open; older months are collapsed <details> the owner clicks
-    // into, same "go in and look" feel as opening a folder.
+    // "파일 폴더처럼 날짜별로 들어가서 볼 수 있게 해줬으면 좋겠어"), then
+    // moved into the left-hand settlement-nav sidebar entirely so clicking
+    // a date updates settlement-content right next to it instead of
+    // somewhere off-screen above (owner: "누르고 위에가 바뀌는 것도
+    // 안보이고 위 아래 왔다갔다 하는 거 별로야 ... 왼쪽 탭 느낌으로").
+    // `list` already arrives newest-day-first (GET /api/settlements/history),
+    // so the first time a year-month is seen is always its most recent day
+    // — a plain Map preserves that insertion order, so months come out
+    // newest-first with no extra sort needed.
     const months = new Map();
     list.forEach((s) => {
       const ym = s.date.slice(0, 7);
@@ -4962,35 +4975,44 @@
       g.paidCount += Number(s.paid_order_count || 0);
       g.days.push(s);
     });
-    let isFirstMonth = true;
+    // Which folders are expanded persists in openHistoryMonths across
+    // re-renders (this function re-runs after every single settlement
+    // load) — seeded once with just the newest month open, and always
+    // force-including whichever month the currently active date lives in
+    // so clicking a day never immediately re-collapses its own folder.
+    if (!openHistoryMonths) openHistoryMonths = new Set([[...months.keys()][0]]);
+    if (activeSettlementHistoryDate) openHistoryMonths.add(activeSettlementHistoryDate.slice(0, 7));
     el.innerHTML = [...months.entries()]
       .map(([ym, g]) => {
-        const openAttr = isFirstMonth ? " open" : "";
-        isFirstMonth = false;
-        const dayCountLabel = adminLang === "zh" ? `${g.days.length}天` : `${g.days.length}일`;
+        const openAttr = openHistoryMonths.has(ym) ? " open" : "";
         return `
-          <details class="settlement-history-month"${openAttr}>
-            <summary class="settlement-history-month-summary">
-              <span class="settlement-history-month-label">📁 ${fmtHistoryMonthLabel(ym)}</span>
-              <span class="settlement-history-month-stats">NT$${g.revenue.toLocaleString()} · ${T("settlementHistoryPaid")} ${g.paidCount} · ${dayCountLabel}</span>
-            </summary>
+          <details class="settlement-history-month" data-ym="${ym}"${openAttr}>
+            <summary class="settlement-history-month-summary">📁 ${fmtHistoryMonthLabel(ym)}</summary>
             <div class="settlement-history-month-days">
               ${g.days
-                .map(
-                  (s) => `
-                <div class="settlement-history-row" data-date="${s.date}">
-                  <span class="settlement-history-date">${s.date}</span>
-                  <span>NT$${Number(s.total_revenue || 0).toLocaleString()}</span>
-                  <span>${T("settlementHistoryPaid")} ${s.paid_order_count}</span>
-                  <span class="${s.problem_order_count > 0 ? "settlement-history-warn" : ""}">${T("settlementHistoryProblem")} ${s.problem_order_count}</span>
-                </div>`
-                )
+                .map((s) => {
+                  const day = parseInt(s.date.slice(8, 10), 10);
+                  const dayLabel = adminLang === "zh" ? `${day}日` : `${day}일`;
+                  const warn = s.problem_order_count > 0 ? ` · <b class="settlement-history-warn">⚠${s.problem_order_count}</b>` : "";
+                  return `
+                <button type="button" class="settlement-history-row" data-date="${s.date}">
+                  <span class="settlement-history-date">${dayLabel}</span>
+                  <span class="settlement-history-row-sub">NT$${Number(s.total_revenue || 0).toLocaleString()}${warn}</span>
+                </button>`;
+                })
                 .join("")}
             </div>
           </details>`;
       })
       .join("");
+    $$(".settlement-history-month").forEach((det) => {
+      det.addEventListener("toggle", () => {
+        if (det.open) openHistoryMonths.add(det.dataset.ym);
+        else openHistoryMonths.delete(det.dataset.ym);
+      });
+    });
     $$(".settlement-history-row").forEach((row) => {
+      row.classList.toggle("active", row.dataset.date === activeSettlementHistoryDate);
       row.onclick = () => loadSettlement(row.dataset.date, row.dataset.date);
     });
   }
