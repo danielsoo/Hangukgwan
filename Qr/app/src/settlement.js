@@ -1,12 +1,26 @@
 // Daily settlement (결산) computation — shared by the live admin view
 // (src/routes/settlements.js GET /) and the nightly snapshot the cron job
 // writes into store.daily_settlements for permanent record-keeping.
-const { taipeiDateString } = require("./time");
+const { taipeiDateString, nowLocal } = require("./time");
 
-// "Problem" = still open at settlement time (not paid, not cancelled) — the
-// owner asked specifically to see anything unpaid so it doesn't get missed:
-// when it was ordered, which table, and exactly what was in it.
+// "Problem" = still open (not paid, not cancelled) AND has been sitting
+// long enough that it isn't just a table still mid-meal — the owner asked
+// specifically to see anything unpaid so it doesn't get missed: when it was
+// ordered, which table, and exactly what was in it. For an already-closed
+// past day every open order already qualifies (it's had a whole day to be
+// paid), but applying that same "any open order = problem" rule to TODAY
+// while the restaurant is still running made completely normal in-progress
+// orders (just placed, still cooking, or served but the table hasn't asked
+// for the bill yet) show up as "미결제" too, which looked alarming and
+// wasn't actually wrong — those orders just hadn't reached paid status yet
+// (owner: "18개가 미결제라는 거야?" — most of those were simply today's
+// still-active tables). So instead of a pure status check, an open order
+// only counts once it's been open at least STALE_OPEN_ORDER_MS — long
+// enough that it really does look like a missed payment rather than
+// ordinary service still in progress (owner picked this over "오늘은 문제
+// 표시 자체를 숨기기"/"지금 그대로 두기").
 const OPEN_STATUSES = ["new", "preparing", "served"];
+const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // startDate/endDate are inclusive "YYYY-MM-DD" strings (Taipei business
 // day). Passing just one date computes that single day, same as before —
@@ -20,7 +34,22 @@ function computeSettlement(store, startDate, endDate = startDate) {
 
   const paidOrders = rangeOrders.filter((o) => o.status === "paid");
   const cancelledOrders = rangeOrders.filter((o) => o.status === "cancelled");
-  const problemOrders = rangeOrders.filter((o) => OPEN_STATUSES.includes(o.status));
+  // Both timestamps below come from nowLocal() (see src/time.js) — a plain
+  // "YYYY-MM-DD HH:MM:SS" Taipei wall-clock string with no timezone
+  // designator, which Date() parses using whatever timezone the running
+  // process happens to be in (Vercel's default is UTC, per time.js's own
+  // comment). Parsing "now" through the exact same nowLocal() + Date()
+  // path as every order's created_at means both ends pick up that same
+  // misinterpretation, so it cancels out in the subtraction below and the
+  // elapsed duration comes out correct regardless of the server's actual
+  // process timezone. Mixing this with a real `new Date()` instead would
+  // silently be off by Taipei's UTC+8 offset.
+  const nowMs = new Date(nowLocal().replace(" ", "T")).getTime();
+  const problemOrders = rangeOrders.filter((o) => {
+    if (!OPEN_STATUSES.includes(o.status)) return false;
+    const placedMs = new Date(o.created_at.replace(" ", "T")).getTime();
+    return nowMs - placedMs >= STALE_OPEN_ORDER_MS;
+  });
 
   const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
