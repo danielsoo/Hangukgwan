@@ -27,6 +27,7 @@
     <div class="admin-brand" data-i18n="brand"><img src="/images/taegeuk.png" alt="" width="16" height="16" style="vertical-align:-2px;margin-right:3px;" /> 한국관 관리자</div>
     <nav class="admin-tabs">
       <button data-tab="orders" class="active"><span data-i18n="tabOrders">실시간 주문</span> <span id="newOrderBadge" class="badge-count" hidden>0</span></button>
+      <button data-tab="payment" data-i18n="tabPayment">결제</button>
       <button data-tab="menu" data-i18n="tabMenu">메뉴 관리</button>
       <button data-tab="tables" data-i18n="tabTables">테이블 / QR 코드</button>
       <button data-tab="reservations" data-i18n="tabReservations">예약</button>
@@ -65,6 +66,20 @@
           <div class="col-body"></div>
         </div>
       </div>
+    </section>
+
+    <!-- PAYMENT (결제) TAB — 사장님 요청(item 22): "실시간 주문탭 바로 옆에
+         결제탭 만들기. 아래 화면(배치도)에서 조정된 테이블이 결제탭에서
+         그대로 반영되면서 고정되어 카운터에서 고객 결제시, 좌석 터치 후
+         바로 결제완료를 할꺼야." — 테이블/QR 코드 탭의 "배치도 보기"와
+         똑같은 좌석 배치(zones/tables)를 그대로 보여주되, 여기서는 항상
+         보기 전용(드래그·크기조절·구역 추가/삭제 없음)이라 배치도를 고치는
+         화면과 절대 헷갈리지 않고, 좌석을 터치하면 바로 결제 화면
+         (openTableDetail, item 23에서 상태 무관 "결제 완료" 버튼으로 이미
+         통일함)이 열림. -->
+    <section id="tab-payment" class="tab-panel" hidden>
+      <p class="settings-hint" data-i18n="paymentFloorHint">좌석을 터치하면 바로 결제 화면이 열립니다. 배치는 "테이블 / QR 코드" 탭의 배치도 보기에서 조정할 수 있어요.</p>
+      <div id="paymentFloorPlan" class="floor-plan payment-floor-plan"></div>
     </section>
 
     <!-- MENU TAB -->

@@ -228,6 +228,12 @@ input, select, button, textarea { font-family: inherit; }
 .table-block.has-order { border-color: var(--red); background: #fdf3f2; }
 .table-block .tb-party { font-size: 9px; font-weight: 600; color: var(--muted); margin-top: 1px; }
 .table-block .resize-handle { background: linear-gradient(135deg, transparent 50%, var(--red) 50%); }
+/* 결제 탭 배치도(payment-floor-plan)는 항상 보기 전용 — 좌석을 잡아서
+   옮기는 게 아니라 터치해서 결제 화면을 여는 용도라, 기본 .table-block의
+   grab 커서 대신 pointer로 표시한다 (item 22). */
+.payment-floor-plan .table-block { cursor: pointer; }
+.payment-floor-plan .table-block:active { cursor: pointer; }
+.payment-floor-plan .zone-block { cursor: default; }
 .align-guide { position: absolute; pointer-events: none; z-index: 50; }
 .align-guide-v { width: 0; border-left: 1.5px dashed #2f80ed; }
 .align-guide-h { height: 0; border-top: 1.5px dashed #2f80ed; }

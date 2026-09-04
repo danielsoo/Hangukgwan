@@ -161,6 +161,7 @@
       loginError: "비밀번호가 올바르지 않습니다. 다시 시도해주세요",
       brand: `${TAEGEUK_ICON_INLINE} 한국관 관리자`,
       tabOrders: "실시간 주문",
+      tabPayment: "결제",
       tabMenu: "메뉴 관리",
       tabTables: "테이블 / QR 코드",
       tabSettings: "설정",
@@ -232,6 +233,7 @@
       saveFloorPlanBtn: "💾 배치도 저장",
       floorPlanSavedMsg: "배치도가 저장되었습니다",
       floorPlanHint: "구역과 테이블을 드래그해서 움직이고, 오른쪽 아래 모서리를 드래그해서 크기를 조절하세요. 구역 이름을 클릭하면 수정할 수 있어요. 자리를 옮긴 뒤에는 \"배치도 저장\"을 눌러서 저장됐는지 확인하세요.",
+      paymentFloorHint: "좌석을 터치하면 바로 결제 화면이 열립니다. 배치는 \"테이블 / QR 코드\" 탭의 배치도 보기에서 조정할 수 있어요.",
       alertTableNumberRequired: "테이블 번호를 입력하세요",
       alertUnluckyNumber: "숫자 '4'가 들어간 테이블 번호는 사용할 수 없습니다 (대만에서 불길한 숫자로 여겨져 제외됩니다).",
       alertTableExists: "이미 존재하는 테이블 번호입니다",
@@ -521,6 +523,7 @@
       loginError: "密碼錯誤，請重新輸入",
       brand: `${TAEGEUK_ICON_INLINE} 韓國館 管理後台`,
       tabOrders: "即時訂單",
+      tabPayment: "結帳",
       tabMenu: "菜單管理",
       tabTables: "桌號 / QR Code",
       tabSettings: "設定",
@@ -592,6 +595,7 @@
       saveFloorPlanBtn: "💾 儲存版面",
       floorPlanSavedMsg: "版面已儲存",
       floorPlanHint: "拖曳區域和桌號即可移動位置，拖曳右下角可調整大小。點擊區域名稱可以修改名稱。移動位置後請按「儲存版面」確認已儲存。",
+      paymentFloorHint: "點擊座位即可直接開啟結帳畫面。版面配置請到「桌號 / QR Code」頁籤的版面配置檢視調整。",
       alertTableNumberRequired: "請輸入桌號",
       alertUnluckyNumber: "桌號不能包含數字「4」（在台灣被視為不吉利的數字）。",
       alertTableExists: "此桌號已經存在",
@@ -1123,6 +1127,11 @@
       if (btn.dataset.tab === "settlement") loadSettlement();
       if (btn.dataset.tab === "reservations") loadReservations();
       if (btn.dataset.tab === "vip") loadVipCards();
+      // 결제 탭(item 22) — 배치도(zones)는 "테이블 / QR 코드" 탭에서만
+      // 로드되던 데이터라, 그 탭을 아직 한 번도 안 열었어도 여기서 곧장
+      // 볼 수 있도록 탭 전환 시점에 로드한다. tables는 로그인 직후
+      // showDashboard()에서 이미 로드/폴링되고 있어 별도 로드 불필요.
+      if (btn.dataset.tab === "payment") loadZones().then(renderPaymentFloorPlan);
     };
   });
 
@@ -1245,6 +1254,7 @@
     if (!draggingOrderId) renderOrders(); // also refreshes #printFailBanner, using prunedAny above
     renderTables();
     if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
+    if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber);
 
     if (!isFirstLoad && newlyArrived.length > 0) {
@@ -3695,6 +3705,46 @@
       }
 
       tablesInThisZone.forEach((t) => renderTableBlock(el, t));
+    });
+  }
+
+  // 결제 탭(item 22) — "테이블 / QR 코드" 탭의 배치도(zones/tables, 같은
+  // 전역 변수)를 그대로 재사용해서 보여주지만, 여기서는 항상 보기 전용:
+  // 드래그/크기조절/구역 추가삭제/좌석 떼어내기 같은 편집 기능은 아예
+  // 붙이지 않고, 좌석을 누르면 바로 openTableDetail()이 열려 결제로
+  // 이어진다 (item 23에서 통일한 "상태 무관 결제 완료" 버튼과 그대로
+  // 이어짐). renderFloorPlan()과 달리 canTableEdit() 분기 자체가 없다 —
+  // 사장님이든 직원이든 이 탭에서는 절대 배치가 흐트러지지 않는다.
+  function renderPaymentFloorPlan() {
+    const wrap = $("#paymentFloorPlan");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    [...zones].sort((a, b) => a.sort_order - b.sort_order).forEach((z) => {
+      const zoneEl = document.createElement("div");
+      zoneEl.className = "zone-block";
+      zoneEl.style.left = z.x + "px";
+      zoneEl.style.top = z.y + "px";
+      zoneEl.style.width = z.width + "px";
+      zoneEl.style.height = z.height + "px";
+      zoneEl.innerHTML = `<span class="zone-label">${z.name}</span>`;
+      wrap.appendChild(zoneEl);
+
+      tables
+        .filter((t) => t.zone_id === z.id)
+        .forEach((t) => {
+          const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
+          const tableEl = document.createElement("div");
+          tableEl.className = "table-block" + (unpaid.length ? " has-order" : "");
+          tableEl.style.left = (t.x != null ? t.x : 10) + "px";
+          tableEl.style.top = (t.y != null ? t.y : ZONE_HEADER_HEIGHT) + "px";
+          tableEl.style.width = (t.width || 70) + "px";
+          tableEl.style.height = (t.height || 70) + "px";
+          tableEl.innerHTML = `
+            <span>${t.label || t.number}</span>${t.party_size && unpaid.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+          `;
+          tableEl.onclick = () => openTableDetail(t.number, t.label);
+          zoneEl.appendChild(tableEl);
+        });
     });
   }
 
