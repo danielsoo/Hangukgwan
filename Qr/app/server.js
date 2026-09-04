@@ -4,10 +4,11 @@ const path = require("path");
 const express = require("express");
 const session = require("express-session");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, store } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store } = require("./src/db");
 const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
+const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use(async (req, res, next) => {
     if (!migratedOnce) {
       await applyFeedback202609(store, { save, nextId, savePhoto });
       await applyFollowup202609(store, { save });
+      await applyMenuFixes20260904(store, { save, deletePhoto });
       migratedOnce = true;
     }
     next();

@@ -36,8 +36,8 @@ const ITEMS = {
     { code: "23", name_zh: "大滷麵", name_ko: "우동면", name_en: "Seafood Udon (not spicy)", price: 230, desc_zh: "海鮮麵不辣", desc_ko: "맵지 않아요", desc_en: "Not spicy" },
     { code: "24", name_zh: "韓式炸醬麵", name_ko: "짜장면", name_en: "Korean Black Bean Noodles", price: 230 },
     { code: "25", name_zh: "韓式炸醬飯", name_ko: "짜장밥", name_en: "Korean Black Bean Rice", price: 230 },
-    { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
-    { code: "27", name_zh: "韓式海鮮飯", name_ko: "짬뽕밥", name_en: "Spicy Seafood Rice", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
+    { code: "26", name_zh: "韓式海鮮麵", name_ko: "짬뽕", name_en: "Spicy Seafood Noodle Soup", price: 230, is_spicy: 1 },
+    { code: "27", name_zh: "韓式海鮮飯", name_ko: "짬뽕밥", name_en: "Spicy Seafood Rice", price: 230, is_spicy: 1 },
     { code: "28", name_zh: "韓式水冷麵", name_ko: "냉면", name_en: "Cold Noodle Soup", price: 230 },
     { code: "29", name_zh: "韓式拌麵", name_ko: "비빔냉면", name_en: "Spicy Cold Mixed Noodles", price: 230, is_spicy: 1, spice_options: "基本,小辣" },
   ],
@@ -76,7 +76,10 @@ const ITEMS = {
     { code: "83", name_zh: "涼拌雪螺", name_ko: "골뱅이무침", name_en: "Spicy Whelk Salad", price: 540, is_spicy: 1 },
   ],
   drink: [
-    { code: "91", name_zh: "韓國飲料", name_ko: "한국 음료수", name_en: "Korean Soft Drink", price: 50 },
+    // 91(韓國飲料/한국 음료수) removed per owner feedback (2026-09-04): the
+    // one drink with no product photo — see
+    // src/migrations/2026-09-04-menu-fixes.js for the matching live-DB
+    // cleanup step.
     { code: "92", name_zh: "台灣飲料", name_ko: "대만 음료수", name_en: "Taiwanese Soft Drink", price: 30 },
     { code: "93", name_zh: "泡麵(加點用)", name_ko: "사리면", name_en: "Extra Ramen Noodles (add-on)", price: 50 },
     { code: "94", name_zh: "白飯", name_ko: "공기밥", name_en: "Steamed Rice", price: 20 },
