@@ -2809,6 +2809,22 @@
     });
   }
 
+  // 사장님 피드백: "전체결제완료 버튼을 눌렀는데, 다시 테이블 1의 다른
+  // 주문 화면이 떠. 내가 선택할 수 있는 탭도 없고." — 실제로는 다른 주문이
+  // 아니라, 결제 처리 후 목록 길이가 줄어들면서 이전 스크롤 위치가 전혀
+  // 다른 내용 위에 놓이게 되는 문제였다. #tableDetailBody는 다시 그려질
+  // 때마다 내용은 새로 채워지지만, 실제로 스크롤되는 부모 .modal 요소의
+  // scrollTop은 그대로 남아있어서 — 화면 아래쪽(전체결제완료 버튼은 목록
+  // 맨 아래 footer에도 있음)에 있다가 누르면, 결제 후 짧아진 목록에서는
+  // 그 스크롤 위치가 엉뚱한 주문 블록 한가운데를 가리키게 되고, 맨 위에
+  // 있는 현재 주문/이전 주문 탭은 화면 밖으로 벗어나 안 보이게 된다. 상태가
+  // 크게 바뀌는 동작(탭 전환/결제 처리) 뒤에는 항상 맨 위로 스크롤을
+  // 리셋해서 탭이 항상 보이도록 한다.
+  function resetTableDetailScroll() {
+    const modal = $("#tableDetailBackdrop .modal");
+    if (modal) modal.scrollTop = 0;
+  }
+
   function openTableDetail(tableNumber, label) {
     // A previous round's paid order used to sit in the same undivided,
     // continuously-scrolling list as whatever the table ordered next —
@@ -2871,6 +2887,7 @@
         btn.onclick = () => {
           tableDetailView = btn.dataset.detailView;
           openTableDetail(tableNumber, label);
+          resetTableDetailScroll();
         };
       });
     $("#tableDetailBody")
@@ -2898,6 +2915,7 @@
           await updateOrderStatus(parseInt(btn.dataset.advanceId, 10), btn.dataset.advanceTo);
           await loadOrders();
           openTableDetail(tableNumber, label);
+          resetTableDetailScroll();
         };
       });
     $("#tableDetailBody")
@@ -2917,6 +2935,7 @@
           await loadOrders();
           await loadTables();
           openTableDetail(tableNumber, label);
+          resetTableDetailScroll();
         };
       });
     $("#tableDetailBackdrop").hidden = false;
@@ -2944,9 +2963,16 @@
             expanded ? T("collapseItemsBtn") : fmtExpandItemsBtn(overflowCount)
           }</button>`
         : "";
-    const nextBtn = NEXT_STATUS[o.status]
-      ? `<button class="primary-btn" style="padding:7px 14px;font-size:14px;" data-advance-id="${o.id}" data-advance-to="${NEXT_STATUS[o.status]}">${nextLabel(o.status)}</button>`
-      : "";
+    // 테이블 상세(결제) 화면에서는 신규/조리중/서빙완료 어느 상태든 상관없이
+    // 테이블을 터치하면 곧장 결제로 넘어간다 — 사장님 피드백: "신규주문이던
+    // 조리중이던 서빙완료이던 테이블 터치해서 바로 결제를 진행할꺼야". 메인
+    // 주문 큐(renderOrderCard)의 신규→조리중→서빙완료 단계별 진행 버튼과는
+    // 별개 화면이라 그쪽은 그대로 두고, 여기서는 상태에 관계없이 항상
+    // "결제 완료로 변경" 버튼 하나만 보여주고 paid로 바로 전환한다.
+    const nextBtn =
+      o.status !== "paid" && o.status !== "cancelled"
+        ? `<button class="primary-btn" style="padding:7px 14px;font-size:14px;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`
+        : "";
     const editBtn =
       o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
