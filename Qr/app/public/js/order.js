@@ -1046,6 +1046,39 @@
   });
 
   // ---------- Membership (회원/VIP) sheet ----------
+  // Firebase Auth (firebase-app-compat.js + firebase-auth-compat.js, loaded
+  // from Google's CDN) used to sit as two plain <script> tags in order.html,
+  // downloaded and parsed on EVERY customer page load before the menu could
+  // even render — even though this store hasn't finished the one-time
+  // Firebase Console setup yet (see vip-membership-system.md), so
+  // initMembership() below always bailed out at `if (!rawConfig) return;`
+  // anyway. That made every single customer pay the SDK's download/parse
+  // cost for a feature that, right now, never actually turns on. 사장님
+  // 피드백: "터치 후 반응 속도랑 링크 타고 들어가는 속도가... 느려" — this
+  // is the biggest single cost we could remove from that initial load, so
+  // the two <script> tags are gone from order.html and this now injects
+  // them lazily, only once a store actually has a valid firebaseConfig.
+  // Once a store does configure it, this still runs once per page load
+  // (same as before) and behaves identically after that.
+  let firebaseSdkPromise = null;
+  function loadFirebaseSdk() {
+    if (window.firebase) return Promise.resolve();
+    if (firebaseSdkPromise) return firebaseSdkPromise;
+    const FIREBASE_VERSION = "10.14.1";
+    const loadScript = (src) =>
+      new Promise((resolve, reject) => {
+        const el = document.createElement("script");
+        el.src = src;
+        el.onload = resolve;
+        el.onerror = reject;
+        document.head.appendChild(el);
+      });
+    firebaseSdkPromise = loadScript(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app-compat.js`).then(() =>
+      loadScript(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-auth-compat.js`)
+    );
+    return firebaseSdkPromise;
+  }
+
   // Sets up Firebase Authentication from the store's own firebaseConfig
   // (Admin > 설정 > 회원(VIP) 로그인 — see PUBLIC_KEYS in src/routes/settings.js
   // for why that config is safe to ship to every customer). A store that
@@ -1054,7 +1087,7 @@
   // this whole feature quietly never turns on: #memberBtn stays hidden,
   // firebaseAuth stays null, and every VIP-related check elsewhere in this
   // file already treats that as "not signed in / no membership".
-  function initMembership(rawConfig) {
+  async function initMembership(rawConfig) {
     if (!rawConfig) return;
     let config;
     try {
@@ -1063,7 +1096,12 @@
       return;
     }
     if (!config || !config.apiKey || !config.projectId) return;
-    if (typeof firebase === "undefined") return; // SDK script failed to load (e.g. offline) — degrade to no login
+    try {
+      await loadFirebaseSdk();
+    } catch (e) {
+      return; // SDK failed to load (e.g. offline) — degrade to no login, same as before
+    }
+    if (typeof firebase === "undefined") return; // shouldn't happen if loadFirebaseSdk() resolved, but stay defensive
     try {
       firebase.initializeApp(config);
       firebaseAuth = firebase.auth();

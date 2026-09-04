@@ -308,13 +308,14 @@
 </div>
 
 <!-- Firebase Authentication only (see src/firebaseAdmin.js) — all real data
-     (VIP cards, orders, etc.) stays in the existing MongoDB. Loaded from
-     Google's own CDN unconditionally; initMembership() in order.js is a
-     no-op (and #memberBtn stays hidden) whenever the store hasn't pasted a
-     firebaseConfig into Admin > 설정 > 회원(VIP) 로그인 yet, so this costs a
-     store that isn't using the feature nothing but the script fetch. -->
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+     (VIP cards, orders, etc.) stays in the existing MongoDB. Used to be two
+     unconditional <script> tags here, loaded from Google's CDN on every
+     single customer page view even for a store that hasn't set up
+     firebaseConfig yet (initMembership() would just no-op). 사장님 피드백:
+     "터치 후 반응 속도랑 링크 타고 들어가는 속도가... 느려" — loadFirebaseSdk()
+     in order.js now injects these two scripts lazily, only once a store has
+     an actual firebaseConfig, so a store not using 회원(VIP) login (the
+     common case right now) skips this download entirely. -->
 <script src="/js/i18n.js"></script>
 <script src="/js/allergens.js"></script>
 <script src="/js/season.js"></script>
