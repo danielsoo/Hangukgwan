@@ -352,7 +352,7 @@ body {
    optionLabel() in order.js) shown inside option/mix-option buttons. */
 .option-icon { height: 18px; width: auto; vertical-align: middle; display: inline-block; }
 .mix-option-name .option-icon { height: 22px; }
-#itemNote, #orderNote {
+#itemNote {
   width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: 13px;
   resize: none; min-height: 44px; font-family: inherit; margin-bottom: 14px;
 }

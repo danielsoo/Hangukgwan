@@ -843,7 +843,6 @@
           // the item sheet) — see src/routes/orders.js, which validates and
           // stores order_type per item instead of once for the whole order.
           items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, orderType: c.orderType, addons: c.addons || [] })),
-          note: $("#orderNote").value.trim(),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
           // Only meaningful (and only required server-side) for a counter
