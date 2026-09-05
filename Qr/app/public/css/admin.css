@@ -161,7 +161,14 @@ input, select, button, textarea { font-family: inherit; }
    자체처럼(자기만의 테두리·그림자·✕ 버튼이 있는 독립된 "창") 보여야
    하고, 한 줄로만 이어지는 게 아니라 옆으로도 위아래로도 줄바꿈되는
    격자로 늘어놓아야 한다. */
-.table-order-block { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: #fff; position: relative; }
+/* 2026-09-05 "모든 게 규격이 같았으면 좋겠어 예를들어 결제 완료로 변경,
+   수정 위치랑 소계 위치랑 이런 거" — 세로 flex로 만들어서, 카드 안
+   맨 아래 소계 줄(admin.js의 renderTableOrderBlock, margin-top:auto)이
+   품목 수와 상관없이 항상 카드 맨 아래에 붙게 한다. 격자 안에서는
+   .order-block-grid가 한 줄의 카드 높이를 자동으로 맞춰주므로(그리드
+   기본 동작인 align-items: stretch), 그 안에서 소계가 항상 같은 위치에
+   오게 된다. */
+.table-order-block { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: #fff; position: relative; }
 /* withDismiss일 때(주문 2건 이상)만 붙는 수정자 — 그림자를 더 줘서 뒤에
    깔린 다른 카드와 확실히 분리된 "창"처럼 보이게 한다. */
 .table-order-block-windowed { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); padding-top: 34px; }

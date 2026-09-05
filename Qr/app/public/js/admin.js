@@ -3128,17 +3128,27 @@
     // 너무 좁아" 피드백). 라벨을 위 줄, 버튼을 아래 줄로 나누고 버튼에
     // white-space:nowrap을 줘서 버튼 텍스트는 절대 안 쪼개지고, 라벨만
     // 필요하면 줄바꿈되게 한다.
+    //
+    // 이어진 피드백: "모든 게 규격이 같았으면 좋겠어 예를들어 결제 완료로
+    // 변경, 수정 위치랑 소계 위치랑 이런 거" — 한 줄에 여러 카드가 늘어설
+    // 때, 카드마다 라벨 길이(1줄/2줄)와 품목 수가 달라서 버튼 줄과 소계
+    // 줄의 세로 위치가 카드마다 들쭉날쭉했다. 두 가지로 고정한다:
+    // (1) 라벨 영역에 min-height를 줘서 1줄이든 2줄이든 그 아래 버튼 줄은
+    // 항상 같은 높이에서 시작하고, (2) 카드를 세로 flex로 만들고 소계
+    // 줄에 margin-top:auto를 줘서 품목이 몇 개든 소계는 항상 카드
+    // 맨 아래(같은 줄의 다른 카드와 격자로 높이가 맞춰짐, 위 .order-block-grid
+    // 참고)에 붙는다.
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${dismissBtn}
         <div style="margin-bottom:10px;">
-          <div style="font-weight:700;font-size:15px;margin-bottom:6px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</div>
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px;min-height:38px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
         ${itemsToggleHtml}
         ${o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
-        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:6px;">${T("subtotalLabel")} NT$${o.total}</div>
+        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${o.total}</div>
       </div>
     `;
   }
