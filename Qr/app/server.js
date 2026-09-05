@@ -49,7 +49,14 @@ app.use(
     // savings (the same table's QR scanned again later, staff reloading
     // /admin through a shift) against how long a fix could take to
     // visibly land — always fixable sooner with a manual hard refresh.
-    maxAge: "1h",
+    //
+    // Local dev (NODE_ENV !== "production", e.g. `node server.js` on
+    // localhost while testing a fix) skips this entirely — 2026-09-05:
+    // 사장님이 로컬(localhost:3000)에서 admin.js를 고칠 때마다 이 1시간
+    // 캐시 때문에 일반 새로고침으로는 방금 배포(로컬 저장)한 최신 코드가
+    // 안 보이고 하드리프레시가 필요해서 "고쳤다는데 왜 그대로냐"는 혼란이
+    // 반복됐다. 실제 운영(production)에서는 그대로 1시간 캐시 유지.
+    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
   })
 );
 
