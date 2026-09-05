@@ -2894,11 +2894,14 @@
         ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
         : "";
     // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
-    // label already says what it is. focusedOrder가 완전 포장 주문이면
-    // (결제탭의 개별 포장 타일을 눌러 들어온 경우) 제목에 그 주문의 태그를
-    // 덧붙여서 지금 보고 있는 게 어느 주문인지 한눈에 보이게 한다 — 포장
-    // 카운터는 기존 픽업번호·이름 태그, 진짜 테이블은 "📦 포장" 배지.
-    const focusTag = focusedOrder && focusedOrder.order_type === "takeout" ? ` · ${fmtTakeoutTileTag(table, focusedOrder)}` : "";
+    // label already says what it is. focusedOrder가 있으면(결제탭의 개별
+    // 포장 타일을 눌러 들어온 경우) 제목에 그 주문의 태그를 덧붙여서 지금
+    // 보고 있는 게 어느 주문인지 한눈에 보이게 한다 — 포장 카운터는 기존
+    // 픽업번호·이름 태그, 진짜 테이블은 "📦 포장" 배지. 포장 카운터는
+    // order_type 값과 상관없이 항상 포장으로 취급한다(위 renderPaymentFloorPlan의
+    // takeoutOrders와 같은 이유 — order_type이 실수로 dine_in/mixed로
+    // 찍혀 있어도 여전히 포장 손님 것).
+    const focusTag = focusedOrder && (focusedOrder.order_type === "takeout" || (table && table.is_counter)) ? ` · ${fmtTakeoutTileTag(table, focusedOrder)}` : "";
     const titleText = table && table.is_counter
       ? `${label || openTableLabel || tableNumber}${focusTag}`
       : `${T("tableLabel")} ${label || tableNumber}${focusTag}`;
@@ -3780,20 +3783,28 @@
           const w = t.width || 70;
           const h = t.height || 70;
           const gap = 8;
-          // "완전 포장"(order_type === "takeout") 주문은 포장 카운터든 진짜
-          // 테이블이든 상관없이 항상 별도 타일로 분리해서 그 주문 하나만
-          // 바로 결제할 수 있게 한다 — 사장님 피드백(2026-09-05): "혼합은
-          // 적용 안 할거고 완전 포장인 것만 적용할 거야... 현재 이미 있는
-          // 포장 애들도 적용해줘. 저기 저 박스 누르면 나오게 해달라는
-          // 말이야". 일부만 포장인 "혼합" 주문과 순수 매장내 주문은 주문
-          // 하나를 반으로 쪼개 따로 결제할 방법이 없으니 그대로 테이블
-          // 전체 타일(bundledOrders)에 묶어서 보여준다. 대표 타일은 (a)
-          // 묶어서 보여줄 매장내/혼합 주문이 있거나 (b) 애초에 미결제
-          // 주문이 하나도 없을 때만 그리고, 미결제 주문이 전부 완전
-          // 포장뿐이면(포장 카운터가 원래 그랬듯) 대표 타일 없이 주문별
-          // 타일만 나란히 보여준다.
-          const takeoutOrders = unpaid.filter((o) => o.order_type === "takeout");
-          const bundledOrders = unpaid.filter((o) => o.order_type !== "takeout");
+          // "완전 포장" 주문은 포장 카운터든 진짜 테이블이든 상관없이 항상
+          // 별도 타일로 분리해서 그 주문 하나만 바로 결제할 수 있게 한다 —
+          // 사장님 피드백(2026-09-05): "혼합은 적용 안 할거고 완전 포장인
+          // 것만 적용할 거야... 현재 이미 있는 포장 애들도 적용해줘. 저기
+          // 저 박스 누르면 나오게 해달라는 말이야".
+          //
+          // 포장 카운터(is_counter)는 order_type 값과 상관없이 거기 놓인
+          // 주문이면 무조건 전부 분리한다 — 카운터는 애초에 앉는 자리가
+          // 없는 walk-in 전용이라 "완전 포장/혼합/매장내" 구분 자체가
+          // 의미 없고(그 자리에 order_type이 실수로 dine_in/mixed로 찍혀
+          // 있어도 여전히 포장 손님 것), 여기서 order_type === "takeout"만
+          // 걸러내면 그 예외 케이스가 결제탭에서 그냥 사라져버리는 회귀가
+          // 생긴다(2026-09-05 발견). 진짜 테이블은 원래대로 order_type이
+          // 명확히 "takeout"인 주문만 골라 분리하고, 일부만 포장인
+          // "혼합" 주문과 순수 매장내 주문은 주문 하나를 반으로 쪼개 따로
+          // 결제할 방법이 없으니 그대로 테이블 전체 타일(bundledOrders)에
+          // 묶어서 보여준다. 대표 타일은 (a) 묶어서 보여줄 매장내/혼합
+          // 주문이 있거나 (b) 애초에 미결제 주문이 하나도 없을 때만 그리고,
+          // 미결제 주문이 전부 완전 포장뿐이면(포장 카운터가 원래 그랬듯)
+          // 대표 타일 없이 주문별 타일만 나란히 보여준다.
+          const takeoutOrders = t.is_counter ? unpaid : unpaid.filter((o) => o.order_type === "takeout");
+          const bundledOrders = t.is_counter ? [] : unpaid.filter((o) => o.order_type !== "takeout");
           const showMainTile = bundledOrders.length > 0 || unpaid.length === 0;
 
           let nextLeft = left;
