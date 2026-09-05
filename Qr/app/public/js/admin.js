@@ -98,7 +98,11 @@
   // see rendered the same way, unlike this screen-only preference.
   const UI_FONT_SCALE_KEY = "hangukgwan_admin_ui_font_scale";
   const UI_FONT_SCALE_MIN = 0.8;
-  const UI_FONT_SCALE_MAX = 1.6;
+  // 사장님 피드백 (2026-09-05): "전체 웹사이트가 글씨랑 그런 게 작다고 지적이
+  // 왔어... 최대 110까지 밖에 안된다고 더 늘려달래" — 기존 상한(1.6 = 160%)으로도
+  // 부족하다는 뜻이라 큰 폭으로 상향. 화면 전용(로컬 저장) 개인 설정이라 다른
+  // 사람 화면에는 영향 없음.
+  const UI_FONT_SCALE_MAX = 3;
   const UI_FONT_SCALE_STEP = 0.1;
 
   function getUiFontScale() {
