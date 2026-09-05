@@ -3188,8 +3188,16 @@
     // 사장님 피드백(2026-09-05): "위치를 번호, 메뉴 사이 말고 메뉴 아래에
     // 놨으면 좋겠어 전체적으로" — 결제 완료/수정 버튼을 시간·상태 줄과
     // 품목 목록 사이가 아니라 품목 목록 아래로 옮긴다(카운터 카드까지
-    // 포함해서 전체적으로 적용). 소계는 그대로 카드 맨 아래
-    // (margin-top:auto로 격자 안에서도 항상 같은 위치에 고정).
+    // 포함해서 전체적으로 적용).
+    //
+    // 이어진 피드백(카운터 격자 스크린샷과 함께): "결제완료 수정도 다른
+    // 애들처럼 고정해줘 일관되게" — 버튼을 품목 바로 아래(품목 개수에
+    // 따라 위치가 들쭉날쭉)에 두면, 카드마다 품목 수가 달라 같은 줄에
+    // 늘어선 카드들 사이에서 버튼 높이가 서로 안 맞았다. 소계가
+    // margin-top:auto로 카드 맨 아래에 항상 고정되는 것처럼, 버튼 줄도
+    // 소계와 한 덩어리로 묶어 같이 margin-top:auto를 줘서 품목이 몇 개든
+    // 항상 카드 맨 아래(같은 줄의 다른 카드와 격자로 높이가 맞춰짐)에
+    // 붙게 한다.
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${p.dismissBtn}
@@ -3200,8 +3208,10 @@
         ${p.itemsHtml}
         ${p.itemsToggleHtml}
         ${p.noteHtml}
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${p.nextBtn}${p.editBtn}</div>
-        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
+        <div style="margin-top:auto;">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${p.nextBtn}${p.editBtn}</div>
+          <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
+        </div>
       </div>
     `;
   }
