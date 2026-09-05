@@ -3801,29 +3801,25 @@
           const w = t.width || 70;
           const h = t.height || 70;
           const gap = 8;
-          // "완전 포장" 주문은 포장 카운터든 진짜 테이블이든 상관없이 항상
-          // 별도 타일로 분리해서 그 주문 하나만 바로 결제할 수 있게 한다 —
-          // 사장님 피드백(2026-09-05): "혼합은 적용 안 할거고 완전 포장인
-          // 것만 적용할 거야... 현재 이미 있는 포장 애들도 적용해줘. 저기
-          // 저 박스 누르면 나오게 해달라는 말이야".
+          // "완전 포장" 주문은 진짜 테이블에서는 별도 타일로 분리해서 그
+          // 주문 하나만 바로 결제할 수 있게 한다 — 사장님 피드백
+          // (2026-09-05): "혼합은 적용 안 할거고 완전 포장인 것만 적용할
+          // 거야... 현재 이미 있는 포장 애들도 적용해줘. 저기 저 박스
+          // 누르면 나오게 해달라는 말이야".
           //
-          // 포장 카운터(is_counter)는 order_type 값과 상관없이 거기 놓인
-          // 주문이면 무조건 전부 분리한다 — 카운터는 애초에 앉는 자리가
-          // 없는 walk-in 전용이라 "완전 포장/혼합/매장내" 구분 자체가
-          // 의미 없고(그 자리에 order_type이 실수로 dine_in/mixed로 찍혀
-          // 있어도 여전히 포장 손님 것), 여기서 order_type === "takeout"만
-          // 걸러내면 그 예외 케이스가 결제탭에서 그냥 사라져버리는 회귀가
-          // 생긴다(2026-09-05 발견). 진짜 테이블은 원래대로 order_type이
-          // 명확히 "takeout"인 주문만 골라 분리하고, 일부만 포장인
-          // "혼합" 주문과 순수 매장내 주문은 주문 하나를 반으로 쪼개 따로
-          // 결제할 방법이 없으니 그대로 테이블 전체 타일(bundledOrders)에
-          // 묶어서 보여준다. 대표 타일은 (a) 묶어서 보여줄 매장내/혼합
-          // 주문이 있거나 (b) 애초에 미결제 주문이 하나도 없을 때만 그리고,
-          // 미결제 주문이 전부 완전 포장뿐이면(포장 카운터가 원래 그랬듯)
-          // 대표 타일 없이 주문별 타일만 나란히 보여준다.
-          const takeoutOrders = t.is_counter ? unpaid : unpaid.filter((o) => o.order_type === "takeout");
-          const bundledOrders = t.is_counter ? [] : unpaid.filter((o) => o.order_type !== "takeout");
-          const showMainTile = bundledOrders.length > 0 || unpaid.length === 0;
+          // 포장 카운터(is_counter)는 정반대다 — 사장님 피드백(2026-09-05,
+          // 후속): "모든 포장 카운터 번호들은 전부 저 하나에 테이블에
+          // 들어갈건데 그 테이블을 누르면 여러개 나열해서 나오게 해달라고".
+          // 즉 카운터는 서로 무관한 손님들 주문이 여러 건 쌓여도 배치도
+          // 상에는 항상 "포장 카운터" 타일 하나만 있고, 그 타일을 누르면
+          // (openTableDetail을 focusOrderId 없이 호출 → 아래 body가 모든
+          // 미결제 주문을 각자 카드로 나열하고, 카운터는 payAllBtn도 이미
+          // 꺼져 있어 각 카드의 개별 "결제 완료로 변경" 버튼으로만 처리됨)
+          // 그 목록이 펼쳐진다. 카운터를 주문 개수만큼 옆으로 늘어놓던
+          // 이전 방식(이 세션 초반의 결제탭 포장 타일 분리 작업)은 되돌림.
+          const takeoutOrders = t.is_counter ? [] : unpaid.filter((o) => o.order_type === "takeout");
+          const bundledOrders = t.is_counter ? unpaid : unpaid.filter((o) => o.order_type !== "takeout");
+          const showMainTile = t.is_counter || bundledOrders.length > 0 || unpaid.length === 0;
 
           let nextLeft = left;
           if (showMainTile) {
