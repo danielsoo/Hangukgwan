@@ -970,6 +970,14 @@
     const counterTable = tables.find((t) => t.is_counter);
     return (counterTable && counterTable.label) || T("counterSectionTitle");
   }
+  // 결제탭에서 "완전 포장"(order_type === "takeout") 주문 타일에 붙이는
+  // 태그 — 포장 카운터 주문은 기존 픽업번호·이름 태그를 그대로 쓰고, 진짜
+  // 테이블에서 통째로 포장으로 주문한 경우(픽업번호가 없음)는 그 테이블의
+  // 다른 주문과 구분되도록 "📦 포장" 배지만 보여준다.
+  function fmtTakeoutTileTag(t, o) {
+    if (t && t.is_counter) return fmtCounterOrderTag(o);
+    return `📦 ${T("orderCardTakeoutBadge")}`;
+  }
   const fmtPrintFailBanner = (n, tableNumbers) => {
     const tables = tableNumbers.join(", ");
     return adminLang === "zh"
@@ -2878,16 +2886,22 @@
     // 결제완료로 넘어가버림) — 진짜 테이블(같은 일행)에서만 이 일괄 버튼을
     // 보여주고, 카운터는 각 주문 카드의 개별 "결제 완료로 변경" 버튼으로만
     // 처리하도록 한다 (아래 renderTableOrderBlock의 data-advance-id 버튼).
+    // focusOrderId로 특정 주문 하나만 보고 있을 때도 마찬가지로 숨긴다 —
+    // 화면에 주문이 이미 하나뿐이라 "전체 결제 완료"가 그 주문의 개별
+    // 버튼과 똑같은 일을 하는 중복 버튼이 되기 때문.
     const payAllBtn =
-      unpaidOrders.length && !(table && table.is_counter)
+      unpaidOrders.length && !(table && table.is_counter) && focusOrderId == null
         ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
         : "";
     // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
-    // label already says what it is. focusedOrder가 있으면(개별 포장 타일을
-    // 눌러 들어온 경우) 제목에 그 손님의 픽업 태그를 덧붙여서 지금 보고
-    // 있는 게 여러 포장 주문 중 어느 건지 한눈에 보이게 한다.
-    const counterFocusTag = table && table.is_counter && focusedOrder ? ` · ${fmtCounterOrderTag(focusedOrder)}` : "";
-    const titleText = table && table.is_counter ? `${label || openTableLabel || tableNumber}${counterFocusTag}` : `${T("tableLabel")} ${label || tableNumber}`;
+    // label already says what it is. focusedOrder가 완전 포장 주문이면
+    // (결제탭의 개별 포장 타일을 눌러 들어온 경우) 제목에 그 주문의 태그를
+    // 덧붙여서 지금 보고 있는 게 어느 주문인지 한눈에 보이게 한다 — 포장
+    // 카운터는 기존 픽업번호·이름 태그, 진짜 테이블은 "📦 포장" 배지.
+    const focusTag = focusedOrder && focusedOrder.order_type === "takeout" ? ` · ${fmtTakeoutTileTag(table, focusedOrder)}` : "";
+    const titleText = table && table.is_counter
+      ? `${label || openTableLabel || tableNumber}${focusTag}`
+      : `${T("tableLabel")} ${label || tableNumber}${focusTag}`;
     const header = `
       <h2>${titleText}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
@@ -3765,43 +3779,53 @@
           const top = t.y != null ? t.y : ZONE_HEADER_HEIGHT;
           const w = t.width || 70;
           const h = t.height || 70;
-          // 포장 카운터(is_counter)는 서로 무관한 손님 주문이 동시에 여러
-          // 건 쌓일 수 있다 — 사장님 피드백: "포장 주문 특성상 여러명이
-          // 다른 개개별 주문이 여러개 들어갈 수 있으니까... 갯수별로
-          // 화면에 여러개 이어 붙여서 나타내면 필요한 것만 누를 수 있게".
-          // 그래서 카운터 한 칸을 늘 하나의 타일로 그리는 대신, 지금 미결제
-          // 상태인 포장 주문 건수만큼 타일을 옆으로 나란히 늘어놓고, 각
-          // 타일은 그 주문 하나로만 좁혀진 결제 화면으로 바로 연결한다
-          // (openTableDetail의 focusOrderId). 대기 중인 포장 주문이 하나도
-          // 없으면 원래대로 빈 타일 하나만 보여준다.
-          if (t.is_counter && unpaid.length) {
-            const gap = 8;
-            unpaid.forEach((o, idx) => {
-              const tileEl = document.createElement("div");
-              tileEl.className = "table-block has-order counter-order-tile";
-              tileEl.style.left = left + idx * (w + gap) + "px";
-              tileEl.style.top = top + "px";
-              tileEl.style.width = w + "px";
-              tileEl.style.height = h + "px";
-              tileEl.innerHTML = `
-                <span>${t.label || t.number}</span><span class="tb-counter-tag">${fmtCounterOrderTag(o)}</span>
-              `;
-              tileEl.onclick = () => openTableDetail(t.number, t.label, o.id);
-              zoneEl.appendChild(tileEl);
-            });
-            return;
+          const gap = 8;
+          // "완전 포장"(order_type === "takeout") 주문은 포장 카운터든 진짜
+          // 테이블이든 상관없이 항상 별도 타일로 분리해서 그 주문 하나만
+          // 바로 결제할 수 있게 한다 — 사장님 피드백(2026-09-05): "혼합은
+          // 적용 안 할거고 완전 포장인 것만 적용할 거야... 현재 이미 있는
+          // 포장 애들도 적용해줘. 저기 저 박스 누르면 나오게 해달라는
+          // 말이야". 일부만 포장인 "혼합" 주문과 순수 매장내 주문은 주문
+          // 하나를 반으로 쪼개 따로 결제할 방법이 없으니 그대로 테이블
+          // 전체 타일(bundledOrders)에 묶어서 보여준다. 대표 타일은 (a)
+          // 묶어서 보여줄 매장내/혼합 주문이 있거나 (b) 애초에 미결제
+          // 주문이 하나도 없을 때만 그리고, 미결제 주문이 전부 완전
+          // 포장뿐이면(포장 카운터가 원래 그랬듯) 대표 타일 없이 주문별
+          // 타일만 나란히 보여준다.
+          const takeoutOrders = unpaid.filter((o) => o.order_type === "takeout");
+          const bundledOrders = unpaid.filter((o) => o.order_type !== "takeout");
+          const showMainTile = bundledOrders.length > 0 || unpaid.length === 0;
+
+          let nextLeft = left;
+          if (showMainTile) {
+            const tableEl = document.createElement("div");
+            tableEl.className = "table-block" + (bundledOrders.length ? " has-order" : "");
+            tableEl.style.left = nextLeft + "px";
+            tableEl.style.top = top + "px";
+            tableEl.style.width = w + "px";
+            tableEl.style.height = h + "px";
+            tableEl.innerHTML = `
+              <span>${t.label || t.number}</span>${t.party_size && bundledOrders.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+            `;
+            tableEl.onclick = () => openTableDetail(t.number, t.label);
+            zoneEl.appendChild(tableEl);
+            nextLeft += w + gap;
           }
-          const tableEl = document.createElement("div");
-          tableEl.className = "table-block" + (unpaid.length ? " has-order" : "");
-          tableEl.style.left = left + "px";
-          tableEl.style.top = top + "px";
-          tableEl.style.width = w + "px";
-          tableEl.style.height = h + "px";
-          tableEl.innerHTML = `
-            <span>${t.label || t.number}</span>${t.party_size && unpaid.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
-          `;
-          tableEl.onclick = () => openTableDetail(t.number, t.label);
-          zoneEl.appendChild(tableEl);
+
+          takeoutOrders.forEach((o) => {
+            const tileEl = document.createElement("div");
+            tileEl.className = "table-block has-order takeout-order-tile";
+            tileEl.style.left = nextLeft + "px";
+            tileEl.style.top = top + "px";
+            tileEl.style.width = w + "px";
+            tileEl.style.height = h + "px";
+            tileEl.innerHTML = `
+              <span>${t.label || t.number}</span><span class="tb-counter-tag">${fmtTakeoutTileTag(t, o)}</span>
+            `;
+            tileEl.onclick = () => openTableDetail(t.number, t.label, o.id);
+            zoneEl.appendChild(tileEl);
+            nextLeft += w + gap;
+          });
         });
     });
   }
