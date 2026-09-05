@@ -411,4 +411,96 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   res.json(order);
 });
 
+// Admin: 부분 결제 — 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고
+// 다른 테이블 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만
+// 결제완료 할 수 있게. 나눠서 계산할 수도 있고" → 곧이어 "선택이 주문별이
+// 아니라 메뉴별이야" — 한 주문(라운드) 안에서도 일부 메뉴 품목만 체크해서
+// 그것만 결제 완료 처리할 수 있어야 한다. 결제 상태(status)는 주문
+// 단위로만 존재하므로, 체크된 품목이 이 주문의 전부가 아니라면 그
+// 품목들만 떼어 새 주문(바로 결제완료 상태)으로 만들고, 남은 품목은 이
+// 주문에 그대로 남겨 계속 미결제로 둔다. 체크된 품목이 전부라면 그냥 이
+// 주문 전체를 결제완료로 바꾸면 되므로 나눌 필요가 없다 — 클라이언트가
+// 매번 구분하지 않고 이 엔드포인트 하나만 부르면 되도록 여기서 판단한다.
+// 카운터(포장) 주문은 애초에 클라이언트가 체크박스를 보여주지 않지만,
+// 혹시 모를 직접 호출에 대비해 여기서 막지는 않는다 — status 가드만
+// 동일하게 적용한다.
+router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
+  if (req.session.role !== "owner") {
+    const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderEdit);
+    if (!allowed) return res.status(403).json({ error: "permission_denied" });
+  }
+  const id = parseInt(req.params.id, 10);
+  const order = store.orders.find((o) => o.id === id);
+  if (!order) return res.status(404).json({ error: "not_found" });
+  if (order.status === "paid" || order.status === "cancelled") {
+    return res.status(400).json({ error: "order_not_editable" });
+  }
+
+  const { itemIndexes } = req.body || {};
+  if (!Array.isArray(itemIndexes) || itemIndexes.length === 0) {
+    return res.status(400).json({ error: "invalid_selection" });
+  }
+  const selectedIdx = [...new Set(itemIndexes.map((i) => parseInt(i, 10)))].filter(
+    (i) => Number.isInteger(i) && i >= 0 && i < order.items.length
+  );
+  if (selectedIdx.length === 0) return res.status(400).json({ error: "invalid_selection" });
+
+  const selectedSet = new Set(selectedIdx);
+  const selectedItems = order.items.filter((_, i) => selectedSet.has(i));
+  const remainingItems = order.items.filter((_, i) => !selectedSet.has(i));
+
+  const lineTotal = (it) => (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
+  const applyVip = (subtotal) =>
+    order.vip_discount_percent ? Math.round((subtotal * (100 - order.vip_discount_percent)) / 100) : subtotal;
+  const orderTypeOf = (items) => {
+    const takeoutCount = items.filter((it) => it.order_type === "takeout").length;
+    return takeoutCount === 0 ? "dine_in" : takeoutCount === items.length ? "takeout" : "mixed";
+  };
+
+  // 전부 체크 = 이 주문 전체를 결제완료로, 나눌 필요 없음. PATCH /:id와
+  // 같은 party_size 정리 규칙도 그대로 적용한다.
+  if (remainingItems.length === 0) {
+    order.status = "paid";
+    order.updated_at = nowLocal();
+    const stillActive = store.orders.some(
+      (o) => o.table_number === order.table_number && o.status !== "paid" && o.status !== "cancelled"
+    );
+    if (!stillActive) {
+      const table = store.tables.find((t) => t.number === order.table_number);
+      if (table && table.party_size) {
+        table.party_size = null;
+        table.party_size_updated_at = null;
+      }
+    }
+    await save();
+    return res.json({ updatedOrder: order, newOrder: null });
+  }
+
+  // 일부만 체크 — 체크된 품목을 새 주문(결제완료 상태)으로 떼어내고, 남은
+  // 품목은 원래 주문에 남겨 계속 미결제 상태로 둔다. 둘 다 원래 주문의
+  // vip_discount_percent를 그대로 적용해서, 나눈 뒤에도 합계가 원래
+  // 합계와 어긋나지 않게 한다.
+  const selectedSubtotal = selectedItems.reduce((s, it) => s + lineTotal(it), 0);
+  const remainingSubtotal = remainingItems.reduce((s, it) => s + lineTotal(it), 0);
+  const newOrder = {
+    ...order,
+    id: nextId("orders"),
+    items: selectedItems,
+    order_type: orderTypeOf(selectedItems),
+    subtotal: selectedSubtotal,
+    total: applyVip(selectedSubtotal),
+    status: "paid",
+    updated_at: nowLocal(),
+  };
+  order.items = remainingItems;
+  order.order_type = orderTypeOf(remainingItems);
+  order.subtotal = remainingSubtotal;
+  order.total = applyVip(remainingSubtotal);
+  order.updated_at = nowLocal();
+
+  store.orders.push(newOrder);
+  await save();
+  res.json({ updatedOrder: order, newOrder });
+});
+
 module.exports = router;
