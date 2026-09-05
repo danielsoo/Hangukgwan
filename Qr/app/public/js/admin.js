@@ -19,6 +19,14 @@
   let pollTimer = null;
   let knownOrderIds = new Set();
   let openTableNumber = null;
+  // 포장 카운터는 서로 무관한 손님 주문이 여러 건 동시에 쌓일 수 있어서,
+  // 결제탭에서 그 중 특정 주문 하나를 눌러 들어갔을 때는 그 주문 하나로만
+  // 화면을 좁혀야 한다 (item 22 후속: 결제탭 포장 타일 여러 개로 분리).
+  // openTableLabel/openFocusOrderId는 4초 폴링(loadOrders)이나 언어 전환이
+  // 이 모달을 다시 그릴 때도 지금 보고 있던 좁혀진 화면 그대로 유지하기
+  // 위한 기억 용도 — openTableDetail() 호출마다 최신 값으로 갱신된다.
+  let openTableLabel = null;
+  let openFocusOrderId = null;
   // Orders whose most recent auto-print attempt is known to have failed
   // (see printKitchenTicket() / markPrintFailed() below) — surfaced as a
   // banner plus a badge on the order's card, since a printer that silently
@@ -1019,7 +1027,7 @@
       renderMenuAdmin();
       populateCategorySelect();
       if ($("#dashboard") && !$("#dashboard").hidden && !$("#floorPlanWrap").hidden) renderFloorPlan();
-      if (openTableNumber) openTableDetail(openTableNumber);
+      if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
       if (!$("#tab-settlement").hidden) loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
       if (!$("#tab-reservations").hidden) renderReservations();
     };
@@ -1259,7 +1267,7 @@
     renderTables();
     if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
     if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
-    if (openTableNumber) openTableDetail(openTableNumber);
+    if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
 
     if (!isFirstLoad && newlyArrived.length > 0) {
       newlyArrived.forEach((o) => flashNewOrder(o.id));
@@ -2839,17 +2847,26 @@
     if (modal) modal.scrollTop = 0;
   }
 
-  function openTableDetail(tableNumber, label) {
+  function openTableDetail(tableNumber, label, focusOrderId) {
     // A previous round's paid order used to sit in the same undivided,
     // continuously-scrolling list as whatever the table ordered next —
     // fine right after paying, confusing once a new order comes in.
     // 진행중/결제완료 내역 tabs (tableDetailView, declared up top) keep the
     // two apart: paid orders always land in 완료 내역, so a fresh order for
     // the same table always starts clean in 진행중.
-    if (openTableNumber !== tableNumber) tableDetailView = "active";
+    focusOrderId = focusOrderId || null;
+    if (openTableNumber !== tableNumber || openFocusOrderId !== focusOrderId) tableDetailView = "active";
     openTableNumber = tableNumber;
+    if (label != null) openTableLabel = label;
+    openFocusOrderId = focusOrderId;
     const table = tables.find((t) => String(t.number) === String(tableNumber));
-    const tableOrders = activeOrdersForTable(tableNumber); // excludes only "cancelled"
+    const allTableOrders = activeOrdersForTable(tableNumber); // excludes only "cancelled"
+    // 결제탭에서 포장 카운터의 특정 손님 주문 타일 하나를 눌러 들어온
+    // 경우(focusOrderId) — 그 손님과 무관한 다른 포장 주문들과 섞이지
+    // 않도록 이 화면 전체를 그 주문 하나로 좁힌다. 진짜 테이블(같은
+    // 일행)에서는 focusOrderId 없이 항상 테이블 전체 주문을 그대로 보여준다.
+    const focusedOrder = focusOrderId != null ? allTableOrders.find((o) => o.id === focusOrderId) : null;
+    const tableOrders = focusOrderId != null ? allTableOrders.filter((o) => o.id === focusOrderId) : allTableOrders;
     const activeOrders = tableOrders.filter((o) => o.status !== "paid");
     const paidOrders = tableOrders.filter((o) => o.status === "paid");
     const unpaidOrders = activeOrders;
@@ -2866,8 +2883,11 @@
         ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
         : "";
     // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
-    // label already says what it is.
-    const titleText = table && table.is_counter ? label || tableNumber : `${T("tableLabel")} ${label || tableNumber}`;
+    // label already says what it is. focusedOrder가 있으면(개별 포장 타일을
+    // 눌러 들어온 경우) 제목에 그 손님의 픽업 태그를 덧붙여서 지금 보고
+    // 있는 게 여러 포장 주문 중 어느 건지 한눈에 보이게 한다.
+    const counterFocusTag = table && table.is_counter && focusedOrder ? ` · ${fmtCounterOrderTag(focusedOrder)}` : "";
+    const titleText = table && table.is_counter ? `${label || openTableLabel || tableNumber}${counterFocusTag}` : `${T("tableLabel")} ${label || tableNumber}`;
     const header = `
       <h2>${titleText}${partyText}</h2>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
@@ -2900,7 +2920,7 @@
       .forEach((btn) => {
         btn.onclick = () => {
           tableDetailView = btn.dataset.detailView;
-          openTableDetail(tableNumber, label);
+          openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };
       });
@@ -2919,7 +2939,7 @@
           const id = parseInt(btn.dataset.toggleItemsId, 10);
           if (expandedOrderIds.has(id)) expandedOrderIds.delete(id);
           else expandedOrderIds.add(id);
-          openTableDetail(tableNumber, label);
+          openTableDetail(tableNumber, label, focusOrderId);
         };
       });
     $("#tableDetailBody")
@@ -2928,7 +2948,7 @@
         btn.onclick = async () => {
           await updateOrderStatus(parseInt(btn.dataset.advanceId, 10), btn.dataset.advanceTo);
           await loadOrders();
-          openTableDetail(tableNumber, label);
+          openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };
       });
@@ -2948,7 +2968,7 @@
           await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
           await loadOrders();
           await loadTables();
-          openTableDetail(tableNumber, label);
+          openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };
       });
@@ -3016,11 +3036,15 @@
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
     openTableNumber = null;
+    openTableLabel = null;
+    openFocusOrderId = null;
   };
   $("#tableDetailBackdrop").addEventListener("click", (e) => {
     if (e.target.id === "tableDetailBackdrop") {
       $("#tableDetailBackdrop").hidden = true;
       openTableNumber = null;
+      openTableLabel = null;
+      openFocusOrderId = null;
     }
   });
 
@@ -3737,12 +3761,42 @@
         .filter((t) => t.zone_id === z.id)
         .forEach((t) => {
           const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
+          const left = t.x != null ? t.x : 10;
+          const top = t.y != null ? t.y : ZONE_HEADER_HEIGHT;
+          const w = t.width || 70;
+          const h = t.height || 70;
+          // 포장 카운터(is_counter)는 서로 무관한 손님 주문이 동시에 여러
+          // 건 쌓일 수 있다 — 사장님 피드백: "포장 주문 특성상 여러명이
+          // 다른 개개별 주문이 여러개 들어갈 수 있으니까... 갯수별로
+          // 화면에 여러개 이어 붙여서 나타내면 필요한 것만 누를 수 있게".
+          // 그래서 카운터 한 칸을 늘 하나의 타일로 그리는 대신, 지금 미결제
+          // 상태인 포장 주문 건수만큼 타일을 옆으로 나란히 늘어놓고, 각
+          // 타일은 그 주문 하나로만 좁혀진 결제 화면으로 바로 연결한다
+          // (openTableDetail의 focusOrderId). 대기 중인 포장 주문이 하나도
+          // 없으면 원래대로 빈 타일 하나만 보여준다.
+          if (t.is_counter && unpaid.length) {
+            const gap = 8;
+            unpaid.forEach((o, idx) => {
+              const tileEl = document.createElement("div");
+              tileEl.className = "table-block has-order counter-order-tile";
+              tileEl.style.left = left + idx * (w + gap) + "px";
+              tileEl.style.top = top + "px";
+              tileEl.style.width = w + "px";
+              tileEl.style.height = h + "px";
+              tileEl.innerHTML = `
+                <span>${t.label || t.number}</span><span class="tb-counter-tag">${fmtCounterOrderTag(o)}</span>
+              `;
+              tileEl.onclick = () => openTableDetail(t.number, t.label, o.id);
+              zoneEl.appendChild(tileEl);
+            });
+            return;
+          }
           const tableEl = document.createElement("div");
           tableEl.className = "table-block" + (unpaid.length ? " has-order" : "");
-          tableEl.style.left = (t.x != null ? t.x : 10) + "px";
-          tableEl.style.top = (t.y != null ? t.y : ZONE_HEADER_HEIGHT) + "px";
-          tableEl.style.width = (t.width || 70) + "px";
-          tableEl.style.height = (t.height || 70) + "px";
+          tableEl.style.left = left + "px";
+          tableEl.style.top = top + "px";
+          tableEl.style.width = w + "px";
+          tableEl.style.height = h + "px";
           tableEl.innerHTML = `
             <span>${t.label || t.number}</span>${t.party_size && unpaid.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
           `;
