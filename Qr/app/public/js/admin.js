@@ -2920,9 +2920,21 @@
     `;
     const shownOrders = tableDetailView === "paid" ? paidOrders : activeOrders;
     const emptyMsg = tableDetailView === "paid" ? T("tableDetailNoPaidHistory") : T("noOrdersYetAdmin");
-    const body = shownOrders.length
-      ? shownOrders.map((o) => renderTableOrderBlock(o)).join("")
-      : `<p style="color:var(--muted);padding:20px 0;text-align:center;">${emptyMsg}</p>`;
+    const orderBlocksHtml = shownOrders.map((o) => renderTableOrderBlock(o)).join("");
+    // 사장님 피드백(2026-09-05, 포장 카운터 화면 스크린샷과 함께): "지금 한
+    // 창에 다른 여러개의 주문들이 섞여 있잖아. 차라리 각 주문들의 창을 한
+    // 열 행으로 이어붙여서 여러개 할 수 있으면 좋을 거 같아" — 서로 무관한
+    // 손님 여러 명의 주문(포장 카운터가 대표 사례)이 세로로 죽 이어져
+    // 있으면 어디부터 어디까지가 한 주문인지 헷갈린다는 뜻. 주문이 2건
+    // 이상이면 각자 뚜렷한 카드로 나눠서 가로로 나란히 배치하고(모달 폭이
+    // 좁아 카드가 다 안 들어가면 옆으로 스크롤/스와이프해서 넘겨봄),
+    // 주문이 1건뿐이거나 특정 주문 하나만 보고 있을 때(focusOrderId)는
+    // 가로 스크롤을 만들 이유가 없어 카드 하나만 그대로 보여준다.
+    const body = !shownOrders.length
+      ? `<p style="color:var(--muted);padding:20px 0;text-align:center;">${emptyMsg}</p>`
+      : shownOrders.length > 1
+      ? `<div class="order-block-row">${orderBlocksHtml}</div>`
+      : orderBlocksHtml;
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
@@ -3037,8 +3049,12 @@
     // 여기 결제 화면의 픽업 번호/성함 태그 옆에도 붙여준다.
     const counterPhone = isCounterOrder(o) && o.customer_phone ? ` · ☎${o.customer_phone}` : "";
     const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)}${counterPhone} · ` : "";
+    // 각 주문을 (구분선만 있던) 이어붙은 한 목록의 일부가 아니라 뚜렷한
+    // 카드 하나로 보이도록 전체 테두리를 준다 — order-block-row(위)가 여러
+    // 개를 가로로 나란히 놓을 때도, 주문이 하나뿐이라 세로로 그냥 하나만
+    // 보여줄 때도 항상 "이건 하나의 독립된 주문"이라는 게 한눈에 보이게.
     return `
-      <div style="border-top:1px solid var(--line);padding:14px 0;">
+      <div class="table-order-block">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-weight:700;font-size:15px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</span>
           <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
