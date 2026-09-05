@@ -3256,7 +3256,15 @@
       groupPayBtn || groupEditBtn
         ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupPayBtn}${groupEditBtn}</div>`
         : "";
-    return `<div class="table-order-block">${roundsHtml}${groupButtonsHtml}</div>`;
+    // 사장님 피드백(2026-09-05, 스크린샷과 함께): "합계는 가장 아래 소계
+    // 아래에 하나 있었으면 좋겠어 다른 색으로" — 라운드마다 있는 소계
+    // (검정 텍스트)와는 별개로, 맨 마지막 소계 바로 아래에 전체 라운드를
+    // 합친 합계를 한 번만, 눈에 띄는 색(포인트 레드, 버튼과 같은 색)으로
+    // 보여준다. 기존 소계보다 진하게/크게 해서 "이게 전체 합"이라는 게
+    // 한눈에 구분되게 한다.
+    const grandTotal = orders.reduce((s, o) => s + o.total, 0);
+    const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${grandTotal}</div>`;
+    return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}${groupButtonsHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
