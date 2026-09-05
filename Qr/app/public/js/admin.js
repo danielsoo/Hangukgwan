@@ -62,6 +62,15 @@
   // just-settled one in the same scrolling list. Reset to "active" every
   // time a (possibly different) table is opened.
   let tableDetailView = "active";
+  // 포장 카운터처럼 서로 무관한 손님 주문이 여러 건 한 화면에 뜰 때, 사장님
+  // 피드백(2026-09-05): "이 엑스하는 창 같은 걸 따로따로 다 만들어달라는
+  // 거였어... 그러면 완전 다른 거라고 인식하기 편하고" — 카드 하나하나를
+  // 그 자체로 닫을 수 있는 독립된 창처럼 보이게 해달라는 요청. 각 주문
+  // 카드마다 자기만의 ✕ 버튼을 달아서, 누르면 그 주문의 결제 상태와는
+  // 무관하게 이 화면에서만 그 카드를 잠깐 치워둘 수 있게 한다(다른 카드에
+  // 영향 없음, 모달을 다시 열면 초기화됨 — 아래 openTableDetail의
+  // tableDetailView 리셋과 같은 조건에서 함께 리셋).
+  let dismissedOrderIds = new Set();
 
   // ---------- In-app confirm/alert ----------
   // Replaces every native window.confirm()/alert() on this page. A
@@ -205,6 +214,9 @@
       tableDetailTabActive: "현재 주문",
       tableDetailTabPaid: "이전 주문",
       tableDetailNoPaidHistory: "아직 결제 완료된 주문이 없습니다.",
+      allOrderCardsDismissed: "모든 주문 카드를 치웠습니다.",
+      restoreDismissedBtn: "다시 보기",
+      dismissOrderCardBtn: "이 카드 치우기",
       orderEditModalTitle: "주문 수정",
       orderEditAddBtn: "+ 추가",
       orderEditAddHint: "동판불고기처럼 섞어 담는 메뉴는 여기서 새로 추가할 수 없어요 — 새 메뉴로 추가하려면 수기 주문을 이용해주세요.",
@@ -567,6 +579,9 @@
       tableDetailTabActive: "目前訂單",
       tableDetailTabPaid: "先前訂單",
       tableDetailNoPaidHistory: "目前還沒有已結帳的訂單。",
+      allOrderCardsDismissed: "已隱藏所有訂單卡片。",
+      restoreDismissedBtn: "重新顯示",
+      dismissOrderCardBtn: "隱藏這張卡片",
       orderEditModalTitle: "修改訂單",
       orderEditAddBtn: "+ 新增",
       orderEditAddHint: "像銅盤烤肉這種可混搭的餐點，無法在這裡新增——如需新增請改用手動點餐。",
@@ -2863,7 +2878,13 @@
     // two apart: paid orders always land in 완료 내역, so a fresh order for
     // the same table always starts clean in 진행중.
     focusOrderId = focusOrderId || null;
-    if (openTableNumber !== tableNumber || openFocusOrderId !== focusOrderId) tableDetailView = "active";
+    if (openTableNumber !== tableNumber || openFocusOrderId !== focusOrderId) {
+      tableDetailView = "active";
+      // 다른 테이블(혹은 다른 focusOrderId)을 새로 연 것이므로, 이전에
+      // 열어봤던 화면에서 개별로 치워뒀던 카드(dismissedOrderIds)는 이번
+      // 화면과 무관하니 초기화한다.
+      dismissedOrderIds = new Set();
+    }
     openTableNumber = tableNumber;
     if (label != null) openTableLabel = label;
     openFocusOrderId = focusOrderId;
@@ -2920,20 +2941,35 @@
     `;
     const shownOrders = tableDetailView === "paid" ? paidOrders : activeOrders;
     const emptyMsg = tableDetailView === "paid" ? T("tableDetailNoPaidHistory") : T("noOrdersYetAdmin");
-    const orderBlocksHtml = shownOrders.map((o) => renderTableOrderBlock(o)).join("");
-    // 사장님 피드백(2026-09-05, 포장 카운터 화면 스크린샷과 함께): "지금 한
-    // 창에 다른 여러개의 주문들이 섞여 있잖아. 차라리 각 주문들의 창을 한
-    // 열 행으로 이어붙여서 여러개 할 수 있으면 좋을 거 같아" — 서로 무관한
-    // 손님 여러 명의 주문(포장 카운터가 대표 사례)이 세로로 죽 이어져
-    // 있으면 어디부터 어디까지가 한 주문인지 헷갈린다는 뜻. 주문이 2건
-    // 이상이면 각자 뚜렷한 카드로 나눠서 가로로 나란히 배치하고(모달 폭이
-    // 좁아 카드가 다 안 들어가면 옆으로 스크롤/스와이프해서 넘겨봄),
-    // 주문이 1건뿐이거나 특정 주문 하나만 보고 있을 때(focusOrderId)는
-    // 가로 스크롤을 만들 이유가 없어 카드 하나만 그대로 보여준다.
+    // 사장님 피드백(2026-09-05, 포장 카운터 화면 스크린샷과 함께, 두 차례에
+    // 걸쳐): 처음엔 "지금 한 창에 다른 여러개의 주문들이 섞여 있잖아.
+    // 차라리 각 주문들의 창을 한 열 행으로 이어붙여서 여러개 할 수 있으면
+    // 좋을 거 같아"(→ 카드로 분리 + 가로 한 줄), 그 다음엔 스크린샷과 함께
+    // "이 엑스하는 창 같은 걸 따로따로 다 만들어달라는 거였어. 옆으로
+    // 위아래로 이어 붙여서. 그러면 완전 다른 거라고 인식하기 편하고" — 카드
+    // 하나가 한 줄로 옆에 이어붙는 걸론 부족하고, 이 모달 자체(자기만의
+    // ✕ 버튼이 있는 하나의 "창")처럼 보이는 독립된 창을 여러 개, 가로뿐
+    // 아니라 세로로도 줄바꿈되는 격자로 늘어놔야 "완전 다른 것"으로
+    // 보인다는 뜻. 주문이 2건 이상이면 각 카드에 자기만의 ✕(치우기) 버튼을
+    // 달고 grid로 배치해서 옆으로도 위아래로도 이어붙게 하고, 1건뿐이거나
+    // 특정 주문 하나만 보고 있을 때(focusOrderId)는 굳이 그럴 필요가 없어
+    // 카드 하나만 그대로 보여준다.
+    const isGrid = shownOrders.length > 1;
+    const visibleOrders = isGrid ? shownOrders.filter((o) => !dismissedOrderIds.has(o.id)) : shownOrders;
+    const orderBlocksHtml = visibleOrders.map((o) => renderTableOrderBlock(o, isGrid)).join("");
+    const allDismissedHtml =
+      isGrid && shownOrders.length && !visibleOrders.length
+        ? `<div style="text-align:center;padding:20px 0;color:var(--muted);">
+             <p style="margin:0 0 10px;">${T("allOrderCardsDismissed")}</p>
+             <button type="button" id="tableDetailRestoreDismissed" style="padding:7px 14px;font-size:14px;">${T("restoreDismissedBtn")}</button>
+           </div>`
+        : "";
     const body = !shownOrders.length
       ? `<p style="color:var(--muted);padding:20px 0;text-align:center;">${emptyMsg}</p>`
-      : shownOrders.length > 1
-      ? `<div class="order-block-row">${orderBlocksHtml}</div>`
+      : allDismissedHtml
+      ? allDismissedHtml
+      : isGrid
+      ? `<div class="order-block-grid">${orderBlocksHtml}</div>`
       : orderBlocksHtml;
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
@@ -2944,6 +2980,11 @@
       `
       : "";
     $("#tableDetailBody").innerHTML = header + tabsHtml + body + footer;
+    // 카드가 여러 개 격자로 뜨는 화면은 기본 480px 폭으로는 한 줄에 하나도
+    // 넉넉히 안 들어가 "독립된 창"처럼 안 보이므로(위 admin.css의
+    // .table-detail-modal.wide 참고) 이때만 폭을 넓힌다.
+    const modalEl = $("#tableDetailBackdrop .modal");
+    if (modalEl) modalEl.classList.toggle("wide", isGrid);
     $("#tableDetailBody")
       .querySelectorAll("[data-detail-view]")
       .forEach((btn) => {
@@ -2971,6 +3012,25 @@
           openTableDetail(tableNumber, label, focusOrderId);
         };
       });
+    // 카드 자체의 ✕(치우기) 버튼 — 결제 상태와는 무관하게 이 화면에서만
+    // 그 카드를 잠깐 안 보이게 한다(dismissedOrderIds, 위 선언부 주석
+    // 참고). 전부 치우면 "모든 주문 카드를 치웠습니다 / 다시 보기" 안내로
+    // 바뀐다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-dismiss-id]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          dismissedOrderIds.add(parseInt(btn.dataset.dismissId, 10));
+          openTableDetail(tableNumber, label, focusOrderId);
+        };
+      });
+    const restoreBtn = $("#tableDetailRestoreDismissed");
+    if (restoreBtn) {
+      restoreBtn.onclick = () => {
+        dismissedOrderIds = new Set();
+        openTableDetail(tableNumber, label, focusOrderId);
+      };
+    }
     $("#tableDetailBody")
       .querySelectorAll("[data-advance-id]")
       .forEach((btn) => {
@@ -3004,7 +3064,7 @@
     $("#tableDetailBackdrop").hidden = false;
   }
 
-  function renderTableOrderBlock(o) {
+  function renderTableOrderBlock(o, withDismiss) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
     const itemLines = o.items.map(
       (it) =>
@@ -3050,11 +3110,21 @@
     const counterPhone = isCounterOrder(o) && o.customer_phone ? ` · ☎${o.customer_phone}` : "";
     const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)}${counterPhone} · ` : "";
     // 각 주문을 (구분선만 있던) 이어붙은 한 목록의 일부가 아니라 뚜렷한
-    // 카드 하나로 보이도록 전체 테두리를 준다 — order-block-row(위)가 여러
-    // 개를 가로로 나란히 놓을 때도, 주문이 하나뿐이라 세로로 그냥 하나만
-    // 보여줄 때도 항상 "이건 하나의 독립된 주문"이라는 게 한눈에 보이게.
+    // 카드 하나로 보이도록 전체 테두리를 준다 — order-block-grid(위)가 여러
+    // 개를 가로세로로 늘어놓을 때도, 주문이 하나뿐이라 그냥 하나만 보여줄
+    // 때도 항상 "이건 하나의 독립된 주문"이라는 게 한눈에 보이게.
+    //
+    // withDismiss(주문이 2건 이상일 때만 true)면 카드 자기 자신의 ✕ 버튼을
+    // 오른쪽 위 모서리에 달아준다 — 사장님 피드백: "이 엑스하는 창 같은 걸
+    // 따로따로 다 만들어달라는 거였어" — 위쪽 모달 전체의 ✕와는 별개로,
+    // 이 카드 하나만 이 화면에서 잠깐 치울 수 있게(결제 상태와는 무관, 아래
+    // openTableDetail의 dismissedOrderIds 참고).
+    const dismissBtn = withDismiss
+      ? `<button type="button" class="table-order-block-dismiss" data-dismiss-id="${o.id}" title="${T("dismissOrderCardBtn")}" aria-label="${T("dismissOrderCardBtn")}">✕</button>`
+      : "";
     return `
-      <div class="table-order-block">
+      <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
+        ${dismissBtn}
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
           <span style="font-weight:700;font-size:15px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</span>
           <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>

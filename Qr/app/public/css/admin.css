@@ -144,29 +144,49 @@ input, select, button, textarea { font-family: inherit; }
 .table-order-badge.empty { background: #f2ede2; color: var(--muted); font-weight: 500; }
 .table-party-badge { margin-top: 4px; font-size: 14px; color: var(--muted); font-weight: 600; }
 .table-detail-modal { max-width: 480px; }
+/* 주문이 여러 건이라 아래 .order-block-grid가 뜨는 화면은 카드가 최소한
+   한 줄에 하나씩은 여유 있게 들어가야 "각자 독립된 창"처럼 보이므로,
+   480px보다 훨씬 넓혀준다(JS의 openTableDetail에서 isGrid일 때만 이
+   클래스를 붙임 — 주문이 1건뿐이거나 특정 주문 하나만 볼 때는 원래
+   폭 그대로). */
+.table-detail-modal.wide { max-width: 900px; }
 
-/* 테이블 상세(결제) 모달 안의 주문 카드 — 2026-09-05 사장님 피드백: "지금
-   한 창에 다른 여러개의 주문들이 섞여 있잖아. 차라리 각 주문들의 창을 한
-   열 행으로 이어붙여서 여러개 할 수 있으면 좋을 거 같아". 서로 무관한
-   손님 여러 명의 주문(포장 카운터가 대표 사례)이 구분선 하나로만 나뉜 채
-   세로로 죽 이어져 있으면 어디부터 어디까지가 한 주문인지 헷갈렸던 문제 —
-   전체 테두리를 줘서 항상 뚜렷한 카드로 보이게 하고, 주문이 2건 이상이면
-   .order-block-row가 그 카드들을 가로로 나란히 놓는다(모달 폭이 좁아 다
-   안 들어가면 옆으로 스크롤/스와이프). */
-.table-order-block { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: #fff; }
-.order-block-row {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  margin: 0 -4px 4px;
-  padding: 2px 4px 10px;
+/* 테이블 상세(결제) 모달 안의 주문 카드 — 2026-09-05 사장님 피드백(두
+   차례): "지금 한 창에 다른 여러개의 주문들이 섞여 있잖아. 차라리 각
+   주문들의 창을 한 열 행으로 이어붙여서 여러개 할 수 있으면 좋을 거
+   같아" → 그 다음 "이 엑스하는 창 같은 걸 따로따로 다 만들어달라는
+   거였어. 옆으로 위아래로 이어 붙여서. 그러면 완전 다른 거라고 인식하기
+   편하고". 서로 무관한 손님 여러 명의 주문(포장 카운터가 대표 사례)을
+   한 눈에 "완전 다른 것"으로 알아보게 하려면 카드 하나하나가 이 모달
+   자체처럼(자기만의 테두리·그림자·✕ 버튼이 있는 독립된 "창") 보여야
+   하고, 한 줄로만 이어지는 게 아니라 옆으로도 위아래로도 줄바꿈되는
+   격자로 늘어놓아야 한다. */
+.table-order-block { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; background: #fff; position: relative; }
+/* withDismiss일 때(주문 2건 이상)만 붙는 수정자 — 그림자를 더 줘서 뒤에
+   깔린 다른 카드와 확실히 분리된 "창"처럼 보이게 한다. */
+.table-order-block-windowed { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); padding-top: 34px; }
+.table-order-block-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 999px;
+  background: #f1ede6;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
 }
-.order-block-row .table-order-block {
-  flex: 0 0 88%;
-  scroll-snap-align: start;
-  margin-bottom: 0;
+.table-order-block-dismiss:hover { background: #e6e0d4; color: var(--ink); }
+.order-block-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-bottom: 4px;
 }
+.order-block-grid .table-order-block { margin-bottom: 0; }
 
 /* 포장 카운터 QR box — a separate, non-table order source (see
    renderCounterSection in admin.js), so it sits in its own card above the
