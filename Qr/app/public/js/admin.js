@@ -71,6 +71,15 @@
   // 영향 없음, 모달을 다시 열면 초기화됨 — 아래 openTableDetail의
   // tableDetailView 리셋과 같은 조건에서 함께 리셋).
   let dismissedOrderIds = new Set();
+  // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
+  // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
+  // 있게. 나눠서 계산할 수도 있고 그래서 그래" — 진짜 테이블(카운터
+  // 제외)에서 미결제 라운드가 여러 건일 때, 그 중 일부만 체크해서
+  // 선택한 라운드만 결제 완료 처리할 수 있게 한다(예: 먼저 온 손님이
+  // 자기 라운드만 계산하고 나머지는 나중에 계산). 체크된 주문 id들을
+  // 담는 Set — dismissedOrderIds와 같은 조건(테이블/포커스 전환)에서
+  // 함께 리셋된다. renderMergedOrderGroup(아래)이 직접 참조한다.
+  let selectedPayOrderIds = new Set();
 
   // ---------- In-app confirm/alert ----------
   // Replaces every native window.confirm()/alert() on this page. A
@@ -272,6 +281,7 @@
       unpaidTotalLabel: "현재 미결제 합계:",
       unpaidTotalLabel2: "미결제 합계:",
       payAllBtn: "전체 결제 완료",
+      paySelectedBtn: "선택 결제 완료",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -637,6 +647,7 @@
       unpaidTotalLabel: "目前未結帳金額：",
       unpaidTotalLabel2: "未結帳金額：",
       payAllBtn: "全部結帳完成",
+      paySelectedBtn: "勾選結帳完成",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -1004,6 +1015,14 @@
     adminLang === "zh"
       ? `確定要將桌號 ${label} 的 ${n} 筆未結帳訂單全部標記為已結帳嗎？`
       : `테이블 ${label}의 미결제 주문 ${n}건을 모두 결제 완료로 처리하시겠습니까?`;
+  // 사장님 피드백(2026-09-05): "부분 결제를 허용해줘. 체크체크 해서
+  // 그것만 결제완료 할 수 있게. 나눠서 계산할 수도 있고" — 라운드
+  // 일부만 체크해서 결제할 때 확인 문구. fmtConfirmPayAll(전체 결제)과
+  // 구분되도록 "체크한/선택한 n건"이라고 명시한다.
+  const fmtConfirmPaySelected = (label, n, total) =>
+    adminLang === "zh"
+      ? `確定要將桌號 ${label} 勾選的 ${n} 筆訂單（合計 NT$${total}）標記為已結帳嗎？（其餘訂單不受影響）`
+      : `테이블 ${label}에서 체크한 ${n}건(합계 NT$${total})만 결제 완료로 처리하시겠습니까? (나머지 주문은 그대로 유지됩니다)`;
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
     adminLang === "zh"
@@ -2881,9 +2900,11 @@
     if (openTableNumber !== tableNumber || openFocusOrderId !== focusOrderId) {
       tableDetailView = "active";
       // 다른 테이블(혹은 다른 focusOrderId)을 새로 연 것이므로, 이전에
-      // 열어봤던 화면에서 개별로 치워뒀던 카드(dismissedOrderIds)는 이번
+      // 열어봤던 화면에서 개별로 치워뒀던 카드(dismissedOrderIds)와
+      // 부분결제용으로 체크해뒀던 라운드(selectedPayOrderIds)는 이번
       // 화면과 무관하니 초기화한다.
       dismissedOrderIds = new Set();
+      selectedPayOrderIds = new Set();
     }
     openTableNumber = tableNumber;
     if (label != null) openTableLabel = label;
@@ -3079,6 +3100,36 @@
           resetTableDetailScroll();
         };
       });
+    // 부분 결제(체크한 라운드만 결제 완료) — 위 renderMergedOrderGroup의
+    // 체크박스/선택-결제 버튼. 체크박스를 누르면 selectedPayOrderIds만
+    // 갱신하고 다시 그려서 버튼 라벨(선택 결제 완료 ↔ 전체 결제 완료)이
+    // 바로 반영되게 한다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-select-pay-id]")
+      .forEach((checkbox) => {
+        checkbox.onchange = () => {
+          const id = parseInt(checkbox.dataset.selectPayId, 10);
+          if (checkbox.checked) selectedPayOrderIds.add(id);
+          else selectedPayOrderIds.delete(id);
+          openTableDetail(tableNumber, label, focusOrderId);
+        };
+      });
+    $("#tableDetailBody")
+      .querySelectorAll(".pay-selected-btn")
+      .forEach((btn) => {
+        btn.onclick = async () => {
+          const selected = unpaidOrders.filter((o) => selectedPayOrderIds.has(o.id));
+          if (!selected.length) return;
+          const total = selected.reduce((s, o) => s + o.total, 0);
+          if (!(await showConfirm(fmtConfirmPaySelected(label || tableNumber, selected.length, total)))) return;
+          await Promise.all(selected.map((o) => updateOrderStatus(o.id, "paid")));
+          selected.forEach((o) => selectedPayOrderIds.delete(o.id));
+          await loadOrders();
+          await loadTables();
+          openTableDetail(tableNumber, label, focusOrderId);
+          resetTableDetailScroll();
+        };
+      });
     $("#tableDetailBackdrop").hidden = false;
   }
 
@@ -3239,12 +3290,30 @@
   //      대상으로 한다 — 보통 아직 손볼 여지가 있는 건 방금 추가된
   //      라운드이기 때문.
   function renderMergedOrderGroup(orders) {
+    // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
+    // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
+    // 있게. 나눠서 계산할 수도 있고 그래서 그래" — 진짜 테이블(이 함수는
+    // 카운터에는 쓰이지 않는다, 위 openTableDetail의 isGrid 참고)에서
+    // 라운드가 여러 건일 때, 그 중 일부(예: 먼저 계산하려는 손님 몫)만
+    // 체크해서 선택한 라운드만 결제 완료 처리할 수 있게 한다. 각 라운드의
+    // 시간 앞에 체크박스를 붙이고, 체크된 라운드는 살짝 배경을 줘서
+    // 눈에 띄게 한다.
     const roundsHtml = orders
       .map((o, i) => {
         const p = buildOrderRoundParts(o, false);
+        const isPayable = o.status !== "paid" && o.status !== "cancelled";
+        const isSelected = isPayable && selectedPayOrderIds.has(o.id);
+        const dividerStyle = i > 0 ? "margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);" : "";
+        const selectedStyle = isSelected ? "background:#fdf1ea;border-radius:8px;padding:10px;" : "";
+        const timeHtml = isPayable
+          ? `<label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;color:var(--muted);">
+               <input type="checkbox" data-select-pay-id="${o.id}" ${isSelected ? "checked" : ""} style="width:16px;height:16px;margin:0;cursor:pointer;" />
+               ${p.time}
+             </label>`
+          : `<div style="font-size:13px;color:var(--muted);">${p.time}</div>`;
         return `
-          <div${i > 0 ? ' style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);"' : ""}>
-            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">${p.time}</div>
+          <div style="${dividerStyle}${selectedStyle}">
+            <div style="margin-bottom:8px;">${timeHtml}</div>
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
@@ -3253,15 +3322,24 @@
         `;
       })
       .join("");
-    const hasPayable = orders.some((o) => o.status !== "paid" && o.status !== "cancelled");
+    const payableOrders = orders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
+    const hasPayable = payableOrders.length > 0;
+    const selectedOrders = payableOrders.filter((o) => selectedPayOrderIds.has(o.id));
+    const hasSelection = selectedOrders.length > 0;
+    const selectedTotal = selectedOrders.reduce((s, o) => s + o.total, 0);
     const lastOrder = orders[orders.length - 1];
     const groupEditBtn =
       hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${lastOrder.id}">${T("orderEditBtn")}</button>`
         : "";
-    const groupPayBtn = hasPayable
-      ? `<button class="primary-btn pay-all-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("nextServed")}</button>`
-      : "";
+    // 체크된 라운드가 있으면 "선택 결제 완료(합계 NT$X)" 버튼으로 바뀌어
+    // 선택한 것만 결제 처리하고, 아무것도 안 체크했으면 기존처럼
+    // "결제 완료로 변경"(전체) 그대로 — 기본 동작은 안 바뀐다.
+    const groupPayBtn = !hasPayable
+      ? ""
+      : hasSelection
+      ? `<button class="primary-btn pay-selected-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("paySelectedBtn")} (NT$${selectedTotal})</button>`
+      : `<button class="primary-btn pay-all-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("nextServed")}</button>`;
     const groupButtonsHtml =
       groupPayBtn || groupEditBtn
         ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupPayBtn}${groupEditBtn}</div>`
