@@ -2954,7 +2954,15 @@
     // 달고 grid로 배치해서 옆으로도 위아래로도 이어붙게 하고, 1건뿐이거나
     // 특정 주문 하나만 보고 있을 때(focusOrderId)는 굳이 그럴 필요가 없어
     // 카드 하나만 그대로 보여준다.
-    const isGrid = shownOrders.length > 1;
+    // 단, 이건 포장 카운터(서로 무관한 손님들의 주문)에만 해당 — 사장님
+    // 피드백(2026-09-05, 테이블 6 스크린샷과 함께): "이거 한 주문이잖아.
+    // 이건 나누면 안돼. 테이블 주문은 결제 전까지 한 곳에서 추가주문을
+    // 하는 거라서 하나로 묶는 게 맞는 거 같아" — 진짜 테이블에서 미결제
+    // 주문이 여러 건인 건 같은 일행이 결제 전에 추가 주문한 것뿐이므로
+    // 서로 무관한 손님처럼 독립된 창(개별 ✕ 버튼 포함)으로 나누면 안 되고
+    // 계속 하나로 묶어서(세로로 쌓아) 보여줘야 한다. grid/치우기 버튼
+    // 처리는 table.is_counter일 때만 켠다.
+    const isGrid = shownOrders.length > 1 && !!(table && table.is_counter);
     const visibleOrders = isGrid ? shownOrders.filter((o) => !dismissedOrderIds.has(o.id)) : shownOrders;
     const orderBlocksHtml = visibleOrders.map((o) => renderTableOrderBlock(o, isGrid)).join("");
     const allDismissedHtml =
