@@ -2964,7 +2964,17 @@
     // 처리는 table.is_counter일 때만 켠다.
     const isGrid = shownOrders.length > 1 && !!(table && table.is_counter);
     const visibleOrders = isGrid ? shownOrders.filter((o) => !dismissedOrderIds.has(o.id)) : shownOrders;
-    const orderBlocksHtml = visibleOrders.map((o) => renderTableOrderBlock(o, isGrid)).join("");
+    // 사장님 피드백(2026-09-05, isGrid를 카운터로 한정한 바로 다음):
+    // "하나로 만들어줘 대신에 그냥 시간대가 다르면 지금처럼 사이에 시간만
+    // 나타내주고" — 진짜 테이블에 라운드가 2건 이상이어도(isGrid는
+    // false) 예전처럼 카드를 여러 개 세로로 나열하지 말고, 카드 하나
+    // 안에 라운드들을 이어붙인다(renderMergedOrderGroup). 카운터는 그대로
+    // 라운드마다 독립된 카드(renderTableOrderBlock).
+    const orderBlocksHtml = isGrid
+      ? visibleOrders.map((o) => renderTableOrderBlock(o, true)).join("")
+      : visibleOrders.length > 1
+      ? renderMergedOrderGroup(visibleOrders)
+      : visibleOrders.map((o) => renderTableOrderBlock(o, false)).join("");
     const allDismissedHtml =
       isGrid && shownOrders.length && !visibleOrders.length
         ? `<div style="text-align:center;padding:20px 0;color:var(--muted);">
@@ -3072,7 +3082,11 @@
     $("#tableDetailBackdrop").hidden = false;
   }
 
-  function renderTableOrderBlock(o, withDismiss) {
+  // renderTableOrderBlock(카드 하나 전체를 그리는 함수, 아래)와
+  // renderMergedOrderGroup(여러 라운드를 카드 하나 안에 이어붙이는 함수,
+  // 더 아래) 둘 다 "주문 하나"의 시간/품목/버튼/소계를 똑같이 필요로 해서
+  // 공통 로직을 여기로 뽑아둔다 — 카드 테두리를 씌우는 방식만 둘이 다르다.
+  function buildOrderRoundParts(o, withDismiss) {
     const createdAt = new Date(o.created_at.replace(" ", "T"));
     // 2026-09-05 피드백: "시간 왼쪽에 간단하게 날짜까지 넣어줄래? 연도랑" —
     // 포장 카운터 픽업번호가 매일 1로 리셋되다 보니(위 orders.js 참고),
@@ -3166,22 +3180,57 @@
     // 맞도록(위 "규격이 같았으면" 수정과 같은 이유).
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
+    const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
+    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, total: o.total };
+  }
+  function renderTableOrderBlock(o, withDismiss) {
+    const p = buildOrderRoundParts(o, withDismiss);
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
-        ${dismissBtn}
+        ${p.dismissBtn}
         <div style="margin-bottom:10px;">
           <div style="margin-bottom:6px;min-height:58px;">
-            ${identityLineHtml}
-            ${timeStatusLineHtml}
+            ${p.identityLineHtml}
+            ${p.timeStatusLineHtml}
           </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${nextBtn}${editBtn}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
         </div>
-        ${itemsHtml}
-        ${itemsToggleHtml}
-        ${o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : ""}
-        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${o.total}</div>
+        ${p.itemsHtml}
+        ${p.itemsToggleHtml}
+        ${p.noteHtml}
+        <div style="text-align:right;font-weight:700;font-size:16px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
       </div>
     `;
+  }
+  // 사장님 피드백(2026-09-05, 테이블 6 스크린샷과 함께, 두 차례에 걸쳐):
+  // 1) "이거 한 주문이잖아. 이건 나누면 안돼. 테이블 주문은 결제 전까지
+  //    한 곳에서 추가주문을 하는 거라서 하나로 묶는 게 맞는 거 같아" —
+  //    카드를 아예 분리하면 안 된다(위 openTableDetail의 isGrid를
+  //    table.is_counter로 한정한 수정으로 해결).
+  // 2) "하나로 만들어줘 대신에 그냥 시간대가 다르면 지금처럼 사이에
+  //    시간만 나타내주고" — 한 걸음 더: 라운드마다 따로 테두리 있는 카드로
+  //    보이는 것도 원치 않는다. 카드(테두리) 자체를 하나로 합치고, 그
+  //    안에서 라운드가 바뀌는 지점에만 옅은 구분선과 그 라운드의 시간을
+  //    표시해서 "언제 추가된 건지"만 알 수 있게 한다. 카운터의
+  //    renderTableOrderBlock(withDismiss)처럼 라운드마다 독립된 카드
+  //    테두리·그림자·✕ 버튼을 주지 않는다 — 같은 일행의 한 탭이므로.
+  function renderMergedOrderGroup(orders) {
+    const roundsHtml = orders
+      .map((o, i) => {
+        const p = buildOrderRoundParts(o, false);
+        return `
+          <div${i > 0 ? ' style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);"' : ""}>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">${p.time}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${p.nextBtn}${p.editBtn}</div>
+            ${p.itemsHtml}
+            ${p.itemsToggleHtml}
+            ${p.noteHtml}
+            <div style="text-align:right;font-weight:700;font-size:15px;margin-top:8px;">${T("subtotalLabel")} NT$${p.total}</div>
+          </div>
+        `;
+      })
+      .join("");
+    return `<div class="table-order-block">${roundsHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
