@@ -3595,7 +3595,20 @@
   }
 
   function addTableToZone(zone) {
-    const unplaced = tables.filter((t) => t.zone_id == null && !t.is_counter);
+    // 2026-09-05: 포장 카운터(is_counter)도 다른 테이블처럼 tables 배열의
+    // 한 행일 뿐이라 zone_id가 null이면 배치도/결제탭 어디에도 안 보인다.
+    // 예전엔 여기서 카운터를 일부러 제외했었는데(카운터는 자체 QR 카드가
+    // 따로 있으니 배치도에 놓을 일이 없다고 가정한 듯), 결제탭에 포장 주문을
+    // 개별 타일로 쪼개서 보여주는 기능이 생기면서 카운터도 다른 테이블처럼
+    // 반드시 어느 존엔가 배치돼 있어야 그 타일들이 뜬다. 그런데 카운터가
+    // 배치된 적이 한 번도 없어서(zone_id: null) 화면에 계속 안 나타났고,
+    // 사장님이 대신 "外帶"라는 이름의 평범한 테이블을 하나 만들어서 눌러보고
+    // 계셨던 것 — 그 테이블엔 실제 포장 주문이 절대 안 붙는다(진짜 포장
+    // 주문은 테이블 번호 "COUNTER"로 들어가지, "外帶" 테이블 번호로는 안
+    // 들어가서). 카운터를 이 "미배치 테이블" 목록에도 포함시켜서, 사장님이
+    // 원래 쓰던 "+테이블 추가" 방식 그대로 카운터를 원하는 자리에 직접 놓을
+    // 수 있게 한다.
+    const unplaced = tables.filter((t) => t.zone_id == null);
     const selected = new Set();
     $("#addTableToZoneTitle").textContent = fmtAddTableToZoneTitle(zone.name);
     const grid = $("#addTableToZoneGrid");
@@ -3604,7 +3617,12 @@
       grid.innerHTML = `<div class="table-picker-empty">${T("addTableToZoneEmpty")}</div>`;
     } else {
       unplaced
-        .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10))
+        // 포장 카운터는 번호가 "COUNTER"라 parseInt가 NaN이 되어 정렬이
+        // 뒤죽박죽될 수 있었다 — 카운터는 항상 맨 앞에 고정.
+        .sort((a, b) => {
+          if (a.is_counter !== b.is_counter) return a.is_counter ? -1 : 1;
+          return parseInt(a.number, 10) - parseInt(b.number, 10);
+        })
         .forEach((t) => {
           const btn = document.createElement("button");
           btn.className = "table-picker-btn";
