@@ -3108,7 +3108,14 @@
     // 큐 카드(위 renderOrderCard, ☎ 표시)와 같은 필드(o.customer_phone)를
     // 여기 결제 화면의 픽업 번호/성함 태그 옆에도 붙여준다.
     const counterPhone = isCounterOrder(o) && o.customer_phone ? ` · ☎${o.customer_phone}` : "";
-    const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)}${counterPhone} · ` : "";
+    // 2026-09-05 피드백: "시간이랑 주문 상태는 번호 이름 전화번호 애들
+    // 줄바꿈 밑으로 내려가게 해주고 아주 조금 연하게 해줘. 다른 거라는 걸
+    // 인식할 수 있게" — 예전엔 "1번 · 김 · ☎0921167610 · 오전 01:48 ·
+    // 서빙 완료"처럼 다 한 줄(굵게)로 붙어 있어서 "누구 주문인지"와
+    // "언제/무슨 상태인지"가 안 구분됐다. 아래 return의 헤더에서 뒷부분
+    // (더 이상 여기서 이어붙이지 않음 — 각자 자기 줄로) 없이 앞부분
+    // 정체성 태그만 여기서 만든다.
+    const counterTagPrefix = isCounterOrder(o) ? `${fmtCounterOrderTag(o)}${counterPhone}` : "";
     // 각 주문을 (구분선만 있던) 이어붙은 한 목록의 일부가 아니라 뚜렷한
     // 카드 하나로 보이도록 전체 테두리를 준다 — order-block-grid(위)가 여러
     // 개를 가로세로로 늘어놓을 때도, 주문이 하나뿐이라 그냥 하나만 보여줄
@@ -3138,11 +3145,21 @@
     // 줄에 margin-top:auto를 줘서 품목이 몇 개든 소계는 항상 카드
     // 맨 아래(같은 줄의 다른 카드와 격자로 높이가 맞춰짐, 위 .order-block-grid
     // 참고)에 붙는다.
+    // 정체성 줄(픽업번호·이름·전화번호, 굵게)과 시간·상태 줄(연하게)을 위
+    // 아래로 분리 — 진짜 테이블 주문(counterTagPrefix가 없음)은 시간·상태
+    // 줄 하나만 뜬다. min-height는 정체성 줄이 전화번호까지 있어 2줄로
+    // 줄바꿈되는 경우까지 감안한 값 — 다른 카드와 버튼 줄 위치가 계속
+    // 맞도록(위 "규격이 같았으면" 수정과 같은 이유).
+    const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
+    const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${dismissBtn}
         <div style="margin-bottom:10px;">
-          <div style="font-weight:700;font-size:15px;margin-bottom:6px;min-height:38px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</div>
+          <div style="margin-bottom:6px;min-height:58px;">
+            ${identityLineHtml}
+            ${timeStatusLineHtml}
+          </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
