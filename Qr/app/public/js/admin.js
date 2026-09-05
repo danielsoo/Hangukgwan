@@ -3185,35 +3185,49 @@
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
+    // 사장님 피드백(2026-09-05): "위치를 번호, 메뉴 사이 말고 메뉴 아래에
+    // 놨으면 좋겠어 전체적으로" — 결제 완료/수정 버튼을 시간·상태 줄과
+    // 품목 목록 사이가 아니라 품목 목록 아래로 옮긴다(카운터 카드까지
+    // 포함해서 전체적으로 적용). 소계는 그대로 카드 맨 아래
+    // (margin-top:auto로 격자 안에서도 항상 같은 위치에 고정).
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${p.dismissBtn}
-        <div style="margin-bottom:10px;">
-          <div style="margin-bottom:6px;min-height:58px;">
-            ${p.identityLineHtml}
-            ${p.timeStatusLineHtml}
-          </div>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
+        <div style="margin-bottom:10px;min-height:58px;">
+          ${p.identityLineHtml}
+          ${p.timeStatusLineHtml}
         </div>
         ${p.itemsHtml}
         ${p.itemsToggleHtml}
         ${p.noteHtml}
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${p.nextBtn}${p.editBtn}</div>
         <div style="text-align:right;font-weight:700;font-size:16px;margin-top:auto;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
       </div>
     `;
   }
-  // 사장님 피드백(2026-09-05, 테이블 6 스크린샷과 함께, 두 차례에 걸쳐):
+  // 사장님 피드백(2026-09-05, 테이블 6 스크린샷과 함께, 세 차례에 걸쳐):
   // 1) "이거 한 주문이잖아. 이건 나누면 안돼. 테이블 주문은 결제 전까지
   //    한 곳에서 추가주문을 하는 거라서 하나로 묶는 게 맞는 거 같아" —
   //    카드를 아예 분리하면 안 된다(위 openTableDetail의 isGrid를
   //    table.is_counter로 한정한 수정으로 해결).
   // 2) "하나로 만들어줘 대신에 그냥 시간대가 다르면 지금처럼 사이에
-  //    시간만 나타내주고" — 한 걸음 더: 라운드마다 따로 테두리 있는 카드로
-  //    보이는 것도 원치 않는다. 카드(테두리) 자체를 하나로 합치고, 그
-  //    안에서 라운드가 바뀌는 지점에만 옅은 구분선과 그 라운드의 시간을
-  //    표시해서 "언제 추가된 건지"만 알 수 있게 한다. 카운터의
-  //    renderTableOrderBlock(withDismiss)처럼 라운드마다 독립된 카드
-  //    테두리·그림자·✕ 버튼을 주지 않는다 — 같은 일행의 한 탭이므로.
+  //    시간만 나타내주고" — 라운드마다 따로 테두리 있는 카드로 보이는 것도
+  //    원치 않는다. 카드(테두리) 자체를 하나로 합치고, 그 안에서 라운드가
+  //    바뀌는 지점에만 옅은 구분선과 그 라운드의 시간을 표시.
+  // 3) "결제완료랑 수정은 전체 주문당 하나씩 있으면 돼. 그리고 위치를
+  //    번호, 메뉴 사이 말고 메뉴 아래에 놨으면 좋겠어 전체적으로" —
+  //    라운드마다 반복되던 결제완료/수정 버튼도 없앤다. 이 병합 카드
+  //    전체(=이 테이블의 미결제 탭 전체)에 대해 딱 한 쌍만, 모든 라운드의
+  //    품목 아래에 둔다.
+  //    - 결제 완료: merged 그룹은 항상 이 테이블의 미결제 주문 전체와
+  //      같으므로(포커스 없이 여러 라운드가 보이는 건 always 전체 활성
+  //      주문 — 위 openTableDetail 참고), 위 헤더의 "전체 결제 완료"와
+  //      완전히 같은 동작이면 된다. 같은 .pay-all-btn 클래스를 붙여
+  //      openTableDetail 안의 기존 핸들러(unpaidOrders 전부를 paid로)를
+  //      그대로 재사용 — 새 JS 로직 불필요.
+  //    - 수정: 주문 하나만 고를 수 있으니, 가장 최근(마지막) 라운드를
+  //      대상으로 한다 — 보통 아직 손볼 여지가 있는 건 방금 추가된
+  //      라운드이기 때문.
   function renderMergedOrderGroup(orders) {
     const roundsHtml = orders
       .map((o, i) => {
@@ -3221,7 +3235,6 @@
         return `
           <div${i > 0 ? ' style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);"' : ""}>
             <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">${p.time}</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${p.nextBtn}${p.editBtn}</div>
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
@@ -3230,7 +3243,20 @@
         `;
       })
       .join("");
-    return `<div class="table-order-block">${roundsHtml}</div>`;
+    const hasPayable = orders.some((o) => o.status !== "paid" && o.status !== "cancelled");
+    const lastOrder = orders[orders.length - 1];
+    const groupEditBtn =
+      hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && canEditOrder()
+        ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${lastOrder.id}">${T("orderEditBtn")}</button>`
+        : "";
+    const groupPayBtn = hasPayable
+      ? `<button class="primary-btn pay-all-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("nextServed")}</button>`
+      : "";
+    const groupButtonsHtml =
+      groupPayBtn || groupEditBtn
+        ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupPayBtn}${groupEditBtn}</div>`
+        : "";
+    return `<div class="table-order-block">${roundsHtml}${groupButtonsHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
