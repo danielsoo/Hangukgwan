@@ -3065,7 +3065,13 @@
   }
 
   function renderTableOrderBlock(o, withDismiss) {
-    const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
+    const createdAt = new Date(o.created_at.replace(" ", "T"));
+    // 2026-09-05 피드백: "시간 왼쪽에 간단하게 날짜까지 넣어줄래? 연도랑" —
+    // 포장 카운터 픽업번호가 매일 1로 리셋되다 보니(위 orders.js 참고),
+    // 시간만 봐서는 서로 다른 날짜의 "1번"들이 같은 날짜인 것처럼
+    // 헷갈렸다. "연도.월.일" 형식으로 짧게 앞에 붙인다(예: 2026.9.2).
+    const dateStr = `${createdAt.getFullYear()}.${createdAt.getMonth() + 1}.${createdAt.getDate()}`;
+    const time = `${dateStr} ${createdAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}`;
     const itemLines = o.items.map(
       (it) =>
         `<div style="display:flex;justify-content:space-between;font-size:16px;padding:5px 0;">
