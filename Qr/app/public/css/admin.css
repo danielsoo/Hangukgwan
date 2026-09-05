@@ -149,7 +149,7 @@ input, select, button, textarea { font-family: inherit; }
    480px보다 훨씬 넓혀준다(JS의 openTableDetail에서 isGrid일 때만 이
    클래스를 붙임 — 주문이 1건뿐이거나 특정 주문 하나만 볼 때는 원래
    폭 그대로). */
-.table-detail-modal.wide { max-width: 900px; }
+.table-detail-modal.wide { max-width: 1040px; }
 
 /* 테이블 상세(결제) 모달 안의 주문 카드 — 2026-09-05 사장님 피드백(두
    차례): "지금 한 창에 다른 여러개의 주문들이 섞여 있잖아. 차라리 각
@@ -182,7 +182,11 @@ input, select, button, textarea { font-family: inherit; }
 .table-order-block-dismiss:hover { background: #e6e0d4; color: var(--ink); }
 .order-block-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  /* 2026-09-05 "좌우 너비가 너무 좁아" 피드백 — 260px는 라벨(픽업번호·
+     이름·시간)이 길면 버튼 쪽이 짓눌릴 만큼 좁았다. 320px로 넓히고(위
+     .table-order-block-windowed 헤더도 라벨/버튼을 위아래로 나눠 같이
+     고침) 모달 폭(.table-detail-modal.wide)도 함께 늘림. */
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 14px;
   margin-bottom: 4px;
 }

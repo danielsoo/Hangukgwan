@@ -3094,11 +3094,11 @@
     // "결제 완료로 변경" 버튼 하나만 보여주고 paid로 바로 전환한다.
     const nextBtn =
       o.status !== "paid" && o.status !== "cancelled"
-        ? `<button class="primary-btn" style="padding:7px 14px;font-size:14px;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`
+        ? `<button class="primary-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`
         : "";
     const editBtn =
       o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
-        ? `<button style="padding:7px 14px;font-size:14px;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
+        ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
@@ -3122,12 +3122,18 @@
     const dismissBtn = withDismiss
       ? `<button type="button" class="table-order-block-dismiss" data-dismiss-id="${o.id}" title="${T("dismissOrderCardBtn")}" aria-label="${T("dismissOrderCardBtn")}">✕</button>`
       : "";
+    // 2026-09-05: 라벨(픽업번호·이름·시간 등, 길어질 수 있음)과 버튼을 한
+    // 줄에 나란히 두면 카드가 좁을 때 버튼 쪽 공간이 짓눌려 "결제 완료로
+    // 변경" 글자가 한 글자씩 세로로 쪼개지는 문제가 있었다("좌우 너비가
+    // 너무 좁아" 피드백). 라벨을 위 줄, 버튼을 아래 줄로 나누고 버튼에
+    // white-space:nowrap을 줘서 버튼 텍스트는 절대 안 쪼개지고, 라벨만
+    // 필요하면 줄바꿈되게 한다.
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${dismissBtn}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-weight:700;font-size:15px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</span>
-          <div style="display:flex;gap:6px;">${nextBtn}${editBtn}</div>
+        <div style="margin-bottom:10px;">
+          <div style="font-weight:700;font-size:15px;margin-bottom:6px;">${counterTagPrefix}${time} · ${statusLabel(o.status)}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">${nextBtn}${editBtn}</div>
         </div>
         ${itemsHtml}
         ${itemsToggleHtml}
