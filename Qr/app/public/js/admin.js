@@ -285,6 +285,7 @@
       payAllBtn: "전체 결제 완료",
       paySelectedBtn: "선택 결제 완료",
       paySelectedFailedMsg: "일부 품목은 결제 완료 처리에 실패했어요. 화면을 새로고침해서 다시 확인해주세요.",
+      itemPaidBadge: "결제완료",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -652,6 +653,7 @@
       payAllBtn: "全部結帳完成",
       paySelectedBtn: "勾選結帳完成",
       paySelectedFailedMsg: "部分品項結帳失敗，請重新整理後再確認一次。",
+      itemPaidBadge: "已結帳",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -2325,7 +2327,11 @@
   }
 
   function openOrderEdit(order) {
-    if (order.status === "paid" || order.status === "cancelled") {
+    // 이미 일부 품목이 부분결제(item.paid)된 주문은 버튼 자체를 숨기지만
+    // (buildOrderRoundParts의 editBtn/groupEditBtn 참고), 혹시 다른 경로로
+    // 이 함수가 불려도 한 번 더 막아서 이미 받은 돈이 수정으로 꼬이지
+    // 않게 한다.
+    if (order.status === "paid" || order.status === "cancelled" || order.items.some((it) => it.paid)) {
       showAlert(T("orderEditNotEditable"));
       return;
     }
@@ -2939,7 +2945,11 @@
     const activeOrders = tableOrders.filter((o) => o.status !== "paid");
     const paidOrders = tableOrders.filter((o) => o.status === "paid");
     const unpaidOrders = activeOrders;
-    const unpaidTotal = unpaidOrders.reduce((s, o) => s + o.total, 0);
+    // remainingAmountOf: unpaidOrders는 항상 status !== "paid"라서 결국
+    // 매번 "품목 중 아직 안 받은 것만 합산"이 되지만, 부분결제로 이미 일부
+    // 품목이 결제완료된 라운드는 o.total(품목 전체 합)보다 작아야 하므로
+    // 헬퍼를 그대로 재사용한다.
+    const unpaidTotal = unpaidOrders.reduce((s, o) => s + remainingAmountOf(o), 0);
     // Same "only while actually occupied" rule as the table-list badge above.
     const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
     // 포장 카운터의 "미결제 주문"은 서로 무관한 손님들 것이라 한 번에 묶어
@@ -3169,6 +3179,18 @@
   function lineTotalOf(it) {
     return (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
   }
+  // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
+  // (체크한 품목 기준) — split-pay는 이제 체크한 품목을 다른 주문으로
+  // 떼어내지 않고, 같은 주문 안에서 item.paid만 표시한다(서버쪽도 동일하게
+  // 변경, src/routes/orders.js 참고). 그래서 "이 라운드에 아직 못 받은
+  // 금액이 얼마인지"는 더 이상 o.total(품목 전체 합)이 아니라, paid 안 된
+  // 품목만 더해야 한다 — 라운드가 이미 전부 결제완료(o.status==="paid")면
+  // (이전 주문 탭에 보이는 지난 내역) 그때는 원래대로 전체 금액을 그대로
+  // 보여준다.
+  function remainingAmountOf(o) {
+    if (o.status === "paid") return o.total;
+    return o.items.reduce((s, it) => (it.paid ? s : s + lineTotalOf(it)), 0);
+  }
   // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
   // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
   // 있게. 나눠서 계산할 수도 있고 그래서 그래" → 곧이어 "선택이 주문별이
@@ -3184,7 +3206,7 @@
     return orders
       .map((o) => {
         if (isCounterOrder(o) || o.status === "paid" || o.status === "cancelled") return null;
-        const indexes = o.items.map((_, i) => i).filter((i) => selectedPayItemKeys.has(`${o.id}:${i}`));
+        const indexes = o.items.map((_, i) => i).filter((i) => selectedPayItemKeys.has(`${o.id}:${i}`) && !o.items[i].paid);
         if (!indexes.length) return null;
         const total = indexes.reduce((s, i) => s + lineTotalOf(o.items[i]), 0);
         return { order: o, indexes, total };
@@ -3203,16 +3225,27 @@
     // 보인다(外帶 제외 — collectSelectedItemsByOrder와 같은 조건).
     const withItemCheckboxes = !isCounterOrder(o) && o.status !== "paid" && o.status !== "cancelled";
     const itemLines = o.items.map((it, idx) => {
-      const isSelected = withItemCheckboxes && selectedPayItemKeys.has(`${o.id}:${idx}`);
-      const checkboxHtml = withItemCheckboxes
+      // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면
+      // 좋겠어" — 체크해서 결제완료 처리한 품목(it.paid)도 목록에서 빼지
+      // 않고 계속 그 자리에 두되, 체크박스 대신 완료 표시(✓)와 "결제완료"
+      // 배지를 붙이고 흐리게 보여서 이미 끝난 품목이라는 걸 표시한다. 다시
+      // 체크할 수 없게 checkbox 자체를 없앤다.
+      const isPaidItem = !!it.paid;
+      const isSelected = !isPaidItem && withItemCheckboxes && selectedPayItemKeys.has(`${o.id}:${idx}`);
+      const checkboxHtml = isPaidItem
+        ? `<span style="display:inline-block;width:16px;margin:2px 8px 0 0;flex-shrink:0;text-align:center;color:var(--muted);">✓</span>`
+        : withItemCheckboxes
         ? `<input type="checkbox" data-select-item-key="${o.id}:${idx}" ${isSelected ? "checked" : ""} style="width:16px;height:16px;margin:2px 8px 0 0;cursor:pointer;flex-shrink:0;" />`
+        : "";
+      const paidBadgeHtml = isPaidItem
+        ? `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:10px;background:var(--line);color:var(--muted);font-size:12px;font-weight:600;vertical-align:middle;">${T("itemPaidBadge")}</span>`
         : "";
       // 체크했을 때 배경으로 표시하되, padding만큼 음수 margin을 같이 줘서
       // 체크 여부와 상관없이 좌우 폭이 그대로 유지되게 한다 — 사장님
       // 피드백: "선택하면 조금 좁아지는 현상이 있어. 그거 수정해줘." (체크
       // 안 한 다른 줄과 비교했을 때 내용이 안쪽으로 밀려 보이던 문제).
-      return `<div style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isSelected ? "background:#fdf1ea;" : ""}">
-          <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
+      return `<div style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
+          <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
           <span>NT$${lineTotalOf(it)}</span>
         </div>`;
     });
@@ -3245,8 +3278,12 @@
         : selectedForThisOrder
         ? `<button class="primary-btn pay-selected-items-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("paySelectedBtn")} (NT$${selectedForThisOrder.total})</button>`
         : `<button class="primary-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`;
+    // 이미 일부 품목이 결제완료(item.paid) 처리된 주문은 "수정"을 막는다 —
+    // 수정 화면은 품목을 통째로 새로 짜서 저장하는 방식이라(openOrderEdit),
+    // 이미 결제된 품목과 같은 메뉴/옵션의 새 품목이 한 줄로 합쳐지거나
+    // 수량이 바뀌면 어디까지가 이미 받은 돈인지 알 수 없게 꼬여버린다.
     const editBtn =
-      o.status !== "paid" && o.status !== "cancelled" && canEditOrder()
+      o.status !== "paid" && o.status !== "cancelled" && !o.items.some((it) => it.paid) && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
@@ -3302,7 +3339,7 @@
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
-    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, total: o.total };
+    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, total: remainingAmountOf(o) };
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
@@ -3390,8 +3427,10 @@
     const hasSelection = selections.length > 0;
     const selectedTotal = selections.reduce((s, x) => s + x.total, 0);
     const lastOrder = orders[orders.length - 1];
+    // 카드 하나 짜리(renderTableOrderBlock)와 같은 이유로, 마지막 라운드에
+    // 이미 결제완료된 품목이 있으면 "수정"을 숨긴다.
     const groupEditBtn =
-      hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && canEditOrder()
+      hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && !lastOrder.items.some((it) => it.paid) && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${lastOrder.id}">${T("orderEditBtn")}</button>`
         : "";
     // 체크된 품목이 하나라도 있으면(어느 라운드에 있든) "선택 결제
@@ -3413,7 +3452,7 @@
     // 합친 합계를 한 번만, 눈에 띄는 색(포인트 레드, 버튼과 같은 색)으로
     // 보여준다. 기존 소계보다 진하게/크게 해서 "이게 전체 합"이라는 게
     // 한눈에 구분되게 한다.
-    const grandTotal = orders.reduce((s, o) => s + o.total, 0);
+    const grandTotal = orders.reduce((s, o) => s + remainingAmountOf(o), 0);
     const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${grandTotal}</div>`;
     return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}${groupButtonsHtml}</div>`;
   }

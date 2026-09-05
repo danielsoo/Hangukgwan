@@ -440,28 +440,33 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   if (!Array.isArray(itemIndexes) || itemIndexes.length === 0) {
     return res.status(400).json({ error: "invalid_selection" });
   }
+  // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
+  // (체크한 품목 기준) — 처음엔 체크한 품목을 새 주문으로 떼어내는 방식으로
+  // 만들었는데, 그러면 원래 주문(라운드) 목록에서 그 품목이 통째로
+  // 사라져버린다. 대신 품목을 옮기지 않고 원래 주문 안에 그대로 둔 채
+  // item.paid만 표시한다 — 화면에는 "결제완료" 표시로 계속 보이고, 체크는
+  // 다시 못 하게 된다. 단, 이 방식은 그 주문(라운드)이 전부 결제완료로
+  // 바뀌기 전까지는 주문 상태가 계속 active로 남아있어서, 정산/매출
+  // 집계(status === "paid" 기준, settlement.js)에는 그 라운드가 통째로
+  // 끝나야 잡힌다 — 사장님도 이 트레이드오프를 알고 "간단한 쪽"을 선택함.
   const selectedIdx = [...new Set(itemIndexes.map((i) => parseInt(i, 10)))].filter(
-    (i) => Number.isInteger(i) && i >= 0 && i < order.items.length
+    (i) => Number.isInteger(i) && i >= 0 && i < order.items.length && !order.items[i].paid
   );
   if (selectedIdx.length === 0) return res.status(400).json({ error: "invalid_selection" });
 
-  const selectedSet = new Set(selectedIdx);
-  const selectedItems = order.items.filter((_, i) => selectedSet.has(i));
-  const remainingItems = order.items.filter((_, i) => !selectedSet.has(i));
+  const paidAt = nowLocal();
+  selectedIdx.forEach((i) => {
+    order.items[i].paid = true;
+    order.items[i].paid_at = paidAt;
+  });
+  order.updated_at = paidAt;
 
-  const lineTotal = (it) => (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
-  const applyVip = (subtotal) =>
-    order.vip_discount_percent ? Math.round((subtotal * (100 - order.vip_discount_percent)) / 100) : subtotal;
-  const orderTypeOf = (items) => {
-    const takeoutCount = items.filter((it) => it.order_type === "takeout").length;
-    return takeoutCount === 0 ? "dine_in" : takeoutCount === items.length ? "takeout" : "mixed";
-  };
-
-  // 전부 체크 = 이 주문 전체를 결제완료로, 나눌 필요 없음. PATCH /:id와
-  // 같은 party_size 정리 규칙도 그대로 적용한다.
-  if (remainingItems.length === 0) {
+  // 이번에 남김없이 전부 결제완료로 표시됐으면(이전에 이미 일부가
+  // paid였던 경우 포함) 이 주문 전체를 paid로 넘긴다 — PATCH /:id와 같은
+  // party_size 정리 규칙도 그대로 적용한다.
+  const allPaid = order.items.every((it) => it.paid);
+  if (allPaid) {
     order.status = "paid";
-    order.updated_at = nowLocal();
     const stillActive = store.orders.some(
       (o) => o.table_number === order.table_number && o.status !== "paid" && o.status !== "cancelled"
     );
@@ -472,35 +477,10 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
         table.party_size_updated_at = null;
       }
     }
-    await save();
-    return res.json({ updatedOrder: order, newOrder: null });
   }
 
-  // 일부만 체크 — 체크된 품목을 새 주문(결제완료 상태)으로 떼어내고, 남은
-  // 품목은 원래 주문에 남겨 계속 미결제 상태로 둔다. 둘 다 원래 주문의
-  // vip_discount_percent를 그대로 적용해서, 나눈 뒤에도 합계가 원래
-  // 합계와 어긋나지 않게 한다.
-  const selectedSubtotal = selectedItems.reduce((s, it) => s + lineTotal(it), 0);
-  const remainingSubtotal = remainingItems.reduce((s, it) => s + lineTotal(it), 0);
-  const newOrder = {
-    ...order,
-    id: nextId("orders"),
-    items: selectedItems,
-    order_type: orderTypeOf(selectedItems),
-    subtotal: selectedSubtotal,
-    total: applyVip(selectedSubtotal),
-    status: "paid",
-    updated_at: nowLocal(),
-  };
-  order.items = remainingItems;
-  order.order_type = orderTypeOf(remainingItems);
-  order.subtotal = remainingSubtotal;
-  order.total = applyVip(remainingSubtotal);
-  order.updated_at = nowLocal();
-
-  store.orders.push(newOrder);
   await save();
-  res.json({ updatedOrder: order, newOrder });
+  res.json({ updatedOrder: order });
 });
 
 module.exports = router;
