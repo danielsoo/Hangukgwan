@@ -3046,8 +3046,13 @@
             .flatMap((o) => o.items.map((it, i) => (it.paid ? null : `${o.id}:${i}`)).filter(Boolean))
         : [];
     const allItemsSelected = allUnpaidKeys.length > 0 && allUnpaidKeys.every((k) => selectedPayItemKeys.has(k));
+    // 사장님 피드백(2026-09-06): "하나 밖에 안남았어도 전체 선택 옵션은
+    // 유지해줘" — 미결제 품목이 딱 1개만 남아도(예: 라운드 마지막 한
+    // 품목) 이 체크박스를 계속 보여준다. 품목이 1개일 때도 그 품목
+    // 자신의 체크박스 대신 이 "전체 선택"으로 바로 체크할 수 있게 하는
+    // 편이 일관적이다.
     const selectAllHtml =
-      allUnpaidKeys.length > 1
+      allUnpaidKeys.length > 0
         ? `<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);cursor:pointer;margin:0 0 10px;">
             <input type="checkbox" id="tableDetailSelectAll" ${allItemsSelected ? "checked" : ""} style="width:16px;height:16px;cursor:pointer;" />
             ${T("selectAllItemsLabel")}
@@ -3348,13 +3353,14 @@
     // 한 번에 전체 체크랑 시간대별 한 번에 전체 체크 기능도 있으면 좋을 거
     // 같아" — 품목을 하나씩 체크하는 게 느리니, 라운드(시간대) 하나
     // 전체를 한 번에 체크/해제하는 토글을 라운드 헤더에 둔다(테이블
-    // 전체를 한 번에 체크하는 토글은 openTableDetail에 따로 있음). 미결제
-    // 품목이 1개뿐이면 개별 체크박스와 다를 게 없어서 굳이 보여주지
-    // 않는다.
+    // 전체를 한 번에 체크하는 토글은 openTableDetail에 따로 있음).
+    // 사장님 피드백(2026-09-06): "하나 밖에 안남았어도 전체 선택 옵션은
+    // 유지해줘" — 미결제 품목이 1개뿐이어도 계속 보여준다(예전엔 개별
+    // 체크박스와 다를 게 없다고 숨겼었음).
     const unpaidIdxOfRound = withItemCheckboxes ? o.items.map((_, i) => i).filter((i) => !o.items[i].paid) : [];
     const roundAllSelected = unpaidIdxOfRound.length > 0 && unpaidIdxOfRound.every((i) => selectedPayItemKeys.has(`${o.id}:${i}`));
     const roundSelectAllHtml =
-      unpaidIdxOfRound.length > 1
+      unpaidIdxOfRound.length > 0
         ? `<label style="display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">
             <input type="checkbox" data-select-round-all="${o.id}" ${roundAllSelected ? "checked" : ""} style="width:14px;height:14px;cursor:pointer;" />
             ${T("selectRoundAllLabel")}
