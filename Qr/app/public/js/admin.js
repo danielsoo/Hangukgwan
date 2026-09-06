@@ -282,7 +282,6 @@
       noOrdersYetAdmin: "아직 주문이 없습니다.",
       unpaidTotalLabel: "현재 미결제 합계:",
       unpaidTotalLabel2: "미결제 합계:",
-      payAllBtn: "전체 결제 완료",
       paySelectedBtn: "선택 결제 완료",
       paySelectedFailedMsg: "일부 품목은 결제 완료 처리에 실패했어요. 화면을 새로고침해서 다시 확인해주세요.",
       itemPaidBadge: "결제완료",
@@ -652,7 +651,6 @@
       noOrdersYetAdmin: "目前尚無訂單。",
       unpaidTotalLabel: "目前未結帳金額：",
       unpaidTotalLabel2: "未結帳金額：",
-      payAllBtn: "全部結帳完成",
       paySelectedBtn: "勾選結帳完成",
       paySelectedFailedMsg: "部分品項結帳失敗，請重新整理後再確認一次。",
       itemPaidBadge: "已結帳",
@@ -1021,14 +1019,12 @@
       : `⚠️ 빌지 ${n}건이 제대로 안 나갔을 수 있어요 (테이블: ${tables}) — 프린터 용지 부족, 연결 끊김, 브라우저 팝업 차단 등이 원인일 수 있어요. 주방에 실제로 전달됐는지 확인하거나, 해당 주문의 "인쇄" 버튼으로 다시 보내주세요.`;
   };
   const fmtConfirmDeleteTable = (n) => (adminLang === "zh" ? `確定要刪除桌號 ${n} 嗎？` : `테이블 ${n}을(를) 삭제하시겠습니까?`);
-  const fmtConfirmPayAll = (label, n) =>
-    adminLang === "zh"
-      ? `確定要將桌號 ${label} 的 ${n} 筆未結帳訂單全部標記為已結帳嗎？`
-      : `테이블 ${label}의 미결제 주문 ${n}건을 모두 결제 완료로 처리하시겠습니까?`;
   // 사장님 피드백(2026-09-05): "부분 결제를 허용해줘. 체크체크 해서
   // 그것만 결제완료 할 수 있게" → "선택이 주문별이 아니라 메뉴별이야" —
-  // 메뉴 품목 일부만 체크해서 결제할 때 확인 문구. fmtConfirmPayAll(전체
-  // 결제)과 구분되도록 "체크한 품목 n개"라고 명시한다.
+  // 메뉴 품목 일부만(또는 "전체 선택"으로 전부) 체크해서 결제할 때
+  // 확인 문구. "체크한 품목 n개"라고 명시한다 — 2026-09-06 피드백으로
+  // 이제 이 문구 하나가 부분/전체 결제 모두를 대신한다(전체 결제
+  // 완료라는 별도 문구는 없앰).
   const fmtConfirmPaySelected = (label, n, total) =>
     adminLang === "zh"
       ? `確定要將桌號 ${label} 勾選的 ${n} 項品項（合計 NT$${total}）標記為已結帳嗎？（其餘品項不受影響）`
@@ -2966,18 +2962,16 @@
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + remainingAmountOf(o), 0);
     // Same "only while actually occupied" rule as the table-list badge above.
     const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
-    // 포장 카운터의 "미결제 주문"은 서로 무관한 손님들 것이라 한 번에 묶어
-    // 결제 완료 처리하면 안 된다 (한 명만 계산해도 나머지 손님 주문까지 같이
-    // 결제완료로 넘어가버림) — 진짜 테이블(같은 일행)에서만 이 일괄 버튼을
-    // 보여주고, 카운터는 각 주문 카드의 개별 "결제 완료로 변경" 버튼으로만
-    // 처리하도록 한다 (아래 renderTableOrderBlock의 data-advance-id 버튼).
-    // focusOrderId로 특정 주문 하나만 보고 있을 때도 마찬가지로 숨긴다 —
-    // 화면에 주문이 이미 하나뿐이라 "전체 결제 완료"가 그 주문의 개별
-    // 버튼과 똑같은 일을 하는 중복 버튼이 되기 때문.
-    const payAllBtn =
-      unpaidOrders.length && !(table && table.is_counter) && focusOrderId == null
-        ? `<button class="primary-btn pay-all-btn" style="padding:8px 16px;font-size:15px;">${T("payAllBtn")}</button>`
-        : "";
+    // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
+    // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
+    // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 헤더/footer에 각각
+    // 있던 "전체 결제 완료" 버튼을 없앤다. "전부 결제"는 이제 별도 버튼이
+    // 아니라, 위의 "전체 선택" 체크박스로 미결제 품목을 다 체크한 뒤 맨
+    // 아래(footer)의 버튼 하나를 누르는 것으로 대체한다 — footerPayBtn
+    // 참고. 포장 카운터의 "미결제 주문"은 서로 무관한 손님들 것이라
+    // 애초에 이 일괄 버튼/체크박스 대상이 아니라서(withItemCheckboxes가
+    // 항상 false) 그대로 각 주문 카드의 개별 "결제 완료로 변경" 버튼으로만
+    // 처리한다(아래 renderTableOrderBlock의 data-advance-id 버튼).
     // 포장 카운터 has no table number worth prefixing "테이블" onto — its own
     // label already says what it is. focusedOrder가 있으면(결제탭의 개별
     // 포장 타일을 눌러 들어온 경우) 제목에 그 주문의 태그를 덧붙여서 지금
@@ -2992,9 +2986,8 @@
       : `${T("tableLabel")} ${label || tableNumber}${focusTag}`;
     const header = `
       <h2>${titleText}${partyText}</h2>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:-6px;">
+      <div style="margin-top:-6px;">
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
-        ${payAllBtn}
       </div>
     `;
     const tabsHtml = `
@@ -3074,11 +3067,32 @@
       : isGrid
       ? `<div class="order-block-grid">${orderBlocksHtml}</div>`
       : `${selectAllHtml}${orderBlocksHtml}`;
+    // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
+    // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
+    // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 이 테이블(포장
+    // 카운터 제외)의 결제 버튼은 이제 이 footer 하나뿐이다. 체크된
+    // 품목이 있으면 그 합계로 "선택 결제 완료"를, 하나도 없으면 아직
+    // 결제할 게 없다는 뜻이라 눌러도 반응 없는 회색 버튼을 보여준다 —
+    // 전부 결제하고 싶으면 위 "전체 선택"으로 다 체크한 뒤 이 버튼을
+    // 누르면 된다. class="pay-selected-items-btn"라서 위에서 이미 연결한
+    // 핸들러(unpaidOrders 기준으로 매번 새로 체크 상태를 모음)가 그대로
+    // 처리한다.
+    // isGrid가 아니라 table.is_counter로 직접 판단한다 — 카운터인데
+    // 주문이 1건뿐이라 isGrid가 false인 경우(포커스로 들어온 개별 픽업
+    // 등)도 여전히 이 합산 버튼 대상이 아니어야 하기 때문.
+    const isCounterTable = !!(table && table.is_counter);
+    const footerSelections = isCounterTable ? [] : collectSelectedItemsByOrder(unpaidOrders);
+    const footerSelectedTotal = footerSelections.reduce((s, x) => s + x.total, 0);
+    const footerPayBtn = isCounterTable
+      ? ""
+      : footerSelections.length > 0
+      ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerSelectedTotal})</button>`
+      : `<button class="primary-btn" disabled style="padding:8px 16px;font-size:15px;opacity:0.4;cursor:not-allowed;">${T("paySelectedBtn")}</button>`;
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
           <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
-          ${payAllBtn}
+          ${footerPayBtn}
         </div>
       `
       : "";
@@ -3144,26 +3158,10 @@
           resetTableDetailScroll();
         };
       });
-    $("#tableDetailBody")
-      .querySelectorAll(".pay-all-btn")
-      .forEach((btn) => {
-        btn.onclick = async () => {
-          if (!(await showConfirm(fmtConfirmPayAll(label || tableNumber, unpaidOrders.length)))) return;
-          // No separate "now also clear the party size" step here on
-          // purpose — each updateOrderStatus() call PATCHes that order to
-          // "paid", and the server's PATCH /api/orders/:id handler already
-          // clears the table's party_size by itself the instant the table's
-          // last order leaves active status (see src/routes/orders.js). The
-          // order and the headcount are one bundled unit for this purpose:
-          // they disappear together as a side effect of the same status
-          // change, not as a second, separately-triggered rule.
-          await Promise.all(unpaidOrders.map((o) => updateOrderStatus(o.id, "paid")));
-          await loadOrders();
-          await loadTables();
-          openTableDetail(tableNumber, label, focusOrderId);
-          resetTableDetailScroll();
-        };
-      });
+    // 사장님 피드백(2026-09-06)으로 "전체 결제 완료"(.pay-all-btn) 버튼
+    // 자체가 없어져서(위 footerPayBtn/groupButtonsHtml 참고) 이 핸들러도
+    // 함께 지웠다 — 이제 전부 결제는 "전체 선택" 체크 + footer의
+    // "선택 결제 완료"(.pay-selected-items-btn, 아래)로 이뤄진다.
     // 부분 결제(체크한 메뉴 품목만 결제 완료) — 위 buildOrderRoundParts가
     // 품목 줄마다 붙여준 체크박스와, renderTableOrderBlock/
     // renderMergedOrderGroup 양쪽에서 만드는 "선택 결제 완료" 버튼.
@@ -3375,21 +3373,20 @@
             expanded ? T("collapseItemsBtn") : fmtExpandItemsBtn(overflowCount)
           }</button>`
         : "";
-    // 테이블 상세(결제) 화면에서는 신규/조리중/서빙완료 어느 상태든 상관없이
-    // 테이블을 터치하면 곧장 결제로 넘어간다 — 사장님 피드백: "신규주문이던
-    // 조리중이던 서빙완료이던 테이블 터치해서 바로 결제를 진행할꺼야". 메인
-    // 주문 큐(renderOrderCard)의 신규→조리중→서빙완료 단계별 진행 버튼과는
-    // 별개 화면이라 그쪽은 그대로 두고, 여기서는 상태에 관계없이 항상
-    // "결제 완료로 변경" 버튼 하나만 보여주고 paid로 바로 전환한다.
-    // 이 카드(주문 하나)에서 체크된 품목이 있으면 "선택 결제 완료
-    // (NT$금액)"로 바뀌어 체크한 품목만 결제 처리(서버 split-pay가 처리),
-    // 아무것도 안 체크했으면 기존처럼 이 주문 전체를 결제 완료로.
-    const selectedForThisOrder = withItemCheckboxes ? collectSelectedItemsByOrder([o])[0] : null;
+    // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
+    // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
+    // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 라운드/카드마다
+    // 따로 있던 결제 버튼(선택 결제 완료 ↔ 결제 완료로 변경)을 없애고,
+    // 테이블 상세 화면 맨 아래(footer)의 버튼 하나로 합친다 — 아래
+    // openTableDetail의 footerPayBtn 참고. 부분/전체 결제 모두 이제
+    // "품목을 체크하고 그 버튼을 누르는" 한 가지 방식으로만 이뤄진다.
+    // 단, 포장 카운터(外帶)는 서로 무관한 손님들 주문이라 애초에
+    // 체크박스/합산 결제 대상이 아니므로(withItemCheckboxes가 항상
+    // false), 카운터만은 예전처럼 카드 자신의 "결제 완료로 변경" 버튼을
+    // 그대로 둔다 — 그게 그 손님 주문 하나를 처리하는 유일한 방법이다.
     const nextBtn =
-      o.status === "paid" || o.status === "cancelled"
+      o.status === "paid" || o.status === "cancelled" || !isCounterOrder(o)
         ? ""
-        : selectedForThisOrder
-        ? `<button class="primary-btn pay-selected-items-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("paySelectedBtn")} (NT$${selectedForThisOrder.total})</button>`
         : `<button class="primary-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`;
     // 이미 일부 품목이 결제완료(item.paid) 처리된 주문은 "수정"을 막는다 —
     // 수정 화면은 품목을 통째로 새로 짜서 저장하는 방식이라(openOrderEdit),
@@ -3542,9 +3539,6 @@
       .join("");
     const payableOrders = orders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
     const hasPayable = payableOrders.length > 0;
-    const selections = collectSelectedItemsByOrder(orders);
-    const hasSelection = selections.length > 0;
-    const selectedTotal = selections.reduce((s, x) => s + x.total, 0);
     const lastOrder = orders[orders.length - 1];
     // 카드 하나 짜리(renderTableOrderBlock)와 같은 이유로, 마지막 라운드에
     // 이미 결제완료된 품목이 있으면 "수정"을 숨긴다.
@@ -3552,19 +3546,15 @@
       hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && !lastOrder.items.some((it) => it.paid) && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${lastOrder.id}">${T("orderEditBtn")}</button>`
         : "";
-    // 체크된 품목이 하나라도 있으면(어느 라운드에 있든) "선택 결제
-    // 완료(합계 NT$X)" 버튼으로 바뀌어 체크한 품목만 결제 처리하고,
-    // 아무것도 안 체크했으면 기존처럼 "결제 완료로 변경"(전체 라운드)
-    // 그대로 — 기본 동작은 안 바뀐다.
-    const groupPayBtn = !hasPayable
-      ? ""
-      : hasSelection
-      ? `<button class="primary-btn pay-selected-items-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("paySelectedBtn")} (NT$${selectedTotal})</button>`
-      : `<button class="primary-btn pay-all-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;">${T("nextServed")}</button>`;
-    const groupButtonsHtml =
-      groupPayBtn || groupEditBtn
-        ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupPayBtn}${groupEditBtn}</div>`
-        : "";
+    // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
+    // 걸로 합쳐서 넣어줘" — 여기 있던 결제 버튼(선택 결제 완료 ↔ 결제
+    // 완료로 변경)은 없앤다. 결제는 이제 테이블 상세 맨 아래 footer의
+    // 버튼 하나로만 하고, 그 버튼이 이 테이블의 모든 라운드에 걸친 체크
+    // 상태를 그대로 읽는다(collectSelectedItemsByOrder(unpaidOrders)) —
+    // openTableDetail의 footerPayBtn 참고. "수정"만 라운드 옆에 남는다.
+    const groupButtonsHtml = groupEditBtn
+      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupEditBtn}</div>`
+      : "";
     // 사장님 피드백(2026-09-05, 스크린샷과 함께): "합계는 가장 아래 소계
     // 아래에 하나 있었으면 좋겠어 다른 색으로" — 라운드마다 있는 소계
     // (검정 텍스트)와는 별개로, 맨 마지막 소계 바로 아래에 전체 라운드를
