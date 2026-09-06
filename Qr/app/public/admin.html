@@ -496,25 +496,30 @@
           <div class="save-msg" id="escposMsg" hidden></div>
         </div>
         <div class="settings-card">
-          <h3 data-i18n="ticketFontSizesTitle">빌지(주방 티켓) 글자 크기</h3>
+          <h3 data-i18n="ticketFontSizesTitle">빌지(주방 티켓) 글자 크기·굵기</h3>
           <p class="settings-hint" data-i18n="ticketFontSizesHint">
-            항목별로 글자 크기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요.
+            항목별로 글자 크기와 굵기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요.
             브라우저 인쇄(미리보기 인쇄)에만 적용되고, ESC/POS 직접 인쇄에는 적용되지 않아요 — 프린터
-            자체 글꼴이라 크기를 이렇게 세밀하게 조절할 수 없어요.
+            자체 글꼴이라 이렇게 세밀하게 조절할 수 없어요.
           </p>
           <div class="ticket-font-editor">
             <div class="ticket-font-fields">
-              <label class="ticket-font-field"><span data-i18n="tfsStoreName">상호명 (헤더)</span><input type="number" id="tfsStoreName" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsTableNo">테이블 번호</span><input type="number" id="tfsTableNo" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsOrderTypeBadge">주문유형 (매장/포장) 배지</span><input type="number" id="tfsOrderTypeBadge" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsTime">주문 시간</span><input type="number" id="tfsTime" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsItemName">메뉴 이름</span><input type="number" id="tfsItemName" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsItemDetail">세부사항 (└ 소/맵기)</span><input type="number" id="tfsItemDetail" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsItemNote">메뉴별 요청사항 (└ 비고)</span><input type="number" id="tfsItemNote" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsItemTakeout">메뉴별 포장 표시 (└ 포장)</span><input type="number" id="tfsItemTakeout" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsTotal">합계</span><input type="number" id="tfsTotal" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsOrderNote">전체 주문 메모</span><input type="number" id="tfsOrderNote" min="8" max="40" /></label>
-              <label class="ticket-font-field"><span data-i18n="tfsPrintTime">인쇄 시간</span><input type="number" id="tfsPrintTime" min="8" max="40" /></label>
+              <div class="ticket-font-field ticket-font-field-header">
+                <span></span>
+                <span class="ticket-font-col-label" data-i18n="tfsSizeColLabel">크기</span>
+                <span class="ticket-font-col-label" data-i18n="tfsWeightColLabel">굵기</span>
+              </div>
+              <label class="ticket-font-field"><span data-i18n="tfsStoreName">상호명 (헤더)</span><input type="number" id="tfsStoreName" min="8" max="40" /><select id="tfsStoreNameWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsTableNo">테이블 번호</span><input type="number" id="tfsTableNo" min="8" max="40" /><select id="tfsTableNoWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsOrderTypeBadge">주문유형 (매장/포장) 배지</span><input type="number" id="tfsOrderTypeBadge" min="8" max="40" /><select id="tfsOrderTypeBadgeWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsTime">주문 시간</span><input type="number" id="tfsTime" min="8" max="40" /><select id="tfsTimeWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsItemName">메뉴 이름</span><input type="number" id="tfsItemName" min="8" max="40" /><select id="tfsItemNameWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsItemDetail">세부사항 (└ 소/맵기)</span><input type="number" id="tfsItemDetail" min="8" max="40" /><select id="tfsItemDetailWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsItemNote">메뉴별 요청사항 (└ 비고)</span><input type="number" id="tfsItemNote" min="8" max="40" /><select id="tfsItemNoteWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsItemTakeout">메뉴별 포장 표시 (└ 포장)</span><input type="number" id="tfsItemTakeout" min="8" max="40" /><select id="tfsItemTakeoutWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsTotal">합계</span><input type="number" id="tfsTotal" min="8" max="40" /><select id="tfsTotalWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsOrderNote">전체 주문 메모</span><input type="number" id="tfsOrderNote" min="8" max="40" /><select id="tfsOrderNoteWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
+              <label class="ticket-font-field"><span data-i18n="tfsPrintTime">인쇄 시간</span><input type="number" id="tfsPrintTime" min="8" max="40" /><select id="tfsPrintTimeWeight"><option value="400" data-i18n="tfsWeightNormal">보통</option><option value="700" data-i18n="tfsWeightBold">굵게</option><option value="900" data-i18n="tfsWeightExtraBold">매우 굵게</option></select></label>
             </div>
             <div class="ticket-font-preview-wrap">
               <iframe id="ticketFontPreviewFrame" class="ticket-font-preview-frame" title="ticket preview"></iframe>

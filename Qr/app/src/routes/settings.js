@@ -300,10 +300,20 @@ const TICKET_FONT_KEYS = [
   "printTime",
 ];
 
+// 사장님 피드백(2026-09-06): "설정에 주방으로 가는 명세서 출력하는 거
+// 글자 크기 조절할 수 있게 했는데 그 부분들 전부 글자 굵기 조절하는것도
+// 추가해줘" — 위 TICKET_FONT_KEYS와 정확히 같은 항목들에 대해 굵기도
+// 같은 방식(같은 GET/PUT, 같은 settings.ticket_font_sizes 객체 안에 함께
+// 저장)으로 조절 가능하게 함. 키 이름은 "<항목>Weight" 규칙으로 붙여서
+// 하나의 평평한(flat) 객체 안에 크기·굵기가 나란히 들어가게 함 —
+// admin.js의 DEFAULT_TICKET_FONT_SIZES/TICKET_FONT_INPUT_IDS도 동일한
+// 규칙을 씀.
+const TICKET_WEIGHT_KEYS = TICKET_FONT_KEYS.map((k) => `${k}Weight`);
+
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
   const out = {};
-  for (const k of TICKET_FONT_KEYS) if (typeof saved[k] === "number") out[k] = saved[k];
+  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS]) if (typeof saved[k] === "number") out[k] = saved[k];
   return out;
 }
 
@@ -320,6 +330,15 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
     // an unreadable or paper-wasting ticket — 8px..40px covers everything
     // from "tiny footer note" to "shout it across the kitchen".
     if (Number.isFinite(v)) store.settings.ticket_font_sizes[k] = Math.max(8, Math.min(40, Math.round(v)));
+  }
+  for (const k of TICKET_WEIGHT_KEYS) {
+    const v = Number(b[k]);
+    // CSS font-weight in 100-step increments (100..900) — matches the
+    // admin.js <select> options exactly (400/700/900, the only weights the
+    // ticket's Google Fonts stylesheet actually loads), rounded to the
+    // nearest hundred so this stays a sane value even if something odd is
+    // ever posted directly to the API.
+    if (Number.isFinite(v)) store.settings.ticket_font_sizes[k] = Math.max(100, Math.min(900, Math.round(v / 100) * 100));
   }
   await save();
   res.json(ticketFontSizesStatus());

@@ -529,9 +529,9 @@
       uiFontScaleTitle: "화면 글자 크기",
       uiFontScaleHint: "이 관리자 화면 전체의 글자 크기를 조절해요. 이 컴퓨터/브라우저에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
       uiFontScaleResetBtn: "기본값",
-      ticketFontSizesTitle: "빌지(주방 티켓) 글자 크기",
+      ticketFontSizesTitle: "빌지(주방 티켓) 글자 크기·굵기",
       ticketFontSizesHint:
-        "항목별로 글자 크기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요. 브라우저 인쇄(미리보기 인쇄)에만 적용되고, ESC/POS 직접 인쇄에는 적용되지 않아요 — 프린터 자체 글꼴이라 크기를 이렇게 세밀하게 조절할 수 없어요.",
+        "항목별로 글자 크기와 굵기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요. 브라우저 인쇄(미리보기 인쇄)에만 적용되고, ESC/POS 직접 인쇄에는 적용되지 않아요 — 프린터 자체 글꼴이라 이렇게 세밀하게 조절할 수 없어요.",
       tfsStoreName: "상호명 (헤더)",
       tfsTableNo: "테이블 번호",
       tfsOrderTypeBadge: "주문유형 (매장/포장) 배지",
@@ -543,6 +543,11 @@
       tfsTotal: "합계",
       tfsOrderNote: "전체 주문 메모",
       tfsPrintTime: "인쇄 시간",
+      tfsSizeColLabel: "크기",
+      tfsWeightColLabel: "굵기",
+      tfsWeightNormal: "보통",
+      tfsWeightBold: "굵게",
+      tfsWeightExtraBold: "매우 굵게",
       ticketFontSavedMsg: "저장되었습니다",
       ticketFontResetBtn: "기본값으로",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
@@ -901,9 +906,9 @@
       uiFontScaleTitle: "畫面文字大小",
       uiFontScaleHint: "調整整個管理後台畫面的文字大小。只影響這台電腦/瀏覽器，不會影響其他人的畫面。",
       uiFontScaleResetBtn: "預設值",
-      ticketFontSizesTitle: "廚房出單文字大小",
+      ticketFontSizesTitle: "廚房出單文字大小・粗細",
       ticketFontSizesHint:
-        "可以個別調整每個項目的文字大小，右邊的預覽是實際列印大小。只影響瀏覽器列印（預覽列印），不影響 ESC/POS 直接列印 — 因為印表機本身的字型無法這樣細部調整大小。",
+        "可以個別調整每個項目的文字大小與粗細，右邊的預覽是實際列印大小。只影響瀏覽器列印（預覽列印），不影響 ESC/POS 直接列印 — 因為印表機本身的字型無法這樣細部調整。",
       tfsStoreName: "店名（標題）",
       tfsTableNo: "桌號",
       tfsOrderTypeBadge: "訂單類型（內用/外帶）標籤",
@@ -915,6 +920,11 @@
       tfsTotal: "合計",
       tfsOrderNote: "整單備註",
       tfsPrintTime: "列印時間",
+      tfsSizeColLabel: "大小",
+      tfsWeightColLabel: "粗細",
+      tfsWeightNormal: "標準",
+      tfsWeightBold: "粗體",
+      tfsWeightExtraBold: "特粗",
       ticketFontSavedMsg: "已儲存",
       ticketFontResetBtn: "恢復預設值",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
@@ -1817,6 +1827,25 @@
     total: 16, // 合計 row
     orderNote: 11, // 訂單備註 (whole-order note) line
     printTime: 10, // footer 列印時間 line
+    // 사장님 피드백(2026-09-06): "그 부분들 전부 글자 굵기 조절하는것도
+    // 추가해줘" — 위 크기 항목과 정확히 같은 11개 부위에 대한 굵기
+    // (CSS font-weight). 기본값은 지금까지 하드코딩되어 있던 실제 값
+    // 그대로라서, 사장님이 직접 바꾸기 전까지는 인쇄 결과가 1px도 안
+    // 달라진다. 400/700/900만 고를 수 있게 한 이유는 아래 buildTicketHtml의
+    // Google Fonts 링크가 이 세 굵기만 실제로 불러오기 때문 — 그 외
+    // 값(예: 500)을 넣어도 브라우저가 가장 가까운 걸로 대충 흉내만 내서
+    // 눈으로 차이가 잘 안 보인다.
+    storeNameWeight: 900,
+    tableNoWeight: 700,
+    orderTypeBadgeWeight: 900,
+    timeWeight: 700,
+    itemNameWeight: 900,
+    itemDetailWeight: 400,
+    itemNoteWeight: 400,
+    itemTakeoutWeight: 900,
+    totalWeight: 900,
+    orderNoteWeight: 400,
+    printTimeWeight: 400,
   };
   let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
 
@@ -1896,7 +1925,7 @@
 <html><head><meta charset="utf-8" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@700;900&family=Noto+Sans+KR:wght@700;900&display=swap" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" />
 <style>
   /* 80mm narrow-roll thermal/receipt printer, not A4 — height is left to
      "auto" since the roll cuts to whatever length the content needs. */
@@ -1909,23 +1938,23 @@
   }
   .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; }
   .header { text-align: center; margin-bottom: 2mm; }
-  .store-name { font-size: ${fs.storeName}px; font-weight: 900; }
+  .store-name { font-size: ${fs.storeName}px; font-weight: ${fs.storeNameWeight}; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
-  .meta-row { display: flex; justify-content: space-between; align-items: center; font-weight: 700; margin-bottom: 1mm; }
-  .table-no { font-size: ${fs.tableNo}px; }
-  .order-type-badge { display: inline-block; font-size: ${fs.orderTypeBadge}px; font-weight: 900; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
-  .order-time { font-size: ${fs.time}px; }
+  .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1mm; }
+  .table-no { font-size: ${fs.tableNo}px; font-weight: ${fs.tableNoWeight}; }
+  .order-type-badge { display: inline-block; font-size: ${fs.orderTypeBadge}px; font-weight: ${fs.orderTypeBadgeWeight}; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
+  .order-time { font-size: ${fs.time}px; font-weight: ${fs.timeWeight}; }
   .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
   .item-row:last-child { border-bottom: none; }
-  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: 900; }
+  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
-  .item-detail { font-size: ${fs.itemDetail}px; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
-  .item-note { font-size: ${fs.itemNote}px; color: #c0161f; }
-  .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: 900; color: #000; }
-  .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: 900; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
-  .order-note { font-size: ${fs.orderNote}px; color: #c0161f; margin-top: 2mm; }
-  .print-time { text-align: center; font-size: ${fs.printTime}px; color: #555; margin-top: 3mm; }
+  .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
+  .item-note { font-size: ${fs.itemNote}px; font-weight: ${fs.itemNoteWeight}; color: #c0161f; }
+  .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
+  .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
+  .order-note { font-size: ${fs.orderNote}px; font-weight: ${fs.orderNoteWeight}; color: #c0161f; margin-top: 2mm; }
+  .print-time { text-align: center; font-size: ${fs.printTime}px; font-weight: ${fs.printTimeWeight}; color: #555; margin-top: 3mm; }
   ${screenChromeCss}
 </style>
 </head><body>
@@ -2048,6 +2077,21 @@
     total: "tfsTotal",
     orderNote: "tfsOrderNote",
     printTime: "tfsPrintTime",
+    // 사장님 피드백(2026-09-06): "그 부분들 전부 글자 굵기 조절하는것도
+    // 추가해줘" — 위 크기 입력칸과 짝을 이루는 굵기 <select> id들. 이
+    // 객체 하나로 readTicketFontInputs()/setTicketFontInputs()가 크기·굵기
+    // 둘 다 그대로 처리하므로 그 두 함수는 손댈 필요가 없다.
+    storeNameWeight: "tfsStoreNameWeight",
+    tableNoWeight: "tfsTableNoWeight",
+    orderTypeBadgeWeight: "tfsOrderTypeBadgeWeight",
+    timeWeight: "tfsTimeWeight",
+    itemNameWeight: "tfsItemNameWeight",
+    itemDetailWeight: "tfsItemDetailWeight",
+    itemNoteWeight: "tfsItemNoteWeight",
+    itemTakeoutWeight: "tfsItemTakeoutWeight",
+    totalWeight: "tfsTotalWeight",
+    orderNoteWeight: "tfsOrderNoteWeight",
+    printTimeWeight: "tfsPrintTimeWeight",
   };
 
   // A small sample order for the live actual-size preview in the settings
@@ -2098,7 +2142,13 @@
     frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), { screenPreview: false });
   }
 
-  $$("#settings-cat-print input[id^='tfs']").forEach((el) => (el.oninput = updateTicketFontPreview));
+  // 굵기는 <select>라서 input과 change 이벤트가 둘 다 잡히게 해둔다 —
+  // 크기(<input type=number>) 쪽은 원래 oninput 하나로 충분했지만, select는
+  // 브라우저에 따라 change만 확실히 보장되는 경우가 있어 안전하게 둘 다 건다.
+  $$("#settings-cat-print input[id^='tfs'], #settings-cat-print select[id^='tfs']").forEach((el) => {
+    el.oninput = updateTicketFontPreview;
+    el.onchange = updateTicketFontPreview;
+  });
 
   // Called for every logged-in role (owner or staff) — see showDashboard()
   // below — because ticketFontSizes is the cache printKitchenTicket() and
