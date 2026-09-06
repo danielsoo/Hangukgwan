@@ -24,6 +24,66 @@ function resolveSelectedAddons(mi, requestedNames) {
 
 const router = express.Router();
 
+// 사장님 요청(2026-09-06): "vip 카드를 소지중이면 세일을 해주거든. 1. 特約
+// 95折 2. VIP 9折... 이 할인은 음료와 주류는 빼고 적용돼. 또 현금만 돼." —
+// 결제 시점에 직원이 손님이 보여준 물리적 카드를 보고 눌러주는 할인이다.
+// 주문 시 자동 적용되는 위쪽 Firebase 회원 시스템의 vip_discount_percent와는
+// 완전히 별개(다른 대상 — 앱으로 미리 가입한 회원 vs 현장에서 카드를 보여준
+// 손님, 다른 트리거 — 주문 생성 시 vs 결제 시)다. order.total(품목 전체
+// 합, PATCH /:id/items 주석대로 절대 바뀌지 않는 고정값)은 그대로 두고,
+// 실제로 받는 금액만 이 할인만큼 줄인다 — 아래 PATCH /:id, PATCH
+// /:id/split-pay 참고.
+const VIP_DISCOUNT_RATES = { te95: 0.95, vip9: 0.9 };
+const PAYMENT_METHODS = ["cash", "linepay", "card"];
+
+// 품목 하나의 카테고리 key — POST /, PATCH /:id/items에서 채워두는
+// category_key 스냅샷을 우선 쓴다(메뉴가 나중에 바뀌거나 삭제돼도 이미
+// 확정된 주문의 계산이 흔들리지 않도록, 다른 스냅샷 필드(name_zh 등)와 같은
+// 원칙). 이 필드가 생기기 전에 이미 저장돼 있던 주문(배포 시점에 진행 중이던
+// 주문)은 스냅샷이 없으므로 현재 메뉴 기준으로 한 번 더 찾아본다 — 완벽하진
+// 않지만("전부 무조건 할인 대상"으로 잘못 처리하는 것보다는 낫다).
+function categoryKeyOf(it) {
+  if (it.category_key !== undefined) return it.category_key;
+  const mi = store.menuItems.find((m) => m.id === it.item_id);
+  if (!mi) return null;
+  const cat = store.categories.find((c) => c.id === mi.category_id);
+  return cat ? cat.key : null;
+}
+
+// 음료·주류(카테고리 key "drink" — src/seed.js 참고, 이 매장은 주류를 따로
+// 분리하지 않고 drink 안에 함께 둔다) 품목은 할인 대상에서 제외하고 나머지
+// 품목의 금액만 더한다. indexes를 주면 그 인덱스들만(부분 결제로 이번에
+// 실제 결제되는 품목만), 생략하면 order.items 전체를 대상으로 한다.
+function discountEligibleTotal(items, indexes) {
+  const idxs = indexes || items.map((_, i) => i);
+  return idxs.reduce((s, i) => {
+    const it = items[i];
+    if (!it || categoryKeyOf(it) === "drink") return s;
+    const addonsTotal = (it.selected_addons || []).reduce((a, x) => a + x.price, 0);
+    return s + (it.unit_price + addonsTotal) * it.qty;
+  }, 0);
+}
+
+function computeVipDiscount(vipDiscountType, eligibleTotal) {
+  const rate = VIP_DISCOUNT_RATES[vipDiscountType];
+  if (!rate) return 0;
+  return eligibleTotal - Math.round(eligibleTotal * rate);
+}
+
+// paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
+// 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을
+// disabled 처리해주는 것과는 별개로 서버가 실제로 막아야 하는 지점이다.
+// 유효하지 않은 값은 조용히 무시(null)한다 — 결제 자체(품목 완료 처리)는
+// 이 둘과 무관하게 항상 진행돼야 하므로, 잘못된 결제 방식/할인 값 때문에
+// 결제 자체가 막히면 안 된다. 단, "할인은 현금만"은 유일하게 진짜 에러로
+// 취급한다(호출부에서 400을 돌려줌).
+function resolvePaymentFields(body) {
+  const paymentMethod = PAYMENT_METHODS.includes(body.paymentMethod) ? body.paymentMethod : null;
+  const vipDiscountType = Object.keys(VIP_DISCOUNT_RATES).includes(body.vipDiscountType) ? body.vipDiscountType : null;
+  const discountRequiresCash = !!vipDiscountType && paymentMethod !== "cash";
+  return { paymentMethod, vipDiscountType, discountRequiresCash };
+}
+
 // Straight-line distance between two lat/lng points, in meters.
 function haversineMeters(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -139,6 +199,12 @@ router.post("/", async (req, res) => {
       // whole order, so a single order can mix both. Anything else
       // (missing, tampered, unrecognized) safely falls back to dine-in.
       order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
+      // 이 품목이 주문될 당시 속해 있던 카테고리 key(예: "drink") 스냅샷 —
+      // 다른 스냅샷 필드(name_zh, unit_price 등)와 같은 이유로, 나중에 메뉴
+      // 카테고리가 바뀌거나 품목이 삭제돼도 흔들리지 않게 한다. VIP 카드
+      // 할인(特約95折/VIP9折, 위 discountEligibleTotal)이 음료·주류를 뺄 때
+      // 이 값을 쓴다.
+      category_key: (store.categories.find((c) => c.id === mi.category_id) || {}).key || null,
       note: (it.note || "").slice(0, 200),
     });
   }
@@ -309,6 +375,25 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = store.orders.find((o) => o.id === id);
   if (!order) return res.status(404).json({ error: "not_found" });
+
+  // 사장님 요청(2026-09-06): 이 라우트로 결제 완료(status: "paid")를 찍을 때
+  // 결제 방식/VIP 카드 할인도 같이 받는다 — 포장 카운터 라운드의 "결제
+  // 완료로 변경" 버튼(public/js/admin.js의 data-advance-id)이 여기로 온다.
+  // 다른 상태 전환(조리 시작/서빙 완료 등)은 이 두 값을 아예 안 보내므로
+  // 전혀 영향이 없다. discountRequiresCash는 클라이언트가 이미 LinePay/
+  // 신용카드 버튼을 잠가주지만, 그건 UI일 뿐이라 여기서 다시 막는다.
+  if (status === "paid") {
+    const { paymentMethod, vipDiscountType, discountRequiresCash } = resolvePaymentFields(req.body || {});
+    if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
+    if (paymentMethod) order.payment_method = paymentMethod;
+    if (vipDiscountType) {
+      const eligible = discountEligibleTotal(order.items);
+      const discountAmount = computeVipDiscount(vipDiscountType, eligible);
+      order.discount_type = vipDiscountType;
+      order.discount_amount = (order.discount_amount || 0) + discountAmount;
+    }
+  }
+
   order.status = status;
   order.updated_at = nowLocal();
 
@@ -390,6 +475,8 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       spice_choice: it.spice || null,
       selected_addons: selectedAddons,
       order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
+      // POST /의 같은 필드와 동일 — 위 discountEligibleTotal 참고.
+      category_key: (store.categories.find((c) => c.id === mi.category_id) || {}).key || null,
       note: (it.note || "").slice(0, 200),
     });
   }
@@ -440,6 +527,12 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   if (!Array.isArray(itemIndexes) || itemIndexes.length === 0) {
     return res.status(400).json({ error: "invalid_selection" });
   }
+  // 사장님 요청(2026-09-06): 진짜 테이블의 결제는 항상 이 라우트(footer의
+  // "선택/전체 결제 완료")로 이뤄지므로 特約95折/VIP9折 할인·결제 방식도
+  // 여기서 받는다. 이번에 실제로 결제되는 품목(selectedIdx, 아래에서 확정)
+  // 중 음료·주류를 뺀 금액에만 할인율을 적용한다 — PATCH /:id와 동일 규칙.
+  const { paymentMethod, vipDiscountType, discountRequiresCash } = resolvePaymentFields(req.body || {});
+  if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
   // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
   // (체크한 품목 기준) — 처음엔 체크한 품목을 새 주문으로 떼어내는 방식으로
   // 만들었는데, 그러면 원래 주문(라운드) 목록에서 그 품목이 통째로
@@ -459,6 +552,13 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
     order.items[i].paid = true;
     order.items[i].paid_at = paidAt;
   });
+  if (paymentMethod) order.payment_method = paymentMethod;
+  if (vipDiscountType) {
+    const eligible = discountEligibleTotal(order.items, selectedIdx);
+    const discountAmount = computeVipDiscount(vipDiscountType, eligible);
+    order.discount_type = vipDiscountType;
+    order.discount_amount = (order.discount_amount || 0) + discountAmount;
+  }
   order.updated_at = paidAt;
 
   // 이번에 남김없이 전부 결제완료로 표시됐으면(이전에 이미 일부가

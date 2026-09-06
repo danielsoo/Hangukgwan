@@ -681,6 +681,28 @@
   </div>
 </div>
 
+<!-- 결제 방식(현금/LinePay/신용카드) 선택 팝업 -- 사장님 요청(2026-09-06):
+     "결제완료할 때 결제 종류로는 현금, LinePay, 신용카드로 할 수 있게
+     해줘... vip 할인 적용 누르면 현금을 제외하고는 회색으로 불 꺼진 것
+     처럼 만들고 버튼도 안 누르게 해줘." 테이블 footer의 "선택/전체 결제
+     완료"와 포장 카운터 라운드의 "결제 완료로 변경" 양쪽에서 공용으로
+     쓴다 -- see showPaymentMethodPopup() in admin.js. -->
+<div id="paymentMethodBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal">
+    <h2 id="paymentMethodTitle" style="margin-top:0;" data-i18n="paymentMethodModalTitle">결제 방식 선택</h2>
+    <p id="paymentMethodSummary" style="color:var(--muted);font-size:14px;"></p>
+    <p id="paymentMethodHint" style="color:var(--red);font-size:13px;margin:0 0 10px;" hidden></p>
+    <div class="modal-actions" id="paymentMethodBtns" style="flex-wrap:wrap;">
+      <button type="button" class="primary-btn" data-payment-method="cash" data-i18n="paymentMethodCash">현금</button>
+      <button type="button" class="primary-btn" data-payment-method="linepay" data-i18n="paymentMethodLinepay">LinePay</button>
+      <button type="button" class="primary-btn" data-payment-method="card" data-i18n="paymentMethodCard">신용카드</button>
+    </div>
+    <div class="modal-actions">
+      <button class="danger-btn" id="paymentMethodCancel" data-i18n="appDialogCancel">취소</button>
+    </div>
+  </div>
+</div>
+
 <!-- Edit an already-placed order's items -- quantity, removal, and (for
      simple items with an options/spice_options list) their option or spice
      choice, plus adding more simple items. A griddle/mix-option item like

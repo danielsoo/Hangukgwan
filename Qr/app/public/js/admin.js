@@ -111,6 +111,17 @@
   // buildOrderRoundParts/collectSelectedItemsByOrder(아래)가 직접
   // 참조한다.
   let selectedPayItemKeys = new Set();
+  // 사장님 피드백(2026-09-06): "vip 카드를 소지중이면 세일을 해주거든...
+  // 特約 95折(5% 할인)/VIP 9折(10% 할인) 중 하나만 적용, 현금만" — 결제
+  // 시점에 직원이 물리적 카드를 보고 눌러주는 할인(주문 시 자동 적용되는
+  // Firebase 회원 시스템의 할인과는 완전히 별개). 명확화 답변에 따라
+  // 진짜 테이블은 "테이블 전체 단위"로 딱 하나만 고르므로(결제도 테이블
+  // 전체가 한 곳 — 아래 footerPayBtn — 에서만 이뤄진다) 테이블당 값 하나면
+  // 충분하고, 포장 카운터는 라운드(주문)마다 결제가 서로 무관하므로 주문
+  // id별로 따로 관리한다. 둘 다 테이블/포커스 전환 시 함께 리셋된다
+  // (dismissedOrderIds/selectedPayItemKeys와 동일 조건).
+  let tableVipDiscountType = null; // "te95" | "vip9" | null
+  let counterVipDiscountTypeByOrderId = new Map();
 
   // ---------- In-app confirm/alert ----------
   // Replaces every native window.confirm()/alert() on this page. A
@@ -143,6 +154,41 @@
         $("#appDialogOk").onclick = null;
         resolve();
       };
+    });
+  }
+
+  // 사장님 요청(2026-09-06): "결제완료할 때 결제 종류로는 현금, LinePay,
+  // 신용카드로 할 수 있게 해줘. 그래서 vip 할인 적용 누르면 현금을
+  // 제외하고는 회색으로 불 꺼진 것 처럼 만들고 버튼도 안 누르게 해줘." —
+  // "결제 완료" 클릭 한 번으로 뜨는 팝업. discountActive가 true면
+  // LinePay/신용카드 버튼을 disabled + 흐리게 처리해서 현금만 고를 수
+  // 있게 한다. summaryText는 팝업 위에 보여줄 한 줄 안내(합계/할인/실수령
+  // 액, 아래 fmtPaymentSummary 참고) — 이 팝업이 곧 확인 단계를 겸하므로
+  // showConfirm을 따로 거치지 않는다. 취소를 누르면 null을 돌려준다.
+  function showPaymentMethodPopup(summaryText, discountActive) {
+    return new Promise((resolve) => {
+      const backdrop = $("#paymentMethodBackdrop");
+      $("#paymentMethodSummary").textContent = summaryText || "";
+      const hint = $("#paymentMethodHint");
+      hint.hidden = !discountActive;
+      hint.textContent = discountActive ? T("paymentMethodCashOnlyHint") : "";
+      const btns = $("#paymentMethodBtns").querySelectorAll("[data-payment-method]");
+      const finish = (result) => {
+        backdrop.hidden = true;
+        btns.forEach((b) => (b.onclick = null));
+        $("#paymentMethodCancel").onclick = null;
+        resolve(result);
+      };
+      btns.forEach((btn) => {
+        const method = btn.dataset.paymentMethod;
+        const locked = discountActive && method !== "cash";
+        btn.disabled = locked;
+        btn.style.opacity = locked ? "0.4" : "1";
+        btn.style.cursor = locked ? "not-allowed" : "pointer";
+        btn.onclick = locked ? null : () => finish(method);
+      });
+      $("#paymentMethodCancel").onclick = () => finish(null);
+      backdrop.hidden = false;
     });
   }
 
@@ -319,6 +365,11 @@
       itemPaidBadge: "결제완료",
       selectRoundAllLabel: "이 주문 전체 선택",
       selectAllItemsLabel: "전체 선택",
+      paymentMethodModalTitle: "결제 방식 선택",
+      paymentMethodCash: "현금",
+      paymentMethodLinepay: "LinePay",
+      paymentMethodCard: "신용카드",
+      paymentMethodCashOnlyHint: "선택한 할인은 현금 결제에만 적용돼요.",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -701,6 +752,11 @@
       itemPaidBadge: "已結帳",
       selectRoundAllLabel: "全選此筆訂單",
       selectAllItemsLabel: "全選",
+      paymentMethodModalTitle: "選擇付款方式",
+      paymentMethodCash: "現金",
+      paymentMethodLinepay: "LinePay",
+      paymentMethodCard: "信用卡",
+      paymentMethodCashOnlyHint: "所選折扣僅適用於現金付款。",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -1084,6 +1140,24 @@
     adminLang === "zh"
       ? `確定要將桌號 ${label} 勾選的 ${n} 項品項（合計 NT$${total}）標記為已結帳嗎？（其餘品項不受影響）`
       : `테이블 ${label}에서 체크한 품목 ${n}개(합계 NT$${total})만 결제 완료로 처리하시겠습니까? (나머지는 그대로 유지됩니다)`;
+  // 特約95折/VIP9折 — 사장님이 직접 부른 명칭 그대로(한자/영문 혼용)라
+  // 관리자 언어(ko/zh)와 무관하게 항상 같은 문구로 보여준다. 서버 쪽
+  // src/routes/orders.js의 VIP_DISCOUNT_RATES와 정확히 같은 값이어야 한다.
+  const VIP_DISCOUNT_LABELS = { te95: "特約95折", vip9: "VIP9折" };
+  const VIP_DISCOUNT_RATES_CLIENT = { te95: 0.95, vip9: 0.9 };
+  // 결제 방식 팝업(showPaymentMethodPopup)에 보여줄 한 줄 요약 — 실제
+  // 반영 금액은 항상 서버가 다시 계산해서 저장하므로(아래
+  // discountEligibleClientTotal 주석 참고) 이건 미리보기용.
+  function fmtPaymentSummary(total, discountType, discountAmount) {
+    if (!discountType) {
+      return adminLang === "zh" ? `本次結帳合計 NT$${total}` : `이번 결제 합계 NT$${total}`;
+    }
+    const label = VIP_DISCOUNT_LABELS[discountType] || "";
+    const payable = total - discountAmount;
+    return adminLang === "zh"
+      ? `本次結帳合計 NT$${total} → ${label}折扣 -NT$${discountAmount}（飲料、酒類不適用）→ 實收 NT$${payable}`
+      : `이번 결제 합계 NT$${total} → ${label} 할인 -NT$${discountAmount} (음료·주류 제외) → 실수령 NT$${payable}`;
+  }
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
     adminLang === "zh"
@@ -2264,11 +2338,18 @@
     };
   }
 
-  async function updateOrderStatus(id, status) {
+  // paymentMethod/vipDiscountType are only meaningful when status === "paid"
+  // (결제 완료 팝업에서 고른 값, 아래 data-advance-id 핸들러 참고) — 다른
+  // 상태 전환(조리 시작/서빙 완료 등, 큐 카드의 드래그 등)은 그냥 두 인자를
+  // 안 넘기면 예전과 동일하게 동작한다.
+  async function updateOrderStatus(id, status, paymentMethod, vipDiscountType) {
+    const body = { status };
+    if (paymentMethod) body.paymentMethod = paymentMethod;
+    if (vipDiscountType) body.vipDiscountType = vipDiscountType;
     const res = await fetch(`/api/orders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(body),
     });
     return res.ok; // callers that optimistically updated the UI (e.g. drag-to-change-status) need to know if it should be undone
   }
@@ -2287,11 +2368,14 @@
   // 돌려주고 있으니(orders.js의 PATCH /:id/split-pay, updatedOrder),
   // 그걸 그대로 돌려줘서 호출부가 로컬 orders 배열의 같은 자리만
   // 바꿔치기하면 되게 한다 — 그러면 재조회 요청 자체가 필요 없어진다.
-  async function splitPayOrderItems(id, itemIndexes) {
+  async function splitPayOrderItems(id, itemIndexes, paymentMethod, vipDiscountType) {
+    const reqBody = { itemIndexes };
+    if (paymentMethod) reqBody.paymentMethod = paymentMethod;
+    if (vipDiscountType) reqBody.vipDiscountType = vipDiscountType;
     const res = await fetch(`/api/orders/${id}/split-pay`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ itemIndexes }),
+      body: JSON.stringify(reqBody),
     });
     if (!res.ok) return { ok: false, updatedOrder: null };
     const body = await res.json().catch(() => null);
@@ -3098,6 +3182,8 @@
       // 화면과 무관하니 초기화한다.
       dismissedOrderIds = new Set();
       selectedPayItemKeys = new Set();
+      tableVipDiscountType = null;
+      counterVipDiscountTypeByOrderId = new Map();
     }
     openTableNumber = tableNumber;
     if (label != null) openTableLabel = label;
@@ -3251,11 +3337,19 @@
       : footerSelections.length > 0
       ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerSelectedTotal})</button>`
       : `<button class="primary-btn" disabled style="padding:8px 16px;font-size:15px;opacity:0.4;cursor:not-allowed;">${T("paySelectedBtn")}</button>`;
+    // 特約95折/VIP9折 토글 — 진짜 테이블은 결제가 항상 이 footer 한 곳
+    // (테이블 전체 단위)에서만 이뤄지므로 여기 하나만 두면 된다(카운터는
+    // 라운드별로 renderTableOrderBlock 쪽에 이미 따로 있음 — 위
+    // buildOrderRoundParts의 vipDiscountToggleHtml 참고).
+    const footerVipDiscountHtml = isCounterTable ? "" : renderVipDiscountToggle(tableVipDiscountType, "table");
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
-          ${footerPayBtn}
+        <div style="border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
+          ${footerVipDiscountHtml ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">${footerVipDiscountHtml}</div>` : ""}
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
+            ${footerPayBtn}
+          </div>
         </div>
       `
       : "";
@@ -3315,10 +3409,51 @@
       .querySelectorAll("[data-advance-id]")
       .forEach((btn) => {
         btn.onclick = async () => {
-          await updateOrderStatus(parseInt(btn.dataset.advanceId, 10), btn.dataset.advanceTo);
+          const orderId = parseInt(btn.dataset.advanceId, 10);
+          const toStatus = btn.dataset.advanceTo;
+          // 이 화면 안에서 [data-advance-id]는 항상 포장 카운터의 "결제
+          // 완료로 변경" 버튼뿐이다(진짜 테이블은 nextBtn 자체가 없음 — 위
+          // buildOrderRoundParts 참고) — toStatus === "paid"일 때만 결제
+          // 방식 팝업(特約95折/VIP9折 토글 포함)을 띄운다.
+          if (toStatus === "paid") {
+            const o = tableOrders.find((x) => x.id === orderId);
+            const discountType = counterVipDiscountTypeByOrderId.get(orderId) || null;
+            const eligible = discountType && o ? discountEligibleClientTotal(o) : 0;
+            const discountAmount = discountType ? computeVipDiscountClient(discountType, eligible) : 0;
+            const method = await showPaymentMethodPopup(fmtPaymentSummary(o ? o.total : 0, discountType, discountAmount), !!discountType);
+            if (!method) return;
+            const ok = await updateOrderStatus(orderId, toStatus, method, discountType);
+            if (!ok) {
+              await showAlert(T("paySelectedFailedMsg"));
+              return;
+            }
+            counterVipDiscountTypeByOrderId.delete(orderId);
+          } else {
+            await updateOrderStatus(orderId, toStatus);
+          }
           await loadOrders();
           openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
+        };
+      });
+    // 特約95折/VIP9折 토글 클릭 — scope가 "table"이면 테이블 전체(footer)용
+    // 값을, 그 외(포장 카운터 라운드의 주문 id 문자열)면 그 주문 하나만의
+    // 값을 갱신한다. 같은 값을 다시 누르면 해제(미선택)된다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-vip-discount-btn]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          const type = btn.dataset.vipDiscountBtn;
+          const scope = btn.dataset.vipDiscountScope;
+          if (scope === "table") {
+            tableVipDiscountType = tableVipDiscountType === type ? null : type;
+          } else {
+            const orderId = parseInt(scope, 10);
+            const current = counterVipDiscountTypeByOrderId.get(orderId) || null;
+            if (current === type) counterVipDiscountTypeByOrderId.delete(orderId);
+            else counterVipDiscountTypeByOrderId.set(orderId, type);
+          }
+          openTableDetail(tableNumber, label, focusOrderId);
         };
       });
     // 사장님 피드백(2026-09-06)으로 "전체 결제 완료"(.pay-all-btn) 버튼
@@ -3397,12 +3532,22 @@
           const selections = collectSelectedItemsByOrder(unpaidOrders);
           if (!selections.length) return;
           const total = selections.reduce((s, x) => s + x.total, 0);
-          const itemCount = selections.reduce((s, x) => s + x.indexes.length, 0);
-          if (!(await showConfirm(fmtConfirmPaySelected(label || tableNumber, itemCount, total)))) return;
-          const results = await Promise.all(selections.map((x) => splitPayOrderItems(x.order.id, x.indexes)));
+          // 사장님 요청(2026-09-06): "결제 완료 누르면 팝업으로" 결제
+          // 방식(현금/LinePay/신용카드)을 고르게 해달라 — 이 팝업 자체가
+          // 요약(합계/할인/실수령액)도 함께 보여주므로 예전의
+          // showConfirm(fmtConfirmPaySelected)은 더 이상 따로 거치지
+          // 않는다. 할인은 "테이블 전체 단위"(tableVipDiscountType)라
+          // 이 footer 버튼 하나에만 있다.
+          const discountType = tableVipDiscountType;
+          const eligible = discountType ? selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0) : 0;
+          const discountAmount = discountType ? computeVipDiscountClient(discountType, eligible) : 0;
+          const method = await showPaymentMethodPopup(fmtPaymentSummary(total, discountType, discountAmount), !!discountType);
+          if (!method) return;
+          const results = await Promise.all(selections.map((x) => splitPayOrderItems(x.order.id, x.indexes, method, discountType)));
           if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
           }
+          tableVipDiscountType = null; // 결제가 끝났으니 다음 결제를 위해 리셋
           // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고
           // 확인누르고 실제 적용되기까지 너무 오래 걸려" — 예전엔 여기서
           // loadOrders()로 이 식당 전체 주문을 통째로 다시 받아왔는데,
@@ -3456,6 +3601,41 @@
   function remainingAmountOf(o) {
     if (o.status === "paid") return o.total;
     return o.items.reduce((s, it) => (it.paid ? s : s + lineTotalOf(it)), 0);
+  }
+  // 特約95折/VIP9折은 음료·주류(메뉴 카테고리 key "drink" — src/seed.js 참고,
+  // 이 매장은 주류를 따로 분리하지 않고 drink 안에 함께 둔다)는 빼고
+  // 적용된다. categories는 loadMenu()가 채워두는, 메뉴 관리 탭과 같은
+  // 트리(각 카테고리에 items 배열)라 여기서 그대로 재사용한다. 실제
+  // 반영/저장은 항상 서버(src/routes/orders.js)가 다시 계산하므로, 여기
+  // 계산은 결제 방식 팝업에 보여줄 미리보기용일 뿐이다.
+  function drinkItemIdSet() {
+    const drinkCat = categories.find((c) => c.key === "drink");
+    return new Set(drinkCat ? drinkCat.items.map((i) => i.id) : []);
+  }
+  function discountEligibleClientTotal(order, indexes) {
+    const drinkIds = drinkItemIdSet();
+    const idxs = indexes || order.items.map((_, i) => i);
+    return idxs.reduce((s, i) => {
+      const it = order.items[i];
+      if (!it || drinkIds.has(it.item_id)) return s;
+      return s + lineTotalOf(it);
+    }, 0);
+  }
+  function computeVipDiscountClient(type, eligibleTotal) {
+    const rate = VIP_DISCOUNT_RATES_CLIENT[type];
+    if (!rate) return 0;
+    return eligibleTotal - Math.round(eligibleTotal * rate);
+  }
+  // 特約95折/VIP9折 중 하나만 고를 수 있는 토글 버튼 두 개 — 같은 걸 다시
+  // 누르면 해제(미선택으로). scope는 클릭 핸들러가 어느 대상(테이블
+  // 전체는 "table", 포장 카운터 라운드는 그 주문 id)에 적용할지 구분하는
+  // 값으로, data 속성에 그대로 실어둔다.
+  function renderVipDiscountToggle(currentType, scope) {
+    const btn = (type) => {
+      const active = currentType === type;
+      return `<button type="button" data-vip-discount-btn="${type}" data-vip-discount-scope="${scope}" style="padding:6px 10px;font-size:13px;white-space:nowrap;border-radius:6px;border:1px solid ${active ? "var(--red)" : "var(--line)"};background:${active ? "var(--red)" : "#fff"};color:${active ? "#fff" : "var(--ink)"};cursor:pointer;">${VIP_DISCOUNT_LABELS[type]}</button>`;
+    };
+    return `<div style="display:flex;gap:6px;">${btn("te95")}${btn("vip9")}</div>`;
   }
   // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
   // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
@@ -3585,6 +3765,16 @@
       o.status !== "paid" && o.status !== "cancelled" && !o.items.some((it) => it.paid) && canEditOrder()
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
+    // 特約95折/VIP9折 토글 — 사장님 요청: "수정 같은 열에 오른쪽에 넣고
+    // 싶은 것들이 있어... vip 카드를 소지중이면 세일을 해주거든". 진짜
+    // 테이블은 결제가 항상 테이블 전체 단위로 footer 한 곳에서만 이뤄지므로
+    // (위 nextBtn 주석 참고) 거기에만 토글을 두고, 포장 카운터는 라운드 =
+    // 그 손님 주문 하나라는 단위가 이미 "전체"와 같으므로 이 카드 자신의
+    // "결제 완료로 변경" 버튼 바로 옆에 토글을 둔다 — nextBtn과 같은 조건.
+    const vipDiscountToggleHtml =
+      o.status === "paid" || o.status === "cancelled" || !isCounterOrder(o)
+        ? ""
+        : renderVipDiscountToggle(counterVipDiscountTypeByOrderId.get(o.id) || null, String(o.id));
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
     // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
@@ -3638,7 +3828,7 @@
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
-    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
+    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, vipDiscountToggleHtml, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
@@ -3680,7 +3870,7 @@
         ${p.itemsToggleHtml}
         ${p.noteHtml}
         <div style="margin-top:auto;">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${p.nextBtn}${p.editBtn}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;">${p.nextBtn}${p.editBtn}${p.vipDiscountToggleHtml}</div>
           <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
           <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${o.total}</div>
         </div>
