@@ -3629,9 +3629,20 @@
   //      완전히 같은 동작이면 된다. 같은 .pay-all-btn 클래스를 붙여
   //      openTableDetail 안의 기존 핸들러(unpaidOrders 전부를 paid로)를
   //      그대로 재사용 — 새 JS 로직 불필요.
-  //    - 수정: 주문 하나만 고를 수 있으니, 가장 최근(마지막) 라운드를
-  //      대상으로 한다 — 보통 아직 손볼 여지가 있는 건 방금 추가된
-  //      라운드이기 때문.
+  //    - 수정: (2026-09-06 피드백 이전) 주문 하나만 고를 수 있으니, 가장
+  //      최근(마지막) 라운드를 대상으로 했었다.
+  //
+  // 사장님 피드백(2026-09-06): "지금 수정 누르면 제일 아래 2개만 뜨거든?
+  // 근데 주문 전체가 떠야 되던지 아니면 선택한 걸 수정하거나" — 위 "가장
+  // 최근 라운드만 수정"이 오히려 다른 라운드 품목이 조용히 편집 대상에서
+  // 빠지는 것처럼 보여 혼란을 줬다. openOrderEdit()가 애초에 주문(라운드)
+  // 하나 단위로만 동작하고(서버 PATCH /api/orders/:id/items도 마찬가지 —
+  // 여러 라운드를 한 번에 합쳐 편집/저장하려면 저장 시 다시 어느 품목이
+  // 어느 라운드로 되돌아가야 하는지부터 정해야 해서 훨씬 큰 변경이 필요),
+  // "주문 전체를 한 화면에서 통합 편집"보다는 "선택한 걸 수정" 쪽으로
+  // 맞춘다 — 맨 아래 버튼 하나 대신, 각 라운드 소계 옆에 그 라운드만의
+  // 수정 버튼을 되살려서(단일 카드일 때의 renderTableOrderBlock과 동일한
+  // p.editBtn 재사용) 어느 라운드를 고칠지 항상 명확하게 고를 수 있게 한다.
   function renderMergedOrderGroup(orders) {
     // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
     // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
@@ -3646,6 +3657,11 @@
       .map((o, i) => {
         const p = buildOrderRoundParts(o, false);
         const dividerStyle = i > 0 ? "margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);" : "";
+        // p.editBtn is already "" when this specific round is paid/cancelled
+        // or has any part-paid item (see buildOrderRoundParts) — checking
+        // per round here (instead of only the last one, as before) is what
+        // fixes an earlier round wrongly staying editable after it was
+        // already partially paid off.
         return `
           <div style="${dividerStyle}">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
@@ -3655,29 +3671,14 @@
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
-            <div style="text-align:right;font-weight:700;font-size:15px;margin-top:8px;">${T("subtotalLabel")} NT$${p.total}</div>
+            <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
+              ${p.editBtn}
+              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
+            </div>
           </div>
         `;
       })
       .join("");
-    const payableOrders = orders.filter((o) => o.status !== "paid" && o.status !== "cancelled");
-    const hasPayable = payableOrders.length > 0;
-    const lastOrder = orders[orders.length - 1];
-    // 카드 하나 짜리(renderTableOrderBlock)와 같은 이유로, 마지막 라운드에
-    // 이미 결제완료된 품목이 있으면 "수정"을 숨긴다.
-    const groupEditBtn =
-      hasPayable && lastOrder.status !== "paid" && lastOrder.status !== "cancelled" && !lastOrder.items.some((it) => it.paid) && canEditOrder()
-        ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${lastOrder.id}">${T("orderEditBtn")}</button>`
-        : "";
-    // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
-    // 걸로 합쳐서 넣어줘" — 여기 있던 결제 버튼(선택 결제 완료 ↔ 결제
-    // 완료로 변경)은 없앤다. 결제는 이제 테이블 상세 맨 아래 footer의
-    // 버튼 하나로만 하고, 그 버튼이 이 테이블의 모든 라운드에 걸친 체크
-    // 상태를 그대로 읽는다(collectSelectedItemsByOrder(unpaidOrders)) —
-    // openTableDetail의 footerPayBtn 참고. "수정"만 라운드 옆에 남는다.
-    const groupButtonsHtml = groupEditBtn
-      ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);">${groupEditBtn}</div>`
-      : "";
     // 사장님 피드백(2026-09-05, 스크린샷과 함께): "합계는 가장 아래 소계
     // 아래에 하나 있었으면 좋겠어 다른 색으로" — 라운드마다 있는 소계
     // (검정 텍스트)와는 별개로, 맨 마지막 소계 바로 아래에 전체 라운드를
@@ -3686,7 +3687,7 @@
     // 한눈에 구분되게 한다.
     const grandTotal = orders.reduce((s, o) => s + remainingAmountOf(o), 0);
     const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${grandTotal}</div>`;
-    return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}${groupButtonsHtml}</div>`;
+    return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
