@@ -3182,6 +3182,24 @@
           openTableDetail(tableNumber, label, focusOrderId);
         };
       });
+    // 사장님 피드백(2026-09-06): "체크 박스뿐 아니라 메뉴 이름 눌러도
+    // 체크되게 해줘" — 위 buildOrderRoundParts가 체크 가능한 품목 줄에
+    // 붙여준 data-select-item-row. 줄 아무 데나 누르면 그 줄의
+    // 체크박스를 토글하고 change 이벤트를 그대로 발생시켜서(위
+    // checkbox.onchange 재사용) 체크박스를 직접 눌렀을 때와 똑같이
+    // 동작하게 한다. 체크박스 자체를 누른 경우는 이미 그 checkbox의
+    // onchange가 처리하므로 여기서 또 토글하면 두 번 뒤집히니 제외한다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-select-item-row]")
+      .forEach((row) => {
+        row.onclick = (e) => {
+          if (e.target.closest("input")) return;
+          const checkbox = row.querySelector("[data-select-item-key]");
+          if (!checkbox) return;
+          checkbox.checked = !checkbox.checked;
+          checkbox.dispatchEvent(new Event("change"));
+        };
+      });
     // 사장님 피드백(2026-09-06): "부분 결제 완료 너무 오래 걸려. 그리고
     // 한 번에 전체 체크랑 시간대별 한 번에 전체 체크 기능도 있으면 좋을 거
     // 같아" — 라운드 하나 전체를 한 번에 체크/해제(라운드 헤더의
@@ -3344,7 +3362,14 @@
       // 체크 여부와 상관없이 좌우 폭이 그대로 유지되게 한다 — 사장님
       // 피드백: "선택하면 조금 좁아지는 현상이 있어. 그거 수정해줘." (체크
       // 안 한 다른 줄과 비교했을 때 내용이 안쪽으로 밀려 보이던 문제).
-      return `<div style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
+      //
+      // 사장님 피드백(2026-09-06): "체크 박스뿐 아니라 메뉴 이름 눌러도
+      // 체크되게 해줘" — 체크박스가 있는 줄(withItemCheckboxes && 아직
+      // 미결제)은 data-select-item-row를 붙여서 줄 전체를 클릭 영역으로
+      // 만든다. 실제 토글 처리는 아래 handler에서 체크박스의 change를
+      // 그대로 재사용한다(checkbox.onchange 참고).
+      const isRowClickable = withItemCheckboxes && !isPaidItem;
+      return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
           <span>NT$${lineTotalOf(it)}</span>
         </div>`;
