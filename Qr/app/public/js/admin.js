@@ -277,6 +277,7 @@
       logoutBtn: "로그아웃",
       soundToggleLabel: "🔔 신규 주문 알림음",
       autoPrintToggleLabel: "🖨️ 신규 주문 자동 인쇄",
+      toggleSavedMsg: "✔ 저장됨",
       refreshBtn: "새로고침",
       refreshingBtn: "⏳ 새로고침 중...",
       refreshedBtn: "✅ 완료",
@@ -664,6 +665,7 @@
       logoutBtn: "登出",
       soundToggleLabel: "🔔 新訂單提示音",
       autoPrintToggleLabel: "🖨️ 新訂單自動列印",
+      toggleSavedMsg: "✔ 已儲存",
       refreshBtn: "重新整理",
       refreshingBtn: "⏳ 重新整理中...",
       refreshedBtn: "✅ 完成",
@@ -1372,13 +1374,28 @@
     }
   }
 
+  // 2026-09-06 피드백: "저장 되었으면 저장되었다고도 알려주고. 저렇게
+  // 하니까 아슬해서" — localStorage에 저장은 이미 되고 있었지만(바로 위
+  // readStoredToggle/writeStoredToggle 참고) 화면에 아무 신호가 없어서
+  // 실제로 저장되는지 사장님이 확신하기 어려웠던 것. 토글을 누를 때마다
+  // 잠깐 "✔ 저장됨"을 보여줘서 확실히 저장됐다는 걸 눈으로 확인할 수 있게 함.
+  let toggleSavedMsgTimer = null;
+  function flashToggleSaved() {
+    const el = $("#toggleSavedMsg");
+    if (!el) return;
+    el.hidden = false;
+    clearTimeout(toggleSavedMsgTimer);
+    toggleSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
+  }
   $("#soundToggle").onchange = (e) => {
     soundOn = e.target.checked;
     writeStoredToggle("hg_admin_soundOn", soundOn);
+    flashToggleSaved();
   };
   $("#autoPrintToggle").onchange = (e) => {
     autoPrintOn = e.target.checked;
     writeStoredToggle("hg_admin_autoPrintOn", autoPrintOn);
+    flashToggleSaved();
   };
   // Reflect whatever was restored from localStorage above back onto the
   // actual checkboxes — otherwise the JS state and the visible UI disagree
@@ -3337,19 +3354,18 @@
       : footerSelections.length > 0
       ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerSelectedTotal})</button>`
       : `<button class="primary-btn" disabled style="padding:8px 16px;font-size:15px;opacity:0.4;cursor:not-allowed;">${T("paySelectedBtn")}</button>`;
-    // 特約95折/VIP9折 토글 — 진짜 테이블은 결제가 항상 이 footer 한 곳
-    // (테이블 전체 단위)에서만 이뤄지므로 여기 하나만 두면 된다(카운터는
-    // 라운드별로 renderTableOrderBlock 쪽에 이미 따로 있음 — 위
-    // buildOrderRoundParts의 vipDiscountToggleHtml 참고).
-    const footerVipDiscountHtml = isCounterTable ? "" : renderVipDiscountToggle(tableVipDiscountType, "table");
+    // 特約95折/VIP9折 토글 — 처음엔 여기 footer에 따로 한 줄로 뒀는데,
+    // 사장님 피드백(2026-09-06, 스크린샷과 함께): "할인 위치를 가장 아래
+    // 수정 같은 수평선 오른쪽으로 넣어줘" — footer가 아니라 각 라운드
+    // 자신의 "수정" 버튼과 같은 줄로 옮겼다(위 buildOrderRoundParts의
+    // vipDiscountToggleHtml, renderTableOrderBlock/renderMergedOrderGroup
+    // 참고). 라운드가 여러 개여도 모두 같은 테이블 전체 값을 공유해서
+    // 보여주므로 footer에 따로 둘 필요가 없다.
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
-        <div style="border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          ${footerVipDiscountHtml ? `<div style="display:flex;justify-content:flex-end;margin-bottom:8px;">${footerVipDiscountHtml}</div>` : ""}
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
-            ${footerPayBtn}
-          </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
+          <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
+          ${footerPayBtn}
         </div>
       `
       : "";
@@ -3766,15 +3782,22 @@
         ? `<button style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-edit-id="${o.id}">${T("orderEditBtn")}</button>`
         : "";
     // 特約95折/VIP9折 토글 — 사장님 요청: "수정 같은 열에 오른쪽에 넣고
-    // 싶은 것들이 있어... vip 카드를 소지중이면 세일을 해주거든". 진짜
-    // 테이블은 결제가 항상 테이블 전체 단위로 footer 한 곳에서만 이뤄지므로
-    // (위 nextBtn 주석 참고) 거기에만 토글을 두고, 포장 카운터는 라운드 =
-    // 그 손님 주문 하나라는 단위가 이미 "전체"와 같으므로 이 카드 자신의
-    // "결제 완료로 변경" 버튼 바로 옆에 토글을 둔다 — nextBtn과 같은 조건.
+    // 싶은 것들이 있어... vip 카드를 소지중이면 세일을 해주거든", 이어서
+    // (footer 위쪽 별도 줄로 넣었던 첫 시도에 대한 피드백, 스크린샷과 함께):
+    // "할인 위치를 가장 아래 수정 같은 수평선 오른쪽으로 넣어줘" — 그래서
+    // footer가 아니라 항상 이 카드/라운드 자신의 "수정" 버튼과 같은 줄에
+    // 둔다. 포장 카운터는 라운드 = 그 손님 주문 하나라는 단위가 이미
+    // "전체"와 같으므로 그 라운드 자신의 값(주문 id별)을 쓰고, 진짜
+    // 테이블은 결제가 테이블 전체 단위(footer의 결제 버튼 하나)로 이뤄지므로
+    // 라운드가 여러 개여도 모두 같은 테이블 전체 값(tableVipDiscountType)을
+    // 공유해서 보여준다 — 어느 라운드의 버튼을 눌러도 같은 값이 바뀌고,
+    // 다시 그리면 모든 라운드의 버튼이 함께 갱신된다.
     const vipDiscountToggleHtml =
-      o.status === "paid" || o.status === "cancelled" || !isCounterOrder(o)
+      o.status === "paid" || o.status === "cancelled"
         ? ""
-        : renderVipDiscountToggle(counterVipDiscountTypeByOrderId.get(o.id) || null, String(o.id));
+        : isCounterOrder(o)
+        ? renderVipDiscountToggle(counterVipDiscountTypeByOrderId.get(o.id) || null, String(o.id))
+        : renderVipDiscountToggle(tableVipDiscountType, "table");
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
     // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
@@ -3939,8 +3962,8 @@
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
-            <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
-              ${p.editBtn}
+            <div style="display:flex;align-items:center;justify-content:${p.editBtn || p.vipDiscountToggleHtml ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${p.editBtn}${p.vipDiscountToggleHtml}</div>
               <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
             </div>
           </div>

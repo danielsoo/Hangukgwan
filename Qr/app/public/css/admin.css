@@ -325,6 +325,11 @@ input, select, button, textarea { font-family: inherit; }
 .settings-card input, .settings-card textarea, .settings-card select { width: 100%; padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 18px; font-family: inherit; resize: vertical; }
 .settings-card button { padding: 10px 18px; border: none; background: var(--navy); color: #fff; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .save-msg { color: var(--green); font-size: 16px; margin-top: 10px; }
+/* 알림음/자동 인쇄 체크박스는 orders-toolbar에 인라인으로 붙어있어 위
+   .save-msg(카드 하단용, margin-top 10px)를 그대로 쓰면 툴바 안에서 어긋나
+   보여서 인라인 전용으로 따로 뺌 — 2026-09-06, "저렇게 하니까 아슬해서" 피드백
+   으로 추가된 저장 확인 표시(toggleSavedMsg)에 적용. */
+.toggle-saved-msg { color: var(--green); font-size: 14px; font-weight: 600; }
 .settings-hint { font-size: 16px; color: var(--muted); margin: -6px 0 14px; }
 @media (max-width: 700px) {
   .settings-shell { flex-direction: column; gap: 14px; }
