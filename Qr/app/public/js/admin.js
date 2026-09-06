@@ -3615,6 +3615,17 @@
     // 소계와 한 덩어리로 묶어 같이 margin-top:auto를 줘서 품목이 몇 개든
     // 항상 카드 맨 아래(같은 줄의 다른 카드와 격자로 높이가 맞춰짐)에
     // 붙게 한다.
+    //
+    // 사장님 피드백(2026-09-06, 테이블 1(라운드 3개)과 테이블 2(라운드
+    // 1개) 스크린샷을 나란히 보여주며): "메뉴가 하나여도 합계가 있었으면
+    // 좋겠어. 항상 전부가 UI가 같았으면 좋겠어" — 라운드가 여러 개라
+    // renderMergedOrderGroup으로 병합될 때만 맨 아래에 빨간 "합계" 줄이
+    // 있고, 라운드가 하나뿐이라 이 함수(단일 카드)로 그려질 때는 검정
+    // "소계" 줄만 있어 두 화면의 생김새가 달랐다. 값 자체는 소계와
+    // 같아지지만(라운드가 하나뿐이니 당연히), 라운드 개수와 무관하게
+    // 카드 생김새가 항상 똑같아 보이도록 여기도 같은 빨간 "합계" 줄을
+    // 추가한다 — 값은 병합 화면과 똑같이 o.total(부분결제와 무관한 고정
+    // 총액, 위 renderMergedOrderGroup 참고)을 쓴다.
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${p.dismissBtn}
@@ -3631,6 +3642,7 @@
         <div style="margin-top:auto;">
           <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${p.nextBtn}${p.editBtn}</div>
           <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
+          <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${o.total}</div>
         </div>
       </div>
     `;
@@ -5462,20 +5474,23 @@
     }
   }
 
-  // Converts a JS string (which may contain Hangul/Hanja, not just ASCII)
-  // into a base64 string of its UTF-8 bytes. btoa() alone only accepts
-  // Latin1 code points, so straight btoa(raw) would throw or mangle any
-  // CJK text in the ticket — this is the standard browser-side
-  // string->UTF-8-bytes->base64 trick. RawBT expects the base64 payload in
-  // "rawbt:base64,..." to be the actual UTF-8 byte stream of the ESC/POS
-  // command text, matching how QZ Tray is configured above (encoding:
-  // "UTF-8").
-  function utf8ToBase64(str) {
-    return btoa(unescape(encodeURIComponent(str)));
+  // Base64-encodes a raw byte array (Uint8Array of 0-255 values) exactly
+  // as-is — used for the raster ticket below, which is real binary image
+  // data, not Unicode text, so the UTF-8-string trick used elsewhere in
+  // this file (see buildTicketHtml/tryPrintViaEscPos) doesn't apply here.
+  // Chunked to avoid the call-stack limit of String.fromCharCode.apply on
+  // a large ticket's byte array.
+  function bytesToBase64(bytes) {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
   }
 
-  // Sends the same ESC/POS ticket bytes used for QZ Tray to the RawBT app
-  // instead (Android-only — see the "RawBT 자동 인쇄" settings card and
+  // Sends the kitchen ticket to the RawBT app instead of QZ Tray
+  // (Android-only — see the "RawBT 자동 인쇄" settings card and
   // 프로젝트 문서 claude/kitchen-printer-recommendation.md for the full
   // story). RawBT is triggered via its documented "rawbt:base64,..." URL
   // scheme (https://rawbt.ru/intents.html): handing it a hidden iframe
@@ -5484,6 +5499,14 @@
   // (Bluetooth, USB, or — this restaurant's case — a network/IP printer
   // reached over WiFi) configured inside the RawBT app, so this code never
   // needs to know the printer's address at all.
+  //
+  // Sends buildEscPosRasterTicket()'s bitmap, not buildEscPosTicket()'s
+  // plain ESC/POS text — the on-site test print (2026-09-06) came out with
+  // every Chinese character replaced by a different, unrelated glyph while
+  // digits/ASCII printed fine, the signature of this printer's firmware
+  // reading our UTF-8 bytes through its own built-in (non-UTF-8) code page.
+  // A bitmap sidesteps that entirely — see buildEscPosRasterTicket's own
+  // comment in escpos.js for the full explanation.
   //
   // IMPORTANT caveat: unlike tryPrintViaEscPos(), a custom URL scheme like
   // this is fire-and-forget — Android doesn't hand a success/failure result
@@ -5497,13 +5520,23 @@
       if (!res.ok) return false;
       const cfg = await res.json();
       if (!cfg.rawbtEnabled) return false;
-      if (typeof buildEscPosTicket !== "function") return false;
+      if (typeof buildEscPosRasterTicket !== "function") return false;
 
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
-      const raw = buildEscPosTicket(o, storeName);
+      // Mirrors buildTicketHtml()'s own table-label/phone logic exactly
+      // (see admin.js above) — escpos.js doesn't know about the `tables`
+      // list, so that lookup happens here and the result is handed in.
+      const counter = isCounterOrder(o);
+      const tableLabel = counter
+        ? o.pickup_number && o.customer_name
+          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          : "外帶櫃檯"
+        : `桌號 ${o.table_number}`;
+      const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
+      const bytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, { tableLabel, phoneLine });
       const iframe = document.createElement("iframe");
       iframe.style.display = "none";
-      iframe.src = "rawbt:base64," + utf8ToBase64(raw);
+      iframe.src = "rawbt:base64," + bytesToBase64(bytes);
       document.body.appendChild(iframe);
       setTimeout(() => iframe.remove(), 1000);
       return true;
@@ -5553,10 +5586,13 @@
   };
 
   // No QZ Tray/websocket connection step here — RawBT is reached purely via
-  // the "rawbt:" intent (see tryPrintViaRawBt/utf8ToBase64 above), which is
-  // fire-and-forget, so this can only confirm "we sent it to the OS", never
-  // "RawBT actually printed it". The status message says so explicitly to
-  // avoid a false sense of certainty.
+  // the "rawbt:" intent (see tryPrintViaRawBt/bytesToBase64 above), which
+  // is fire-and-forget, so this can only confirm "we sent it to the OS",
+  // never "RawBT actually printed it". The status message says so
+  // explicitly to avoid a false sense of certainty. Uses the same raster
+  // ticket builder as the real print path, so this test print actually
+  // exercises the fix for the Chinese-character garbling found on-site
+  // (2026-09-06), not the old plain-text path that caused it.
   $("#testRawbtBtn").onclick = async () => {
     const status = $("#rawbtTestStatus");
     try {
@@ -5569,10 +5605,10 @@
         total: 0,
         note: "",
       };
-      const raw = buildEscPosTicket(sampleOrder, storeName);
+      const bytes = buildEscPosRasterTicket(sampleOrder, storeName, ticketFontSizes, { tableLabel: "桌號 TEST" });
       const iframe = document.createElement("iframe");
       iframe.style.display = "none";
-      iframe.src = "rawbt:base64," + utf8ToBase64(raw);
+      iframe.src = "rawbt:base64," + bytesToBase64(bytes);
       document.body.appendChild(iframe);
       setTimeout(() => iframe.remove(), 1000);
       status.style.color = "#1a8a44";
