@@ -286,6 +286,8 @@
       paySelectedBtn: "선택 결제 완료",
       paySelectedFailedMsg: "일부 품목은 결제 완료 처리에 실패했어요. 화면을 새로고침해서 다시 확인해주세요.",
       itemPaidBadge: "결제완료",
+      selectRoundAllLabel: "이 주문 전체 선택",
+      selectAllItemsLabel: "전체 선택",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -654,6 +656,8 @@
       paySelectedBtn: "勾選結帳完成",
       paySelectedFailedMsg: "部分品項結帳失敗，請重新整理後再確認一次。",
       itemPaidBadge: "已結帳",
+      selectRoundAllLabel: "全選此筆訂單",
+      selectAllItemsLabel: "全選",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -3025,6 +3029,27 @@
       : visibleOrders.length > 1
       ? renderMergedOrderGroup(visibleOrders)
       : visibleOrders.map((o) => renderTableOrderBlock(o, false)).join("");
+    // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고 한
+    // 번에 전체 체크랑 시간대별 한 번에 전체 체크 기능도 있으면 좋을 거
+    // 같아" — 라운드별 전체 체크(위 buildOrderRoundParts의
+    // roundSelectAllHtml)와 별개로, 이 테이블(포장 카운터는 애초에
+    // 부분결제 대상이 아니라서 제외 — isGrid)의 모든 라운드에 걸친 미결제
+    // 품목을 한 번에 다 체크/해제하는 토글. "현재 주문" 탭에서만 의미가
+    // 있다.
+    const allUnpaidKeys =
+      !isGrid && tableDetailView === "active"
+        ? unpaidOrders
+            .filter((o) => !isCounterOrder(o) && o.status !== "paid" && o.status !== "cancelled")
+            .flatMap((o) => o.items.map((it, i) => (it.paid ? null : `${o.id}:${i}`)).filter(Boolean))
+        : [];
+    const allItemsSelected = allUnpaidKeys.length > 0 && allUnpaidKeys.every((k) => selectedPayItemKeys.has(k));
+    const selectAllHtml =
+      allUnpaidKeys.length > 1
+        ? `<label style="display:flex;align-items:center;gap:6px;font-size:14px;color:var(--ink);cursor:pointer;margin:0 0 10px;">
+            <input type="checkbox" id="tableDetailSelectAll" ${allItemsSelected ? "checked" : ""} style="width:16px;height:16px;cursor:pointer;" />
+            ${T("selectAllItemsLabel")}
+          </label>`
+        : "";
     const allDismissedHtml =
       isGrid && shownOrders.length && !visibleOrders.length
         ? `<div style="text-align:center;padding:20px 0;color:var(--muted);">
@@ -3038,7 +3063,7 @@
       ? allDismissedHtml
       : isGrid
       ? `<div class="order-block-grid">${orderBlocksHtml}</div>`
-      : orderBlocksHtml;
+      : `${selectAllHtml}${orderBlocksHtml}`;
     const footer = tableDetailView === "active" && activeOrders.length
       ? `
         <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
@@ -3144,6 +3169,35 @@
           openTableDetail(tableNumber, label, focusOrderId);
         };
       });
+    // 사장님 피드백(2026-09-06): "부분 결제 완료 너무 오래 걸려. 그리고
+    // 한 번에 전체 체크랑 시간대별 한 번에 전체 체크 기능도 있으면 좋을 거
+    // 같아" — 라운드 하나 전체를 한 번에 체크/해제(라운드 헤더의
+    // roundSelectAllHtml). 이미 결제완료된 품목(it.paid)은 애초에
+    // unpaidIdxOfRound에서 빠져 있으므로 여기서 다시 걸러줄 필요 없다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-select-round-all]")
+      .forEach((checkbox) => {
+        checkbox.onchange = () => {
+          const orderId = parseInt(checkbox.dataset.selectRoundAll, 10);
+          const o = unpaidOrders.find((x) => x.id === orderId);
+          if (!o) return;
+          const idxs = o.items.map((_, i) => i).filter((i) => !o.items[i].paid);
+          if (checkbox.checked) idxs.forEach((i) => selectedPayItemKeys.add(`${o.id}:${i}`));
+          else idxs.forEach((i) => selectedPayItemKeys.delete(`${o.id}:${i}`));
+          openTableDetail(tableNumber, label, focusOrderId);
+        };
+      });
+    // 같은 피드백의 "한 번에 전체 체크" — 이 테이블의 모든 라운드에 걸친
+    // 미결제 품목을 한 번에 체크/해제(위 openTableDetail의 allUnpaidKeys/
+    // selectAllHtml).
+    const selectAllCheckbox = $("#tableDetailSelectAll");
+    if (selectAllCheckbox) {
+      selectAllCheckbox.onchange = () => {
+        if (selectAllCheckbox.checked) allUnpaidKeys.forEach((k) => selectedPayItemKeys.add(k));
+        else allUnpaidKeys.forEach((k) => selectedPayItemKeys.delete(k));
+        openTableDetail(tableNumber, label, focusOrderId);
+      };
+    }
     // unpaidOrders(=이 테이블의 미결제 주문 전체)를 기준으로 매번 다시
     // 모으므로, 카드 하나짜리 화면(renderTableOrderBlock)이든 여러 라운드
     // 병합 화면(renderMergedOrderGroup)이든 같은 핸들러 하나로 처리된다.
@@ -3249,6 +3303,22 @@
           <span>NT$${lineTotalOf(it)}</span>
         </div>`;
     });
+    // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고
+    // 한 번에 전체 체크랑 시간대별 한 번에 전체 체크 기능도 있으면 좋을 거
+    // 같아" — 품목을 하나씩 체크하는 게 느리니, 라운드(시간대) 하나
+    // 전체를 한 번에 체크/해제하는 토글을 라운드 헤더에 둔다(테이블
+    // 전체를 한 번에 체크하는 토글은 openTableDetail에 따로 있음). 미결제
+    // 품목이 1개뿐이면 개별 체크박스와 다를 게 없어서 굳이 보여주지
+    // 않는다.
+    const unpaidIdxOfRound = withItemCheckboxes ? o.items.map((_, i) => i).filter((i) => !o.items[i].paid) : [];
+    const roundAllSelected = unpaidIdxOfRound.length > 0 && unpaidIdxOfRound.every((i) => selectedPayItemKeys.has(`${o.id}:${i}`));
+    const roundSelectAllHtml =
+      unpaidIdxOfRound.length > 1
+        ? `<label style="display:flex;align-items:center;gap:5px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            <input type="checkbox" data-select-round-all="${o.id}" ${roundAllSelected ? "checked" : ""} style="width:14px;height:14px;cursor:pointer;" />
+            ${T("selectRoundAllLabel")}
+          </label>`
+        : "";
     // Same fixed-size-by-default treatment as the order-queue cards (see
     // renderOrderCard) — a table with a big running order shouldn't force
     // the whole 테이블 상세 panel into a long scroll.
@@ -3339,7 +3409,7 @@
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
-    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, total: remainingAmountOf(o) };
+    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
@@ -3359,9 +3429,12 @@
     return `
       <div class="table-order-block${withDismiss ? " table-order-block-windowed" : ""}">
         ${p.dismissBtn}
-        <div style="margin-bottom:10px;min-height:58px;">
-          ${p.identityLineHtml}
-          ${p.timeStatusLineHtml}
+        <div style="margin-bottom:10px;min-height:58px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+          <div>
+            ${p.identityLineHtml}
+            ${p.timeStatusLineHtml}
+          </div>
+          ${p.roundSelectAllHtml}
         </div>
         ${p.itemsHtml}
         ${p.itemsToggleHtml}
@@ -3412,7 +3485,10 @@
         const dividerStyle = i > 0 ? "margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);" : "";
         return `
           <div style="${dividerStyle}">
-            <div style="font-size:13px;color:var(--muted);margin-bottom:8px;">${p.time}</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;">
+              <span style="font-size:13px;color:var(--muted);">${p.time}</span>
+              ${p.roundSelectAllHtml}
+            </div>
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
