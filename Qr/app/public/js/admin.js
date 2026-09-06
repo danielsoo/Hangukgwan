@@ -4927,7 +4927,22 @@
         btn.className = "table-picker-btn";
         btn.textContent = t.label || t.number;
         btn.onclick = () => {
-          window.open(`/t/${encodeURIComponent(t.number)}`, "_blank");
+          // 한국관 POS 키오스크 앱(태블릿 전용 네이티브 WebView 앱) 안에서는
+          // window.open()이 전부 막혀 있다 — MainActivity.java의
+          // onCreateWindow가 항상 false를 반환하는데, 이건 원래 영수증 인쇄
+          // 폴백 경로(window.open을 실패시켜 "인쇄 실패" 처리)만 노리고 넣은
+          // 것이었지만 부작용으로 이 수기 주문 버튼도 같이 막아버렸다. 그
+          // 앱은 window.HangukgwanPrint를 주입해두므로 이걸로 감지해서, 그
+          // 경우에만 새 탭 대신 같은 화면에서 바로 이동한다(WebView는 보통의
+          // http/https 이동은 그대로 허용함 — handleUrl() 참고). 그러면
+          // 직원이 돌아올 방법이 없어지므로 ?fromAdmin=1을 붙여서
+          // order.js가 "관리자로 돌아가기" 버튼을 띄우게 한다. 일반 브라우저
+          // (PC/폰 웹)에서는 이 조건이 안 걸리므로 기존처럼 새 탭으로 연다.
+          if (window.HangukgwanPrint) {
+            location.href = `/t/${encodeURIComponent(t.number)}?fromAdmin=1`;
+          } else {
+            window.open(`/t/${encodeURIComponent(t.number)}`, "_blank");
+          }
           $("#manualOrderBackdrop").hidden = true;
         };
         grid.appendChild(btn);

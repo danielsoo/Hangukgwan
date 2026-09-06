@@ -67,6 +67,21 @@ body {
   align-items: center;
   justify-content: center;
 }
+.back-to-admin-pill {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255,255,255,0.92);
+  color: var(--ink);
+  border: none;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
 /* Store header */
 .store-header {

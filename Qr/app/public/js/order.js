@@ -1038,6 +1038,21 @@
     if (e.target.id === "historyBackdrop") $("#historyBackdrop").hidden = true;
   });
 
+  // "관리자로 돌아가기" — only relevant when the manual-order table picker
+  // (admin.js, #manualOrderBtn) sent staff here via a same-window
+  // location.href navigation instead of window.open(). That path only runs
+  // inside the kiosk POS app's WebView, which blocks window.open() entirely
+  // (MainActivity.java's onCreateWindow), so admin.js appends ?fromAdmin=1
+  // and we show a way back. Ordinary customers scanning the table QR code
+  // never carry this param, so this stays hidden for them.
+  if (new URLSearchParams(location.search).get("fromAdmin") === "1") {
+    const backBtn = $("#backToAdminBtn");
+    backBtn.hidden = false;
+    backBtn.onclick = () => {
+      location.href = "/admin";
+    };
+  }
+
   // Store info sheet
   $("#storeInfoBtn").onclick = () => ($("#storeInfoBackdrop").hidden = false);
   $("#storeInfoClose").onclick = () => ($("#storeInfoBackdrop").hidden = true);

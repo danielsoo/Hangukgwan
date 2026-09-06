@@ -13,6 +13,13 @@
 
   <div class="hero" id="hero">
     <button class="history-pill" id="historyBtn" aria-label="Order history">🧾</button>
+    <!-- 관리자(태블릿 키오스크 앱)에서 "수기 주문"으로 들어왔을 때만 표시된다.
+         키오스크 앱의 WebView는 window.open()을 전부 막아놓아서(admin.js의
+         manualOrderBtn 핸들러 참고) 새 탭 대신 이 페이지로 바로 이동시키는데,
+         그러면 직원이 다시 관리자 화면으로 돌아갈 방법이 없어지므로 이 버튼을
+         띄운다. 일반 웹에서 새 탭으로 열렸을 때는 ?fromAdmin=1이 없으므로
+         계속 숨김 상태 그대로다. -->
+    <button class="back-to-admin-pill" id="backToAdminBtn" hidden>← 관리자로</button>
     <button class="lang-pill" id="currencyPillBtn"><span id="currencyPillLabel">NT$</span></button>
     <button class="lang-pill" id="langPillBtn"><span id="langPillLabel">Language</span></button>
   </div>
