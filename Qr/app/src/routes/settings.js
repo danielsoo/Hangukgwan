@@ -333,11 +333,13 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
   }
   for (const k of TICKET_WEIGHT_KEYS) {
     const v = Number(b[k]);
-    // CSS font-weight in 100-step increments (100..900) — matches the
-    // admin.js <select> options exactly (400/700/900, the only weights the
-    // ticket's Google Fonts stylesheet actually loads), rounded to the
-    // nearest hundred so this stays a sane value even if something odd is
-    // ever posted directly to the API.
+    // 사장님 피드백(2026-09-06): "굵기도 사이즈 크기처럼 숫자로 정할 수
+    // 있게 해줄래?" — admin.js 쪽 입력을 3단계 <select>에서 100~900 사이
+    // 숫자를 직접 입력하는 <input type=number>로 바꿨다. CSS font-weight는
+    // 원래 100 단위로만 의미가 있고, ticket의 Google Fonts 스타일시트도
+    // 100/200/.../900 9개 고정 굵기만 로드해두므로(admin.js buildTicketHtml
+    // 상단 링크 참고), 100~900 범위로 clamp하고 가장 가까운 100 단위로
+    // 반올림해서 항상 실제로 로드된 굵기 중 하나가 되게 한다.
     if (Number.isFinite(v)) store.settings.ticket_font_sizes[k] = Math.max(100, Math.min(900, Math.round(v / 100) * 100));
   }
   await save();

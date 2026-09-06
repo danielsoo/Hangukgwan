@@ -545,9 +545,6 @@
       tfsPrintTime: "인쇄 시간",
       tfsSizeColLabel: "크기",
       tfsWeightColLabel: "굵기",
-      tfsWeightNormal: "보통",
-      tfsWeightBold: "굵게",
-      tfsWeightExtraBold: "매우 굵게",
       ticketFontSavedMsg: "저장되었습니다",
       ticketFontResetBtn: "기본값으로",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
@@ -922,9 +919,6 @@
       tfsPrintTime: "列印時間",
       tfsSizeColLabel: "大小",
       tfsWeightColLabel: "粗細",
-      tfsWeightNormal: "標準",
-      tfsWeightBold: "粗體",
-      tfsWeightExtraBold: "特粗",
       ticketFontSavedMsg: "已儲存",
       ticketFontResetBtn: "恢復預設值",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
@@ -1925,7 +1919,13 @@
 <html><head><meta charset="utf-8" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Sans+KR:wght@400;700;900&display=swap" />
+<!-- 사장님 피드백(2026-09-06): "굵기도 사이즈 크기처럼 숫자로 정할 수 있게 해줄래?" —
+     굵기 입력을 3단계 <select>에서 100~900 사이 아무 100단위 숫자나 입력하는
+     <input type=number>로 바꿨다. Noto Sans TC/KR은 (가변 폰트가 아니라)
+     100/200/.../900의 9개 고정 굵기 파일로만 제공되므로, 사용자가 고를 수 있는
+     값 전부를 실제로 로드해둬야 브라우저가 안 쓴 굵기를 가짜로 합성(synthetic
+     bold)하지 않고 폰트 파일 그대로의 굵기로 렌더링한다. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@100;200;300;400;500;600;700;800;900&family=Noto+Sans+KR:wght@100;200;300;400;500;600;700;800;900&display=swap" />
 <style>
   /* 80mm narrow-roll thermal/receipt printer, not A4 — height is left to
      "auto" since the roll cuts to whatever length the content needs. */
@@ -2142,10 +2142,10 @@
     frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), { screenPreview: false });
   }
 
-  // 굵기는 <select>라서 input과 change 이벤트가 둘 다 잡히게 해둔다 —
-  // 크기(<input type=number>) 쪽은 원래 oninput 하나로 충분했지만, select는
-  // 브라우저에 따라 change만 확실히 보장되는 경우가 있어 안전하게 둘 다 건다.
-  $$("#settings-cat-print input[id^='tfs'], #settings-cat-print select[id^='tfs']").forEach((el) => {
+  // 크기·굵기 모두 <input type=number>라서 oninput 하나로 충분하지만,
+  // change도 같이 걸어 브라우저별 스피너 클릭 등 oninput이 누락될 수 있는
+  // 경우까지 안전하게 잡는다.
+  $$("#settings-cat-print input[id^='tfs']").forEach((el) => {
     el.oninput = updateTicketFontPreview;
     el.onchange = updateTicketFontPreview;
   });

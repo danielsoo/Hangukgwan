@@ -421,18 +421,11 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ticket-font-field input {
   width: 64px; flex: none; margin-top: 0; text-align: center; font-size: 16px;
 }
-/* 사장님 피드백(2026-09-06): "그 부분들 전부 글자 굵기 조절하는것도
-   추가해줘" — 크기 입력칸 옆에 굵기 <select>를 나란히 추가. 위 칸들과
-   높이/여백이 맞도록 input과 거의 같은 규칙을 쓴다. */
-.ticket-font-field select {
-  width: 96px; flex: none; margin-top: 0; font-size: 15px; padding: 6px 4px;
-}
 .ticket-font-field-header { padding-bottom: 2px; }
 /* .ticket-font-field span already sets flex:1/font-size:15px with the same
    specificity (one class + one element each); qualifying with the parent
    class here (two classes) is what lets these actually win over that rule. */
 .ticket-font-field-header .ticket-font-col-label { flex: none; width: 64px; text-align: center; font-size: 13px; color: var(--muted); font-weight: 700; }
-.ticket-font-field-header .ticket-font-col-label:last-child { width: 96px; }
 .ticket-font-preview-wrap {
   flex-shrink: 0; background: #dfe3e7; border-radius: 10px; padding: 16px;
   display: flex; justify-content: center;
