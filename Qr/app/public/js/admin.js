@@ -3893,7 +3893,10 @@
         ${p.itemsToggleHtml}
         ${p.noteHtml}
         <div style="margin-top:auto;">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;">${p.nextBtn}${p.editBtn}${p.vipDiscountToggleHtml}</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
+            ${p.vipDiscountToggleHtml}
+          </div>
           <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
           <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${o.total}</div>
         </div>
@@ -3962,9 +3965,12 @@
             ${p.itemsHtml}
             ${p.itemsToggleHtml}
             ${p.noteHtml}
-            <div style="display:flex;align-items:center;justify-content:${p.editBtn || p.vipDiscountToggleHtml ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${p.editBtn}${p.vipDiscountToggleHtml}</div>
-              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
+            <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
+              ${p.editBtn}
+              <div style="display:flex;align-items:center;gap:10px;">
+                ${p.vipDiscountToggleHtml}
+                <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
+              </div>
             </div>
           </div>
         `;
