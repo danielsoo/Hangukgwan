@@ -638,6 +638,17 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 
 .order-detail-modal { max-width: 420px; }
+/* 사장님 피드백(2026-09-06, 태블릿 화면 녹화와 함께): "지금 보면 너비가
+   좁아서 양 옆이 꽉 찬게 아니라 잘렸어" — 주문 수정 모달은 위
+   .order-detail-modal의 420px 제한을 그대로 쓰기엔 품목 줄(이름/수량/가격/
+   삭제)과 옵션 pill, 추가 영역, 안내 문구까지 다 들어가야 해서 태블릿
+   화면에서 유독 빽빽하게 눌려 보였다. 읽기 전용 주문 상세 팝업
+   (#orderDetailBackdrop, 품목·합계만 보여줘서 좁아도 괜찮음)은 그대로 두고,
+   주문 수정 쪽 메인 패널만 기본 .modal 상한(560px)까지 넓힌다 — 추가 항목
+   피커 패널(.order-edit-picker-modal, 별도로 폭 고정됨)은 영향받지 않는다. */
+#orderEditBackdrop .order-edit-panels > .order-detail-modal:not(.order-edit-picker-modal) {
+  max-width: 560px;
+}
 .add-table-zone-modal { max-width: 420px; }
 .add-table-zone-modal h2 { margin: 0 0 4px; }
 .table-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 8px; margin-top: 14px; }
