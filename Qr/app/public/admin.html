@@ -496,6 +496,22 @@
           <div class="save-msg" id="escposMsg" hidden></div>
         </div>
         <div class="settings-card">
+          <h3 data-i18n="rawbtSettingsTitle">주방 프린터 직접 인쇄 (RawBT · 안드로이드 태블릿)</h3>
+          <p class="settings-hint" data-i18n="rawbtSettingsHint">
+            안드로이드 태블릿에서 관리자 페이지를 열어둘 때 쓰는 방식이에요. QZ Tray는 안드로이드에 설치할 수
+            없어서, 대신 태블릿에 <strong>RawBT</strong> 앱을 설치하고 프린터를 등록해두면 이 태블릿에서는
+            확인창 없이 바로 인쇄돼요. 프린터를 블루투스로 페어링했든, LAN 케이블로 연결해서 네트워크(IP)로
+            등록했든 상관없이 — 그 설정은 전부 RawBT 앱 안에서 하는 것이고, 여기서는 그냥 이 방식을 켜기만
+            하면 돼요. 켜져 있어도 QZ Tray 연결이 먼저 시도되고, 그게 실패해야만(즉 QZ Tray가 없는
+            안드로이드에서는 항상) 이 방식으로 자동 전환돼요.
+          </p>
+          <label class="perm-toggle-row"><span data-i18n="rawbtEnableLabel">RawBT 자동 인쇄 사용</span><input type="checkbox" id="rawbtEnabledToggle" /></label>
+          <div id="rawbtTestStatus" class="settings-hint"></div>
+          <button id="saveRawbtSettingsBtn" data-i18n="saveBtn">저장</button>
+          <button id="testRawbtBtn" type="button" data-i18n="testRawbtBtn">🖨️ RawBT 테스트 인쇄</button>
+          <div class="save-msg" id="rawbtMsg" hidden></div>
+        </div>
+        <div class="settings-card">
           <h3 data-i18n="ticketFontSizesTitle">빌지(주방 티켓) 글자 크기·굵기</h3>
           <p class="settings-hint" data-i18n="ticketFontSizesHint">
             항목별로 글자 크기와 굵기를 따로 조절할 수 있어요. 오른쪽 미리보기는 실제 인쇄 크기 그대로예요.

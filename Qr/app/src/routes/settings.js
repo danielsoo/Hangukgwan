@@ -261,6 +261,12 @@ function escposStatus() {
   return {
     enabled: !!store.settings.escpos_enabled,
     printerName: store.settings.escpos_printer_name || "",
+    // RawBT (Android-only, see public/js/admin.js tryPrintViaRawBt) has no
+    // printer address of its own to store here — the target printer
+    // (Bluetooth/USB/Network) is configured inside the RawBT app itself on
+    // the tablet. This is just the on/off switch, same shape as the QZ
+    // Tray "enabled" flag above.
+    rawbtEnabled: !!store.settings.rawbt_enabled,
   };
 }
 
@@ -276,6 +282,7 @@ router.put("/escpos", requireOwner, async (req, res) => {
   const b = req.body || {};
   if (typeof b.enabled === "boolean") store.settings.escpos_enabled = b.enabled;
   if (typeof b.printerName === "string") store.settings.escpos_printer_name = b.printerName.trim().slice(0, 100);
+  if (typeof b.rawbtEnabled === "boolean") store.settings.rawbt_enabled = b.rawbtEnabled;
   await save();
   res.json(escposStatus());
 });

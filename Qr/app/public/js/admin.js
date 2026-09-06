@@ -526,6 +526,14 @@
       testEscposBtn: "🖨️ 테스트 인쇄",
       escposTestSuccess: "✔ 테스트 인쇄를 보냈어요. 프린터를 확인해보세요.",
       escposTestFailed: "✘ 인쇄 실패 — QZ Tray가 실행 중인지, 프린터 이름이 맞는지 확인해주세요.",
+      rawbtSettingsTitle: "주방 프린터 직접 인쇄 (RawBT · 안드로이드 태블릿)",
+      rawbtSettingsHint:
+        "안드로이드 태블릿에서 관리자 페이지를 열어둘 때 쓰는 방식이에요. QZ Tray는 안드로이드에 설치할 수 없어서, 대신 태블릿에 <strong>RawBT</strong> 앱을 설치하고 프린터를 등록해두면 이 태블릿에서는 확인창 없이 바로 인쇄돼요. 프린터를 블루투스로 페어링했든, LAN 케이블로 연결해서 네트워크(IP)로 등록했든 상관없이 — 그 설정은 전부 RawBT 앱 안에서 하는 것이고, 여기서는 그냥 이 방식을 켜기만 하면 돼요. 켜져 있어도 QZ Tray 연결이 먼저 시도되고, 그게 실패해야만(즉 QZ Tray가 없는 안드로이드에서는 항상) 이 방식으로 자동 전환돼요.",
+      rawbtEnableLabel: "RawBT 자동 인쇄 사용",
+      rawbtSavedMsg: "저장되었습니다",
+      testRawbtBtn: "🖨️ RawBT 테스트 인쇄",
+      rawbtTestSent: "RawBT로 테스트 인쇄를 보냈어요. 확인창 없이 조용히 인쇄됐는지 프린터를 확인해보세요 (이 기기에 RawBT 앱이 설치·설정되어 있어야 해요).",
+      rawbtTestFailed: "✘ RawBT로 보내는 데 실패했어요 — 이 기기에 RawBT 앱이 설치되어 있는지 확인해주세요.",
       uiFontScaleTitle: "화면 글자 크기",
       uiFontScaleHint: "이 관리자 화면 전체의 글자 크기를 조절해요. 이 컴퓨터/브라우저에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
       uiFontScaleResetBtn: "기본값",
@@ -900,6 +908,14 @@
       testEscposBtn: "🖨️ 測試列印",
       escposTestSuccess: "✔ 已送出測試列印，請確認印表機。",
       escposTestFailed: "✘ 列印失敗 — 請確認 QZ Tray 是否執行中，以及印表機名稱是否正確。",
+      rawbtSettingsTitle: "廚房出單機直接列印（RawBT · Android 平板）",
+      rawbtSettingsHint:
+        "在 Android 平板上開啟管理後台時使用的方式。QZ Tray 無法安裝在 Android 上，因此改為在平板上安裝 <strong>RawBT</strong> App 並在裡面設定好印表機，這台平板就能不跳出確認視窗直接列印。不管印表機是用藍牙配對，還是用 LAN 網路線連上路由器、以網路（IP）方式在 RawBT 裡設定，都在 RawBT App 內完成，這裡只需要開啟這個選項即可。開啟後仍會先嘗試 QZ Tray，只有失敗時（在沒有 QZ Tray 的 Android 上一定會失敗）才會自動改用這個方式。",
+      rawbtEnableLabel: "啟用 RawBT 直接列印",
+      rawbtSavedMsg: "已儲存",
+      testRawbtBtn: "🖨️ RawBT 測試列印",
+      rawbtTestSent: "已透過 RawBT 送出測試列印，請確認印表機是否已不跳確認視窗直接列印（此裝置需已安裝並設定好 RawBT App）。",
+      rawbtTestFailed: "✘ 傳送給 RawBT 失敗 — 請確認這台裝置是否已安裝 RawBT App。",
       uiFontScaleTitle: "畫面文字大小",
       uiFontScaleHint: "調整整個管理後台畫面的文字大小。只影響這台電腦/瀏覽器，不會影響其他人的畫面。",
       uiFontScaleResetBtn: "預設值",
@@ -2011,6 +2027,16 @@
     // to the normal browser-print flow below, so printing is never silently
     // lost either way.
     if (await tryPrintViaEscPos(o)) {
+      markPrintSucceeded(o.id);
+      return;
+    }
+
+    // Second rung of the same fallback ladder: on a computer with no QZ
+    // Tray running this does nothing (disabled by default / no RawBT app
+    // there to catch the intent), but on the Android tablet this is what
+    // actually delivers a silent, no-dialog print — see tryPrintViaRawBt()
+    // below and the "RawBT 자동 인쇄" settings card.
+    if (await tryPrintViaRawBt(o)) {
       markPrintSucceeded(o.id);
       return;
     }
@@ -5320,6 +5346,7 @@
     const data = await res.json();
     $("#escposEnabledToggle").checked = !!data.enabled;
     $("#escposPrinterNameInput").value = data.printerName || "";
+    $("#rawbtEnabledToggle").checked = !!data.rawbtEnabled;
   }
 
   $("#saveEscposSettingsBtn").onclick = async () => {
@@ -5338,6 +5365,31 @@
       $("#escposPrinterNameInput").value = data.printerName || "";
       msg.style.color = "#1a8a44";
       msg.textContent = T("escposSavedMsg");
+    } else {
+      msg.style.color = "#b5232c";
+      msg.textContent = T("staffPasswordFailed");
+    }
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2500);
+  };
+
+  // Separate save button/card from ESC/POS above (see rawbtSettingsTitle in
+  // the i18n blocks + settings-cat-print in admin.html) — this only ever
+  // sends { rawbtEnabled }, and the PUT route merges partial updates, so it
+  // can't clobber the QZ Tray printerName/enabled fields saved by the
+  // button above, or vice versa.
+  $("#saveRawbtSettingsBtn").onclick = async () => {
+    const res = await fetch("/api/settings/escpos", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rawbtEnabled: $("#rawbtEnabledToggle").checked }),
+    });
+    const msg = $("#rawbtMsg");
+    if (res.ok) {
+      const data = await res.json();
+      $("#rawbtEnabledToggle").checked = !!data.rawbtEnabled;
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("rawbtSavedMsg");
     } else {
       msg.style.color = "#b5232c";
       msg.textContent = T("staffPasswordFailed");
@@ -5396,6 +5448,57 @@
     }
   }
 
+  // Converts a JS string (which may contain Hangul/Hanja, not just ASCII)
+  // into a base64 string of its UTF-8 bytes. btoa() alone only accepts
+  // Latin1 code points, so straight btoa(raw) would throw or mangle any
+  // CJK text in the ticket — this is the standard browser-side
+  // string->UTF-8-bytes->base64 trick. RawBT expects the base64 payload in
+  // "rawbt:base64,..." to be the actual UTF-8 byte stream of the ESC/POS
+  // command text, matching how QZ Tray is configured above (encoding:
+  // "UTF-8").
+  function utf8ToBase64(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  // Sends the same ESC/POS ticket bytes used for QZ Tray to the RawBT app
+  // instead (Android-only — see the "RawBT 자동 인쇄" settings card and
+  // 프로젝트 문서 claude/kitchen-printer-recommendation.md for the full
+  // story). RawBT is triggered via its documented "rawbt:base64,..." URL
+  // scheme (https://rawbt.ru/intents.html): handing it a hidden iframe
+  // whose src is that URL makes Android open RawBT via an intent, without
+  // navigating this page away. RawBT itself already has the actual printer
+  // (Bluetooth, USB, or — this restaurant's case — a network/IP printer
+  // reached over WiFi) configured inside the RawBT app, so this code never
+  // needs to know the printer's address at all.
+  //
+  // IMPORTANT caveat: unlike tryPrintViaEscPos(), a custom URL scheme like
+  // this is fire-and-forget — Android doesn't hand a success/failure result
+  // back to the web page. So returning true here only means "RawBT looks
+  // enabled and we handed it the data", not "paper actually came out". Use
+  // the RawBT app's own test print, and the "RawBT 테스트 인쇄" button below,
+  // to verify real printing before relying on this for live orders.
+  async function tryPrintViaRawBt(o) {
+    try {
+      const res = await fetch("/api/settings/escpos");
+      if (!res.ok) return false;
+      const cfg = await res.json();
+      if (!cfg.rawbtEnabled) return false;
+      if (typeof buildEscPosTicket !== "function") return false;
+
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      const raw = buildEscPosTicket(o, storeName);
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = "rawbt:base64," + utf8ToBase64(raw);
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 1000);
+      return true;
+    } catch (e) {
+      console.warn("RawBT print failed:", e);
+      return false;
+    }
+  }
+
   $("#testEscposBtn").onclick = async () => {
     const btn = $("#testEscposBtn");
     const status = $("#escposConnStatus");
@@ -5433,6 +5536,39 @@
     } finally {
       btn.disabled = false;
     }
+  };
+
+  // No QZ Tray/websocket connection step here — RawBT is reached purely via
+  // the "rawbt:" intent (see tryPrintViaRawBt/utf8ToBase64 above), which is
+  // fire-and-forget, so this can only confirm "we sent it to the OS", never
+  // "RawBT actually printed it". The status message says so explicitly to
+  // avoid a false sense of certainty.
+  $("#testRawbtBtn").onclick = async () => {
+    const status = $("#rawbtTestStatus");
+    try {
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      const sampleOrder = {
+        table_number: "TEST",
+        order_type: "dine_in",
+        created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
+        items: [{ name_ko: "테스트 메뉴", name_zh: "測試菜品", qty: 1, option_choice: "보통", spice_choice: "보통", note: "" }],
+        total: 0,
+        note: "",
+      };
+      const raw = buildEscPosTicket(sampleOrder, storeName);
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = "rawbt:base64," + utf8ToBase64(raw);
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 1000);
+      status.style.color = "#1a8a44";
+      status.textContent = T("rawbtTestSent");
+    } catch (e) {
+      console.warn("RawBT test print failed:", e);
+      status.style.color = "#b5232c";
+      status.textContent = T("rawbtTestFailed");
+    }
+    status.hidden = false;
   };
 
   // Owner-only "reveal" toggle: fetches the actual saved token/secret and
