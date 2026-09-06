@@ -24,3 +24,8 @@ pnpm-debug.log*
 
 # typescript
 *.tsbuildinfo
+
+# 한국관 POS 앱(kiosk-app) 서명키 - 이 키가 있어야 기존 앱 위에 업데이트를 덮어
+# 설치할 수 있고, 유출되면 남이 이 앱 행세를 하는 APK를 만들 수 있다. 저장소에는
+# 올리지 않고 별도로 보관한다.
+kiosk-app/keystore/
