@@ -3317,7 +3317,17 @@
       // 않고 계속 그 자리에 두되, 체크박스 대신 완료 표시(✓)와 "결제완료"
       // 배지를 붙이고 흐리게 보여서 이미 끝난 품목이라는 걸 표시한다. 다시
       // 체크할 수 없게 checkbox 자체를 없앤다.
-      const isPaidItem = !!it.paid;
+      //
+      // 사장님 피드백(2026-09-06, "이전 주문" 탭 스크린샷과 함께): "여전히
+      // 오른쪽으로 넘어간다니까?" — 이 라운드가 이미 통째로 결제완료(주문
+      // 상태 자체가 paid, 이전 주문 탭)된 뒤에는 개별 품목의 it.paid 여부가
+      // 들쭉날쭉하다(구버전 "결제 완료로 변경"으로 끝난 라운드는 품목에
+      // paid 플래그가 아예 없고, 새 부분결제로 하나씩 끝나서 완료된
+      // 라운드만 있음). 그 결과 같은 목록 안에서 ✓ 아이콘이 있는 줄과 없는
+      // 줄이 섞여 좌우 정렬이 안 맞았다 — 라운드 전체가 이미 끝난 뒤에는
+      // 품목 하나하나를 구분해서 보여줄 필요가 없으므로, 그 라운드가
+      // 아직 진행 중(active)일 때만 개별 품목의 완료 표시를 보여준다.
+      const isPaidItem = o.status !== "paid" && !!it.paid;
       const isSelected = !isPaidItem && withItemCheckboxes && selectedPayItemKeys.has(`${o.id}:${idx}`);
       const checkboxHtml = isPaidItem
         ? `<span style="display:inline-block;width:16px;margin:2px 8px 0 0;flex-shrink:0;text-align:center;color:var(--muted);">✓</span>`
