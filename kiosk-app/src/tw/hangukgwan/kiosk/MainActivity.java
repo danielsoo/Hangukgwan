@@ -5,7 +5,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Insets;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -17,6 +19,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.webkit.ConsoleMessage;
 import android.webkit.CookieManager;
@@ -89,7 +93,9 @@ public class MainActivity extends Activity {
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         root = new TouchWatchingLayout(this);
+        root.setBackgroundColor(Color.WHITE);
         setContentView(root);
+        applySystemBarInsets();
 
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(
@@ -125,6 +131,52 @@ public class MainActivity extends Activity {
             return;
         }
         super.onBackPressed();
+    }
+
+    /**
+     * From Android 15 (API 35) on, an app that targets 35 or higher is drawn
+     * behind the status and navigation bars whether it asks to be or not — and
+     * this app has to target 36, since that is what Play now requires of new
+     * apps. Left alone, the order board's own header would sit underneath the
+     * status bar clock. So pad the root by whatever the system bars cover, plus
+     * the keyboard when it is up, which keeps the address field on the settings
+     * screen visible while it is being typed into.
+     */
+    private void applySystemBarInsets() {
+        // Every screen in this app is light, so ask for dark system-bar icons.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            WindowInsetsController controller = getWindow().getInsetsController();
+            if (controller != null) {
+                int light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                controller.setSystemBarsAppearance(light, light);
+            }
+        }
+        root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsets onApplyWindowInsets(View v, WindowInsets insets) {
+                int left;
+                int top;
+                int right;
+                int bottom;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    Insets bars = insets.getInsets(WindowInsets.Type.systemBars()
+                            | WindowInsets.Type.displayCutout()
+                            | WindowInsets.Type.ime());
+                    left = bars.left;
+                    top = bars.top;
+                    right = bars.right;
+                    bottom = bars.bottom;
+                } else {
+                    left = insets.getSystemWindowInsetLeft();
+                    top = insets.getSystemWindowInsetTop();
+                    right = insets.getSystemWindowInsetRight();
+                    bottom = insets.getSystemWindowInsetBottom();
+                }
+                v.setPadding(left, top, right, bottom);
+                return insets;
+            }
+        });
     }
 
     // ---------------------------------------------------------------- webview

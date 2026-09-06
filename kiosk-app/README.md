@@ -71,9 +71,15 @@
 `/opt/andtools`에 두고 Gradle 없이 직접 빌드합니다.
 
 ```bash
-./build.sh                       # build/dist/hangukgwan-pos-1.0.apk
-VERSION_CODE=2 VERSION_NAME=1.1 ./build.sh   # 버전 올릴 때
+./build.sh                                   # 사이드로드용 APK
+VERSION_CODE=3 VERSION_NAME=1.2 ./build.sh   # 버전 올릴 때
+
+./build-aab.sh                               # Play 업로드용 .aab
 ```
+
+Play 스토어(내부 테스트) 출시 절차와 각종 설문 답변은 **`PLAY-RELEASE.md`** 에 정리돼
+있습니다. 신규 앱은 API 36을 타겟해야 해서 `TARGET_SDK=36` 으로 맞춰져 있고, 그에 따라
+Android 15+ 의 edge-to-edge 표시를 위해 시스템 바 영역만큼 여백을 주도록 처리돼 있습니다.
 
 필요한 도구 (npm 패키지에서 추출):
 
