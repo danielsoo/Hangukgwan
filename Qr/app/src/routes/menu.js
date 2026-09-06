@@ -120,6 +120,42 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   res.json(updated);
 });
 
+// 사장님 피드백(2026-09-06): "메뉴 순서를 바꾸고 싶어. 코드 정렬로
+// 되어있지 않은 거 같거든" — 관리자 메뉴 관리 화면의 위/아래 화살표
+// 버튼(public/js/admin.js의 renderMenuAdmin)이 호출하는 엔드포인트. 같은
+// 카테고리 안에서 sort_order 기준 바로 위/아래에 있는 아이템과 sort_order
+// 값을 맞바꾼다 — sort_order는 카테고리 구분 없이 전역으로 매겨지는
+// 값이지만(POST /admin/items의 maxSort 참고), 실제로 의미가 있는 건 같은
+// category_id를 가진 아이템들 사이의 상대적인 순서뿐이라 이걸로 충분하다.
+// 이미 맨 위/맨 아래인데 더 이동하려 하면 조용히 아무 것도 하지 않는다
+// (프론트에서 이미 그 방향 버튼을 disabled 처리하지만, 방어적으로 한 번 더
+// 확인).
+router.patch("/admin/items/:id/move", canEditMenu, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const direction = req.body && req.body.direction;
+  if (direction !== "up" && direction !== "down") {
+    return res.status(400).json({ error: "invalid_direction" });
+  }
+  let found = false;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    found = true;
+    const siblings = s.menuItems
+      .filter((i) => i.category_id === item.category_id)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const idx = siblings.findIndex((i) => i.id === id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= siblings.length) return;
+    const other = siblings[swapIdx];
+    const tmp = item.sort_order;
+    item.sort_order = other.sort_order;
+    other.sort_order = tmp;
+  });
+  if (!found) return res.status(404).json({ error: "not_found" });
+  res.json({ ok: true });
+});
+
 router.delete("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   store.menuItems = store.menuItems.filter((i) => i.id !== id);

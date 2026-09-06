@@ -250,6 +250,9 @@
       nameTh: "이름",
       priceTh: "가격",
       statusTh: "상태",
+      orderTh: "순서",
+      moveItemUpTitle: "위로 이동",
+      moveItemDownTitle: "아래로 이동",
       photoMissing: "사진<br>없음",
       photoMissingTitle: "사진을 추가해주세요",
       onSale: "판매 중",
@@ -619,6 +622,9 @@
       nameTh: "名稱",
       priceTh: "價格",
       statusTh: "狀態",
+      orderTh: "順序",
+      moveItemUpTitle: "上移",
+      moveItemDownTitle: "下移",
       photoMissing: "尚無<br>照片",
       photoMissingTitle: "請新增照片",
       onSale: "供應中",
@@ -2615,6 +2621,14 @@
   function renderMenuAdmin() {
     const wrap = $("#menuCategories");
     wrap.innerHTML = "";
+    // 사장님 피드백(2026-09-06): "메뉴 순서를 바꾸고 싶어. 코드 정렬로
+    // 되어있지 않은 거 같거든" — 코드(code) 숫자와 무관하게 사장님이 원하는
+    // 순서로 직접 배치할 수 있도록 상태 칸 오른쪽에 위/아래 화살표 버튼을
+    // 추가한다(드래그 방식도 검토했으나, 터치(태블릿) 환경에서 오작동하기
+    // 쉬워 화살표 버튼 방식으로 확정). 실제 순서는 메뉴 아이템의
+    // sort_order 필드(서버가 이미 손님 화면/관리자 목록 모두 이걸로 정렬)를
+    // 같은 카테고리 안의 바로 위/아래 아이템과 맞바꾸는 방식으로 바꾼다 —
+    // 아래 PATCH /api/menu/admin/items/:id/move 참고.
     categories.forEach((c) => {
       const block = document.createElement("div");
       block.className = "cat-block";
@@ -2622,18 +2636,25 @@
       const table = document.createElement("table");
       table.className = "item-table";
       table.innerHTML = `
-        <thead><tr><th></th><th>${T("codeTh")}</th><th>${T("nameTh")}</th><th>${T("priceTh")}</th><th>${T("statusTh")}</th></tr></thead>
+        <thead><tr><th></th><th>${T("codeTh")}</th><th>${T("nameTh")}</th><th>${T("priceTh")}</th><th>${T("statusTh")}</th><th>${T("orderTh")}</th></tr></thead>
         <tbody></tbody>
       `;
       const tbody = table.querySelector("tbody");
-      c.items.forEach((item) => {
+      c.items.forEach((item, idx) => {
         const tr = document.createElement("tr");
+        const moveButtonsHtml = canMenuEdit()
+          ? `<div style="display:flex;gap:4px;">
+              <button type="button" class="menu-move-btn" data-move-item-id="${item.id}" data-move-direction="up" title="${T("moveItemUpTitle")}" ${idx === 0 ? "disabled" : ""} style="padding:4px 8px;font-size:13px;line-height:1;${idx === 0 ? "opacity:0.3;cursor:default;" : "cursor:pointer;"}">▲</button>
+              <button type="button" class="menu-move-btn" data-move-item-id="${item.id}" data-move-direction="down" title="${T("moveItemDownTitle")}" ${idx === c.items.length - 1 ? "disabled" : ""} style="padding:4px 8px;font-size:13px;line-height:1;${idx === c.items.length - 1 ? "opacity:0.3;cursor:default;" : "cursor:pointer;"}">▼</button>
+            </div>`
+          : "";
         tr.innerHTML = `
           <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="${T("photoMissingTitle")}">${T("photoMissing")}</span>`}</td>
           <td>${item.code || ""}</td>
           <td>${itemName(item)}</td>
           <td>NT$${item.price}</td>
           <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span></td>
+          <td>${moveButtonsHtml}</td>
         `;
         // Staff without menuEdit can look at the menu but not open the edit
         // modal (server would 403 the save/delete anyway; this just avoids
@@ -2644,6 +2665,27 @@
       });
       block.appendChild(table);
       wrap.appendChild(block);
+    });
+    // 화살표는 행 클릭(수정 모달 열기)과 같은 <tr> 안에 있으므로, 클릭이
+    // 상위 tr.onclick으로 번지지 않게 막고 순서 변경 API만 호출한다.
+    wrap.querySelectorAll("[data-move-item-id]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        if (btn.disabled) return;
+        const itemId = parseInt(btn.dataset.moveItemId, 10);
+        const direction = btn.dataset.moveDirection;
+        btn.disabled = true;
+        try {
+          await fetch(`/api/menu/admin/items/${itemId}/move`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ direction }),
+          });
+          await loadMenu();
+        } finally {
+          btn.disabled = false;
+        }
+      };
     });
   }
 
