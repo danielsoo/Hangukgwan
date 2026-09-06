@@ -2151,6 +2151,17 @@
   }
 
   async function printKitchenTicket(o) {
+    // Inside the 한국관 POS app (the tablet's own kiosk app, see
+    // appPrintBridge() below) the ticket goes straight from here to the
+    // printer's TCP port, so that is the whole print path. It runs ahead of
+    // QZ Tray because QZ Tray is desktop-only: on the tablet it can only
+    // ever time out, and that delay would sit between a new order arriving
+    // and paper coming out of the kitchen printer.
+    if (appPrintBridge() && (await tryPrintViaRawBt(o))) {
+      markPrintSucceeded(o.id);
+      return;
+    }
+
     // If ESC/POS auto-print is turned on and QZ Tray is reachable on this
     // computer, this sends the ticket straight to the physical printer with
     // no dialog at all and we're done. Any failure here (feature off, QZ
@@ -5852,13 +5863,36 @@
   // confirm the physical printer accepted them. Use the RawBT app's own
   // test print, and the "RawBT 테스트 인쇄" button below, to verify real
   // printing before relying on this for live orders.
+  // The 한국관 POS app injects window.HangukgwanPrint into this page. Its
+  // presence is how the page knows it is running inside that app rather than
+  // in a browser — and it is also the print path itself: printBase64() hands
+  // the ticket bytes to the app, which writes them to the printer's own TCP
+  // port (9100). No RawBT app in the middle re-reading our bytes through some
+  // other code page, and none of Chrome's "an app launch needs a real tap"
+  // rule that stopped 신규 주문 자동 인쇄 from ever firing on its own.
+  function appPrintBridge() {
+    try {
+      const bridge = typeof HangukgwanPrint !== "undefined" ? HangukgwanPrint : null;
+      return bridge && typeof bridge.printBase64 === "function" ? bridge : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function tryPrintViaRawBt(o) {
     try {
-      const res = await fetch("/api/settings/escpos");
-      if (!res.ok) return false;
-      const cfg = await res.json();
-      if (!cfg.rawbtEnabled) return false;
       if (typeof buildEscPosRasterTicket !== "function") return false;
+      const bridge = appPrintBridge();
+      // In the app the printer is configured in the app's own settings, so
+      // the "RawBT 자동 인쇄" switch — which only ever gated handing the job to
+      // the RawBT app from a browser — does not apply. Skipping the lookup
+      // also keeps a network round-trip out of every single ticket.
+      if (!bridge) {
+        const res = await fetch("/api/settings/escpos");
+        if (!res.ok) return false;
+        const cfg = await res.json();
+        if (!cfg.rawbtEnabled) return false;
+      }
 
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
       // Mirrors buildTicketHtml()'s own table-label/phone logic exactly
@@ -5872,6 +5906,17 @@
         : `桌號 ${o.table_number}`;
       const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
       const bytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, { tableLabel, phoneLine });
+
+      if (bridge) {
+        const result = bridge.printBase64(bytesToBase64(bytes));
+        if (result === "queued") return true;
+        // The app shows its own on-screen message for a real failure (no
+        // printer address saved, printer unreachable). Returning false here
+        // lets printKitchenTicket()'s ladder carry on to the browser-print
+        // fallback, so a ticket is never dropped without a trace.
+        console.warn("한국관 POS 앱 인쇄 실패:", result);
+        return false;
+      }
 
       if (await sendViaRawBtWebSocket(bytes)) return true;
 
@@ -5947,11 +5992,19 @@
         note: "",
       };
       const bytes = buildEscPosRasterTicket(sampleOrder, storeName, ticketFontSizes, { tableLabel: "桌號 TEST" });
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = "rawbt:base64," + bytesToBase64(bytes);
-      document.body.appendChild(iframe);
-      setTimeout(() => iframe.remove(), 1000);
+      const bridge = appPrintBridge();
+      if (bridge) {
+        const result = bridge.printBase64(bytesToBase64(bytes));
+        if (result !== "queued") {
+          throw new Error(String(result));
+        }
+      } else {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = "rawbt:base64," + bytesToBase64(bytes);
+        document.body.appendChild(iframe);
+        setTimeout(() => iframe.remove(), 1000);
+      }
       status.style.color = "#1a8a44";
       status.textContent = T("rawbtTestSent");
     } catch (e) {
