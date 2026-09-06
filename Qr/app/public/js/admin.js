@@ -13,8 +13,37 @@
   let editingItemId = null;
   let editingItemPhotoUrl = null;
   let selectedPhotoFile = null;
-  let soundOn = true;
-  let autoPrintOn = false;
+  // Both toggles used to be plain in-memory booleans that silently reset
+  // to their unchecked-in-HTML defaults (soundOn: on, autoPrintOn: off)
+  // every time this page reloads — including the tablet's Chrome
+  // reclaiming a backgrounded tab, a network hiccup forcing a reload, or
+  // staff clearing the browser cache after a JS update (see the 1-hour
+  // static-asset cache comment on express.static in server.js). That
+  // silently turned "신규 주문 자동 인쇄" back off with no visual cue beyond
+  // the checkbox itself, which nobody thinks to re-check after a routine
+  // reload — 2026-09-06 field report: "자동 인쇄는 여전히 안돼. 수동으로
+  // 자꾸 눌러야 돼" right after doing exactly that kind of reload. Persisting
+  // both to localStorage (scoped to this browser/device, which is exactly
+  // right — it's a per-tablet preference, not something to sync from the
+  // server) makes the setting survive reloads the same way a real toggle
+  // should.
+  function readStoredToggle(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? fallback : v === "1";
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function writeStoredToggle(key, value) {
+    try {
+      localStorage.setItem(key, value ? "1" : "0");
+    } catch (e) {
+      /* ignore (private browsing / storage disabled) */
+    }
+  }
+  let soundOn = readStoredToggle("hg_admin_soundOn", true);
+  let autoPrintOn = readStoredToggle("hg_admin_autoPrintOn", false);
   let storeSettings = {};
   let pollTimer = null;
   let knownOrderIds = new Set();
@@ -1269,8 +1298,19 @@
     }
   }
 
-  $("#soundToggle").onchange = (e) => (soundOn = e.target.checked);
-  $("#autoPrintToggle").onchange = (e) => (autoPrintOn = e.target.checked);
+  $("#soundToggle").onchange = (e) => {
+    soundOn = e.target.checked;
+    writeStoredToggle("hg_admin_soundOn", soundOn);
+  };
+  $("#autoPrintToggle").onchange = (e) => {
+    autoPrintOn = e.target.checked;
+    writeStoredToggle("hg_admin_autoPrintOn", autoPrintOn);
+  };
+  // Reflect whatever was restored from localStorage above back onto the
+  // actual checkboxes — otherwise the JS state and the visible UI disagree
+  // right after a reload (state restored, checkbox still shows unchecked).
+  $("#soundToggle").checked = soundOn;
+  $("#autoPrintToggle").checked = autoPrintOn;
   // Give the 새로고침 button explicit loading/done feedback — before, it did
   // its thing silently, so staff had no way to tell whether a tap actually
   // registered or whether the (identical-looking) board was already
