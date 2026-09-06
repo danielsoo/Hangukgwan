@@ -3711,7 +3711,21 @@
     // 합친 합계를 한 번만, 눈에 띄는 색(포인트 레드, 버튼과 같은 색)으로
     // 보여준다. 기존 소계보다 진하게/크게 해서 "이게 전체 합"이라는 게
     // 한눈에 구분되게 한다.
-    const grandTotal = orders.reduce((s, o) => s + remainingAmountOf(o), 0);
+    //
+    // 사장님 피드백(2026-09-06, 스크린샷과 함께): "저기서 뜨는 빨간 글씨의
+    // 합계는 계산 완료랑 무관하게 전체 합계여서 바뀌면 안돼" — 위쪽
+    // 헤더/맨 아래 footer의 "미결제 합계"(remainingAmountOf 기반, 부분
+    // 결제로 품목이 하나둘 paid 처리될 때마다 정확히 그만큼 줄어드는 게
+    // 맞는 값)와 달리, 이 빨간 합계는 "이 테이블이 지금까지 주문한 전체
+    // 금액"이라 부분 결제 여부와 무관하게 항상 같은 값이어야 한다. 그런데
+    // 여기 이전 코드가 잘못 remainingAmountOf(o)를 합산해서, 어떤 라운드가
+    // 부분 결제(split-pay로 일부 품목만 paid)되면 그 순간부터 이 빨간
+    // 합계도 (다른 미결제 합계들처럼) 슬쩍 줄어드는 버그가 있었다.
+    // o.total은 그 라운드가 처음 주문/수정 저장될 때 한 번 계산되어
+    // 박히는 값이라(품목이 이후에 부분결제로 paid 표시돼도 서버가
+    // 건드리지 않음 — src/routes/orders.js의 split-pay 참고) 이걸 더하면
+    // 항상 "전체 합계"를 유지한다.
+    const grandTotal = orders.reduce((s, o) => s + o.total, 0);
     const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${grandTotal}</div>`;
     return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}</div>`;
   }
