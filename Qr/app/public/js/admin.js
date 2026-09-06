@@ -2161,13 +2161,23 @@
   // (전부 체크했으면 서버가 그냥 이 주문 전체를 결제완료로), 나머지
   // 품목은 이 주문에 그대로 남는다 — src/routes/orders.js의
   // PATCH /:id/split-pay 참고.
+  // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고 확인누르고
+  // 실제 적용되기까지 너무 오래 걸려" — 이 함수는 res.ok만 boolean으로
+  // 돌려주고, 호출부(아래 pay-selected-items-btn 핸들러)는 그 뒤에 매번
+  // loadOrders()(이 식당의 모든 주문을 통째로 다시 받아오는 무거운
+  // 요청)를 또 불렀었다. 서버가 이미 갱신된 주문 전체를 응답으로
+  // 돌려주고 있으니(orders.js의 PATCH /:id/split-pay, updatedOrder),
+  // 그걸 그대로 돌려줘서 호출부가 로컬 orders 배열의 같은 자리만
+  // 바꿔치기하면 되게 한다 — 그러면 재조회 요청 자체가 필요 없어진다.
   async function splitPayOrderItems(id, itemIndexes) {
     const res = await fetch(`/api/orders/${id}/split-pay`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ itemIndexes }),
     });
-    return res.ok;
+    if (!res.ok) return { ok: false, updatedOrder: null };
+    const body = await res.json().catch(() => null);
+    return { ok: true, updatedOrder: body ? body.updatedOrder : null };
   }
 
   function openOrderDetail(o) {
@@ -3211,12 +3221,35 @@
           const itemCount = selections.reduce((s, x) => s + x.indexes.length, 0);
           if (!(await showConfirm(fmtConfirmPaySelected(label || tableNumber, itemCount, total)))) return;
           const results = await Promise.all(selections.map((x) => splitPayOrderItems(x.order.id, x.indexes)));
-          if (results.some((ok) => !ok)) {
+          if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
           }
+          // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고
+          // 확인누르고 실제 적용되기까지 너무 오래 걸려" — 예전엔 여기서
+          // loadOrders()로 이 식당 전체 주문을 통째로 다시 받아왔는데,
+          // 그게 split-pay 요청들 자체보다도 훨씬 무거워서 체감 지연의
+          // 대부분을 차지했다. 서버가 이미 돌려준 updatedOrder로 로컬
+          // orders 배열의 같은 자리만 바꿔치면 화면은 똑같이 갱신되면서
+          // 그 재조회 요청이 통째로 없어진다(unpaidOrders 등은 orders를
+          // 필터링한 배열이라 참조가 아니라 값 복사이므로, 바로 아래
+          // openTableDetail 재호출이 orders에서 새로 걸러 다시 그린다).
+          results.forEach((r) => {
+            if (!r.ok || !r.updatedOrder) return;
+            const idx = orders.findIndex((o) => o.id === r.updatedOrder.id);
+            if (idx !== -1) orders[idx] = r.updatedOrder;
+          });
           selections.forEach((x) => x.indexes.forEach((i) => selectedPayItemKeys.delete(`${x.order.id}:${i}`)));
-          await loadOrders();
-          await loadTables();
+          // 라운드가 이번에 통째로 결제완료(paid)로 바뀐 경우에만, 서버가
+          // 정리했을 수 있는 party_size(테이블 인원수 표시)를 반영하려고
+          // 가벼운 테이블 목록을 다시 받아온다(loadTables가 renderTables도
+          // 같이 해준다) — 매번 결제할 때마다 항상 다시 받아올 필요는
+          // 없다. 그 외엔 renderTables()만 직접 불러 화면을 갱신한다.
+          const roundFullyPaid = results.some((r) => r.ok && r.updatedOrder && r.updatedOrder.status === "paid");
+          if (roundFullyPaid) await loadTables();
+          else renderTables();
+          renderOrders();
+          if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
+          if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
           openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };
