@@ -5489,16 +5489,92 @@
     return btoa(binary);
   }
 
+  // Sends the ticket bytes to RawBT's own local print service over a
+  // loopback WebSocket (ws://127.0.0.1:40213/, documented at
+  // https://github.com/402d/rawbt_ws_server — send the raw ESC/POS bytes
+  // as binary, no base64/JSON wrapper). This is the PRIMARY delivery path
+  // (see tryPrintViaRawBt below) because, unlike the "rawbt:" intent link
+  // it replaces as first choice, opening a WebSocket is not something
+  // Android/Chrome treats as "launching an external app" — so it isn't
+  // subject to the "requires a real user gesture" rule that silently
+  // swallowed 신규 주문 자동 인쇄 (see the long comment on 신규 주문 자동 인쇄
+  // 안 됨, only 수동 인쇄 버튼 works — 2026-09-06 field report): the tablet's
+  // 4-second order poll calls printKitchenTicket() with no click behind it
+  // at all, and Chrome for Android silently refuses to hand a fire-and-forget
+  // "rawbt:" navigation to another app from a non-gesture context (the exact
+  // same category of restriction as the popup blocker that already forced
+  // markPrintFailed()'s window.open() check below). A loopback WebSocket
+  // connection has no such restriction, so it fires from the poll exactly
+  // as reliably as from a real click.
+  // ws://127.0.0.1:40213/ from this HTTPS admin page is not blocked as
+  // mixed content either — Chrome (and the mixed-content spec) treats
+  // 127.0.0.1/localhost as a "potentially trustworthy" loopback origin.
+  function sendViaRawBtWebSocket(bytes) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(ok);
+      };
+      let socket;
+      try {
+        socket = new WebSocket("ws://127.0.0.1:40213/");
+      } catch (e) {
+        resolve(false);
+        return;
+      }
+      // If RawBT's WS service isn't running (older app version, service
+      // disabled, or the app isn't installed at all) the connection just
+      // hangs instead of erroring quickly on some Android versions, so
+      // this timeout is what actually lets tryPrintViaRawBt fall back to
+      // the "rawbt:" intent link below within a reasonable time.
+      const timer = setTimeout(() => {
+        try {
+          socket.close();
+        } catch (e) {}
+        finish(false);
+      }, 2500);
+      socket.binaryType = "arraybuffer";
+      socket.onopen = () => {
+        try {
+          socket.send(bytes);
+          // Give the loopback socket a beat to actually flush the bytes to
+          // RawBT before closing — closing immediately after send() has
+          // been seen to drop the last chunk on some Android WebView builds.
+          setTimeout(() => {
+            try {
+              socket.close();
+            } catch (e) {}
+            finish(true);
+          }, 300);
+        } catch (e) {
+          finish(false);
+        }
+      };
+      socket.onerror = () => finish(false);
+      socket.onclose = () => finish(false);
+    });
+  }
+
   // Sends the kitchen ticket to the RawBT app instead of QZ Tray
   // (Android-only — see the "RawBT 자동 인쇄" settings card and
   // 프로젝트 문서 claude/kitchen-printer-recommendation.md for the full
-  // story). RawBT is triggered via its documented "rawbt:base64,..." URL
-  // scheme (https://rawbt.ru/intents.html): handing it a hidden iframe
-  // whose src is that URL makes Android open RawBT via an intent, without
-  // navigating this page away. RawBT itself already has the actual printer
-  // (Bluetooth, USB, or — this restaurant's case — a network/IP printer
-  // reached over WiFi) configured inside the RawBT app, so this code never
-  // needs to know the printer's address at all.
+  // story). Tries RawBT's local WebSocket print service first
+  // (sendViaRawBtWebSocket above — works from both a click and the silent
+  // 4-second order-poll auto-print), and only falls back to the documented
+  // "rawbt:base64,..." URL scheme (https://rawbt.ru/intents.html) — a
+  // hidden iframe whose src is that URL makes Android open RawBT via an
+  // intent — for older RawBT app versions without the WS service, or if
+  // the WS connection is refused for any other reason. That intent
+  // fallback is fire-and-forget and, from field testing, only actually
+  // reaches RawBT when triggered by a real click (e.g. the manual 인쇄
+  // button or "RawBT 테스트 인쇄"), not from the automatic poll. RawBT
+  // itself already has the actual printer (Bluetooth, USB, or — this
+  // restaurant's case — a network/IP printer reached over WiFi) configured
+  // inside the RawBT app, so neither path here ever needs to know the
+  // printer's address.
   //
   // Sends buildEscPosRasterTicket()'s bitmap, not buildEscPosTicket()'s
   // plain ESC/POS text — the on-site test print (2026-09-06) came out with
@@ -5508,12 +5584,15 @@
   // A bitmap sidesteps that entirely — see buildEscPosRasterTicket's own
   // comment in escpos.js for the full explanation.
   //
-  // IMPORTANT caveat: unlike tryPrintViaEscPos(), a custom URL scheme like
-  // this is fire-and-forget — Android doesn't hand a success/failure result
-  // back to the web page. So returning true here only means "RawBT looks
-  // enabled and we handed it the data", not "paper actually came out". Use
-  // the RawBT app's own test print, and the "RawBT 테스트 인쇄" button below,
-  // to verify real printing before relying on this for live orders.
+  // IMPORTANT caveat: the "rawbt:" fallback tier is fire-and-forget — unlike
+  // tryPrintViaEscPos(), Android doesn't hand a success/failure result back
+  // to the web page for it — so returning true from that tier only means
+  // "RawBT looks enabled and we handed it the data", not "paper actually
+  // came out". The WebSocket tier is more honest (it only returns true once
+  // the bytes were actually sent over an open connection), but still can't
+  // confirm the physical printer accepted them. Use the RawBT app's own
+  // test print, and the "RawBT 테스트 인쇄" button below, to verify real
+  // printing before relying on this for live orders.
   async function tryPrintViaRawBt(o) {
     try {
       const res = await fetch("/api/settings/escpos");
@@ -5534,6 +5613,9 @@
         : `桌號 ${o.table_number}`;
       const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
       const bytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, { tableLabel, phoneLine });
+
+      if (await sendViaRawBtWebSocket(bytes)) return true;
+
       const iframe = document.createElement("iframe");
       iframe.style.display = "none";
       iframe.src = "rawbt:base64," + bytesToBase64(bytes);
