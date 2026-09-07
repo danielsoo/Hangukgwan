@@ -385,6 +385,12 @@
       paymentMethodCard: "신용카드",
       paymentMethodOther: "기타",
       paymentMethodCashOnlyHint: "선택한 할인은 현금 결제에만 적용돼요.",
+      manualDiscountModalTitle: "직접 할인 입력",
+      manualDiscountModalHint: "할인 방식을 고르고 값을 입력하세요.",
+      manualDiscountModeAmount: "금액 (NT$)",
+      manualDiscountModePercent: "퍼센트 (%)",
+      manualDiscountErrorMsg: "숫자를 다시 확인해주세요 (퍼센트는 100 이하로 입력)",
+      manualDiscountClearBtn: "할인 해제",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -781,6 +787,12 @@
       paymentMethodCard: "信用卡",
       paymentMethodOther: "其他",
       paymentMethodCashOnlyHint: "所選折扣僅適用於現金付款。",
+      manualDiscountModalTitle: "輸入自訂折扣",
+      manualDiscountModalHint: "請選擇折扣方式並輸入數值。",
+      manualDiscountModeAmount: "金額 (NT$)",
+      manualDiscountModePercent: "百分比 (%)",
+      manualDiscountErrorMsg: "請重新確認輸入的數字（百分比請輸入 100 以下）",
+      manualDiscountClearBtn: "取消折扣",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -3910,33 +3922,79 @@
     return computeVipDiscountClient(discountType, discountEligibleClientTotal(order, indexes));
   }
   // 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/
-  // 퍼센트 할인(직접 입력)이 가능하도록 넣어줘" — 브라우저 native prompt()
-  // 하나로 금액/퍼센트를 한 번에 받는다(숫자만이면 금액, 끝에 %가 있으면
-  // 퍼센트). 이 파일에서 유일하게 이미 native prompt()를 쓰는 곳(구역 이름
-  // 입력, renderTableLayoutEditor)이 있어 같은 패턴을 재사용. 취소하면
-  // undefined(값 변경 없음), 빈 문자열로 확인하면 null(할인 해제), 그 외
-  // 유효한 값이면 {mode, value} 객체를 돌려준다.
-  async function promptManualDiscount(existing) {
-    const defaultStr = existing ? (existing.mode === "percent" ? `${existing.value}%` : String(existing.value)) : "";
-    const msg =
-      adminLang === "zh"
-        ? "請輸入折扣：純數字＝金額（例：100），數字加 % ＝百分比（例：10%）。留空可取消折扣。"
-        : "할인을 입력하세요. 숫자만 입력하면 금액(예: 100), 숫자 뒤에 %를 붙이면 퍼센트(예: 10%)예요. 비워두면 할인이 해제됩니다.";
-    const raw = window.prompt(msg, defaultStr);
-    if (raw == null) return undefined; // 취소 — 기존 값 그대로
-    const trimmed = raw.trim();
-    if (trimmed === "") return null; // 명시적으로 비움 — 할인 해제
-    const isPercent = trimmed.endsWith("%");
-    const num = parseFloat(isPercent ? trimmed.slice(0, -1).trim() : trimmed);
-    if (!Number.isFinite(num) || num <= 0 || (isPercent && num > 100)) {
-      await showAlert(
-        adminLang === "zh"
-          ? "請重新確認輸入的數字（例：100 或 10%，百分比請輸入 100 以下）"
-          : "숫자를 다시 확인해주세요 (예: 100 또는 10%, 퍼센트는 100 이하로 입력)"
-      );
-      return undefined;
-    }
-    return { mode: isPercent ? "percent" : "amount", value: num };
+  // 퍼센트 할인(직접 입력)이 가능하도록 넣어줘" → 곧이어 "팝업이 내부에서
+  // 일어났으면 좋겠어" — 처음엔 브라우저 native window.prompt()로
+  // 구현했었는데(이 파일에서 유일하게 native 팝업을 쓰는 곳이었다), 다른
+  // 팝업(appDialogBackdrop, paymentMethodBackdrop)과 다르게 브라우저가
+  // 그리는 OS 스타일 박스라 UI에서 붕 떠 보였다. #manualDiscountBackdrop
+  // (admin.html)으로 같은 스타일의 인앱 모달로 바꾼다 — 모드(금액/퍼센트)
+  // 버튼 두 개 + 숫자 입력칸 하나. 반환 규약은 이전과 동일: 취소하면
+  // undefined(기존 값 유지), "할인 해제" 버튼이나 빈 입력으로 확인하면
+  // null(할인 해제), 그 외 유효한 값이면 {mode, value} 객체.
+  function promptManualDiscount(existing) {
+    return new Promise((resolve) => {
+      const backdrop = $("#manualDiscountBackdrop");
+      const input = $("#manualDiscountValueInput");
+      const errorEl = $("#manualDiscountError");
+      const amountBtn = $("#manualDiscountModeAmount");
+      const percentBtn = $("#manualDiscountModePercent");
+      let mode = existing ? existing.mode : "amount";
+      const paintMode = () => {
+        const isAmount = mode === "amount";
+        amountBtn.style.border = `1px solid ${isAmount ? "var(--red)" : "var(--line)"}`;
+        amountBtn.style.background = isAmount ? "var(--red)" : "#fff";
+        amountBtn.style.color = isAmount ? "#fff" : "var(--ink)";
+        percentBtn.style.border = `1px solid ${!isAmount ? "var(--red)" : "var(--line)"}`;
+        percentBtn.style.background = !isAmount ? "var(--red)" : "#fff";
+        percentBtn.style.color = !isAmount ? "#fff" : "var(--ink)";
+      };
+      input.value = existing ? String(existing.value) : "";
+      errorEl.hidden = true;
+      paintMode();
+      const finish = (result) => {
+        backdrop.hidden = true;
+        amountBtn.onclick = null;
+        percentBtn.onclick = null;
+        $("#manualDiscountOk").onclick = null;
+        $("#manualDiscountClear").onclick = null;
+        $("#manualDiscountCancel").onclick = null;
+        input.onkeydown = null;
+        resolve(result);
+      };
+      const submit = () => {
+        const trimmed = input.value.trim();
+        if (trimmed === "") {
+          finish(null); // 빈 입력으로 확인 = 할인 해제
+          return;
+        }
+        const num = parseFloat(trimmed);
+        if (!Number.isFinite(num) || num <= 0 || (mode === "percent" && num > 100)) {
+          errorEl.hidden = false;
+          return;
+        }
+        finish({ mode, value: num });
+      };
+      amountBtn.onclick = () => {
+        mode = "amount";
+        paintMode();
+      };
+      percentBtn.onclick = () => {
+        mode = "percent";
+        paintMode();
+      };
+      $("#manualDiscountOk").onclick = submit;
+      $("#manualDiscountClear").onclick = () => finish(null);
+      $("#manualDiscountCancel").onclick = () => finish(undefined);
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submit();
+        }
+      };
+      backdrop.hidden = false;
+      input.focus();
+      input.select();
+    });
   }
   // 特約95折/VIP9折/직접입력 중 하나만 고를 수 있는 토글 버튼 — 같은 걸
   // 다시 누르면 해제(미선택으로). scope는 클릭 핸들러가 어느 대상(테이블
