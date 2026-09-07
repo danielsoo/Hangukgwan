@@ -3761,9 +3761,10 @@
           const discountType = tableVipDiscountType;
           const manualValue = tableManualDiscountValue;
           let discountAmount = 0;
+          let manualEligibleTotal = 0;
           if (discountType === "manual") {
-            const eligible = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
-            discountAmount = computeManualDiscountAmountClient(manualValue, eligible);
+            manualEligibleTotal = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
+            discountAmount = computeManualDiscountAmountClient(manualValue, manualEligibleTotal);
           } else if (discountType) {
             const eligible = selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0);
             discountAmount = computeVipDiscountClient(discountType, eligible);
@@ -3773,8 +3774,29 @@
             discountRequiresCashOnly(discountType)
           );
           if (!method) return;
+          // 사장님 피드백(2026-09-07, 스크린샷과 함께): "직접 숫자 로직
+          // 이상해" — 정액(금액) 직접 할인은 特約95折/VIP9折(비율)와 달리
+          // 라운드마다 독립적으로 적용하면 안 된다. 이 버튼은 체크된
+          // 라운드마다 splitPayOrderItems를 따로 호출하는데, 서버(orders.js
+          // computeDiscountAmount)는 각 호출을 그 라운드 자기 금액만 보고
+          // 독립적으로 다시 계산하므로, 금액 그대로를 매 호출에 실어 보내면
+          // 라운드 수만큼 곱절로(예: 500원이 3라운드 결제에서 최대
+          // 1500원까지) 할인되는 버그가 있었다. 2라운드 이상을 한 번에
+          // 결제할 때는 실제로 적용될 총 할인액을 동일 비율(%)로 환산해서
+          // 보낸다 — 그러면 서버가 라운드별로 각자 계산해도 합이 원래
+          // 의도한 총 할인액과 같아진다(特約95折/VIP9折가 원래 비율이라
+          // 안전한 것과 같은 원리). 라운드가 1개뿐이면 애초에 곱절 문제가
+          // 없으니 원래 값(사장님이 입력한 그대로) 그대로 보낸다.
+          const perCallManualValue =
+            discountType === "manual" &&
+            manualValue &&
+            manualValue.mode === "amount" &&
+            selections.length > 1 &&
+            manualEligibleTotal > 0
+              ? { mode: "percent", value: Math.min(100, (discountAmount / manualEligibleTotal) * 100) }
+              : manualValue;
           const results = await Promise.all(
-            selections.map((x) => splitPayOrderItems(x.order.id, x.indexes, method, discountType, manualValue))
+            selections.map((x) => splitPayOrderItems(x.order.id, x.indexes, method, discountType, perCallManualValue))
           );
           if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
@@ -4244,9 +4266,9 @@
         <div style="margin-top:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}</div>
           </div>
           <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.vipDiscountAmount)}</div>
+          ${p.vipDiscountToggleHtml ? `<div style="display:flex;justify-content:flex-end;padding:8px 0;">${p.vipDiscountToggleHtml}</div>` : ""}
           <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} ${vipTotalHtml(o.total, p.vipDiscountAmount)}</div>
         </div>
       </div>
@@ -4297,15 +4319,24 @@
     // 아니라서 라운드 전체에 배경을 주지 않는다), 맨 아래 버튼만 여러
     // 라운드에 걸쳐 체크된 품목을 모아 계산한다.
     // 사장님 피드백(2026-09-07): "가장 아래 수정 버튼이랑 수평으로 오른쪽
-    // 정렬해서 한 곳에만 있었으면 좋겠어" — 特約95折/VIP9折/직접입력은
-    // 테이블 전체에 공유되는 값 하나뿐인데(위 payment-discount-rules 참고)
-    // 라운드마다 반복해서 보여주면 마치 라운드별로 따로 있는 것처럼
-    // 보인다. 가장 마지막(맨 아래) 라운드에만 보여주고, 그 라운드 자신의
-    // 수정 버튼과 같은 줄에 오른쪽 정렬한다.
+    // 정렬해서 한 곳에만 있었으면 좋겠어" → 곧이어 "위치를 마지막 소계와
+    // 합계 사이에 공간 하나 만들어서 거기에다가 넣어줄래" — 特約95折/
+    // VIP9折/직접입력은 테이블 전체에 공유되는 값 하나뿐인데(위
+    // payment-discount-rules 참고) 라운드마다 반복해서 보여주면 마치
+    // 라운드별로 따로 있는 것처럼 보인다. 토글은 맨 아래(마지막 소계와
+    // 합계 사이)에 한 번만 보여준다(아래 discountRowHtml).
+    //
+    // 사장님 피드백(2026-09-07, 스크린샷과 함께): "직접 숫자 로직 이상해" —
+    // 특히 정액(금액) 직접 할인은 라운드마다 독립적으로 적용하면 안 된다
+    // (特約95折/VIP9折는 비율이라 라운드별로 계산해서 더해도 결과가 같지만,
+    // 정액은 그렇지 않다 — 라운드가 3개면 최대 3배로 할인되어 보이는
+    // 버그가 있었다). 그래서 라운드별 소계에는 더 이상 할인을 반영하지
+    // 않고(항상 원래 금액), 할인은 테이블 전체 미결제 금액 기준으로 딱
+    // 한 번만 계산해서 맨 아래 합계에 반영한다.
+    const roundParts = orders.map((o) => buildOrderRoundParts(o, false));
     const roundsHtml = orders
       .map((o, i) => {
-        const p = buildOrderRoundParts(o, false);
-        const isLastRound = i === orders.length - 1;
+        const p = roundParts[i];
         const dividerStyle = i > 0 ? "margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);" : "";
         // p.editBtn is already "" when this specific round is paid/cancelled
         // or has any part-paid item (see buildOrderRoundParts) — checking
@@ -4323,15 +4354,38 @@
             ${p.noteHtml}
             <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
               ${p.editBtn}
-              <div style="display:flex;align-items:center;gap:10px;">
-                ${isLastRound ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}</div>` : ""}
-                <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.vipDiscountAmount)}</div>
-              </div>
+              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
             </div>
           </div>
         `;
       })
       .join("");
+    // 테이블 전체(미결제 라운드만) 기준으로 할인액을 딱 한 번 계산 — 위
+    // 주석 참고. 이미 결제완료/취소된 라운드는 대상에서 빠진다(라운드별
+    // 계산이던 buildOrderRoundParts의 vipDiscountActive 조건과 동일).
+    const isManualDiscount = tableVipDiscountType === "manual";
+    const tableDiscountActive = isManualDiscount ? !!tableManualDiscountValue : !!tableVipDiscountType;
+    let tableDiscountEligibleTotal = 0;
+    if (tableDiscountActive) {
+      orders.forEach((o) => {
+        if (o.status === "paid" || o.status === "cancelled") return;
+        const unpaidIdxs = o.items.map((_, idx) => idx).filter((idx) => !o.items[idx].paid);
+        tableDiscountEligibleTotal += isManualDiscount
+          ? fullEligibleClientTotal(o, unpaidIdxs)
+          : discountEligibleClientTotal(o, unpaidIdxs);
+      });
+    }
+    const tableDiscountAmount = tableDiscountActive
+      ? isManualDiscount
+        ? computeManualDiscountAmountClient(tableManualDiscountValue, tableDiscountEligibleTotal)
+        : computeVipDiscountClient(tableVipDiscountType, tableDiscountEligibleTotal)
+      : 0;
+    // 토글 자체는 어느 라운드에서 만들었든 동일(테이블 전체 공유 값)하므로
+    // 마지막 라운드 것을 그대로 쓴다.
+    const discountToggleHtml = roundParts[roundParts.length - 1].vipDiscountToggleHtml;
+    const discountRowHtml = discountToggleHtml
+      ? `<div style="display:flex;justify-content:flex-end;padding:8px 0;">${discountToggleHtml}</div>`
+      : "";
     // 사장님 피드백(2026-09-05, 스크린샷과 함께): "합계는 가장 아래 소계
     // 아래에 하나 있었으면 좋겠어 다른 색으로" — 라운드마다 있는 소계
     // (검정 텍스트)와는 별개로, 맨 마지막 소계 바로 아래에 전체 라운드를
@@ -4351,10 +4405,12 @@
     // o.total은 그 라운드가 처음 주문/수정 저장될 때 한 번 계산되어
     // 박히는 값이라(품목이 이후에 부분결제로 paid 표시돼도 서버가
     // 건드리지 않음 — src/routes/orders.js의 split-pay 참고) 이걸 더하면
-    // 항상 "전체 합계"를 유지한다.
+    // 항상 "전체 합계"를 유지한다. (2026-09-07: 여기에 特約95折/VIP9折/
+    // 직접입력 할인이 활성화돼 있으면 위에서 계산한 tableDiscountAmount로
+    // 취소선+할인가를 같이 보여준다 — 부분 결제 여부와는 여전히 무관.)
     const grandTotal = orders.reduce((s, o) => s + o.total, 0);
-    const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${grandTotal}</div>`;
-    return `<div class="table-order-block">${roundsHtml}${grandTotalHtml}</div>`;
+    const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} ${vipTotalHtml(grandTotal, tableDiscountAmount)}</div>`;
+    return `<div class="table-order-block">${roundsHtml}${discountRowHtml}${grandTotalHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {
     $("#tableDetailBackdrop").hidden = true;
