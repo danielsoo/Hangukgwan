@@ -44,6 +44,18 @@ function publicSettings() {
   // season from today's date; it can also be forced to one specific season
   // regardless of the real month, or turned "off" entirely.
   map.taegeuk_season_mode = store.settings.taegeukSeasonMode || "auto";
+  // 실시간 주문 알림 (Pusher Channels) — 2026-09-07 성능 개선 작업, 자세한
+  // 배경은 src/realtime.js 참고. key/cluster는 공개해도 안전한 값이다
+  // (Pusher 공식 문서 기준 app key는 공개 식별자이고, 비밀로 지켜야 하는
+  // 건 secret뿐 — secret은 서버 쪽 src/realtime.js에만 있고 여기엔 절대
+  // 포함하지 않는다). PUSHER_KEY/PUSHER_CLUSTER 둘 다 설정된 경우에만
+  // admin.js가 폴링 대신 이 채널을 구독하고, 미설정 시엔 enabled:false로
+  // 내려가서 기존 폴링 방식 그대로 동작한다.
+  map.realtime = {
+    enabled: !!(process.env.PUSHER_KEY && process.env.PUSHER_CLUSTER),
+    key: process.env.PUSHER_KEY || null,
+    cluster: process.env.PUSHER_CLUSTER || null,
+  };
   return map;
 }
 

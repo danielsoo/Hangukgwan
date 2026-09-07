@@ -5,6 +5,7 @@ const { nowLocal, taipeiDateString } = require("../time");
 const { verifyIdToken } = require("../firebaseAdmin");
 const { isActive: isVipActive } = require("../vip");
 const { parseAddons } = require("../addons");
+const { broadcastOrdersChanged } = require("../realtime");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -291,6 +292,7 @@ router.post("/", async (req, res) => {
   };
   store.orders.push(order);
   await save();
+  broadcastOrdersChanged();
 
   res.status(201).json(order);
 });
@@ -356,6 +358,7 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
     if (order) order.queue_order = index;
   });
   await save();
+  broadcastOrdersChanged();
   res.json({ ok: true });
 });
 
@@ -420,6 +423,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   }
 
   await save();
+  broadcastOrdersChanged();
   res.json(order);
 });
 
@@ -495,6 +499,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   order.updated_at = nowLocal();
 
   await save();
+  broadcastOrdersChanged();
   res.json(order);
 });
 
@@ -580,6 +585,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   }
 
   await save();
+  broadcastOrdersChanged();
   res.json({ updatedOrder: order });
 });
 

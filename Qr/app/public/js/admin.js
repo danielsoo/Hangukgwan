@@ -46,6 +46,11 @@
   let autoPrintOn = readStoredToggle("hg_admin_autoPrintOn", false);
   let storeSettings = {};
   let pollTimer = null;
+  // 실시간 주문 알림(Pusher) 연결 상태 — startPolling()이 폴링 주기를
+  // 정할 때 이 값을 본다. Pusher 설정이 안 된 매장에서는 계속 false로
+  // 남아서 기존 2초 폴링 그대로 동작한다.
+  let realtimeEnabled = false;
+  let pusherClient = null;
   let knownOrderIds = new Set();
   let openTableNumber = null;
   // 포장 카운터는 서로 무관한 손님 주문이 여러 건 동시에 쌓일 수 있어서,
@@ -1343,22 +1348,52 @@
     };
   });
 
-  // ---------- Live orders (polling — no persistent server connection
-  // needed, so this works the same on Vercel, Railway, or a laptop) ----------
-  // 사장님 피드백(2026-09-07): "주문이 들어가고 빌지가 나오기까지 너무 오래
-  // 걸려(3~5초). 시간이 훨씬 단축되었으면 좋겠어" — 이 4초 주기가 그 지연의
-  // 가장 큰 원인이었다(새 주문이 들어와도 다음 폴링 때까지는 화면도 자동
-  // 인쇄도 전혀 모름 → 평균 대기시간이 이 값의 절반, 최악의 경우 거의 이
-  // 값 전체). 2초로 줄여서 평균/최악 대기시간을 절반으로 낮춘다. 더 짧게
-  // 줄이면 그만큼 DB 조회 빈도(부하)도 같이 늘어나므로, 체감 속도와 서버
-  // 부하 사이의 균형점으로 2초를 선택했다 — 진짜 즉시(0초에 가까운) 알림은
-  // 폴링이 아니라 서버→클라이언트 실시간 푸시(WebSocket/SSE)가 필요한데,
-  // 이 프로젝트는 원래 Socket.IO로 그렇게 했다가 Vercel의 서버리스
-  // 환경(지속 연결을 못 붙잡음)에 맞추려고 지금의 폴링 방식으로 바꾼
-  // 이력이 있다 — 되돌리려면 별도의 상시 구동 서버가 필요한 더 큰 작업.
+  // ---------- Live orders ----------
+  // 2026-09-07: 4초 폴링 → 2초로 절반 단축(1차 조치) → 사장님이 "폴링 자체를
+  // 없애고 싶다"고 하셔서 Pusher Channels로 실시간 push 추가(2차 조치,
+  // src/realtime.js 참고). 이 프로젝트는 원래 Socket.IO로 실시간 push를
+  // 했다가 Vercel 서버리스 환경(지속 연결을 못 붙잡음)에 맞추려고 폴링으로
+  // 바꾼 이력이 있는데, Pusher는 그 "지속 연결을 붙잡고 있는 역할"을 대신
+  // 맡아주는 관리형 서비스라 Vercel 쪽 코드는 그대로 둔 채 붙일 수 있었다.
+  //
+  // Pusher가 설정된 매장(loadSettings()에서 확인)은 이 채널로 새 주문/상태
+  // 변경을 거의 즉시 받아서 loadOrders()를 바로 부르고, 폴링은 30초의 아주
+  // 느린 "혹시 Pusher 연결이 끊기면"을 대비한 안전망으로만 돈다. Pusher가
+  // 설정 안 된 매장(아직 계정을 안 만들었거나 환경변수를 안 넣은 경우)은
+  // realtimeEnabled가 false로 남아서 예전처럼 2초 폴링이 유일한 경로가
+  // 된다 — 즉 이 기능을 몰라도, 설정 안 해도 앱은 그대로 잘 돌아간다.
+  function initRealtimeOrders(cfg) {
+    if (!cfg || !cfg.enabled || !cfg.key || !cfg.cluster || typeof Pusher === "undefined") return;
+    if (pusherClient) return; // 이미 연결돼 있으면 재연결하지 않음 (loadSettings()가 여러 번 불릴 수 있음)
+    try {
+      pusherClient = new Pusher(cfg.key, { cluster: cfg.cluster });
+      const channel = pusherClient.subscribe("orders");
+      channel.bind("changed", () => loadOrders());
+      pusherClient.connection.bind("connected", () => {
+        realtimeEnabled = true;
+        // 폴링이 이미 빠른 주기로 돌고 있었다면 느린 안전망 주기로 다시 시작
+        if (pollTimer) {
+          stopPolling();
+          startPolling();
+        }
+      });
+      // 연결이 끊기면 안전하게 빠른 폴링으로 되돌아간다 — 손님이 주문을
+      // 못 받는 상황이 "몰래" 생기는 것보다는 폴링이라도 도는 게 낫다.
+      pusherClient.connection.bind("disconnected", () => {
+        realtimeEnabled = false;
+        if (pollTimer) {
+          stopPolling();
+          startPolling();
+        }
+      });
+    } catch (e) {
+      console.error("[realtime] Pusher init failed:", e);
+      realtimeEnabled = false;
+    }
+  }
   function startPolling() {
     if (pollTimer) return;
-    pollTimer = setInterval(loadOrders, 2000);
+    pollTimer = setInterval(loadOrders, realtimeEnabled ? 30000 : 2000);
   }
   function stopPolling() {
     if (pollTimer) {
@@ -5063,6 +5098,7 @@
     const res = await fetch("/api/settings");
     const s = await res.json();
     storeSettings = s;
+    initRealtimeOrders(s.realtime);
     $("#s_store_name_zh").value = s.store_name_zh || "";
     $("#s_store_name_ko").value = s.store_name_ko || "";
     $("#s_store_name_en").value = s.store_name_en || "";

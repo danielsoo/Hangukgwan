@@ -761,6 +761,11 @@
 <audio id="notifySound" preload="auto"></audio>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<!-- 주문 실시간 알림(Pusher Channels) — src/realtime.js 참고. 매장이
+     PUSHER_KEY/PUSHER_CLUSTER를 설정 안 했으면 admin.js가 그냥 이 전역을
+     안 쓰고 기존 폴링으로 자연스럽게 폴백하므로, 이 스크립트 자체는
+     항상 로드해둬도 안전하다. -->
+<script src="https://js.pusher.com/8.4.0/pusher.min.js"></script>
 <script src="/js/allergens.js"></script>
 <script src="/js/season.js"></script>
 <script src="/js/qz-tray.js"></script>
