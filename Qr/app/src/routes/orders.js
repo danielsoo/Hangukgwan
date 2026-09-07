@@ -76,6 +76,22 @@ function computeVipDiscount(vipDiscountType, eligibleTotal) {
   return eligibleTotal - Math.round(eligibleTotal * rate);
 }
 
+// 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/퍼센트
+// 할인 (직접 입력)이 가능하도록 넣어줘" — 特約95折/VIP9折처럼 정해진
+// 카드가 아니라, 결제를 처리하는 직원이 그 자리에서 임의로 정하는
+// 할인이다. 위 discountEligibleTotal과 달리 음료·주류를 빼지 않는다 —
+// 特約95折/VIP9折는 그 물리 카드 프로그램 고유의 규칙(음료 제외)일 뿐,
+// 직원 재량 할인까지 같은 제한을 물려받을 이유가 없다.
+function fullEligibleTotal(items, indexes) {
+  const idxs = indexes || items.map((_, i) => i);
+  return idxs.reduce((s, i) => {
+    const it = items[i];
+    if (!it) return s;
+    const addonsTotal = (it.selected_addons || []).reduce((a, x) => a + x.price, 0);
+    return s + (it.unit_price + addonsTotal) * it.qty;
+  }, 0);
+}
+
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을
 // disabled 처리해주는 것과는 별개로 서버가 실제로 막아야 하는 지점이다.
@@ -83,11 +99,53 @@ function computeVipDiscount(vipDiscountType, eligibleTotal) {
 // 이 둘과 무관하게 항상 진행돼야 하므로, 잘못된 결제 방식/할인 값 때문에
 // 결제 자체가 막히면 안 된다. 단, "할인은 현금만"은 유일하게 진짜 에러로
 // 취급한다(호출부에서 400을 돌려줌).
+//
+// vipDiscountType이 "manual"이면 特約95折/VIP9折처럼 정해진 비율표가 없고
+// 직원이 그때그때 입력한 금액/퍼센트(manualDiscountMode/manualDiscountValue)를
+// 써야 한다 — 이 값 자체는 서버가 미리 정해둔 카탈로그가 없으니 클라이언트
+// 입력을 받을 수밖에 없지만, 범위는 여기서 반드시 검증한다(퍼센트는
+// 0~100, 금액은 양수만 — 실제로 청구액을 넘는지는 아래
+// computeDiscountAmount가 eligibleTotal로 다시 한번 clamp한다).
 function resolvePaymentFields(body) {
   const paymentMethod = PAYMENT_METHODS.includes(body.paymentMethod) ? body.paymentMethod : null;
-  const vipDiscountType = Object.keys(VIP_DISCOUNT_RATES).includes(body.vipDiscountType) ? body.vipDiscountType : null;
-  const discountRequiresCash = !!vipDiscountType && paymentMethod !== "cash";
-  return { paymentMethod, vipDiscountType, discountRequiresCash };
+  const rawType = body.vipDiscountType;
+  const vipDiscountType = Object.keys(VIP_DISCOUNT_RATES).includes(rawType) || rawType === "manual" ? rawType : null;
+  let manualDiscount = null;
+  if (vipDiscountType === "manual") {
+    const mode = body.manualDiscountMode === "percent" || body.manualDiscountMode === "amount" ? body.manualDiscountMode : null;
+    const value = Number(body.manualDiscountValue);
+    if (mode && Number.isFinite(value) && value > 0) {
+      manualDiscount = { mode, value: mode === "percent" ? Math.min(value, 100) : value };
+    }
+  }
+  // 재량 할인은 결제수단 제한이 없다 — "할인은 현금만"은 特約95折/VIP9折
+  // 물리 카드 프로그램 고유 규칙이므로 그 둘일 때만 적용한다.
+  const discountRequiresCash = (vipDiscountType === "te95" || vipDiscountType === "vip9") && paymentMethod !== "cash";
+  return {
+    paymentMethod,
+    // manual인데 유효한 값이 없으면(잘못된 입력) 할인 자체를 적용하지
+    // 않는다 — 결제 자체는 그대로 진행되어야 하므로(위 주석 참고) 조용히
+    // null로 무시.
+    vipDiscountType: vipDiscountType === "manual" && !manualDiscount ? null : vipDiscountType,
+    manualDiscount,
+    discountRequiresCash,
+  };
+}
+
+// 特約95折/VIP9折(고정 비율표)와 manual(직원 직접 입력, 음료 제외 없음)을
+// 한 곳에서 처리 — PATCH /:id, PATCH /:id/split-pay 둘 다 이 함수만 부르면
+// 된다.
+function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes) {
+  if (vipDiscountType === "manual") {
+    if (!manualDiscount) return 0;
+    const eligible = fullEligibleTotal(items, indexes);
+    if (manualDiscount.mode === "percent") {
+      return Math.min(eligible, Math.round(eligible * (manualDiscount.value / 100)));
+    }
+    return Math.min(eligible, Math.round(manualDiscount.value));
+  }
+  const eligible = discountEligibleTotal(items, indexes);
+  return computeVipDiscount(vipDiscountType, eligible);
 }
 
 // Straight-line distance between two lat/lng points, in meters.
@@ -391,7 +449,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 전혀 영향이 없다. discountRequiresCash는 클라이언트가 이미 LinePay/
   // 신용카드 버튼을 잠가주지만, 그건 UI일 뿐이라 여기서 다시 막는다.
   if (status === "paid") {
-    const { paymentMethod, vipDiscountType, discountRequiresCash } = resolvePaymentFields(req.body || {});
+    const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
     if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
     if (paymentMethod) {
       order.payment_method = paymentMethod;
@@ -406,8 +464,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       });
     }
     if (vipDiscountType) {
-      const eligible = discountEligibleTotal(order.items);
-      const discountAmount = computeVipDiscount(vipDiscountType, eligible);
+      const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items);
       order.discount_type = vipDiscountType;
       order.discount_amount = (order.discount_amount || 0) + discountAmount;
     }
@@ -552,7 +609,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   // "선택/전체 결제 완료")로 이뤄지므로 特約95折/VIP9折 할인·결제 방식도
   // 여기서 받는다. 이번에 실제로 결제되는 품목(selectedIdx, 아래에서 확정)
   // 중 음료·주류를 뺀 금액에만 할인율을 적용한다 — PATCH /:id와 동일 규칙.
-  const { paymentMethod, vipDiscountType, discountRequiresCash } = resolvePaymentFields(req.body || {});
+  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
   if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
   // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
   // (체크한 품목 기준) — 처음엔 체크한 품목을 새 주문으로 떼어내는 방식으로
@@ -582,8 +639,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   });
   if (paymentMethod) order.payment_method = paymentMethod;
   if (vipDiscountType) {
-    const eligible = discountEligibleTotal(order.items, selectedIdx);
-    const discountAmount = computeVipDiscount(vipDiscountType, eligible);
+    const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items, selectedIdx);
     order.discount_type = vipDiscountType;
     order.discount_amount = (order.discount_amount || 0) + discountAmount;
   }
