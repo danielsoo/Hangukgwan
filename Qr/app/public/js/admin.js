@@ -1556,12 +1556,38 @@
     return `${y}-${m}-${day}`;
   }
 
-  // Quick AM/PM settlement check, right inside 실시간주문 (2026-09 피드백:
-  // "오전장사 끝나고 정산버튼/저녁장사끝나고 정산버튼 눌러서 합계 확인 가능하게") —
-  // sums today's already-loaded `orders` (paid status, updated_at in the
-  // given hour range) without a separate API round-trip. This is a quick
-  // on-the-spot total, not a replacement for the full 결산 탭 (which has the
-  // permanent nightly snapshot, item breakdown, etc.).
+  // AM/PM settlement, right inside 실시간주문 (2026-09 피드백: "오전장사
+  // 끝나고 정산버튼/저녁장사끝나고 정산버튼 눌러서 합계 확인 가능하게", 이후
+  // 2026-09-07 사장님 요청으로 "완전 마무리"로 확장: "메뉴가 남아있던
+  // 안남아있던 모든 걸 클리어 하고 결산 탭으로 넘기는거야... 오전 정산은
+  // 점심시간에 쉬는 시간 전까지 한 걸 마감하는 거고 오후 정산은 하루 마감을
+  // 하는 거야"). 처음엔 이미 결제된 주문의 합계만 보여주는 조회용 버튼이었지만,
+  // 이제는 실제로 정산을 "마감"한다:
+  //   1) 아직 결제 안 된(신규/조리중/서빙완료) 오늘 주문이 있으면 몇 건인지
+  //      먼저 보여주고 확인을 받는다 — 확인하면 그 주문들도 전부(음식이
+  //      나갔든 안 나갔든) 결제완료로 처리해서 실시간 주문판에서 지운다.
+  //      결제수단은 지정하지 않으므로 정산의 결제수단별 집계에는
+  //      "미지정"으로 잡힌다(실제로 어떻게 결제됐는지 모르는 채로 강제
+  //      마감된 것이므로 정직하게 미지정 처리).
+  //   2) 그 다음 오늘 날짜로 결산 마감 스냅샷(POST /api/settlements/close,
+  //      결산 탭의 "마감" 버튼과 동일)을 찍어서 결산 탭의 영구 기록에도
+  //      반영되게 한다 — 오전에 한 번, 오후에 한 번 더 찍으면 오후 것이
+  //      그날 스냅샷을 하루 전체 합계로 덮어써서 자연스럽게 "오전 정산 =
+  //      점심 전까지 마감", "오후 정산 = 하루 마감"이 된다. 소유자 권한이
+  //      없어 이 호출이 실패해도(403) 치명적이지 않다 — 결산 탭은 항상
+  //      살아있는 주문에서 다시 계산해서 보여주므로.
+  // 오래된 날짜에 걸린(예: 며칠 전부터 안 닫힌) 주문까지 휩쓸리지 않도록
+  // 오늘 생성된 주문만 대상으로 한다 — 그보다 오래된 미결제 주문은 결산
+  // 탭의 "⚠️ 결제되지 않은 주문" 목록에 계속 남아 사장님이 따로 확인하게
+  // 둔다.
+  function openOrdersToday() {
+    const todayLocalStr = localDateStr(new Date());
+    return orders.filter(
+      (o) =>
+        ["new", "preparing", "served"].includes(o.status) &&
+        localDateStr(new Date(o.created_at.replace(" ", "T"))) === todayLocalStr
+    );
+  }
   function computeHalfDaySettlement(startHour, endHour) {
     const todayLocalStr = localDateStr(new Date());
     const matching = orders.filter((o) => {
@@ -1574,22 +1600,54 @@
     const total = matching.reduce((sum, o) => sum + (o.total || 0), 0);
     return { count: matching.length, total };
   }
-  $("#settleAmBtn").onclick = () => {
-    const { count, total } = computeHalfDaySettlement(0, 11);
-    showAlert(
-      adminLang === "zh"
-        ? `🌅 今日上午（00:00–11:59）已結帳 ${count} 筆，合計 NT$${total}`
-        : `🌅 오늘 오전(00:00~11:59) 결제 ${count}건, 합계 NT$${total}`
-    );
-  };
-  $("#settlePmBtn").onclick = () => {
-    const { count, total } = computeHalfDaySettlement(12, 23);
-    showAlert(
-      adminLang === "zh"
-        ? `🌙 今日下午（12:00–23:59）已結帳 ${count} 筆，合計 NT$${total}`
-        : `🌙 오늘 오후(12:00~23:59) 결제 ${count}건, 합계 NT$${total}`
-    );
-  };
+  async function finalizeHalfDaySettlement({ isFullDay }) {
+    const openOrders = openOrdersToday();
+    const openTotal = openOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const confirmMsg =
+      openOrders.length > 0
+        ? adminLang === "zh"
+          ? `尚有 ${openOrders.length} 筆訂單尚未結帳（合計 NT$${openTotal}，不論餐點是否已出）。結算後將全部標記為已結帳並從看板移除，確定要繼續嗎？`
+          : `아직 결제되지 않은 주문이 ${openOrders.length}건(합계 NT$${openTotal}) 있어요. 음식이 나갔든 안 나갔든 정산하면 전부 결제완료 처리되어 판에서 사라집니다. 진행할까요?`
+        : adminLang === "zh"
+        ? "確定要結算嗎？"
+        : "정산을 진행할까요?";
+    if (!(await showConfirm(confirmMsg))) return;
+
+    if (openOrders.length > 0) {
+      await Promise.all(openOrders.map((o) => updateOrderStatus(o.id, "paid")));
+      await loadOrders();
+      await loadTables();
+    }
+
+    // 결산 탭 영구 기록에 오늘자 마감 스냅샷 반영 — 소유자가 아니라 실패해도
+    // (403) 조용히 넘어간다(위 주석 참고).
+    try {
+      await fetch("/api/settlements/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+    } catch (e) {
+      // network error 등 — 결산 탭은 어차피 실시간 재계산되므로 무시.
+    }
+
+    const { count, total } = computeHalfDaySettlement(0, isFullDay ? 23 : 11);
+    if (isFullDay) {
+      showAlert(
+        adminLang === "zh"
+          ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${total}`
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`
+      );
+    } else {
+      showAlert(
+        adminLang === "zh"
+          ? `🌅 今日上午（至午休前）結算完成：已結帳 ${count} 筆，合計 NT$${total}`
+          : `🌅 오늘 오전(점심 쉬는 시간 전까지) 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`
+      );
+    }
+  }
+  $("#settleAmBtn").onclick = () => finalizeHalfDaySettlement({ isFullDay: false });
+  $("#settlePmBtn").onclick = () => finalizeHalfDaySettlement({ isFullDay: true });
 
   const NEXT_STATUS = { new: "preparing", preparing: "served", served: "paid" };
   const statusLabel = (s) => T("status" + s.charAt(0).toUpperCase() + s.slice(1));
