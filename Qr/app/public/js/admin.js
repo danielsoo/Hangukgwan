@@ -3849,12 +3849,28 @@
     // 라운드가 여러 개여도 모두 같은 테이블 전체 값(tableVipDiscountType)을
     // 공유해서 보여준다 — 어느 라운드의 버튼을 눌러도 같은 값이 바뀌고,
     // 다시 그리면 모든 라운드의 버튼이 함께 갱신된다.
+    const vipCurrentType = isCounterOrder(o) ? counterVipDiscountTypeByOrderId.get(o.id) || null : tableVipDiscountType;
     const vipDiscountToggleHtml =
       o.status === "paid" || o.status === "cancelled"
         ? ""
         : isCounterOrder(o)
-        ? renderVipDiscountToggle(counterVipDiscountTypeByOrderId.get(o.id) || null, String(o.id))
-        : renderVipDiscountToggle(tableVipDiscountType, "table");
+        ? renderVipDiscountToggle(vipCurrentType, String(o.id))
+        : renderVipDiscountToggle(vipCurrentType, "table");
+    // 사장님 피드백(2026-09-07): "vip 할인 기능이 누르면 그 상태에서
+    // 할인이 적용되는 모습을 보여줘. 그래야 직원들이 적용되었구나라고
+    // 알 수 있게" — 토글 버튼 자체의 빨간 강조 색만으로는 실제로 눌렸다는
+    // 확신이 잘 안 서서, 지금 이 라운드 기준으로 얼마가 깎이는지 보여주는
+    // 작은 배지를 바로 옆에 추가한다. 음료 제외 규칙까지 반영한 미리보기용
+    // 계산이고(discountEligibleClientTotal/computeVipDiscountClient — 결제
+    // 방식 팝업 미리보기와 같은 헬퍼), 실제 결제 금액은 여전히 그 팝업과
+    // 서버가 최종 계산한다.
+    const vipDiscountAppliedHtml = vipCurrentType && o.status !== "paid" && o.status !== "cancelled"
+      ? (() => {
+          const eligible = discountEligibleClientTotal(o);
+          const discountAmount = computeVipDiscountClient(vipCurrentType, eligible);
+          return `<div style="font-size:12px;font-weight:700;color:var(--red);white-space:nowrap;margin-top:4px;">✔ ${VIP_DISCOUNT_LABELS[vipCurrentType]} 적용 중 · -NT$${discountAmount}</div>`;
+        })()
+      : "";
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
     // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
@@ -3908,7 +3924,7 @@
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
-    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, vipDiscountToggleHtml, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
+    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, vipDiscountToggleHtml, vipDiscountAppliedHtml, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
@@ -3952,7 +3968,7 @@
         <div style="margin-top:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
-            ${p.vipDiscountToggleHtml}
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}${p.vipDiscountAppliedHtml}</div>
           </div>
           <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
           <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${o.total}</div>
@@ -4025,7 +4041,7 @@
             <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
               ${p.editBtn}
               <div style="display:flex;align-items:center;gap:10px;">
-                ${p.vipDiscountToggleHtml}
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}${p.vipDiscountAppliedHtml}</div>
                 <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
               </div>
             </div>
