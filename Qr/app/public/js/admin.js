@@ -3710,6 +3710,15 @@
     };
     return `<div style="display:flex;gap:6px;">${btn("te95")}${btn("vip9")}</div>`;
   }
+  // 소계/합계 줄에서 원래 금액을 회색 취소선으로, 그 옆에 할인 적용된 새
+  // 금액을 보여주는 공용 헬퍼(2026-09-07 피드백) — discountAmount가 0/없음
+  // 이면 그냥 원래 금액만 보여준다(할인 꺼짐, 또는 이 라운드에 할인 대상
+  // 품목이 없어서 결과가 원래와 같은 경우).
+  function vipTotalHtml(original, discountAmount) {
+    if (!discountAmount) return `NT$${original}`;
+    const newAmount = original - discountAmount;
+    return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${original}</span><span>NT$${newAmount}</span>`;
+  }
   // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
   // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
   // 있게. 나눠서 계산할 수도 있고 그래서 그래" → 곧이어 "선택이 주문별이
@@ -3743,6 +3752,30 @@
     // 부분 결제 체크박스는 카운터가 아니고 아직 결제 전인 주문에서만
     // 보인다(外帶 제외 — collectSelectedItemsByOrder와 같은 조건).
     const withItemCheckboxes = !isCounterOrder(o) && o.status !== "paid" && o.status !== "cancelled";
+    // 사장님 피드백(2026-09-07, 스크린샷과 함께): "할인 버튼 밑으로 빨간
+    // 글씨 넣지 말고 각 메뉴 가격, 소계, 합계 원래 가격을 회색처리 하고
+    // 가운데 평행으로 줄 긋고 새 가격을 적어줘" — 별도 텍스트 배지 대신,
+    // 할인 대상(드링크 제외, 이미 결제된 품목 제외) 가격 자체를 원래가
+    // (회색 취소선) + 새 가격으로 바꿔서 보여준다. itemLines/소계/합계가
+    // 모두 이 값들을 같이 써야 해서 itemLines보다 먼저 계산해둔다.
+    const vipCurrentType = isCounterOrder(o) ? counterVipDiscountTypeByOrderId.get(o.id) || null : tableVipDiscountType;
+    const vipDiscountActive = !!vipCurrentType && o.status !== "paid" && o.status !== "cancelled";
+    const vipRate = vipDiscountActive ? VIP_DISCOUNT_RATES_CLIENT[vipCurrentType] : null;
+    const vipDrinkIds = vipDiscountActive ? drinkItemIdSet() : new Set();
+    // amount(=이 줄의 원래 가격)를 받아, 할인 대상이면 "회색 취소선 원래가 +
+    // 새 가격", 아니면(할인 꺼짐/드링크/이미 결제됨) 원래 표시 그대로 반환.
+    function vipPriceHtml(amount, isEligible) {
+      if (!vipDiscountActive || !isEligible) return `NT$${amount}`;
+      const discounted = amount - Math.round(amount * (1 - vipRate));
+      return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${amount}</span><span style="font-weight:700;">NT$${discounted}</span>`;
+    }
+    // 이 라운드에서 아직 결제 안 된, 드링크가 아닌 품목들의 합계 기준으로
+    // 계산한 할인액 — 소계/합계 표시에 재사용(품목 줄 하나하나를 따로 더해
+    // 반올림 오차가 생기는 대신, 결제 팝업/서버와 같은 방식으로 한 번에
+    // 계산). 이미 결제된 품목은 가격이 확정된 것이라 대상에서 제외한다.
+    const vipUnpaidIdxs = o.items.map((_, i) => i).filter((i) => !o.items[i].paid);
+    const vipEligibleTotal = vipDiscountActive ? discountEligibleClientTotal(o, vipUnpaidIdxs) : 0;
+    const vipDiscountAmount = vipDiscountActive ? computeVipDiscountClient(vipCurrentType, vipEligibleTotal) : 0;
     const itemLines = o.items.map((it, idx) => {
       // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면
       // 좋겠어" — 체크해서 결제완료 처리한 품목(it.paid)도 목록에서 빼지
@@ -3782,7 +3815,7 @@
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
-          <span>NT$${lineTotalOf(it)}</span>
+          <span>${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipDrinkIds.has(it.item_id))}</span>
         </div>`;
     });
     // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고
@@ -3849,28 +3882,12 @@
     // 라운드가 여러 개여도 모두 같은 테이블 전체 값(tableVipDiscountType)을
     // 공유해서 보여준다 — 어느 라운드의 버튼을 눌러도 같은 값이 바뀌고,
     // 다시 그리면 모든 라운드의 버튼이 함께 갱신된다.
-    const vipCurrentType = isCounterOrder(o) ? counterVipDiscountTypeByOrderId.get(o.id) || null : tableVipDiscountType;
     const vipDiscountToggleHtml =
       o.status === "paid" || o.status === "cancelled"
         ? ""
         : isCounterOrder(o)
         ? renderVipDiscountToggle(vipCurrentType, String(o.id))
         : renderVipDiscountToggle(vipCurrentType, "table");
-    // 사장님 피드백(2026-09-07): "vip 할인 기능이 누르면 그 상태에서
-    // 할인이 적용되는 모습을 보여줘. 그래야 직원들이 적용되었구나라고
-    // 알 수 있게" — 토글 버튼 자체의 빨간 강조 색만으로는 실제로 눌렸다는
-    // 확신이 잘 안 서서, 지금 이 라운드 기준으로 얼마가 깎이는지 보여주는
-    // 작은 배지를 바로 옆에 추가한다. 음료 제외 규칙까지 반영한 미리보기용
-    // 계산이고(discountEligibleClientTotal/computeVipDiscountClient — 결제
-    // 방식 팝업 미리보기와 같은 헬퍼), 실제 결제 금액은 여전히 그 팝업과
-    // 서버가 최종 계산한다.
-    const vipDiscountAppliedHtml = vipCurrentType && o.status !== "paid" && o.status !== "cancelled"
-      ? (() => {
-          const eligible = discountEligibleClientTotal(o);
-          const discountAmount = computeVipDiscountClient(vipCurrentType, eligible);
-          return `<div style="font-size:12px;font-weight:700;color:var(--red);white-space:nowrap;margin-top:4px;">✔ ${VIP_DISCOUNT_LABELS[vipCurrentType]} 적용 중 · -NT$${discountAmount}</div>`;
-        })()
-      : "";
     // 포장 카운터의 "테이블 상세"는 서로 다른 손님들의 주문을 한 목록에 같이
     // 보여주므로 (전체 결제 완료 버튼은 이미 위에서 숨겼다), 어느 버튼이
     // 누구 주문인지 헷갈리지 않도록 블록마다 픽업 번호/성함을 붙여준다.
@@ -3924,7 +3941,21 @@
     const identityLineHtml = counterTagPrefix ? `<div style="font-weight:700;font-size:15px;">${counterTagPrefix}</div>` : "";
     const timeStatusLineHtml = `<div style="font-size:13px;color:var(--muted);margin-top:${counterTagPrefix ? "2px" : "0"};">${time} · ${statusLabel(o.status)}</div>`;
     const noteHtml = o.note ? `<p style="font-size:14px;color:var(--muted);margin:8px 0 0;">${T("orderMemoLabel")}: ${o.note}</p>` : "";
-    return { time, identityLineHtml, timeStatusLineHtml, nextBtn, editBtn, vipDiscountToggleHtml, vipDiscountAppliedHtml, itemsHtml, itemsToggleHtml, noteHtml, dismissBtn, roundSelectAllHtml, total: remainingAmountOf(o) };
+    return {
+      time,
+      identityLineHtml,
+      timeStatusLineHtml,
+      nextBtn,
+      editBtn,
+      vipDiscountToggleHtml,
+      itemsHtml,
+      itemsToggleHtml,
+      noteHtml,
+      dismissBtn,
+      roundSelectAllHtml,
+      total: remainingAmountOf(o),
+      vipDiscountAmount,
+    };
   }
   function renderTableOrderBlock(o, withDismiss) {
     const p = buildOrderRoundParts(o, withDismiss);
@@ -3968,10 +3999,10 @@
         <div style="margin-top:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}${p.vipDiscountAppliedHtml}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}</div>
           </div>
-          <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} NT$${p.total}</div>
-          <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} NT$${o.total}</div>
+          <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.vipDiscountAmount)}</div>
+          <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} ${vipTotalHtml(o.total, p.vipDiscountAmount)}</div>
         </div>
       </div>
     `;
@@ -4041,8 +4072,8 @@
             <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
               ${p.editBtn}
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}${p.vipDiscountAppliedHtml}</div>
-                <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">${p.vipDiscountToggleHtml}</div>
+                <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.vipDiscountAmount)}</div>
               </div>
             </div>
           </div>
