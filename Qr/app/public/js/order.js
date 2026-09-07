@@ -61,6 +61,14 @@
   let currentItem = null;
   let currentOption = null;
   let currentSpiceOption = null;
+  // 부대찌개(部隊鍋) 등 일부 메뉴가 "포장(外帶)"으로 주문될 때만 고를 수
+  // 있는 옵션(예: 不煮外帶/조리하지 않은 포장 vs 煮熟外帶/조리한 포장) —
+  // 사장님 메모(2026-09-07). item.takeout_options에 콤마로 저장되고,
+  // currentOrderType이 "takeout"일 때만 #itemTakeoutOptions가 보인다(위
+  // openItemSheet/updateTakeoutOptionsVisibility 참고). 매장 식사에는
+  // 의미가 없는 선택이라(가게에서 먹을 땐 늘 조리해서 나감) item.options
+  // 처럼 항상 보이는 일반 옵션과는 별개로 관리한다.
+  let currentTakeoutOption = null;
   // Multi-select extras (사리면 추가, 밥→당면 교체 등) currently checked in the
   // item sheet — array of addon name strings. See parseAddons() below,
   // which mirrors src/addons.js's server-side parser exactly so the price
@@ -398,6 +406,7 @@
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
     currentSpiceOption = item.spice_options ? item.spice_options.split(",")[0].trim() : null;
+    currentTakeoutOption = item.takeout_options ? item.takeout_options.split(",")[0].trim() : null;
     // A counter/takeout QR has no dine-in seat to speak of, so every item
     // defaults to 포장 there instead of the usual 매장 default — the toggle
     // itself is hidden for the same reason (see initPartySize below).
@@ -405,6 +414,27 @@
     document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((b) => {
       b.classList.toggle("active", b.dataset.type === currentOrderType);
     });
+
+    const takeoutOptWrap = $("#itemTakeoutOptions");
+    const takeoutOptList = $("#takeoutOptionsList");
+    takeoutOptList.innerHTML = "";
+    if (item.takeout_options) {
+      item.takeout_options.split(",").forEach((opt, i) => {
+        const b = document.createElement("button");
+        b.textContent = optionLabel(opt.trim());
+        if (i === 0) b.classList.add("active");
+        b.onclick = () => {
+          currentTakeoutOption = opt.trim();
+          takeoutOptList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
+          b.classList.add("active");
+        };
+        takeoutOptList.appendChild(b);
+      });
+    }
+    // 처음 열 때의 표시 여부는 이 아래 currentOrderType(포장 QR이면
+    // takeout, 아니면 dine_in)에 따라 결정 — updateTakeoutOptionsVisibility()가
+    // #itemOrderTypeTabs 탭을 눌러 바꿀 때도 같은 조건으로 다시 계산한다.
+    takeoutOptWrap.hidden = !item.takeout_options || currentOrderType !== "takeout";
     $("#itemPhoto").style.backgroundImage = item.photo_url ? `url('${item.photo_url}')` : "";
     $("#itemPhoto").textContent = item.photo_url ? "" : "";
     $("#itemName").innerHTML = `${nameFor(item)}${meatIconsHtml(item)}`;
@@ -598,6 +628,9 @@
     b.onclick = () => {
       currentOrderType = b.dataset.type;
       document.querySelectorAll("#itemOrderTypeTabs .order-type-tab[data-type]").forEach((btn) => btn.classList.toggle("active", btn === b));
+      // 부대찌개 등 "포장에만 있는 옵션"(위 currentTakeoutOption 참고) —
+      // 매장/포장을 이 안에서 바꿀 때마다 표시 여부를 다시 계산한다.
+      $("#itemTakeoutOptions").hidden = !currentItem.takeout_options || currentOrderType !== "takeout";
     };
   });
   // Griddle items with a min_first_order_qty are NOT floored at that minimum
@@ -627,7 +660,16 @@
       }
       opts.forEach((opt) => {
         if (mixQty[opt] > 0) {
-          cart.push({ itemId: currentItem.id, item: currentItem, qty: mixQty[opt], option: opt, spice: currentSpiceOption, orderType: currentOrderType, addons: [...currentAddons] });
+          cart.push({
+            itemId: currentItem.id,
+            item: currentItem,
+            qty: mixQty[opt],
+            option: opt,
+            spice: currentSpiceOption,
+            takeoutOption: currentOrderType === "takeout" ? currentTakeoutOption : null,
+            orderType: currentOrderType,
+            addons: [...currentAddons],
+          });
         }
       });
     } else {
@@ -642,6 +684,10 @@
         qty: currentQty,
         option: currentOption,
         spice: currentSpiceOption,
+        // 부대찌개 등 "포장에만 있는 옵션" — currentOrderType이 takeout일
+        // 때만 실제로 보낸다(dine_in인데 화면에 안 보였던 기본값이 몰래
+        // 딸려가는 걸 막는다).
+        takeoutOption: currentOrderType === "takeout" ? currentTakeoutOption : null,
         orderType: currentOrderType,
         addons: [...currentAddons],
       });
@@ -700,6 +746,7 @@
       const metaParts = [];
       if (c.option) metaParts.push(c.option);
       if (c.spice) metaParts.push(c.spice);
+      if (c.takeoutOption) metaParts.push(c.takeoutOption);
       if (c.addons && c.addons.length) metaParts.push(`+${c.addons.join(", ")}`);
       // 매장(dine-in) is the default and stays implicit; only 포장(takeout)
       // is called out here, so a customer mixing both in one order can see
@@ -842,7 +889,15 @@
           // Each cart line carries its own orderType now (chosen per dish in
           // the item sheet) — see src/routes/orders.js, which validates and
           // stores order_type per item instead of once for the whole order.
-          items: cart.map((c) => ({ itemId: c.itemId, qty: c.qty, option: c.option, spice: c.spice, orderType: c.orderType, addons: c.addons || [] })),
+          items: cart.map((c) => ({
+            itemId: c.itemId,
+            qty: c.qty,
+            option: c.option,
+            spice: c.spice,
+            takeoutOption: c.takeoutOption,
+            orderType: c.orderType,
+            addons: c.addons || [],
+          })),
           lat: coords ? coords.lat : undefined,
           lng: coords ? coords.lng : undefined,
           // Only meaningful (and only required server-side) for a counter
@@ -1006,8 +1061,9 @@
         const row = document.createElement("div");
         row.className = "history-item";
         const addonsSuffix = (it.selected_addons || []).length ? ` +${it.selected_addons.map((a) => a.name).join(", ")}` : "";
+        const optionSuffix = [it.option_choice, it.takeout_choice].filter(Boolean).join(", ");
         row.innerHTML = `
-          <span class="history-item-name">${name}${it.option_choice ? ` (${it.option_choice})` : ""}${addonsSuffix}<span class="history-item-qty">x${it.qty}</span></span>
+          <span class="history-item-name">${name}${optionSuffix ? ` (${optionSuffix})` : ""}${addonsSuffix}<span class="history-item-qty">x${it.qty}</span></span>
           <span class="history-item-price">${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}</span>
         `;
         list.appendChild(row);

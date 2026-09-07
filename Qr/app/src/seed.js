@@ -61,7 +61,11 @@ const ITEMS = {
     { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, price_note: "首次點餐低消2份 / min 2 on 1st order", min_first_order_qty: 2 },
   ],
   other: [
-    { code: "71", name_zh: "部隊鍋", name_ko: "부대찌개", name_en: "Army Stew", price: 600, is_spicy: 1, is_signature: 1, addons: "加點泡麵:50" },
+    // takeout_options: 사장님 메모(2026-09-07) — 부대찌개 포장주문은 조리
+    // 여부를 물어야 한다(不煮外帶=조리하지 않은 포장 / 煮熟外帶=조리한
+    // 포장). 매장 식사에는 없는 선택이라 order.js가 포장(外帶) 선택 시에만
+    // 이 라디오를 보여준다.
+    { code: "71", name_zh: "部隊鍋", name_ko: "부대찌개", name_en: "Army Stew", price: 600, is_spicy: 1, is_signature: 1, addons: "加點泡麵:50", takeout_options: "不煮外帶,煮熟外帶" },
     { code: "72", name_zh: "青椒牛肉片", name_ko: "소고기 볶음", name_en: "Beef with Green Pepper", price: 380 },
     { code: "73", name_zh: "辣炒魷魚", name_ko: "오징어볶음", name_en: "Spicy Stir-fried Squid", price: 400, is_spicy: 1 },
     { code: "74", name_zh: "辣炒年糕", name_ko: "떡볶이", name_en: "Spicy Rice Cakes (Tteokbokki)", price: 380, is_spicy: 1, addons: "加點泡麵:50", spice_options: "基本,小辣" },
@@ -145,6 +149,7 @@ async function run() {
           original_price: item.original_price || null,
           options: item.options || null,
           spice_options: item.spice_options || null,
+          takeout_options: item.takeout_options || null,
           addons: item.addons || null,
           mix_options: item.mix_options ? 1 : 0,
           min_first_order_qty: item.min_first_order_qty || null,

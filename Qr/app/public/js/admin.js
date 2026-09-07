@@ -524,6 +524,8 @@
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
       itemSpiceOptionsLabel: "맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)",
       itemSpiceOptionsPlaceholder: "맵기 옵션이 없으면 비워두세요",
+      itemTakeoutOptionsLabel: "포장 전용 옵션 (쉼표로 구분, 예: 不煮外帶,煮熟外帶)",
+      itemTakeoutOptionsPlaceholder: "포장 전용 옵션이 없으면 비워두세요",
       itemAddonsLabel: "추가 옵션 (이름:가격, 쉼표로 구분, 예: 볶음밥 추가:80,사리면 추가:50)",
       itemAddonsPlaceholder: "추가 옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
@@ -928,6 +930,8 @@
       itemOptionsPlaceholder: "沒有選項請留空",
       itemSpiceOptionsLabel: "辣度選項（用逗號分隔，例如：不辣,普通,辣）",
       itemSpiceOptionsPlaceholder: "沒有辣度選項請留空",
+      itemTakeoutOptionsLabel: "外帶專用選項（用逗號分隔，例如：不煮外帶,煮熟外帶）",
+      itemTakeoutOptionsPlaceholder: "沒有外帶專用選項請留空",
       itemAddonsLabel: "加點選項（名稱:價格，用逗號分隔，例如：加點炒飯:80,加點泡麵:50）",
       itemAddonsPlaceholder: "沒有加點選項請留空",
       itemMinFirstOrderQtyLabel: "首次點餐最低數量（不需要請留空）",
@@ -1968,7 +1972,7 @@
     // takeout line here, since the header badge alone can't say which dish
     // needs to-go packaging.
     const itemLines = o.items.map((it) => {
-      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}`;
+      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${it.takeout_choice ? `(${it.takeout_choice})` : ""}`;
       const perItemTag =
         o.order_type === "mixed" && it.order_type === "takeout"
           ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
@@ -2173,9 +2177,24 @@
   // 80mm wide in its own box, where zooming/centering would be wrong).
   // `fontSizes` overrides individual component sizes — pass a partial
   // object; anything not given falls back to DEFAULT_TICKET_FONT_SIZES.
-  function buildTicketHtml(o, fontSizes, opts) {
-    const fs = Object.assign({}, DEFAULT_TICKET_FONT_SIZES, fontSizes || {});
-    const screenPreview = !opts || opts.screenPreview !== false;
+  // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른
+  // 한장은 각각의 가격이 나오게... 화면을 안보고 결제시도를 하게 됐을때
+  // 가격이 나온 주문서를 보고 계산을 할 수 있도록. 할인이 들어가면 그
+  // 안에 음료수같은 것은 제하는 부분도 있으니까 보다 명료해야함" —
+  // priceCopy가 true면 기존 주방용 티켓과 똑같은 내용에 품목별 금액을 한
+  // 줄씩 더 붙이고(단가×수량, 애드온 포함), 할인 대상에서 빠지는 음료·
+  // 주류 품목(category_key === "drink" — 위 computeVipDiscount/
+  // discountEligibleTotal과 같은 기준)은 별도로 표시해서, 화면 없이 이
+  // 종이만 보고 계산해도 헷갈리지 않게 한다. 실제 할인 금액 자체는 결제
+  // 시점에 고른 할인(特約95折/VIP9折/직접 입력)에 따라 달라지므로 여기서
+  // 미리 계산해 찍지 않고, 맨 아래에 "참고용" 문구만 남긴다.
+  //
+  // <style> 블록(글자 크기 fontSizes 반영)과 이 본문(.receipt 안쪽)은
+  // 서로 독립적이라(본문은 클래스 이름만 쓰고 인라인 크기값은 안 씀)
+  // 따로 뽑아뒀다 — buildTicketHtml(한 장짜리 문서)과 아래
+  // buildDualTicketHtml(주방용+결제용 두 장을 한 인쇄 작업에 담는 문서)이
+  // 이 함수 하나를 그대로 재사용한다.
+  function buildReceiptBodyHtml(o, priceCopy) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
 
@@ -2197,6 +2216,12 @@
         // below (owner: "특별히 맵기 안 바꾸면 기본맛이야").
         if (it.spice_choice && it.spice_choice !== "基本") detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
         (it.selected_addons || []).forEach((a) => detailLines.push(`<div class="item-detail">└ +${a.name}</div>`));
+        // 부대찌개(部隊鍋) 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy
+        // 여부와 무관하게 항상 찍는다. 조리 여부는 결제 화면이 아니라
+        // 주방이 판단해야 하는 정보라서 option_choice/spice_choice와 같은
+        // 취급이다(사장님 메모: "부대찌개 포장주문할때 두가지 옵션이
+        // 있대. 不煮外帶 → 조리하지 않은 포장 / 煮熟外帶 → 조리한 포장").
+        if (it.takeout_choice) detailLines.push(`<div class="item-detail item-takeout">└ ${it.takeout_choice}</div>`);
         // 매장(dine-in) is this dish's default and stays implicit — only
         // 外帶(takeout) is called out per-dish, since that's the one that
         // changes how the kitchen has to send it out. See the file-level
@@ -2204,6 +2229,15 @@
         // already says takeout/mixed.
         if (it.order_type === "takeout") detailLines.push(`<div class="item-detail item-takeout">└ 外帶</div>`);
         if (it.note) detailLines.push(`<div class="item-detail item-note">└ 備註：${it.note}</div>`);
+        // priceCopy 전용 — 품목 금액(단가+애드온 합계)×수량과, 할인
+        // 대상에서 빠지는 음료·주류 표시. 주방용 사본에는 안 넣는다(주방은
+        // 가격을 알 필요가 없고, 오히려 화면이 복잡해질 뿐이다).
+        if (priceCopy) {
+          detailLines.push(`<div class="item-detail item-price">└ NT$${lineTotalOf(it)}</div>`);
+          if (it.category_key === "drink") {
+            detailLines.push(`<div class="item-detail item-note-discount">└ 飲料/酒類（不列入折扣）</div>`);
+          }
+        }
         return `<div class="item-row">
           <div class="item-main"><span class="item-name">${name}</span><span class="item-qty">x${it.qty}</span></div>
           ${detailLines.join("")}
@@ -2211,6 +2245,34 @@
       })
       .join("");
 
+    return `<div class="receipt">
+    <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}</div></div>
+    <div class="divider"></div>
+    <div class="meta-row"><span class="table-no">${
+      isCounterOrder(o)
+        ? o.pickup_number && o.customer_name
+          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          : "外帶櫃檯"
+        : `桌號 ${o.table_number}`
+    }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
+    ${isCounterOrder(o) && o.customer_phone ? `<div class="meta-row"><span class="order-time">☎ ${o.customer_phone}</span></div>` : ""}
+    <div class="meta-row"><span class="order-time">${time}</span></div>
+    <div class="divider"></div>
+    ${itemRows}
+    <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
+    ${priceCopy ? `<div class="price-copy-note">※此聯僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
+    ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
+    <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
+  </div>`;
+  }
+
+  // 위 buildReceiptBodyHtml()의 .receipt 마크업을 실제 인쇄 가능한 HTML
+  // 문서로 감싼다 — <style>은 fontSizes(빌지 글자 크기 설정)에 따라
+  // 달라지므로 여기서 한 번만 계산해서 공유한다. 문서 하나에 .receipt를
+  // 몇 장 넣을지는 `bodyHtml`을 넘기는 쪽(buildTicketHtml/
+  // buildDualTicketHtml)이 정한다.
+  function wrapReceiptDocument(bodyHtml, fontSizes, screenPreview) {
+    const fs = Object.assign({}, DEFAULT_TICKET_FONT_SIZES, fontSizes || {});
     // Only the standalone preview/print tab gets the gray "desk" background
     // + shadow + 2.4x zoom + centering — the embedded Settings-card preview
     // needs none of that (it's already a small fixed-size box at true 1x
@@ -2274,31 +2336,38 @@
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-note { font-size: ${fs.itemNote}px; font-weight: ${fs.itemNoteWeight}; color: #c0161f; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
+  .item-price { font-weight: 700; color: #000; }
+  .item-note-discount { color: #966; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: ${fs.orderNote}px; font-weight: ${fs.orderNoteWeight}; color: #c0161f; margin-top: 2mm; }
+  .price-copy-note { font-size: ${fs.orderNote}px; color: #555; margin-top: 2mm; text-align: center; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; font-weight: ${fs.printTimeWeight}; color: #555; margin-top: 3mm; }
+  .receipt-page-break { break-after: page; page-break-after: always; }
   ${screenChromeCss}
 </style>
 </head><body>
-  <div class="receipt">
-    <div class="header"><div class="store-name">${storeName} 廚房出單</div></div>
-    <div class="divider"></div>
-    <div class="meta-row"><span class="table-no">${
-      isCounterOrder(o)
-        ? o.pickup_number && o.customer_name
-          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
-          : "外帶櫃檯"
-        : `桌號 ${o.table_number}`
-    }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
-    ${isCounterOrder(o) && o.customer_phone ? `<div class="meta-row"><span class="order-time">☎ ${o.customer_phone}</span></div>` : ""}
-    <div class="meta-row"><span class="order-time">${time}</span></div>
-    <div class="divider"></div>
-    ${itemRows}
-    <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
-    ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
-    <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
-  </div>
+  ${bodyHtml}
 </body></html>`;
+  }
+
+  function buildTicketHtml(o, fontSizes, opts) {
+    const screenPreview = !opts || opts.screenPreview !== false;
+    const priceCopy = !!(opts && opts.priceCopy);
+    return wrapReceiptDocument(buildReceiptBodyHtml(o, priceCopy), fontSizes, screenPreview);
+  }
+
+  // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른
+  // 한장은 각각의 가격이 나오게" — 실물 프린터(QZ Tray/RawBT/앱 브릿지)
+  // 경로는 각자 티켓을 2번 따로 인쇄해서 2장을 뽑지만(각 인쇄 함수 참고),
+  // 브라우저 print() 경로는 인쇄 대화상자가 두 번 뜨는 걸 피하려고 한
+  // 문서 안에 .receipt 두 장(주방용 + 결제용)을 넣고 그 사이에
+  // break-after: page를 줘서 한 번의 print() 호출로 (프린터/드라이버가
+  // 페이지 사이 자동 커팅을 지원하면) 2장이 이어서 나오게 한다.
+  function buildDualTicketHtml(o, fontSizes) {
+    const kitchenReceipt = buildReceiptBodyHtml(o, false);
+    const priceReceipt = buildReceiptBodyHtml(o, true);
+    const bodyHtml = `<div class="receipt-page-break">${kitchenReceipt}</div>${priceReceipt}`;
+    return wrapReceiptDocument(bodyHtml, fontSizes, false);
   }
 
   // Prints via the exact same code path as previewKitchenTicket (a real
@@ -2324,6 +2393,25 @@
   function markPrintSucceeded(orderId) {
     printFailedOrderIds.delete(orderId);
   }
+  // 사장님 요청(2026-09-07): "주문서 인출되면 신규주문에서 조리시작 누르지
+  // 않아도 자동으로 조리중으로 주문내용 넘어가도록" — 주방 티켓이 실제로
+  // 나갔다는 것 자체가 이미 주방이 그 주문을 인지했다는 뜻이므로, 인쇄가
+  // 성공하면(자동 인쇄든, 카드의 수동 "인쇄" 버튼이든) "신규 주문" 상태인
+  // 주문은 사람이 따로 "조리 시작"을 누르지 않아도 곧장 "조리중"으로
+  // 넘어간다. o.status !== "new"인 경우(이미 조리중/서빙완료 등인 주문을
+  // 재인쇄하는 경우)는 아무 영향이 없다 — 되돌리거나 건너뛰지 않는다.
+  // orders 배열의 같은 객체를 그대로 낙관적으로 바꿔서(다음 4초 폴링을
+  // 기다리지 않고) 카드가 바로 조리중 칸으로 옮겨가 보이게 하고, 서버에는
+  // 그 뒤에 실제 PATCH를 보낸다 — 실패해도 다음 loadOrders()의 폴링이
+  // 서버의 실제 상태로 다시 맞춰준다(다른 곳의 낙관적 업데이트들과 동일).
+  function markPrintSucceededAndAdvance(o) {
+    markPrintSucceeded(o.id);
+    if (o.status === "new") {
+      o.status = "preparing";
+      updateOrderStatus(o.id, "preparing");
+      renderOrders();
+    }
+  }
 
   async function printKitchenTicket(o) {
     // Inside the 한국관 POS app (the tablet's own kiosk app, see
@@ -2333,7 +2421,7 @@
     // ever time out, and that delay would sit between a new order arriving
     // and paper coming out of the kitchen printer.
     if (appPrintBridge() && (await tryPrintViaRawBt(o))) {
-      markPrintSucceeded(o.id);
+      markPrintSucceededAndAdvance(o);
       return;
     }
 
@@ -2344,7 +2432,7 @@
     // to the normal browser-print flow below, so printing is never silently
     // lost either way.
     if (await tryPrintViaEscPos(o)) {
-      markPrintSucceeded(o.id);
+      markPrintSucceededAndAdvance(o);
       return;
     }
 
@@ -2354,7 +2442,7 @@
     // actually delivers a silent, no-dialog print — see tryPrintViaRawBt()
     // below and the "RawBT 자동 인쇄" settings card.
     if (await tryPrintViaRawBt(o)) {
-      markPrintSucceeded(o.id);
+      markPrintSucceededAndAdvance(o);
       return;
     }
 
@@ -2364,7 +2452,7 @@
       return;
     }
     win.document.open();
-    win.document.write(buildTicketHtml(o, ticketFontSizes));
+    win.document.write(buildDualTicketHtml(o, ticketFontSizes));
     win.document.close();
 
     // Wait for the receipt fonts (Noto Sans KR/TC) to finish loading before
@@ -2380,7 +2468,7 @@
     // Getting this far (a real ticket window opened and print() was called)
     // is the best confirmation this code can get, so treat it as success —
     // clears any earlier failure flag if this was a manual retry.
-    markPrintSucceeded(o.id);
+    markPrintSucceededAndAdvance(o);
   }
 
   // Opens the exact same ticket HTML in its own small popup WINDOW (not a
@@ -2397,7 +2485,10 @@
     );
     if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
     win.document.open();
-    win.document.write(buildTicketHtml(o, ticketFontSizes));
+    // 사장님 요청(2026-09-07)으로 실제 인쇄가 주방용+결제용 2장이 됐으니
+    // (buildDualTicketHtml, printKitchenTicket 참고) 미리보기도 그 2장을
+    // 그대로 보여줘서 레이아웃을 한 번에 확인할 수 있게 한다.
+    win.document.write(buildDualTicketHtml(o, ticketFontSizes));
     win.document.close();
   }
 
@@ -2866,6 +2957,11 @@
           it.selected_addons && it.selected_addons.length
             ? `<span class="order-edit-meta-badge">+${it.selected_addons.map((a) => a.name).join(", ")}</span>`
             : "";
+        // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — 손님이 주문 시
+        // 고른 값을 읽기 전용 배지로만 보여준다. option/spice처럼 여기서
+        // 다시 바꿀 일은 없어서(수기 주문 편집은 수량/삭제/기본 옵션 정정이
+        // 목적) 별도 pill 그룹은 만들지 않는다.
+        const takeoutChoiceHtml = it.takeout_choice ? `<span class="order-edit-meta-badge">${it.takeout_choice}</span>` : "";
         // Two-tier layout so the qty/price/delete controls always land in
         // exactly the same place: a fixed "main" row (name — qty — price —
         // delete), plus one "choice" row per attribute below it (option,
@@ -2902,6 +2998,7 @@
           <div class="order-edit-item-row-choice">${optionsHtml}</div>
           <div class="order-edit-item-row-choice">${spiceHtml}</div>
           <div class="order-edit-item-row-choice">${addonsHtml}</div>
+          <div class="order-edit-item-row-choice">${takeoutChoiceHtml}</div>
           <div class="order-edit-item-row-choice">${orderTypeHtml}</div>
         `;
         wrap.appendChild(row);
@@ -3125,6 +3222,7 @@
     $("#f_original_price").value = item?.original_price || "";
     $("#f_options").value = item?.options || "";
     $("#f_spice_options").value = item?.spice_options || "";
+    $("#f_takeout_options").value = item?.takeout_options || "";
     $("#f_addons").value = item?.addons || "";
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
@@ -3192,6 +3290,7 @@
       original_price: parseInt($("#f_original_price").value, 10) || null,
       options: $("#f_options").value.trim() || null,
       spice_options: $("#f_spice_options").value.trim() || null,
+      takeout_options: $("#f_takeout_options").value.trim() || null,
       addons: $("#f_addons").value.trim() || null,
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,
@@ -4150,7 +4249,7 @@
       // 그대로 재사용한다(checkbox.onchange 참고).
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
-          <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
+          <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
           <span>${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipDrinkIds.has(it.item_id))}</span>
         </div>`;
     });
@@ -6244,9 +6343,18 @@
 
       await ensureQzConnected();
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
-      const raw = buildEscPosTicket(o, storeName);
+      // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용,
+      // 다른 한장은 각각의 가격이 나오게" — 한 인쇄 작업(qz.print) 안에
+      // raw 데이터 2개를 순서대로 넣으면 같은 프린터에서 이어서 2장이
+      // 나온다(각 티켓 끝에 이미 FEED_AND_CUT이 들어있어 장마다 알아서
+      // 커팅됨).
+      const rawKitchen = buildEscPosTicket(o, storeName);
+      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true });
       const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
-      await qz.print(config, [{ type: "raw", format: "command", flavor: "plain", data: raw }]);
+      await qz.print(config, [
+        { type: "raw", format: "command", flavor: "plain", data: rawKitchen },
+        { type: "raw", format: "command", flavor: "plain", data: rawPriceCopy },
+      ]);
       return true;
     } catch (e) {
       console.warn("ESC/POS print failed, falling back to browser print:", e);
@@ -6389,6 +6497,33 @@
     }
   }
 
+  // 한 장(bytes 하나)을 현재 활성화된 경로(앱 브릿지 → RawBT WebSocket →
+  // "rawbt:" intent iframe, 우선순위 그대로)로 실제로 내보낸다 — 아래
+  // tryPrintViaRawBt()가 주방용/결제용 2장 각각에 대해 이 함수를 순서대로
+  // 호출한다. bridge가 이미 확인돼 있으면 그대로 재사용(매 장마다 다시
+  // appPrintBridge()를 부를 필요 없음).
+  async function sendRasterTicketBytes(bytes, bridge) {
+    if (bridge) {
+      const result = bridge.printBase64(bytesToBase64(bytes));
+      if (result === "queued") return true;
+      // The app shows its own on-screen message for a real failure (no
+      // printer address saved, printer unreachable). Returning false here
+      // lets printKitchenTicket()'s ladder carry on to the browser-print
+      // fallback, so a ticket is never dropped without a trace.
+      console.warn("한국관 POS 앱 인쇄 실패:", result);
+      return false;
+    }
+
+    if (await sendViaRawBtWebSocket(bytes)) return true;
+
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = "rawbt:base64," + bytesToBase64(bytes);
+    document.body.appendChild(iframe);
+    setTimeout(() => iframe.remove(), 1000);
+    return true;
+  }
+
   async function tryPrintViaRawBt(o) {
     try {
       if (typeof buildEscPosRasterTicket !== "function") return false;
@@ -6415,27 +6550,19 @@
           : "外帶櫃檯"
         : `桌號 ${o.table_number}`;
       const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
-      const bytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, { tableLabel, phoneLine });
+      const labelInfo = { tableLabel, phoneLine };
 
-      if (bridge) {
-        const result = bridge.printBase64(bytesToBase64(bytes));
-        if (result === "queued") return true;
-        // The app shows its own on-screen message for a real failure (no
-        // printer address saved, printer unreachable). Returning false here
-        // lets printKitchenTicket()'s ladder carry on to the browser-print
-        // fallback, so a ticket is never dropped without a trace.
-        console.warn("한국관 POS 앱 인쇄 실패:", result);
-        return false;
-      }
+      // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용,
+      // 다른 한장은 각각의 가격이 나오게" — 주방용 비트맵을 먼저 내보내고
+      // 이어서 결제용(가격 포함) 비트맵을 내보낸다. 첫 장이 이미
+      // 실패했다면(false) 굳이 두 번째를 시도하지 않고 바로 실패 처리 —
+      // printKitchenTicket()의 다음 단계(브라우저 인쇄, 2장 모두 다시
+      // 시도)로 넘어가는 편이 반쪽짜리 인쇄보다 낫다.
+      const kitchenBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo);
+      if (!(await sendRasterTicketBytes(kitchenBytes, bridge))) return false;
 
-      if (await sendViaRawBtWebSocket(bytes)) return true;
-
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = "rawbt:base64," + bytesToBase64(bytes);
-      document.body.appendChild(iframe);
-      setTimeout(() => iframe.remove(), 1000);
-      return true;
+      const priceBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo, { priceCopy: true });
+      return await sendRasterTicketBytes(priceBytes, bridge);
     } catch (e) {
       console.warn("RawBT print failed:", e);
       return false;

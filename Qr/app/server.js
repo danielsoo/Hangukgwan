@@ -10,6 +10,7 @@ const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
+const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-takeout-options");
 
 const app = express();
 
@@ -118,6 +119,7 @@ app.use(async (req, res, next) => {
       await applyFeedback202609(store, { save, nextId, savePhoto });
       await applyFollowup202609(store, { save });
       await applyMenuFixes20260904(store, { save, deletePhoto });
+      await applyTakeoutOptions20260907(store, { save });
       migratedOnce = true;
     }
     next();

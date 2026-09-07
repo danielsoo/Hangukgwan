@@ -70,6 +70,12 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     options: b.options || null,
     mix_options: b.mix_options ? 1 : 0,
     spice_options: b.spice_options || null,
+    // 부대찌개(部隊鍋) 같은 품목의 포장 전용 옵션(不煮外帶/煮熟外帶 — 조리
+    // 여부) — spice_options와 같은 comma-separated 단일 선택 라디오
+    // 형식이지만, 손님 화면에서는 이 품목을 포장(外帶)으로 담을 때만
+    // 보인다(order.html #itemTakeoutOptions, order.js openItemSheet()
+    // 참고). 사장님 메모(2026-09-07) 기반.
+    takeout_options: b.takeout_options || null,
     // Multi-select paid (or free) extras a customer can add to this dish —
     // e.g. "볶음밥 추가:80,사리면 추가:50" or a free swap like
     // "飯換冬粉:0". Format: comma-separated "Name:Price" pairs, parsed by
@@ -96,7 +102,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const fields = [
     "category_id", "code", "name_zh", "name_ko", "name_en",
     "desc_zh", "desc_ko", "desc_en", "price", "price_note", "original_price", "options",
-    "spice_options", "addons", "min_first_order_qty", "sort_order",
+    "spice_options", "takeout_options", "addons", "min_first_order_qty", "sort_order",
   ];
   // Re-fetches the latest data right before writing (see refreshAndSave() in
   // src/db.js) instead of mutating the `item` this request loaded at the

@@ -254,6 +254,10 @@ router.post("/", async (req, res) => {
       unit_price: mi.price,
       option_choice: it.option || null,
       spice_choice: it.spice || null,
+      // 부대찌개(部隊鍋) 포장 전용 옵션(不煮外帶/煮熟外帶 — 조리 여부) — 매장
+      // 식사에는 없고 order.js의 #itemTakeoutOptions에서만 선택된다. 주방이
+      // 조리 전에 확인해야 하므로 kitchen ticket에도 그대로 찍힌다.
+      takeout_choice: it.takeoutOption || null,
       // Selected multi-select extras (사리면 추가, 밥→당면 교체, etc. — see
       // src/addons.js) — a list of { name, price } re-priced from the menu
       // item's own definition above, never trusted from the client.
@@ -550,6 +554,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       unit_price: mi.price,
       option_choice: it.option || null,
       spice_choice: it.spice || null,
+      takeout_choice: it.takeoutOption || null,
       selected_addons: selectedAddons,
       order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
       // POST /의 같은 필드와 동일 — 위 discountEligibleTotal 참고.

@@ -94,6 +94,17 @@
           <button type="button" class="order-type-tab active" data-type="dine_in" data-i18n="orderTypeDineIn">內用</button>
           <button type="button" class="order-type-tab" data-type="takeout" data-i18n="orderTypeTakeout">外帶</button>
         </div>
+        <!-- 부대찌개(部隊鍋) 포장 전용 옵션 — 사장님 메모(2026-09-07):
+             "부대찌개 포장주문할때 두가지 옵션이 있대. 不煮外帶(조리하지
+             않은 포장) / 煮熟外帶(조리한 포장)" — 매장 식사에는 의미가
+             없는 선택이라(항상 조리해서 나감) 이 메뉴 항목에
+             takeout_options가 있고, 지금 포장(外帶)이 선택돼 있을 때만
+             보인다. See openItemSheet()/#itemOrderTypeTabs 핸들러 in
+             order.js. -->
+        <div class="options" id="itemTakeoutOptions" hidden>
+          <div class="options-label" data-i18n="chooseTakeoutOption">請選擇外帶方式</div>
+          <div class="options-list" id="takeoutOptionsList"></div>
+        </div>
         <div class="options" id="itemOptions" hidden>
           <div class="options-label" data-i18n="chooseOption">請選擇</div>
           <div class="options-list" id="optionsList"></div>

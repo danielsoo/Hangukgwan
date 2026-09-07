@@ -121,11 +121,29 @@
   // attribute (meat type, spice level, note) prints as its own "└"-marked
   // sub-line under the dish, same as the HTML ticket, so it reads clearly
   // as a *detail of that dish* and not a second item.
-  function buildEscPosTicket(o, storeName) {
+  // 한 품목 라인의 금액(단가+애드온 합)×수량 — admin.js의 lineTotalOf()와
+  // 동일한 계산식(이 파일은 admin.js와 별개로 로드되므로 그쪽 함수를 그냥
+  // 가져다 쓸 수 없어 여기 따로 둔다).
+  function lineTotalOf(it) {
+    return (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
+  }
+
+  // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른
+  // 한장은 각각의 가격이 나오게... 화면을 안보고 결제시도를 하게 됐을때
+  // 가격이 나온 주문서를 보고 계산을 할 수 있도록. 할인이 들어가면 그
+  // 안에 음료수같은 것은 제하는 부분도 있으니까 보다 명료해야함" —
+  // priceCopy가 true면 품목마다 금액(단가×수량, 애드온 포함)을 한 줄 더
+  // 붙이고, 할인 대상에서 제외되는 음료·주류(category_key === "drink" —
+  // src/routes/orders.js의 discountEligibleTotal과 같은 기준)를 표시해서
+  // 화면 없이 이 종이만 보고 계산해도 헷갈리지 않게 한다. admin.js의
+  // buildTicketHtml()과 같은 설계 — 결제 시점 할인 자체는 미리 계산해
+  // 찍지 않고 참고용 문구만 남긴다.
+  function buildEscPosTicket(o, storeName, opts) {
+    const priceCopy = !!(opts && opts.priceCopy);
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
-    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} 廚房出單` + CMD.BOLD_OFF + "\n";
+    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
     out += padLine(`桌號 ${o.table_number}`, orderTypeLabel(o)) + "\n";
     out += time + "\n";
@@ -136,16 +154,25 @@
       out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
       if (it.option_choice) out += "  └ " + it.option_choice + "\n";
       if (it.spice_choice) out += "  └ " + it.spice_choice + "\n";
+      // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
+      // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
+      if (it.takeout_choice) out += "  └ " + it.takeout_choice + "\n";
       // Order type is chosen per dish now (see order_type on each item in
       // src/routes/orders.js), so one order can mix 內用/外帶 — 內用 is the
       // default and stays implicit, only 外帶 is called out per dish, same
       // as buildTicketHtml()'s HTML ticket in admin.js.
       if (it.order_type === "takeout") out += CMD.BOLD_ON + "  └ 外帶" + CMD.BOLD_OFF + "\n";
       if (it.note) out += "  └ 備註：" + it.note + "\n";
+      // priceCopy 전용 — 주방용 사본에는 안 넣는다.
+      if (priceCopy) {
+        out += "  └ NT$" + lineTotalOf(it) + "\n";
+        if (it.category_key === "drink") out += "  └ 飲料/酒類（不列入折扣）\n";
+      }
     });
 
     out += divider() + "\n";
     out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+    if (priceCopy) out += "※此聯僅供結帳參考，實際折扣依系統結帳畫面為準\n";
     if (o.note) out += "訂單備註：" + o.note + "\n";
     out += CMD.ALIGN_CENTER + "列印時間：" + new Date().toLocaleString("zh-TW") + "\n";
     out += CMD.FEED_AND_CUT;
@@ -219,12 +246,17 @@
   // pickup-number lookup needs the `tables` list, which this file
   // deliberately doesn't know about), so this stays a pure function of its
   // arguments, same as buildEscPosTicket() above.
-  function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo) {
+  // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른
+  // 한장은 각각의 가격이 나오게" — opts.priceCopy는 buildEscPosTicket()과
+  // 같은 의미(품목별 금액 + 음료·주류 표시, 참고용 문구), RawBT/앱 브릿지
+  // 경로(tryPrintViaRawBt)에서 이 비트맵 방식을 쓴다.
+  function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
     const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}`;
+    const priceCopy = !!(opts && opts.priceCopy);
 
     // ---- pass 1: measure on a throwaway canvas at the real width, laying
     // out every line/row and accumulating the total height needed ----
@@ -258,7 +290,7 @@
       y += 20;
     }
 
-    line(`${storeName} 廚房出單`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    line(`${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
@@ -270,13 +302,22 @@
       if (it.option_choice) line("  └ " + it.option_choice, sz("itemDetail", 13), wt("itemDetail", 400));
       if (it.spice_choice && it.spice_choice !== "基本") line("  └ " + it.spice_choice, sz("itemDetail", 13), wt("itemDetail", 400));
       (it.selected_addons || []).forEach((a) => line("  └ +" + a.name, sz("itemDetail", 13), wt("itemDetail", 400)));
+      // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
+      // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
+      if (it.takeout_choice) line("  └ " + it.takeout_choice, sz("itemTakeout", 13), wt("itemTakeout", 900));
       if (it.order_type === "takeout") line("  └ 外帶", sz("itemTakeout", 13), wt("itemTakeout", 900));
       if (it.note) line("  └ 備註：" + it.note, sz("itemNote", 13), wt("itemNote", 400));
+      // priceCopy 전용 — 주방용 사본에는 안 넣는다.
+      if (priceCopy) {
+        line("  └ NT$" + lineTotalOf(it), sz("itemDetail", 13), wt("itemDetail", 700));
+        if (it.category_key === "drink") line("  └ 飲料/酒類（不列入折扣）", sz("itemDetail", 13), wt("itemDetail", 400));
+      }
       y += 8; // small gap between items, echoing .item-row's CSS padding
     });
 
     divider();
     row("合計", `NT${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+    if (priceCopy) line("※此聯僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     if (o.note) line("訂單備註：" + o.note, sz("orderNote", 11), wt("orderNote", 400));
     line("列印時間：" + new Date().toLocaleString("zh-TW"), sz("printTime", 10), wt("printTime", 400), { align: "center" });
 

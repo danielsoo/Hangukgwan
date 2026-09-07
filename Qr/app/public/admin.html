@@ -608,6 +608,12 @@
       </div>
       <label><span data-i18n="itemOptionsLabel">옵션 (쉼표로 구분, 예: 소고기,돼지고기)</span><input id="f_options" data-i18n-placeholder="itemOptionsPlaceholder" placeholder="옵션이 없으면 비워두세요" /></label>
       <label><span data-i18n="itemSpiceOptionsLabel">맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)</span><input id="f_spice_options" data-i18n-placeholder="itemSpiceOptionsPlaceholder" placeholder="맵기 옵션이 없으면 비워두세요" /></label>
+      <!-- 부대찌개(部隊鍋) 같은 품목의 포장 전용 옵션 — 사장님 메모
+           (2026-09-07): "부대찌개 포장주문할때 두가지 옵션이 있대.
+           不煮外帶(조리하지 않은 포장) / 煮熟外帶(조리한 포장)". 매장
+           식사에는 의미가 없어서 손님 화면에서는 포장(外帶) 선택 시에만
+           보인다(order.html의 #itemTakeoutOptions, order.js 참고). -->
+      <label><span data-i18n="itemTakeoutOptionsLabel">포장 전용 옵션 (쉼표로 구분, 예: 不煮外帶,煮熟外帶)</span><input id="f_takeout_options" data-i18n-placeholder="itemTakeoutOptionsPlaceholder" placeholder="포장 전용 옵션이 없으면 비워두세요" /></label>
       <label><span data-i18n="itemAddonsLabel">추가 옵션 (이름:가격, 쉼표로 구분, 예: 볶음밥 추가:80,사리면 추가:50)</span><input id="f_addons" data-i18n-placeholder="itemAddonsPlaceholder" placeholder="추가 옵션이 없으면 비워두세요" /></label>
       <label><span data-i18n="itemMinFirstOrderQtyLabel">최초 주문 최소 수량 (없으면 비워두세요)</span><input id="f_min_first_order_qty" type="number" min="0" /></label>
       <div class="form-row checkboxes">
