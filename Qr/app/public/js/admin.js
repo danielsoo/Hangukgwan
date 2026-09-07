@@ -1345,9 +1345,20 @@
 
   // ---------- Live orders (polling — no persistent server connection
   // needed, so this works the same on Vercel, Railway, or a laptop) ----------
+  // 사장님 피드백(2026-09-07): "주문이 들어가고 빌지가 나오기까지 너무 오래
+  // 걸려(3~5초). 시간이 훨씬 단축되었으면 좋겠어" — 이 4초 주기가 그 지연의
+  // 가장 큰 원인이었다(새 주문이 들어와도 다음 폴링 때까지는 화면도 자동
+  // 인쇄도 전혀 모름 → 평균 대기시간이 이 값의 절반, 최악의 경우 거의 이
+  // 값 전체). 2초로 줄여서 평균/최악 대기시간을 절반으로 낮춘다. 더 짧게
+  // 줄이면 그만큼 DB 조회 빈도(부하)도 같이 늘어나므로, 체감 속도와 서버
+  // 부하 사이의 균형점으로 2초를 선택했다 — 진짜 즉시(0초에 가까운) 알림은
+  // 폴링이 아니라 서버→클라이언트 실시간 푸시(WebSocket/SSE)가 필요한데,
+  // 이 프로젝트는 원래 Socket.IO로 그렇게 했다가 Vercel의 서버리스
+  // 환경(지속 연결을 못 붙잡음)에 맞추려고 지금의 폴링 방식으로 바꾼
+  // 이력이 있다 — 되돌리려면 별도의 상시 구동 서버가 필요한 더 큰 작업.
   function startPolling() {
     if (pollTimer) return;
-    pollTimer = setInterval(loadOrders, 4000);
+    pollTimer = setInterval(loadOrders, 2000);
   }
   function stopPolling() {
     if (pollTimer) {
