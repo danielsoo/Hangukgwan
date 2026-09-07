@@ -140,6 +140,12 @@
   // 찍지 않고 참고용 문구만 남긴다.
   function buildEscPosTicket(o, storeName, opts) {
     const priceCopy = !!(opts && opts.priceCopy);
+    // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과를 그대로
+    // 넘겨받는다(이 파일은 admin.js의 테이블별 할인 상태를 모르므로).
+    // { active:false } 아니면 { active:true, isPercent, rate?,
+    // discountedTotal } — buildReceiptBodyHtml()과 완전히 같은 규칙.
+    const discount = (opts && opts.discount) || { active: false };
+    let hasDrinkItem = false;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
@@ -163,15 +169,33 @@
       // as buildTicketHtml()'s HTML ticket in admin.js.
       if (it.order_type === "takeout") out += CMD.BOLD_ON + "  └ 外帶" + CMD.BOLD_OFF + "\n";
       if (it.note) out += "  └ 備註：" + it.note + "\n";
-      // priceCopy 전용 — 주방용 사본에는 안 넣는다.
+      // priceCopy 전용 — 주방용 사본에는 안 넣는다. 할인이 걸려 있으면
+      // (特約95折/VIP9折만, 재량 할인은 품목별로 안 나눔 — 위 admin.js
+      // computeTicketDiscountInfo 주석 참고) 원가→할인가를 같이 찍는다.
+      // 일반 텍스트 ESC/POS라 화면처럼 취소선은 못 그으니 화살표로 표시.
       if (priceCopy) {
-        out += "  └ NT$" + lineTotalOf(it) + "\n";
-        if (it.category_key === "drink") out += "  └ 飲料/酒類（不列入折扣）\n";
+        const amount = lineTotalOf(it);
+        const isDrink = it.category_key === "drink";
+        if (isDrink) hasDrinkItem = true;
+        if (discount.active && discount.isPercent && !isDrink) {
+          const discounted = amount - Math.round(amount * (1 - discount.rate));
+          out += "  └ NT$" + amount + "→NT$" + discounted + "\n";
+        } else {
+          const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
+          out += "  └ NT$" + amount + mark + "\n";
+        }
       }
     });
 
+    if (priceCopy && discount.active && discount.isPercent && hasDrinkItem) {
+      out += "※ 飲料/酒類不列入折扣\n";
+    }
     out += divider() + "\n";
-    out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+    if (priceCopy && discount.active) {
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+    } else {
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+    }
     if (priceCopy) out += "※此聯僅供結帳參考，實際折扣依系統結帳畫面為準\n";
     if (o.note) out += "訂單備註：" + o.note + "\n";
     out += CMD.ALIGN_CENTER + "列印時間：" + new Date().toLocaleString("zh-TW") + "\n";
@@ -257,6 +281,12 @@
     labelInfo = labelInfo || {};
     const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}`;
     const priceCopy = !!(opts && opts.priceCopy);
+    // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과. 이
+    // 비트맵도 흑백 1비트 인쇄라 화면의 회색 취소선을 그대로 재현하기
+    // 어려워서, buildEscPosTicket()의 일반 텍스트 버전과 똑같이
+    // "NT$원가→NT$할인가" 화살표 표기로 통일한다.
+    const discount = (opts && opts.discount) || { active: false };
+    let hasDrinkItem = false;
 
     // ---- pass 1: measure on a throwaway canvas at the real width, laying
     // out every line/row and accumulating the total height needed ----
@@ -307,16 +337,33 @@
       if (it.takeout_choice) line("  └ " + it.takeout_choice, sz("itemTakeout", 13), wt("itemTakeout", 900));
       if (it.order_type === "takeout") line("  └ 外帶", sz("itemTakeout", 13), wt("itemTakeout", 900));
       if (it.note) line("  └ 備註：" + it.note, sz("itemNote", 13), wt("itemNote", 400));
-      // priceCopy 전용 — 주방용 사본에는 안 넣는다.
+      // priceCopy 전용 — 주방용 사본에는 안 넣는다. 할인이 걸려 있으면
+      // (特約95折/VIP9折만, 위 admin.js computeTicketDiscountInfo 주석 참고)
+      // 원가→할인가로 찍는다.
       if (priceCopy) {
-        line("  └ NT$" + lineTotalOf(it), sz("itemDetail", 13), wt("itemDetail", 700));
-        if (it.category_key === "drink") line("  └ 飲料/酒類（不列入折扣）", sz("itemDetail", 13), wt("itemDetail", 400));
+        const amount = lineTotalOf(it);
+        const isDrink = it.category_key === "drink";
+        if (isDrink) hasDrinkItem = true;
+        if (discount.active && discount.isPercent && !isDrink) {
+          const discounted = amount - Math.round(amount * (1 - discount.rate));
+          line("  └ NT$" + amount + "→NT$" + discounted, sz("itemDetail", 13), wt("itemDetail", 700));
+        } else {
+          const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
+          line("  └ NT$" + amount + mark, sz("itemDetail", 13), wt("itemDetail", 700));
+        }
       }
       y += 8; // small gap between items, echoing .item-row's CSS padding
     });
 
+    if (priceCopy && discount.active && discount.isPercent && hasDrinkItem) {
+      line("※ 飲料/酒類不列入折扣", sz("itemDetail", 13), wt("itemDetail", 400));
+    }
     divider();
-    row("合計", `NT${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+    if (priceCopy && discount.active) {
+      row("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+    } else {
+      row("合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+    }
     if (priceCopy) line("※此聯僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     if (o.note) line("訂單備註：" + o.note, sz("orderNote", 11), wt("orderNote", 400));
     line("列印時間：" + new Date().toLocaleString("zh-TW"), sz("printTime", 10), wt("printTime", 400), { align: "center" });

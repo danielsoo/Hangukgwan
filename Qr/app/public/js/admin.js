@@ -2197,6 +2197,17 @@
   function buildReceiptBodyHtml(o, priceCopy) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+    // 사장님 피드백(2026-09-07): "할인 반영 안될 때는 굳이 음료수 얘기
+    // 안해도 되고" — 이 주문(정확히는 테이블/포장카운터 단위, 결제 팝업과
+    // 완전히 같은 규칙)에 지금 걸려 있는 할인이 없으면 { active: false }를
+    // 반환해서 아래 렌더링 쪽에서 가격/음료 관련 문구를 전부 건너뛴다.
+    // 特約95折/VIP9折(퍼센트 할인)만 품목별로 나눠 보여줄 수 있고
+    // (discountEligibleClientTotal/computeVipDiscountClient 참고), 직접
+    // 입력(재량, isPercent:false)은 음료를 빼지 않고 품목별로도 못 나누는
+    // 기존 규칙(위 fullEligibleClientTotal 주석) 그대로 유지 — 그때는
+    // 소계/합계에서만 할인 반영된 금액을 보여준다.
+    const discountInfo = priceCopy ? computeTicketDiscountInfo(o) : { active: false };
+    let hasDrinkItem = false;
 
     const itemRows = o.items
       .map((it) => {
@@ -2229,13 +2240,29 @@
         // already says takeout/mixed.
         if (it.order_type === "takeout") detailLines.push(`<div class="item-detail item-takeout">└ 外帶</div>`);
         if (it.note) detailLines.push(`<div class="item-detail item-note">└ 備註：${it.note}</div>`);
-        // priceCopy 전용 — 품목 금액(단가+애드온 합계)×수량과, 할인
-        // 대상에서 빠지는 음료·주류 표시. 주방용 사본에는 안 넣는다(주방은
-        // 가격을 알 필요가 없고, 오히려 화면이 복잡해질 뿐이다).
+        // priceCopy 전용 — 품목 금액(단가+애드온 합계)×수량. 주방용
+        // 사본에는 안 넣는다(주방은 가격을 알 필요가 없고, 오히려 화면이
+        // 복잡해질 뿐이다). 할인이 걸려 있는 特約95折/VIP9折(퍼센트)이면
+        // 화면(vipPriceHtml)과 완전히 같은 공식으로 품목별 할인가를 같이
+        // 찍어서, 화면을 안 보고도 이 티켓만으로 정확한 금액을 셀 수 있게
+        // 한다 — 음료/주류는 이 할인에서 제외되므로 원가 그대로에 "※"만
+        // 짧게 붙이고(품목마다 긴 문구를 반복하면 음료가 여러 개일 때
+        // 지저분해진다는 피드백), 설명 문구는 아래 합계 위에 한 번만
+        // 넣는다(hasDrinkItem/drinkFootnoteHtml 참고). 직접 입력(재량)
+        // 할인은 음료를 빼지 않고 품목별로도 안 나누므로(위 주석) 이
+        // 블록에서는 아무 것도 달라지지 않는다.
         if (priceCopy) {
-          detailLines.push(`<div class="item-detail item-price">└ NT$${lineTotalOf(it)}</div>`);
-          if (it.category_key === "drink") {
-            detailLines.push(`<div class="item-detail item-note-discount">└ 飲料/酒類（不列入折扣）</div>`);
+          const amount = lineTotalOf(it);
+          const isDrink = it.category_key === "drink";
+          if (isDrink) hasDrinkItem = true;
+          if (discountInfo.active && discountInfo.isPercent && !isDrink) {
+            const discounted = amount - Math.round(amount * (1 - discountInfo.rate));
+            detailLines.push(
+              `<div class="item-detail item-price">└ <span class="item-price-orig">NT$${amount}</span> <span class="item-price-final">NT$${discounted}</span></div>`
+            );
+          } else {
+            const mark = discountInfo.active && discountInfo.isPercent && isDrink ? " ※" : "";
+            detailLines.push(`<div class="item-detail item-price">└ NT$${amount}${mark}</div>`);
           }
         }
         return `<div class="item-row">
@@ -2259,7 +2286,16 @@
     <div class="meta-row"><span class="order-time">${time}</span></div>
     <div class="divider"></div>
     ${itemRows}
-    <div class="total-row"><span>合計</span><span>NT$${o.total}</span></div>
+    ${
+      discountInfo.active && hasDrinkItem && discountInfo.isPercent
+        ? `<div class="price-copy-note price-copy-drink-note">※ 飲料/酒類不列入折扣</div>`
+        : ""
+    }
+    <div class="total-row"><span>合計</span><span>${
+      discountInfo.active
+        ? `<span class="item-price-orig">NT$${o.total}</span> <span class="item-price-final">NT$${discountInfo.discountedTotal}</span>`
+        : `NT$${o.total}`
+    }</span></div>
     ${priceCopy ? `<div class="price-copy-note">※此聯僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
     ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
     <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
@@ -2337,10 +2373,12 @@
   .item-note { font-size: ${fs.itemNote}px; font-weight: ${fs.itemNoteWeight}; color: #c0161f; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
   .item-price { font-weight: 700; color: #000; }
-  .item-note-discount { color: #966; }
+  .item-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; }
+  .item-price-final { font-weight: 700; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .order-note { font-size: ${fs.orderNote}px; font-weight: ${fs.orderNoteWeight}; color: #c0161f; margin-top: 2mm; }
   .price-copy-note { font-size: ${fs.orderNote}px; color: #555; margin-top: 2mm; text-align: center; }
+  .price-copy-drink-note { color: #966; margin-top: 1mm; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; font-weight: ${fs.printTimeWeight}; color: #555; margin-top: 3mm; }
   .receipt-page-break { break-after: page; page-break-after: always; }
   ${screenChromeCss}
@@ -4020,6 +4058,34 @@
       return Math.min(eligibleTotal, Math.round(eligibleTotal * (manualValue.value / 100)));
     }
     return Math.min(eligibleTotal, Math.round(manualValue.value));
+  }
+  // buildReceiptBodyHtml()의 결제용 사본(priceCopy)에서 쓰는, "이 주문의
+  // 테이블/포장카운터에 지금 걸려 있는 할인"을 결제 팝업(위
+  // vipDiscountActive/vipRate 등, renderTableOrderBlock 쪽)과 완전히
+  // 똑같은 규칙으로 다시 계산한다 — 화면과 티켓이 서로 다른 금액을 찍으면
+  // 안 되므로 판단 기준(어떤 타입인지, 활성 여부)과 공식을 그대로
+  // 재사용한다. 결제 팝업 로직 자체를 재사용하지 못하는 건 그쪽이 DOM을
+  // 직접 그리는 함수라서이고, 여기는 숫자만 필요하다.
+  function computeTicketDiscountInfo(o) {
+    const vipCurrentType = isCounterOrder(o) ? counterVipDiscountTypeByOrderId.get(o.id) || null : tableVipDiscountType;
+    const manualDiscountValue = isCounterOrder(o)
+      ? counterManualDiscountValueByOrderId.get(o.id) || null
+      : tableManualDiscountValue;
+    const isManualDiscount = vipCurrentType === "manual";
+    const active =
+      !!vipCurrentType && o.status !== "paid" && o.status !== "cancelled" && (!isManualDiscount || !!manualDiscountValue);
+    if (!active) return { active: false };
+    if (isManualDiscount) {
+      // 재량 할인은 음료 포함 전체 금액 기준, 품목별로 나누지 않고
+      // 소계/합계에서만 반영한다(위 fullEligibleClientTotal 주석 참고).
+      const eligibleTotal = fullEligibleClientTotal(o);
+      const discountAmount = computeManualDiscountAmountClient(manualDiscountValue, eligibleTotal);
+      return { active: true, isPercent: false, discountedTotal: o.total - discountAmount };
+    }
+    const rate = VIP_DISCOUNT_RATES_CLIENT[vipCurrentType];
+    const eligibleTotal = discountEligibleClientTotal(o);
+    const discountAmount = computeVipDiscountClient(vipCurrentType, eligibleTotal);
+    return { active: true, isPercent: true, rate, discountedTotal: o.total - discountAmount };
   }
   // 결제 방식/재량 할인 미리보기 계산을 한 곳에서 — discountType이
   // "manual"이면 직접 입력 값을, 아니면 特約95折/VIP9折 고정 비율을 쓴다.
@@ -6349,7 +6415,7 @@
       // 나온다(각 티켓 끝에 이미 FEED_AND_CUT이 들어있어 장마다 알아서
       // 커팅됨).
       const rawKitchen = buildEscPosTicket(o, storeName);
-      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true });
+      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o) });
       const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
       await qz.print(config, [
         { type: "raw", format: "command", flavor: "plain", data: rawKitchen },
@@ -6561,7 +6627,10 @@
       const kitchenBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo);
       if (!(await sendRasterTicketBytes(kitchenBytes, bridge))) return false;
 
-      const priceBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo, { priceCopy: true });
+      const priceBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo, {
+        priceCopy: true,
+        discount: computeTicketDiscountInfo(o),
+      });
       return await sendRasterTicketBytes(priceBytes, bridge);
     } catch (e) {
       console.warn("RawBT print failed:", e);
