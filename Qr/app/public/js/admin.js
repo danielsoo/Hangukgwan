@@ -73,6 +73,13 @@
   // that's what activeOrdersForTable() keys on.
   let mergePayMode = false;
   let mergePaySelected = new Set();
+  // 사장님 피드백(2026-09-07): "지금 엑스로 바로 테이블을 삭제할 수 있는데
+  // 편집 기능을 만들어서 그거 눌러야 삭제 되게 해줘. 그냥은 못하게" — 목록
+  // 보기에서 ✕ 버튼이 항상 떠 있어서 실수로 테이블을 지우기 쉬웠다.
+  // "편집" 버튼(#tableEditModeBtn)을 눌러 편집 모드를 켜야만 ✕ 버튼이
+  // 나타나고 눌리게 하고, 평소(꺼짐)에는 카드를 눌러도 그냥 상세 화면만
+  // 열리게 한다 — 위 mergePayMode와 같은 토글 패턴.
+  let tableEditMode = false;
   // Order cards/blocks with more than this many item lines render collapsed
   // (see renderCollapsibleItemLines() below) so a table's big order doesn't
   // force the whole 신규/조리중 column into a long scroll — most cards end
@@ -391,6 +398,8 @@
       manualDiscountModePercent: "퍼센트 (%)",
       manualDiscountErrorMsg: "숫자를 다시 확인해주세요 (퍼센트는 100 이하로 입력)",
       manualDiscountClearBtn: "할인 해제",
+      tableEditModeBtn: "✏️ 편집",
+      tableEditModeHint: "편집 모드예요. 테이블 카드의 ✕를 누르면 삭제할 수 있어요. 다시 \"편집\"을 누르면 꺼집니다.",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
       mergePayCancelBtn: "취소",
@@ -793,6 +802,8 @@
       manualDiscountModePercent: "百分比 (%)",
       manualDiscountErrorMsg: "請重新確認輸入的數字（百分比請輸入 100 以下）",
       manualDiscountClearBtn: "取消折扣",
+      tableEditModeBtn: "✏️ 編輯",
+      tableEditModeHint: "目前是編輯模式。點桌號卡片上的 ✕ 即可刪除。再按一次「編輯」即可關閉。",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
       mergePayCancelBtn: "取消",
@@ -3316,10 +3327,10 @@
       // handler) and showing it here would make an empty table look
       // occupied, exactly the "비어있음인데 인원수가 남아있다" bug reported.
       const partyBadge = t.party_size && unpaid.length > 0 ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
-      const delBtn = canTableEdit() && !mergePayMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
+      const delBtn = canTableEdit() && !mergePayMode && tableEditMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
       chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
-      if (canTableEdit() && !mergePayMode) {
+      if (canTableEdit() && !mergePayMode && tableEditMode) {
         chip.querySelector(".del-btn").onclick = async (e) => {
           e.stopPropagation();
           if (!(await showConfirm(fmtConfirmDeleteTable(t.number)))) return;
@@ -5317,11 +5328,35 @@
     bar.hidden = false;
   }
 
+  // 사장님 피드백(2026-09-07): "지금 엑스로 바로 테이블을 삭제할 수
+  // 있는데 편집 기능을 만들어서 그거 눌러야 삭제 되게 해줘" — 위
+  // mergePayMode와 같은 켜고/끄는 토글. 편집 모드일 때만 renderTables()가
+  // 테이블 카드에 ✕ 버튼을 그린다(위 delBtn 참고). 합산 결제 모드와 동시에
+  // 켜지면 카드 클릭 의미가 겹치므로(하나는 삭제, 하나는 합산 선택) 서로
+  // 배타적으로 만든다.
+  $("#tableEditModeBtn").onclick = () => {
+    tableEditMode = !tableEditMode;
+    $("#tableEditModeBtn").classList.toggle("active", tableEditMode);
+    $("#tableEditModeHint").hidden = !tableEditMode;
+    if (tableEditMode && mergePayMode) {
+      mergePayMode = false;
+      mergePaySelected = new Set();
+      $("#mergePayModeBtn").classList.remove("active");
+      $("#mergePayHint").hidden = true;
+      updateMergePayBar();
+    }
+    renderTables();
+  };
   $("#mergePayModeBtn").onclick = () => {
     mergePayMode = !mergePayMode;
     mergePaySelected = new Set();
     $("#mergePayModeBtn").classList.toggle("active", mergePayMode);
     $("#mergePayHint").hidden = !mergePayMode;
+    if (mergePayMode && tableEditMode) {
+      tableEditMode = false;
+      $("#tableEditModeBtn").classList.remove("active");
+      $("#tableEditModeHint").hidden = true;
+    }
     renderTables();
     updateMergePayBar();
   };
