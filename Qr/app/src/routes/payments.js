@@ -107,6 +107,13 @@ router.post("/callback", async (req, res) => {
       if (order && order.status !== "paid") {
         order.status = "paid";
         order.updated_at = nowLocal();
+        // 정산 결제수단별 집계(src/settlement.js)에서 "온라인결제"로 따로
+        // 잡히도록 표시 — 직원이 결제 방식 팝업에서 고르는 현금/LinePay/
+        // 신용카드/기타와는 구분되는, 손님이 스스로 결제한 경로다.
+        order.payment_method = "online";
+        order.items.forEach((it) => {
+          if (!it.payment_method) it.payment_method = "online";
+        });
       }
     }
     // If this payment cleared every remaining unpaid order for the table,

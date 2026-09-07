@@ -35,7 +35,12 @@ const router = express.Router();
 // 실제로 받는 금액만 이 할인만큼 줄인다 — 아래 PATCH /:id, PATCH
 // /:id/split-pay 참고.
 const VIP_DISCOUNT_RATES = { te95: 0.95, vip9: 0.9 };
-const PAYMENT_METHODS = ["cash", "linepay", "card"];
+// 사장님 요청(2026-09-07): "결제종류 현금, 라인페이, 신용카드, 기타" — "기타"
+// 하나 추가. 이 목록은 결제 방식 팝업(직원이 직접 고르는 값)에서 허용되는
+// 값만 담는다 — "online"(손님이 직접 결제하는 온라인 결제, src/routes/
+// payments.js)은 서버가 직접 붙이는 값이라 여기 포함하지 않는다(직원이
+// 고를 수 있는 선택지가 아니므로).
+const PAYMENT_METHODS = ["cash", "linepay", "card", "other"];
 
 // 품목 하나의 카테고리 key — POST /, PATCH /:id/items에서 채워두는
 // category_key 스냅샷을 우선 쓴다(메뉴가 나중에 바뀌거나 삭제돼도 이미
@@ -388,7 +393,18 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   if (status === "paid") {
     const { paymentMethod, vipDiscountType, discountRequiresCash } = resolvePaymentFields(req.body || {});
     if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
-    if (paymentMethod) order.payment_method = paymentMethod;
+    if (paymentMethod) {
+      order.payment_method = paymentMethod;
+      // 이 라운드가 이전에 부분결제(PATCH /:id/split-pay)로 일부 품목만
+      // 결제수단이 찍혀 있었다면 그건 그대로 두고, 아직 안 찍힌(=여기서
+      // 한 번에 전부 결제되는) 품목에만 이번 결제수단을 남긴다 — 정산의
+      // 결제수단별 집계(src/settlement.js)가 품목 단위로 정확히 잡을 수
+      // 있게 하기 위함(사장님 요청 2026-09-07: "정산에서도 서로 분류해서도
+      // 집계해줘").
+      order.items.forEach((it) => {
+        if (!it.payment_method) it.payment_method = paymentMethod;
+      });
+    }
     if (vipDiscountType) {
       const eligible = discountEligibleTotal(order.items);
       const discountAmount = computeVipDiscount(vipDiscountType, eligible);
@@ -556,6 +572,13 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   selectedIdx.forEach((i) => {
     order.items[i].paid = true;
     order.items[i].paid_at = paidAt;
+    // 정산의 결제수단별 집계(src/settlement.js)가 품목 단위로 정확히
+    // 집계할 수 있도록, "이번에 결제된 이 품목들"에는 이번 결제수단을
+    // 남긴다 — 같은 라운드를 나중에 다른 결제수단으로 또 나눠 내도(예:
+    // 일부는 현금, 나머지는 신용카드) 각자 자기 결제수단으로 정확히
+    // 잡힌다. 사장님 요청(2026-09-07): "정산에서도 서로 분류해서도
+    // 집계해줘".
+    if (paymentMethod) order.items[i].payment_method = paymentMethod;
   });
   if (paymentMethod) order.payment_method = paymentMethod;
   if (vipDiscountType) {

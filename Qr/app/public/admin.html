@@ -241,6 +241,31 @@
               </table>
             </div>
 
+            <!-- 결제수단별 집계 — 사장님 요청(2026-09-07): "결제종류 현금,
+                 라인페이, 신용카드, 기타... 정산에서도 서로 분류해서도
+                 집계해줘 총합도 있고". src/settlement.js의
+                 payment_method_breakdown/payment_method_total 참고. -->
+            <div class="settlement-wide-card settlement-chart-card">
+              <h3 data-i18n="settlementPaymentMethodTitle">결제수단별 집계</h3>
+              <table class="settlement-items-table" id="settlementPaymentMethodTable">
+                <thead>
+                  <tr>
+                    <th data-i18n="settlementPaymentMethodName">결제수단</th>
+                    <th data-i18n="settlementPaymentMethodCount">건수</th>
+                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
+                  </tr>
+                </thead>
+                <tbody id="settlementPaymentMethodBody"></tbody>
+                <tfoot>
+                  <tr style="font-weight:700;border-top:2px solid var(--ink);">
+                    <td data-i18n="settlementPaymentMethodTotalLabel">총합</td>
+                    <td></td>
+                    <td id="settlementPaymentMethodTotal">NT$0</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
             <div class="settlement-wide-card settlement-chart-card">
               <h3 data-i18n="settlementTrendTitle">매출 추이 (선택한 기간)</h3>
               <div class="settlement-chart-wrap">
@@ -697,6 +722,7 @@
       <button type="button" class="primary-btn" data-payment-method="cash" data-i18n="paymentMethodCash">현금</button>
       <button type="button" class="primary-btn" data-payment-method="linepay" data-i18n="paymentMethodLinepay">LinePay</button>
       <button type="button" class="primary-btn" data-payment-method="card" data-i18n="paymentMethodCard">신용카드</button>
+      <button type="button" class="primary-btn" data-payment-method="other" data-i18n="paymentMethodOther">기타</button>
     </div>
     <div class="modal-actions">
       <button class="danger-btn" id="paymentMethodCancel" data-i18n="appDialogCancel">취소</button>

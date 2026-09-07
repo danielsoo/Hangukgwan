@@ -53,6 +53,35 @@ function computeSettlement(store, startDate, endDate = startDate) {
 
   const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
+  // 결제수단별 집계 (2026-09-07 사장님 요청: "결제종류... 정산에서도 서로
+  // 분류해서도 집계해줘 총합도 있고") — 품목 단위로 집계한다. 한 라운드를
+  // 부분결제(PATCH /:id/split-pay)로 서로 다른 결제수단으로 나눠 낸 경우
+  // (예: 일부는 현금, 나머지는 신용카드)에도 각 품목이 실제로 어느
+  // 결제수단으로 찍혔는지(it.payment_method)가 정확히 반영된다. 이 필드가
+  // 없는 오래된 데이터는 그 주문의 order.payment_method로, 그것도 없으면
+  // "unspecified"(미지정 — 이 기능 추가 이전에 결제완료된 주문)로 묶인다.
+  // 온라인 결제(손님이 직접 카드/LINE Pay로 결제, src/routes/payments.js)는
+  // "online"으로 따로 잡힌다.
+  //
+  // 품목 가격 합(unit_price*qty)을 기준으로 하며, 아래 item_breakdown과
+  // 같은 방식이라 VIP 카드 할인(order.discount_amount)만큼은 이 합계가
+  // total_revenue보다 약간 높게 나올 수 있다 — item_breakdown과 동일한
+  // 한계이자 관례.
+  const paymentMethodMap = new Map();
+  for (const o of paidOrders) {
+    for (const it of o.items || []) {
+      const method = it.payment_method || o.payment_method || "unspecified";
+      const entry = paymentMethodMap.get(method) || { method, revenue: 0, order_ids: new Set() };
+      entry.revenue += (it.unit_price || 0) * (it.qty || 0);
+      entry.order_ids.add(o.id);
+      paymentMethodMap.set(method, entry);
+    }
+  }
+  const paymentMethodBreakdown = [...paymentMethodMap.values()]
+    .map((e) => ({ method: e.method, revenue: e.revenue, order_count: e.order_ids.size }))
+    .sort((a, b) => b.revenue - a.revenue);
+  const paymentMethodTotal = paymentMethodBreakdown.reduce((sum, e) => sum + e.revenue, 0);
+
   // Item breakdown across paid orders only (what actually sold in this range).
   const itemMap = new Map();
   for (const o of paidOrders) {
@@ -152,6 +181,8 @@ function computeSettlement(store, startDate, endDate = startDate) {
     cancelled_order_count: cancelledOrders.length,
     problem_order_count: problemOrders.length,
     item_breakdown: itemBreakdown,
+    payment_method_breakdown: paymentMethodBreakdown,
+    payment_method_total: paymentMethodTotal,
     daily_breakdown: dailyBreakdown,
     hourly_breakdown: hourlyBreakdown,
     avg_turnover_minutes: avgTurnoverMinutes,

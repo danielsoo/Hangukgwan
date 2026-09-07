@@ -375,6 +375,7 @@
       paymentMethodCash: "현금",
       paymentMethodLinepay: "LinePay",
       paymentMethodCard: "신용카드",
+      paymentMethodOther: "기타",
       paymentMethodCashOnlyHint: "선택한 할인은 현금 결제에만 적용돼요.",
       mergePayModeBtn: "🧾 합산 결제",
       mergePayHint: "합산 결제할 테이블을 모두 선택하세요 (미결제 테이블만 선택 가능).",
@@ -420,6 +421,13 @@
       settlementItemName: "메뉴",
       settlementItemQty: "수량",
       settlementItemSubtotal: "소계",
+      settlementPaymentMethodTitle: "결제수단별 집계",
+      settlementPaymentMethodName: "결제수단",
+      settlementPaymentMethodCount: "건수",
+      settlementPaymentMethodRevenue: "매출",
+      settlementPaymentMethodTotalLabel: "총합",
+      paymentMethodOnline: "온라인결제",
+      paymentMethodUnspecified: "미지정",
       settlementTrendTitle: "매출 추이 (선택한 기간)",
       settlementTurnover: "평균 테이블 회전 시간",
       settlementTurnoverMinutes: "분",
@@ -763,6 +771,7 @@
       paymentMethodCash: "現金",
       paymentMethodLinepay: "LinePay",
       paymentMethodCard: "信用卡",
+      paymentMethodOther: "其他",
       paymentMethodCashOnlyHint: "所選折扣僅適用於現金付款。",
       mergePayModeBtn: "🧾 合併結帳",
       mergePayHint: "請選擇要合併結帳的桌號（僅能選擇有未結帳訂單的桌號）。",
@@ -808,6 +817,13 @@
       settlementItemName: "品項",
       settlementItemQty: "數量",
       settlementItemSubtotal: "小計",
+      settlementPaymentMethodTitle: "付款方式統計",
+      settlementPaymentMethodName: "付款方式",
+      settlementPaymentMethodCount: "筆數",
+      settlementPaymentMethodRevenue: "營業額",
+      settlementPaymentMethodTotalLabel: "總計",
+      paymentMethodOnline: "線上付款",
+      paymentMethodUnspecified: "未指定",
       settlementTrendTitle: "營業額趨勢（選定期間）",
       settlementTurnover: "平均翻桌時間",
       settlementTurnoverMinutes: "分鐘",
@@ -6403,6 +6419,31 @@
           </tr>`
       )
       .join("");
+
+    // 결제수단별 집계 (2026-09-07 사장님 요청) — src/settlement.js가 넘겨주는
+    // payment_method_breakdown의 raw method 키(cash/linepay/card/other/
+    // online/unspecified)를 화면 표시용 라벨로 바꿔서 보여준다.
+    const paymentMethodLabel = (method) =>
+      ({
+        cash: T("paymentMethodCash"),
+        linepay: T("paymentMethodLinepay"),
+        card: T("paymentMethodCard"),
+        other: T("paymentMethodOther"),
+        online: T("paymentMethodOnline"),
+        unspecified: T("paymentMethodUnspecified"),
+      })[method] || method;
+    $("#settlementPaymentMethodBody").innerHTML = (data.payment_method_breakdown || [])
+      .map(
+        (pm) => `
+          <tr>
+            <td>${paymentMethodLabel(pm.method)}</td>
+            <td>${pm.order_count}</td>
+            <td>NT$${pm.revenue.toLocaleString()}</td>
+          </tr>`
+      )
+      .join("");
+    $("#settlementPaymentMethodTotal").textContent = `NT$${Number(data.payment_method_total || 0).toLocaleString()}`;
+
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
     renderHourlyChart(data.hourly_breakdown || []);
