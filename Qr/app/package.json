@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node src/seed.js",
-    "test": "node test/accounts.test.js"
+    "test": "node test/accounts.test.js && node test/customer.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

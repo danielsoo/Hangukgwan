@@ -2,8 +2,8 @@ const express = require("express");
 const { store, save, nextId } = require("../db");
 const { requireAdmin } = require("../auth");
 const { nowLocal, taipeiDateString } = require("../time");
-const { verifyIdToken } = require("../firebaseAdmin");
-const { isActive: isVipActive } = require("../vip");
+const { resolveCustomer } = require("../customer");
+const { isActive: isVipActive, cardBelongsTo } = require("../vip");
 const { parseAddons } = require("../addons");
 const { broadcastOrdersChanged } = require("../realtime");
 
@@ -224,15 +224,14 @@ router.post("/", async (req, res) => {
   // claim a discount). An expired/unclaimed card or no token at all is
   // identical to "not a member" — never an error, since ordering without
   // being a member is the normal case for most customers.
+  // 2026-09-08: 손님을 알아보는 경로가 홈페이지 로그인 세션과 기존 구글
+  // 토큰 두 가지가 됐다. 어느 쪽이든 src/customer.js 한 곳을 거친다.
+  // 로그인하지 않은 손님은 null 이고, 그건 오류가 아니라 가장 흔한 경우다.
+  const customer = await resolveCustomer(req);
   let vipCard = null;
-  const authHeader = req.headers.authorization || "";
-  const idToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-  if (idToken) {
-    const firebaseUser = await verifyIdToken(idToken);
-    if (firebaseUser) {
-      const candidate = store.vipCards.find((c) => c.google_uid === firebaseUser.uid);
-      if (candidate && isVipActive(candidate)) vipCard = candidate;
-    }
+  if (customer) {
+    const candidate = store.vipCards.find((c) => cardBelongsTo(c, customer));
+    if (candidate && isVipActive(candidate)) vipCard = candidate;
   }
 
   const validated = [];
@@ -356,6 +355,11 @@ router.post("/", async (req, res) => {
     customer_name: customerName,
     customer_phone: customerPhone,
     pickup_number: pickupNumber,
+    // 로그인한 손님의 주문이면 계정을 남긴다 — 이게 있어야 기기를 바꾸거나
+    // 브라우저 캐시를 지워도 "내 주문 내역"이 남는다(GET /api/account/orders).
+    // 로그인 안 한 손님은 null 이고, 그 경우 주문 내역은 예전처럼 그 브라우저
+    // 안에만(localStorage) 남는다.
+    account_id: customer && customer.accountId ? customer.accountId : null,
   };
   store.orders.push(order);
   await save();

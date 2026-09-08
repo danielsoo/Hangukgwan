@@ -14,6 +14,7 @@ const express = require("express");
 const accounts = require("../accounts");
 const { verifyIdToken, isConfigured } = require("../firebaseAdmin");
 const { requireUser } = require("../auth");
+const { store } = require("../db");
 
 const router = express.Router();
 
@@ -189,6 +190,48 @@ router.post("/change-password", requireUser, async (req, res) => {
     console.error("[account] change-password failed:", e);
     res.status(500).json({ error: "server_error" });
   }
+});
+
+// ---------- 내 주문 내역 ----------
+// 사장님 요청(2026-09-08): 손님이 로그인하면 "주문 내역 조회"가 되게.
+//
+// 지금까지 손님의 주문 내역은 그 브라우저의 localStorage("hgk_orders_<테이블>",
+// public/js/order.js)에만 있었다. 기기를 바꾸거나 캐시를 지우면 사라지고,
+// 애초에 테이블별로 나뉘어 있어서 "내가 이 가게에서 시킨 것들"이라는 목록이
+// 될 수 없었다. 이제 로그인 상태로 주문하면 주문에 account_id 가 남고
+// (src/routes/orders.js), 여기서 그걸 모아 돌려준다.
+//
+// 다른 사람 주문이 섞일 수 없도록 반드시 세션의 userId 로만 거른다 —
+// 쿼리 파라미터로 계정을 받지 않는다.
+router.get("/orders", requireUser, (req, res) => {
+  const mine = store.orders
+    .filter((o) => o.account_id && String(o.account_id) === String(req.session.userId))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+    .slice(0, 50)
+    .map((o) => ({
+      id: o.id,
+      table_number: o.table_number,
+      pickup_number: o.pickup_number || null,
+      status: o.status,
+      order_type: o.order_type,
+      subtotal: o.subtotal,
+      total: o.total,
+      vip_card_number: o.vip_card_number || null,
+      vip_discount_percent: o.vip_discount_percent || null,
+      created_at: o.created_at,
+      items: (o.items || []).map((it) => ({
+        name_zh: it.name_zh,
+        name_ko: it.name_ko,
+        name_en: it.name_en,
+        qty: it.qty,
+        unit_price: it.unit_price,
+        option_choice: it.option_choice || null,
+        spice_choice: it.spice_choice || null,
+        order_type: it.order_type || null,
+        selected_addons: it.selected_addons || [],
+      })),
+    }));
+  res.json({ orders: mine });
 });
 
 // Tells the website which sign-in buttons to render — there is no point
