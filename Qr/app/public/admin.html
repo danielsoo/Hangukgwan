@@ -6,7 +6,13 @@
 <title data-i18n="pageTitle">한국관 관리자 페이지</title>
 <link rel="stylesheet" href="/css/admin.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Noto+Serif+TC:wght@400;500&family=Newsreader:wght@400;500&display=swap" rel="stylesheet">
+<!-- 로그인 화면의 "韓" 마크와 "韓國館" 에만 쓰는 명조체. &text= 로 그 네
+     글자만 받아온다 — 서브셋 없이 Noto Serif TC 를 통째로 부르면 CSS 만
+     245KB에 @font-face 216개다(중국어라 유니코드 구간별로 쪼개져 있다).
+     그걸 태블릿이 매번 받게 하려고 로그인 화면 장식을 넣은 게 아니다.
+     Newsreader 는 라틴 전용이라 한국어/중국어에는 한 글자도 안 쓰여서 뺐다. -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500&text=%E9%9F%93%E5%9C%8B%E9%A4%A8&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
 <body>
 

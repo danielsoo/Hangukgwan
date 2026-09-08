@@ -66,7 +66,11 @@ input, select, button, textarea { font-family: inherit; }
 }
 
 .login-screen h1 {
-  font-family: 'Newsreader', 'Noto Serif KR', serif;
+  /* Newsreader 는 라틴 전용이라 한국어·중국어에는 적용되지 않는다(관리자
+     화면은 이 두 언어뿐). 웹폰트를 받아봐야 한 글자도 안 쓰이므로 부르지
+     않고, 기기에 있는 명조 계열로 간다 — 홈페이지 로그인 화면도 한국어에서는
+     결국 같은 자리로 떨어진다. */
+  font-family: 'Noto Serif KR', 'Apple SD Gothic Neo', serif;
   font-size: clamp(24px, 6vw, 31px);
   font-weight: 400;
   letter-spacing: 0.01em;
