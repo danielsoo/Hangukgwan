@@ -197,19 +197,42 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Firebase SDK 가 던지는 오류는 우리 서버의 코드가 아니라
+ *  "Firebase: Error (auth/unauthorized-domain)." 같은 문장으로 온다.
+ *  그중 설정이 덜 끝났을 때 실제로 마주치는 것들만 우리 문구로 옮긴다. */
+const FIREBASE_ERRORS: Record<string, string> = {
+  'auth/unauthorized-domain': 'google_domain_not_authorized',
+  'auth/operation-not-allowed': 'google_not_enabled',
+  'auth/popup-blocked': 'google_popup_blocked',
+  'auth/network-request-failed': 'network_failed',
+}
+
 /** 서버가 준 error 코드를 현재 언어 문구로. 모르는 코드는 일반 오류로
- *  떨어뜨린다 — 사용자에게 영문 코드가 그대로 보이는 일이 없게. */
+ *  떨어뜨린다 — 사용자에게 영문 코드가 그대로 보이는 일이 없게.
+ *
+ *  2026-09-08: Firebase 설정을 끝내는 동안 실제로 겪은 문제 —
+ *  승인된 도메인에 주소를 안 넣은 상태에서 구글 버튼을 누르면 화면에는
+ *  "문제가 발생했습니다. 잠시 후 다시 시도해 주세요." 만 떴다. 무엇을
+ *  해야 하는지는 브라우저 콘솔에만 있었고, 그건 사장님이 열어볼 곳이
+ *  아니다. 설정이 덜 끝나서 나는 오류는 화면이 직접 알려줘야 한다. */
 export function useAuthError() {
   const { tr } = useLanguage()
   return (code?: string | null) => {
     if (!code) return ''
     const errors = tr.auth.errors as unknown as Record<string, string>
-    return errors[code] || errors.server_error
+    if (errors[code]) return errors[code]
+    const fb = code.match(/auth\/[a-z-]+/i)
+    if (fb && FIREBASE_ERRORS[fb[0]]) return errors[FIREBASE_ERRORS[fb[0]]] || errors.server_error
+    return errors.server_error
   }
 }
 
 /** 구글 팝업을 사용자가 그냥 닫은 것은 오류가 아니라 취소다 — 빨간 경고를
- *  띄우면 뭔가 잘못된 줄 알게 된다. */
+ *  띄우면 뭔가 잘못된 줄 알게 된다.
+ *
+ *  popup-blocked 는 여기 넣지 않는다. 사용자가 닫은 게 아니라 브라우저가
+ *  막은 것이고, 아무 말 없이 넘어가면 "버튼을 눌러도 아무 일이 없다" 가
+ *  된다 — 팝업을 허용하라고 알려줘야 한다(google_popup_blocked). */
 export function isPopupCancel(message: string) {
-  return /popup-closed|popup_closed|cancelled|canceled|popup-blocked/i.test(message)
+  return /popup-closed|popup_closed|cancelled|canceled/i.test(message)
 }

@@ -188,6 +188,10 @@ export interface TranslationsType {
       wrong_current_password: string
       google_login_not_configured: string
       firebase_sdk_load_failed: string
+      google_domain_not_authorized: string
+      google_not_enabled: string
+      google_popup_blocked: string
+      network_failed: string
       card_number_required: string
       card_not_found: string
       card_already_claimed: string
