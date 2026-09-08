@@ -24,6 +24,21 @@ function check(name, cond, extra = "") {
   else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
 }
 
+// 2026-09-08: JSON 에 주석이 없어서 "// outputDirectory" 같은 키로 설명을
+// 달았더니 Vercel 스키마 검사가 should NOT have additional property 로
+// **배포를 실패**시켰다. 설명은 VERCEL.md 에 둔다.
+out.push("\n[vercel.json 은 주석을 넣을 수 없다]");
+const badKeys = Object.keys(vercel).filter((k) => k.trim().startsWith("//"));
+check("주석용 키가 없다", badKeys.length === 0, badKeys.join(", "));
+const ALLOWED = new Set([
+  "buildCommand", "devCommand", "installCommand", "ignoreCommand", "framework",
+  "outputDirectory", "public", "regions", "functions", "headers", "redirects",
+  "rewrites", "routes", "cleanUrls", "trailingSlash", "crons", "images", "git",
+]);
+const unknown = Object.keys(vercel).filter((k) => !ALLOWED.has(k));
+check("Vercel 이 아는 키만 쓴다", unknown.length === 0, unknown.join(", "));
+check("설명은 VERCEL.md 에 있다", fs.existsSync(path.join(APP, "VERCEL.md")));
+
 out.push("\n[정적 출력 — 홈페이지가 CDN 에서 나가는 근거]");
 check("outputDirectory 가 site", vercel.outputDirectory === "site", String(vercel.outputDirectory));
 check("빌드 스크립트가 그 폴더를 만든다", /const DEST = path\.join\(APP_DIR, "site"\)/.test(buildScript));
