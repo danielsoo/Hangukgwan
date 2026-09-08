@@ -2273,7 +2273,7 @@
       .join("");
 
     return `<div class="receipt">
-    <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}</div></div>
+    <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳單" : "廚房出單"}</div></div>
     <div class="divider"></div>
     <div class="meta-row"><span class="table-no">${
       isCounterOrder(o)
@@ -2296,7 +2296,7 @@
         ? `<span class="item-price-orig">NT$${o.total}</span> <span class="item-price-final">NT$${discountInfo.discountedTotal}</span>`
         : `NT$${o.total}`
     }</span></div>
-    ${priceCopy ? `<div class="price-copy-note">※此聯僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
+    ${priceCopy ? `<div class="price-copy-note">※本單僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
     ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
     <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
   </div>`;

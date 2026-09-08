@@ -149,7 +149,7 @@
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
-    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
+    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳單" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
     out += padLine(`桌號 ${o.table_number}`, orderTypeLabel(o)) + "\n";
     out += time + "\n";
@@ -196,7 +196,7 @@
     } else {
       out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
     }
-    if (priceCopy) out += "※此聯僅供結帳參考，實際折扣依系統結帳畫面為準\n";
+    if (priceCopy) out += "※本單僅供結帳參考，實際折扣依系統結帳畫面為準\n";
     if (o.note) out += "訂單備註：" + o.note + "\n";
     out += CMD.ALIGN_CENTER + "列印時間：" + new Date().toLocaleString("zh-TW") + "\n";
     out += CMD.FEED_AND_CUT;
@@ -320,7 +320,7 @@
       y += 20;
     }
 
-    line(`${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    line(`${storeName} ${priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
@@ -364,7 +364,7 @@
     } else {
       row("合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
-    if (priceCopy) line("※此聯僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
+    if (priceCopy) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     if (o.note) line("訂單備註：" + o.note, sz("orderNote", 11), wt("orderNote", 400));
     line("列印時間：" + new Date().toLocaleString("zh-TW"), sz("printTime", 10), wt("printTime", 400), { align: "center" });
 
