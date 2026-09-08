@@ -1,7 +1,8 @@
 {
+  "buildCommand": "node scripts/build-site.js",
   "functions": {
     "api/index.js": {
-      "includeFiles": "public/**"
+      "includeFiles": "{public,site}/**"
     }
   },
   "rewrites": [

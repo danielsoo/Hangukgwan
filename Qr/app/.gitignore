@@ -10,3 +10,7 @@ public/uploads/*
 # FIREBASE_SERVICE_ACCOUNT 에만 넣는다. (Qr/app/src/firebaseAdmin.js 참고)
 *firebase-adminsdk*.json
 serviceAccountKey.json
+
+# 배포 빌드가 Web/out 을 복사해 넣는 곳 (scripts/build-site.js).
+# 빌드 산출물이라 저장소에는 넣지 않는다.
+site/

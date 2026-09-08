@@ -75,6 +75,16 @@ app.get("/admin", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "admin.html"));
 });
 
+// 홈페이지(Web/) — 자세한 배경은 src/site.js 주석. 여기 순서가 중요하다:
+// 위의 /t/:tableNumber 와 /admin 이 먼저 잡히고, 그 다음 홈페이지가 "/",
+// "/menu/", "/login/", "/account/" 같은 나머지를 가져간다. /api/* 는
+// site.js 가 스스로 비켜준다.
+const { siteMiddleware } = require("./src/site");
+const site = siteMiddleware();
+if (site) app.use(site);
+
+// 홈페이지 빌드가 없을 때만 여기까지 온다(로컬에서 주문 시스템만 띄운
+// 경우). 그때는 예전처럼 관리자 화면으로 보낸다 — 빈 화면보다 낫다.
 app.get("/", (req, res) => {
   res.redirect("/admin");
 });
