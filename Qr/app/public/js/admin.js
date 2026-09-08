@@ -5886,40 +5886,86 @@
   // 붙여넣은 값을 알아서 JSON 으로 바꿔준다. 못 바꾸면 null 을 돌려주고
   // 호출한 쪽이 평소대로 오류를 띄운다 — 조용히 이상한 값을 저장하지 않는다.
   function normalizeFirebaseConfig(raw) {
-    const text = String(raw || "").trim();
-    if (!text) return null;
+    const text = String(raw || "");
+    if (!text.trim()) return null;
 
     const accept = (obj) =>
       obj && typeof obj === "object" && obj.apiKey && obj.projectId ? JSON.stringify(obj, null, 2) : null;
 
+    // 이미 올바른 JSON 이면 그대로.
     try {
-      return accept(JSON.parse(text));
+      const direct = accept(JSON.parse(text));
+      if (direct) return direct;
     } catch (e) {
-      /* JSON 이 아니면 아래에서 콘솔 형태로 한 번 더 시도한다 */
+      /* 아래에서 콘솔 형태로 시도한다 */
     }
 
-    // `const firebaseConfig = { ... };` 에서 중괄호 안쪽만 꺼낸다.
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start < 0 || end <= start) return null;
-    let body = text.slice(start, end + 1);
+    // 따옴표 안을 건드리지 않으면서 주석을 지운다. 문자열 안의 "//" 를
+    // 주석으로 잘못 보면 값이 깨진다.
+    const stripComments = (src) => {
+      let out = "";
+      let quote = null;
+      for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        if (quote) {
+          out += c;
+          if (c === "\\") { out += src[++i] || ""; continue; }
+          if (c === quote) quote = null;
+          continue;
+        }
+        if (c === '"' || c === "'" || c === "`") { quote = c; out += c; continue; }
+        if (c === "/" && src[i + 1] === "/") { while (i < src.length && src[i] !== "\n") i++; out += "\n"; continue; }
+        if (c === "/" && src[i + 1] === "*") { i += 2; while (i < src.length && !(src[i] === "*" && src[i + 1] === "/")) i++; i++; continue; }
+        out += c;
+      }
+      return out;
+    };
 
-    body = body
-      // 주석 제거 (콘솔이 "// Your web app's Firebase configuration" 같은 걸 같이 준다)
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
-      // 따옴표 없는 키에 따옴표를 씌운다  ->  apiKey:  =>  "apiKey":
-      .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
-      // 작은따옴표 문자열을 큰따옴표로
-      .replace(/'([^'\\]*)'/g, '"$1"')
-      // 마지막 항목 뒤의 쉼표 제거
-      .replace(/,(\s*[}\]])/g, "$1");
-
-    try {
-      return accept(JSON.parse(body));
-    } catch (e) {
-      return null;
+    // 괄호가 맞는 { … } 덩어리를 전부 찾는다.
+    //
+    // 첫 "{" 부터 마지막 "}" 까지 자르는 방식으로는 안 된다 — Firebase 콘솔이
+    // 보여주는 코드는 `import { initializeApp } from "firebase/app";` 로
+    // 시작해서, 첫 "{" 가 import 문의 것이다. 사장님이 화면을 통째로 복사해
+    // 붙여넣는 게 가장 자연스러운데 그게 바로 실패했다.
+    const blocks = [];
+    {
+      const src = stripComments(text);
+      let depth = 0, from = -1, quote = null;
+      for (let i = 0; i < src.length; i++) {
+        const c = src[i];
+        if (quote) {
+          if (c === "\\") { i++; continue; }
+          if (c === quote) quote = null;
+          continue;
+        }
+        if (c === '"' || c === "'" || c === "`") { quote = c; continue; }
+        if (c === "{") { if (depth === 0) from = i; depth++; }
+        else if (c === "}") {
+          if (depth > 0) depth--;
+          if (depth === 0 && from >= 0) { blocks.push(src.slice(from, i + 1)); from = -1; }
+        }
+      }
     }
+
+    const toJson = (body) =>
+      body
+        // 따옴표 없는 키에 따옴표를 씌운다  ->  apiKey:  =>  "apiKey":
+        .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+        // 작은따옴표 문자열을 큰따옴표로
+        .replace(/'([^'\\]*)'/g, '"$1"')
+        // 마지막 항목 뒤의 쉼표 제거
+        .replace(/,(\s*[}\]])/g, "$1");
+
+    // apiKey 와 projectId 가 둘 다 있는 첫 덩어리가 우리가 찾는 것이다.
+    for (const block of blocks) {
+      try {
+        const ok = accept(JSON.parse(toJson(block)));
+        if (ok) return ok;
+      } catch (e) {
+        /* 다음 덩어리 */
+      }
+    }
+    return null;
   }
 
   function renderVipConfigStatus(raw) {

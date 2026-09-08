@@ -38,9 +38,37 @@ const firebaseConfig = {
   appId: "1:1234567890:web:abcdef"
 };`;
 
+// Firebase 콘솔이 실제로 보여주는 화면 전체. 사장님이 이걸 통째로 복사해
+// 붙여넣는 게 가장 자연스러운데, 첫 "{" 가 import 문의 것이라 "첫 { 부터
+// 마지막 } 까지" 방식으로는 실패했다(2026-09-08에 실제로 실패했다).
+const FULL_CONSOLE_SCREEN = `
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyABC123",
+  authDomain: "hangookgwan-f8cd5.firebaseapp.com",
+  projectId: "hangookgwan-f8cd5",
+  storageBucket: "hangookgwan-f8cd5.firebasestorage.app",
+  messagingSenderId: "75860363301",
+  appId: "1:75860363301:web:abcdef",
+  measurementId: "G-ABC123"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+`;
+
 out.push("\n[받아들여야 하는 것]");
 for (const [name, input] of [
   ["Firebase 콘솔에서 복사한 그대로", CONSOLE_PASTE],
+  ["콘솔 화면 전체 (import 문까지 포함)", FULL_CONSOLE_SCREEN],
   ["중괄호 부분만", `{ apiKey: "A", projectId: "p" }`],
   ["작은따옴표", `{ apiKey: 'A', projectId: 'p' }`],
   ["마지막 쉼표가 남은 경우", `{ "apiKey": "A", "projectId": "p", }`],
@@ -60,6 +88,16 @@ for (const [name, input] of [
 ]) {
   check(name, normalizeFirebaseConfig(input) === null, String(normalizeFirebaseConfig(input)));
 }
+
+out.push("\n[화면 전체를 붙여넣어도 config 만 골라낸다]");
+const fromFull = normalizeFirebaseConfig(FULL_CONSOLE_SCREEN);
+let fullCfg = null;
+try { fullCfg = JSON.parse(fromFull); } catch (e) { /* 아래에서 잡힌다 */ }
+check("import 문의 중괄호를 집지 않는다", !!fullCfg, String(fromFull).slice(0, 120));
+check("apiKey 가 맞다", fullCfg && fullCfg.apiKey === "AIzaSyABC123", JSON.stringify(fullCfg));
+check("projectId 가 맞다", fullCfg && fullCfg.projectId === "hangookgwan-f8cd5", JSON.stringify(fullCfg));
+check("measurementId 까지 살아있다", fullCfg && fullCfg.measurementId === "G-ABC123", JSON.stringify(fullCfg));
+check("initializeApp 같은 코드가 섞여들지 않는다", fromFull && !/initializeApp|import/.test(fromFull), String(fromFull).slice(0, 200));
 
 out.push("\n[결과가 실제로 쓸 수 있는 값인지]");
 const normalized = normalizeFirebaseConfig(CONSOLE_PASTE);
