@@ -314,6 +314,12 @@ const TICKET_FONT_KEYS = [
   "itemDetail",
   "itemNote",
   "itemTakeout",
+  // 사장님 피드백(2026-09-08): "크기, 두께 전부 설정할 수 있잖아 영수증.
+  // 거기에 금액 버전도 설정할 수 있게 해줘" — 결제용(금액) 사본에서만
+  // 찍히는 └ NT$ 줄 전용 크기·굵기. admin.js
+  // DEFAULT_TICKET_FONT_SIZES/TICKET_FONT_INPUT_IDS에도 같은 이름으로
+  // 추가돼 있다.
+  "itemPrice",
   "total",
   "orderNote",
   "printTime",

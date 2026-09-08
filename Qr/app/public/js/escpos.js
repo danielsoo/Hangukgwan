@@ -339,17 +339,21 @@
       if (it.note) line("  └ 備註：" + it.note, sz("itemNote", 13), wt("itemNote", 400));
       // priceCopy 전용 — 주방용 사본에는 안 넣는다. 할인이 걸려 있으면
       // (特約95折/VIP9折만, 위 admin.js computeTicketDiscountInfo 주석 참고)
-      // 원가→할인가로 찍는다.
+      // 원가→할인가로 찍는다. 사장님 피드백(2026-09-08): "크기, 두께 전부
+      // 설정할 수 있잖아 영수증. 거기에 금액 버전도 설정할 수 있게 해줘" —
+      // 세부사항(itemDetail)과 같이 쓰던 크기·굵기를 admin.js
+      // DEFAULT_TICKET_FONT_SIZES에 새로 추가한 itemPrice/itemPriceWeight로
+      // 분리해서, 결제용 금액만 따로 크게/굵게 조절할 수 있게 한다.
       if (priceCopy) {
         const amount = lineTotalOf(it);
         const isDrink = it.category_key === "drink";
         if (isDrink) hasDrinkItem = true;
         if (discount.active && discount.isPercent && !isDrink) {
           const discounted = amount - Math.round(amount * (1 - discount.rate));
-          line("  └ NT$" + amount + "→NT$" + discounted, sz("itemDetail", 13), wt("itemDetail", 700));
+          line("  └ NT$" + amount + "→NT$" + discounted, sz("itemPrice", 13), wt("itemPrice", 700));
         } else {
           const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
-          line("  └ NT$" + amount + mark, sz("itemDetail", 13), wt("itemDetail", 700));
+          line("  └ NT$" + amount + mark, sz("itemPrice", 13), wt("itemPrice", 700));
         }
       }
       y += 8; // small gap between items, echoing .item-row's CSS padding

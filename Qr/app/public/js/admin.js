@@ -667,6 +667,7 @@
       tfsItemDetail: "세부사항 (└ 소/맵기)",
       tfsItemNote: "메뉴별 요청사항 (└ 비고)",
       tfsItemTakeout: "메뉴별 포장 표시 (└ 포장)",
+      tfsItemPrice: "결제용(금액) 표시 (└ NT$)",
       tfsTotal: "합계",
       tfsOrderNote: "전체 주문 메모",
       tfsPrintTime: "인쇄 시간",
@@ -1073,6 +1074,7 @@
       tfsItemDetail: "細項（└ 肉類/辣度）",
       tfsItemNote: "單品要求（└ 備註）",
       tfsItemTakeout: "單品外帶標示（└ 外帶）",
+      tfsItemPrice: "結帳單金額顯示（└ NT$）",
       tfsTotal: "合計",
       tfsOrderNote: "整單備註",
       tfsPrintTime: "列印時間",
@@ -2144,6 +2146,12 @@
     itemDetail: 13, // └ meat-type/spice lines under a dish
     itemNote: 13, // └ 備註 (customer note) line under a dish
     itemTakeout: 13, // └ 外帶 line under a dish ordered as takeout
+    // 사장님 피드백(2026-09-08): "크기, 두께 전부 설정할 수 있잖아 영수증.
+    // 거기에 금액 버전도 설정할 수 있게 해줘 현재 있는 것과 같이" — 결제용
+    // (금액) 사본에서만 찍히는 └ NT$ 줄. 지금까지는 itemDetail 크기를
+    // 같이 쓰고 굵기는 700으로 고정돼 있었는데, 계산할 때 한눈에 들어와야
+    // 하는 숫자라 다른 세부사항(소/맵기 등)과 별도로 조절할 수 있게 뺐다.
+    itemPrice: 13, // └ NT$(결제용 사본 품목 금액) 줄
     total: 16, // 合計 row
     orderNote: 11, // 訂單備註 (whole-order note) line
     printTime: 10, // footer 列印時間 line
@@ -2163,6 +2171,7 @@
     itemDetailWeight: 400,
     itemNoteWeight: 400,
     itemTakeoutWeight: 900,
+    itemPriceWeight: 700,
     totalWeight: 900,
     orderNoteWeight: 400,
     printTimeWeight: 400,
@@ -2293,7 +2302,7 @@
     }
     <div class="total-row"><span>合計</span><span>${
       discountInfo.active
-        ? `<span class="item-price-orig">NT$${o.total}</span> <span class="item-price-final">NT$${discountInfo.discountedTotal}</span>`
+        ? `<span class="total-price-orig">NT$${o.total}</span> NT$${discountInfo.discountedTotal}`
         : `NT$${o.total}`
     }</span></div>
     ${priceCopy ? `<div class="price-copy-note">※本單僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
@@ -2372,10 +2381,11 @@
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-note { font-size: ${fs.itemNote}px; font-weight: ${fs.itemNoteWeight}; color: #c0161f; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
-  .item-price { font-weight: 700; color: #000; }
-  .item-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; }
-  .item-price-final { font-weight: 700; color: #000; }
+  .item-price { font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; color: #000; }
+  .item-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
+  .item-price-final { font-weight: ${fs.itemPriceWeight}; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
+  .total-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
   .order-note { font-size: ${fs.orderNote}px; font-weight: ${fs.orderNoteWeight}; color: #c0161f; margin-top: 2mm; }
   .price-copy-note { font-size: ${fs.orderNote}px; color: #555; margin-top: 2mm; text-align: center; }
   .price-copy-drink-note { color: #966; margin-top: 1mm; }
@@ -2546,6 +2556,7 @@
     itemDetail: "tfsItemDetail",
     itemNote: "tfsItemNote",
     itemTakeout: "tfsItemTakeout",
+    itemPrice: "tfsItemPrice",
     total: "tfsTotal",
     orderNote: "tfsOrderNote",
     printTime: "tfsPrintTime",
@@ -2561,6 +2572,7 @@
     itemDetailWeight: "tfsItemDetailWeight",
     itemNoteWeight: "tfsItemNoteWeight",
     itemTakeoutWeight: "tfsItemTakeoutWeight",
+    itemPriceWeight: "tfsItemPriceWeight",
     totalWeight: "tfsTotalWeight",
     orderNoteWeight: "tfsOrderNoteWeight",
     printTimeWeight: "tfsPrintTimeWeight",
@@ -2608,10 +2620,15 @@
   // screenPreview:false here — the settings-card preview is an <iframe>
   // already fixed at 80mm wide, so it should show the ticket at true 1x
   // size, not the 2.4x-zoomed "paper on a desk" look of the real preview tab.
+  // 사장님 피드백(2026-09-08): "금액 버전도 설정할 수 있게 해줘" —
+  // 새로 추가한 결제용(금액) 표시 크기·굵기(tfsItemPrice)는 주방용
+  // 사본에는 안 나오므로, 미리보기도 buildTicketHtml(주방용 한 장)
+  // 대신 buildDualTicketHtml(주방용+결제용 두 장)로 바꿔서 이 설정이
+  // 실제로 어디에 적용되는지 스크롤해서 바로 볼 수 있게 한다.
   function updateTicketFontPreview() {
     const frame = $("#ticketFontPreviewFrame");
     if (!frame) return;
-    frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), { screenPreview: false });
+    frame.srcdoc = buildDualTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs());
   }
 
   // 크기·굵기 모두 <input type=number>라서 oninput 하나로 충분하지만,
