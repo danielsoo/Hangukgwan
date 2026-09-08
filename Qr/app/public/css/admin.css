@@ -20,13 +20,123 @@ body {
 input, select, button, textarea { font-family: inherit; }
 
 /* Login */
-.login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--navy); }
-.login-card { background: #fff; border-radius: 16px; padding: 32px; width: 320px; text-align: center; }
-.login-logo { font-size: 26px; font-weight: 900; color: var(--red); margin-bottom: 6px; }
-.login-card h1 { font-size: 21px; margin: 0 0 18px; color: var(--muted); font-weight: 500; }
-.login-card input { width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; font-size: 18px; }
-.login-card button { width: 100%; padding: 12px; border: none; background: var(--red); color: #fff; border-radius: 10px; font-weight: 700; cursor: pointer; }
-.login-error { color: var(--red); font-size: 16px; margin-top: 10px; }
+/* ── 관리자 로그인 화면 ──────────────────────────────────────────────
+   홈페이지(Web/)와 같은 얼굴로 맞춘다. 2026-09-08에 홈페이지와 주문
+   시스템이 한 주소로 합쳐지면서(src/site.js), 손님이 보는 화면과 이
+   화면이 같은 사이트의 두 문이 됐다. 그런데 여기만 남색 배경에 흰
+   카드, 빨간 버튼이라 다른 서비스로 넘어온 것처럼 보였다.
+
+   색은 홈페이지의 다크 팔레트를 그대로 옮겼다 (Web/src/app/globals.css
+   의 --bg/--panel/--gold/--muted 값). 여기서 CSS 변수로 다시 선언하지
+   않고 실제 값을 쓰는 이유: 이 파일의 :root 에는 이미 관리자 대시보드용
+   --navy/--red/--line 이 살고 있고, 대시보드는 밝은 화면 그대로 둬야
+   한다. 로그인 화면에만 닫힌 스타일로 두는 편이 안전하다.
+
+   대시보드(로그인 후)는 손대지 않았다 — 매일 몇 시간씩 보는 업무
+   화면이라 밝은 쪽이 낫고, 이번 요청은 "로그인하는 페이지"였다. */
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  /* 세로 정중앙이 아니라 위쪽에 둔다. 태블릿처럼 세로로 긴 화면에서
+     정중앙에 두면 위아래 여백이 과해져서 홈페이지 로그인 화면과 높이가
+     안 맞는다 (그쪽도 헤더 아래에서 바로 시작한다). */
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(56px, 16vh, 170px) clamp(16px, 5vw, 48px) clamp(40px, 8vw, 72px);
+  background: #0D0A08;
+  /* 홈페이지 히어로의 아주 옅은 금빛 번짐 — 평평한 검정보다 덜 삭막하다 */
+  background-image: radial-gradient(120% 80% at 50% 0%, rgba(200, 162, 75, 0.07), rgba(200, 162, 75, 0) 62%);
+}
+.login-shell { width: 100%; max-width: 400px; }
+
+.login-brand { display: inline-flex; align-items: center; gap: 11px; text-decoration: none; margin-bottom: 30px; }
+.login-brand-mark {
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(200, 162, 75, 0.5);
+  color: #C8A24B;
+  font-family: 'Noto Serif TC', serif;
+  font-size: 17px; line-height: 1;
+}
+.login-brand-name {
+  font-family: 'Noto Serif TC', serif;
+  font-size: 19px;
+  letter-spacing: 0.16em;
+  color: #F4EDE1;
+}
+
+.login-screen h1 {
+  font-family: 'Newsreader', 'Noto Serif KR', serif;
+  font-size: clamp(24px, 6vw, 31px);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  color: #F4EDE1;
+  margin: 0;
+}
+.login-sub { font-size: 13.5px; line-height: 1.6; color: rgba(239, 230, 216, 0.6); margin: 10px 0 0; }
+
+.login-card {
+  margin-top: 26px;
+  padding: clamp(20px, 5vw, 30px);
+  background: #15100C;
+  border: 1px solid rgba(200, 162, 75, 0.18);
+}
+
+.login-field { display: block; margin-bottom: 18px; }
+.login-field > span {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: #8C7A5E;
+  margin-bottom: 7px;
+}
+.login-card input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 13px 13px;
+  background: #0D0A08;
+  border: 1px solid rgba(200, 162, 75, 0.22);
+  border-radius: 0;
+  color: #F4EDE1;
+  font-family: inherit;
+  /* 16px 미만이면 모바일 브라우저가 입력칸을 탭할 때 화면을 확대해버린다.
+     태블릿에서 손가락으로 누르는 칸이라 그것도 피할 겸 크게 잡는다. */
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  outline: none;
+  transition: border-color 0.18s ease;
+}
+.login-card input:focus { border-color: rgba(200, 162, 75, 0.55); }
+
+.login-card button {
+  width: 100%;
+  padding: 13px 0;
+  border: none;
+  border-radius: 0;
+  background: #C8A24B;
+  color: #0D0A08;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+.login-card button:hover { background: #E0C179; }
+
+/* 비밀번호가 틀렸을 때. 빨강을 그대로 쓰면 이 화면에서 혼자 튀어서,
+   금색 계열 안에서 읽히는 낮은 채도의 붉은 톤으로 맞췄다. */
+.login-error {
+  color: #D98A72;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-top: 14px;
+  text-align: center;
+}
+
+.login-back { margin: 22px 0 0; font-size: 12.5px; }
+.login-back a { color: #C8A24B; text-decoration: none; letter-spacing: 0.04em; }
+.login-back a:hover { color: #E0C179; }
 
 /* Top bar */
 .admin-topbar { background: var(--navy); color: #fff; display: flex; align-items: center; padding: 0 20px; height: 58px; gap: 24px; position: sticky; top: 0; z-index: 30; }
