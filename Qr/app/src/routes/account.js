@@ -272,12 +272,18 @@ function hasWebConfig() {
 // 재검증 요청을 하나씩 더 만들었다 — 요청을 줄이려던 것이 늘리고 있었다
 // (브라우저 테스트가 networkidle 에 영영 도달하지 못해서 드러났다).
 //
-// CDN-Cache-Control 은 CDN 만 읽고 브라우저는 무시한다. 이게 원래 쓰려던
-// 도구다. 사장님이 Firebase 설정을 바꾸면 최대 1분 늦게 반영되는 대신,
-// 그 사이 방문자들은 함수를 깨우지 않는다.
+// 그래서 CDN-Cache-Control 로 바꿔봤는데 배포본에서 재보니 그것도 안 먹었다
+// (계속 x-vercel-cache: MISS). Vercel 이 함수 응답에 대해 문서화한 방법은
+// Cache-Control 의 s-maxage 다 — SWR 없이 그것만 쓴다.
+//
+// max-age=0  : 브라우저는 매번 물어본다(설정을 바꾼 뒤 그 기기만 옛날 상태로
+//              남는 일이 없다)
+// s-maxage=60: 엣지는 1분 보관한다(브라우저는 이 값을 무시한다)
+//
+// 사장님이 Firebase 설정을 바꾸면 최대 1분 늦게 반영되는 대신, 그 사이
+// 방문자들은 함수를 깨우지 않는다.
 router.get("/methods", (req, res) => {
-  res.set("Cache-Control", "public, max-age=0, must-revalidate");
-  res.set("CDN-Cache-Control", "public, max-age=60");
+  res.set("Cache-Control", "public, max-age=0, s-maxage=60");
   res.json({ email: true, google: isConfigured() && hasWebConfig() });
 });
 

@@ -51,13 +51,16 @@ function resolveSiteDir() {
 function cacheControl(res, filePath) {
   if (filePath.includes(`${path.sep}_next${path.sep}static${path.sep}`)) {
     // 파일 이름에 내용 해시가 박혀 있어 내용이 바뀌면 이름이 바뀐다.
-    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    res.setHeader("CDN-Cache-Control", "public, max-age=31536000");
+    res.setHeader("Cache-Control", "public, max-age=31536000, s-maxage=31536000, immutable");
   } else if (filePath.endsWith(".html")) {
-    // 이름이 그대로라 브라우저에는 남기지 않는다 — 배포 후에도 손님 폰에
-    // 예전 페이지가 보이면 안 된다. 엣지는 배포마다 비워지니 맡겨도 된다.
-    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
-    res.setHeader("CDN-Cache-Control", "public, max-age=3600");
+    // max-age=0 은 브라우저용(배포 후에도 손님 폰에 예전 페이지가 보이면
+    // 안 된다), s-maxage 는 엣지용(브라우저는 무시한다). 엣지 캐시는 배포마다
+    // 자동으로 비워지므로 맡겨도 낡은 페이지가 남지 않는다.
+    //
+    // stale-while-revalidate 는 쓰지 않는다 — 공유 캐시뿐 아니라 브라우저
+    // 캐시에도 적용돼서 페이지를 열 때마다 배경 재검증 요청을 하나씩 더
+    // 만든다(요청을 줄이려다 늘어난다).
+    res.setHeader("Cache-Control", "public, max-age=0, s-maxage=3600");
   }
 }
 
