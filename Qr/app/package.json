@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "dev:local": "node scripts/dev-local.js",
     "seed": "node src/seed.js",
     "test": "node test/accounts.test.js && node test/customer.test.js",
     "test:e2e": "node test/e2e-accounts.js && node test/e2e-site-login.js"
