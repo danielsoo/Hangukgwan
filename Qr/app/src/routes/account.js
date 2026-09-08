@@ -234,11 +234,36 @@ router.get("/orders", requireUser, (req, res) => {
   res.json({ orders: mine });
 });
 
-// Tells the website which sign-in buttons to render — there is no point
-// showing "구글로 계속하기" before the owner has finished the Firebase setup
-// (same "degrade to not-configured" pattern as firebaseAdmin.js).
+// 구글 로그인은 **양쪽이 다 갖춰져야** 동작한다.
+//
+//   1. 서버: FIREBASE_SERVICE_ACCOUNT (Vercel 환경변수) — 받은 ID 토큰이
+//      진짜인지 검증한다. isConfigured() 가 보는 값.
+//   2. 브라우저: firebase_web_config (Admin > 설정 > 회원(VIP) 로그인) —
+//      구글 팝업을 띄우려면 어느 Firebase 프로젝트인지 알아야 한다.
+//      Web/src/lib/firebaseClient.ts 가 /api/settings 에서 받아 쓴다.
+//
+// 처음엔 1번만 보고 버튼을 띄웠는데, 2026-09-08 배포에서 실제로 그 상태가
+// 됐다: 환경변수는 넣고 관리자 화면 설정은 아직 안 한 상태. 버튼은 멀쩡히
+// 보이는데 누르면 "Google 로그인이 아직 설정되지 않았습니다" 가 떴다.
+// 눌러야만 알 수 있는 고장은 없느니만 못하다 — 둘 다 있을 때만 띄운다.
+function hasWebConfig() {
+  const raw = store.settings && store.settings.firebase_web_config;
+  if (!raw || !String(raw).trim()) return false;
+  try {
+    const cfg = typeof raw === "string" ? JSON.parse(raw) : raw;
+    // firebaseClient.ts 가 실제로 필요로 하는 최소 두 개. 콘솔이 보여주는
+    // JS 객체 리터럴(키에 따옴표 없음)을 그대로 붙여넣으면 위 JSON.parse
+    // 에서 걸리는데, 그것도 "설정 안 됨"으로 보는 게 맞다 — 그 값으로는
+    // 브라우저에서도 똑같이 실패한다.
+    return !!(cfg && cfg.apiKey && cfg.projectId);
+  } catch (e) {
+    return false;
+  }
+}
+
+// Tells the website which sign-in buttons to render.
 router.get("/methods", (req, res) => {
-  res.json({ email: true, google: isConfigured() });
+  res.json({ email: true, google: isConfigured() && hasWebConfig() });
 });
 
 module.exports = router;

@@ -5871,6 +5871,57 @@
   // sanity-checks it parses and has the two fields a Firebase web config
   // always has, so a copy-paste mistake shows up immediately instead of
   // silently breaking Google sign-in on the customer page.
+  // Firebase 콘솔은 firebaseConfig 를 **자바스크립트 객체 리터럴**로 보여준다:
+  //
+  //     const firebaseConfig = {
+  //       apiKey: "AIza...",
+  //       projectId: "hangookgwan-f8cd5"
+  //     };
+  //
+  // 키에 따옴표가 없어서 JSON 이 아니다. 그런데 이 값을 읽는 쪽
+  // (Web/src/lib/firebaseClient.ts, public/js/order.js)은 전부 JSON.parse 를
+  // 쓴다. 그래서 콘솔에서 복사한 그대로 붙여넣으면 저장이 거부됐고, 사장님
+  // 입장에서는 "화면이 시키는 대로 했는데 안 된다" 가 된다.
+  //
+  // 붙여넣은 값을 알아서 JSON 으로 바꿔준다. 못 바꾸면 null 을 돌려주고
+  // 호출한 쪽이 평소대로 오류를 띄운다 — 조용히 이상한 값을 저장하지 않는다.
+  function normalizeFirebaseConfig(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return null;
+
+    const accept = (obj) =>
+      obj && typeof obj === "object" && obj.apiKey && obj.projectId ? JSON.stringify(obj, null, 2) : null;
+
+    try {
+      return accept(JSON.parse(text));
+    } catch (e) {
+      /* JSON 이 아니면 아래에서 콘솔 형태로 한 번 더 시도한다 */
+    }
+
+    // `const firebaseConfig = { ... };` 에서 중괄호 안쪽만 꺼낸다.
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start) return null;
+    let body = text.slice(start, end + 1);
+
+    body = body
+      // 주석 제거 (콘솔이 "// Your web app's Firebase configuration" 같은 걸 같이 준다)
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1")
+      // 따옴표 없는 키에 따옴표를 씌운다  ->  apiKey:  =>  "apiKey":
+      .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
+      // 작은따옴표 문자열을 큰따옴표로
+      .replace(/'([^'\\]*)'/g, '"$1"')
+      // 마지막 항목 뒤의 쉼표 제거
+      .replace(/,(\s*[}\]])/g, "$1");
+
+    try {
+      return accept(JSON.parse(body));
+    } catch (e) {
+      return null;
+    }
+  }
+
   function renderVipConfigStatus(raw) {
     const el = $("#vipConfigStatus");
     if (!el) return;
@@ -5879,34 +5930,32 @@
       el.style.color = "";
       return;
     }
-    try {
-      const cfg = JSON.parse(raw);
-      if (cfg && cfg.apiKey && cfg.projectId) {
-        el.textContent = T("vipConfigSet");
-        el.style.color = "#1a8a44";
-      } else {
-        el.textContent = T("vipConfigInvalid");
-        el.style.color = "#b5232c";
-      }
-    } catch (e) {
+    if (normalizeFirebaseConfig(raw)) {
+      el.textContent = T("vipConfigSet");
+      el.style.color = "#1a8a44";
+    } else {
       el.textContent = T("vipConfigInvalid");
       el.style.color = "#b5232c";
     }
   }
 
   $("#saveVipSettingsBtn").onclick = async () => {
-    const raw = $("#vipFirebaseConfigInput").value.trim();
+    const typed = $("#vipFirebaseConfigInput").value.trim();
     const msg = $("#vipSettingsMsg");
-    if (raw) {
-      try {
-        JSON.parse(raw);
-      } catch (e) {
+    // 빈 값은 "구글 로그인 끄기" 로 취급한다(이메일 로그인은 계속 동작).
+    let raw = "";
+    if (typed) {
+      raw = normalizeFirebaseConfig(typed);
+      if (!raw) {
         msg.style.color = "#b5232c";
         msg.textContent = T("vipConfigInvalidJson");
         msg.hidden = false;
-        setTimeout(() => (msg.hidden = true), 3000);
+        setTimeout(() => (msg.hidden = true), 4000);
         return;
       }
+      // 정리된 값을 입력칸에도 되돌려 보여준다 — 저장된 것과 화면에 보이는
+      // 게 다르면 다음에 열었을 때 "내가 넣은 게 아닌데?" 가 된다.
+      $("#vipFirebaseConfigInput").value = raw;
     }
     await fetch("/api/settings", {
       method: "PUT",
