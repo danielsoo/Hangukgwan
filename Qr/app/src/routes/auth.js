@@ -2,6 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const { store, save } = require("../db");
 const { requireOwner } = require("../auth");
+const { isAdminRole } = require("../accounts");
 
 const router = express.Router();
 
@@ -17,12 +18,20 @@ router.post("/login", (req, res) => {
   const staffHash = store.settings.staff_password_hash;
   if (!ownerHash) return res.status(500).json({ error: "admin_not_configured" });
 
+  // This login is not tied to an account row, so any userId left over from
+  // an account login on the same browser must go — otherwise
+  // /api/account/me would look that account up, find role "customer" on it,
+  // and re-sync this session's role back down to customer (that endpoint
+  // treats the account row as the source of truth), silently undoing the
+  // admin login that just succeeded.
   if (bcrypt.compareSync(password, ownerHash)) {
+    delete req.session.userId;
     req.session.isAdmin = true;
     req.session.role = "owner";
     return res.json({ ok: true, role: "owner" });
   }
   if (staffHash && bcrypt.compareSync(password, staffHash)) {
+    delete req.session.userId;
     req.session.isAdmin = true;
     req.session.role = "staff";
     return res.json({ ok: true, role: "staff" });
@@ -34,8 +43,17 @@ router.post("/logout", (req, res) => {
   req.session.destroy(() => res.json({ ok: true }));
 });
 
+// admin.js's checkAuth() calls this on every load of /admin to decide
+// between the login screen and the dashboard. Since the 2026-09-08 account
+// merge, a signed-in *customer* also has a session role, so this must check
+// the role's value (isAdminRole) rather than merely that one exists —
+// otherwise every customer who logged in on the website would be handed the
+// admin dashboard UI. (The API calls that dashboard then makes are
+// separately guarded by src/auth.js, which was fixed the same way, so this
+// was never the only line standing between a customer and the data — but it
+// is the one that decides what they get shown.)
 router.get("/me", (req, res) => {
-  if (!req.session || !req.session.role) return res.json({ isAdmin: false });
+  if (!req.session || !isAdminRole(req.session.role)) return res.json({ isAdmin: false });
   const role = req.session.role;
   const staffPerms = store.settings.staff_permissions || {};
   // NOTE: reservationManage was missing from this list even though it's a
@@ -62,8 +80,12 @@ router.get("/me", (req, res) => {
 // Each role changes its own password (owner changes the owner password,
 // staff changes the staff password) — same endpoint, targets whichever
 // account is logged in.
+// NOTE: this changes the shared 사장/직원 *password*, not an account's
+// password (that's POST /api/account/change-password). isAdminRole, not a
+// bare role check — a signed-in customer must not reach the branch below
+// that picks between the owner and staff password hashes.
 router.post("/change-password", async (req, res) => {
-  if (!req.session || !req.session.role) return res.status(401).json({ error: "not_authenticated" });
+  if (!req.session || !isAdminRole(req.session.role)) return res.status(401).json({ error: "not_authenticated" });
   const { currentPassword, newPassword } = req.body || {};
   if (!currentPassword || !newPassword || newPassword.length < 6) {
     return res.status(400).json({ error: "invalid_input" });

@@ -200,4 +200,17 @@ async function deletePhoto(id) {
   await db.collection("photos").deleteOne({ _id: new ObjectId(id) });
 }
 
-module.exports = { connectDB, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId, savePhoto, getPhoto, deletePhoto };
+// The raw Mongo db handle, for data that deliberately does NOT live inside
+// the single `store` document. `store` is re-read in full on every request
+// (refreshStore above) and re-written in full on every save, which is fine
+// for a restaurant's menu/tables/settings but wrong for anything that grows
+// without bound and is looked up by key — photos already live in their own
+// collection for exactly this reason, and so do user accounts
+// (src/accounts.js). Callers must await connectDB() first (or call this
+// after any other db.js call that already did).
+function getDb() {
+  if (!db) throw new Error("getDb() called before connectDB() — await connectDB() first.");
+  return db;
+}
+
+module.exports = { connectDB, getDb, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId, savePhoto, getPhoto, deletePhoto };

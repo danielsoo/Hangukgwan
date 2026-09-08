@@ -148,6 +148,18 @@ app.use(
   })
 );
 
+// Re-reads the signed-in account's current role from the database before any
+// route runs, so promoting/demoting someone takes effect on their very next
+// request instead of whenever their 12-hour session cookie happens to expire
+// (see src/auth.js). Must come after the session middleware above and before
+// every route that guards on a role.
+app.use(require("./src/auth").syncSessionRole);
+
+// The unified customer+admin login (사장님 요청 2026-09-08). /api/auth
+// below is the legacy password-only admin login, kept as the never-locked-out
+// fallback; /api/account is the one the website's login form uses.
+app.use("/api/account", require("./src/routes/account"));
+app.use("/api/users", require("./src/routes/users"));
 app.use("/api/auth", require("./src/routes/auth"));
 app.use("/api/menu", require("./src/routes/menu"));
 app.use("/api/tables", require("./src/routes/tables"));
