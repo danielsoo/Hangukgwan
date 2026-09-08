@@ -1,7 +1,7 @@
 const express = require("express");
 const { store, refreshAndSave, patchArrayItem, nextId } = require("../db");
-const { requireAdmin, requirePermission } = require("../auth");
-const { expiryDate, isExpired, isActive } = require("../vip");
+const { requireAdmin, requirePermission, requireOwner } = require("../auth");
+const { expiryDate, isExpired, isActive, isClaimed } = require("../vip");
 // Gated the same as other money-affecting configuration (payment settings,
 // staff permissions) — a discount rate is a financial setting, not
 // day-to-day order handling any staff member should be able to touch.
@@ -93,15 +93,33 @@ router.patch("/:id", canManageVip, async (req, res) => {
   res.json(serialize(card));
 });
 
-// Clears a claim (lost phone, wrong person registered it, customer asked to
-// re-link to a different Google account, etc.) without deleting the
-// physical card record itself — it goes back to "issued, not yet claimed"
-// and can be registered again.
-router.post("/:id/unlink", canManageVip, async (req, res) => {
+// 카드 등록 해제 — 사장 전용.
+//
+// 손님에게는 "한 번 등록한 카드는 다른 계정으로 옮길 수 없습니다"라고
+// 안내한다(주문 화면·홈페이지의 회원 등록 화면). 그래야 카드를 돌려쓰거나
+// 남의 카드를 가로채는 시도가 애초에 줄어든다. 다만 현실에서는 폰을
+// 잃어버렸다거나, 가족이 대신 등록해버렸다거나, 엉뚱한 계정으로 눌렀다거나
+// 하는 일이 생기므로 사장님이 직접 풀어줄 수 있는 길은 남겨둔다
+// (사장님: "우리는 뭐 바꿀 수 있도록 해주자 혹시 모르니까. 근데 그건 사장 권한만").
+//
+// requireOwner 인 이유: 이건 사실상 "이 손님의 할인 권리를 회수해서 다른
+// 사람에게 넘길 수 있다"는 뜻이라, 직원 권한 토글(settingsEdit)로 열어둘
+// 성질이 아니다.
+router.post("/:id/unlink", requireOwner, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const card = store.vipCards.find((c) => c.id === id);
   if (!card) return res.status(404).json({ error: "not_found" });
-  const updates = { google_uid: null, customer_name: null, customer_email: null, registered_at: null };
+  // account_id 를 같이 비우지 않으면 통합 계정으로 등록한 카드는 "등록해제"를
+  // 눌러도 그 계정에 그대로 붙어 있게 된다(vip.js cardBelongsTo 가 두 필드를
+  // 모두 보기 때문). google_uid 만 지우던 예전 코드 그대로 뒀다면 조용히
+  // 동작하지 않는 버튼이 됐을 것이다.
+  const updates = {
+    google_uid: null,
+    account_id: null,
+    customer_name: null,
+    customer_email: null,
+    registered_at: null,
+  };
   await patchArrayItem("vipCards", id, updates);
   res.json(serialize(card));
 });
@@ -115,7 +133,10 @@ router.delete("/:id", canManageVip, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const card = store.vipCards.find((c) => c.id === id);
   if (!card) return res.status(404).json({ error: "not_found" });
-  if (card.google_uid) return res.status(400).json({ error: "cannot_delete_claimed_card" });
+  // isClaimed() 로 봐야 한다 — 통합 계정으로 등록한 카드는 google_uid 가
+  // 비어 있어서, 예전처럼 그 필드만 보면 손님이 쓰고 있는 카드가 그대로
+  // 삭제돼 할인이 조용히 사라진다.
+  if (isClaimed(card)) return res.status(400).json({ error: "cannot_delete_claimed_card" });
   await refreshAndSave((s) => {
     s.vipCards = s.vipCards.filter((c) => c.id !== id);
   });

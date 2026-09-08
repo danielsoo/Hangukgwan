@@ -63,6 +63,9 @@ app.use(syncSessionRole);
 app.use("/api/account", require("../src/routes/account"));
 app.use("/api/members", require("../src/routes/members"));
 app.use("/api/orders", require("../src/routes/orders"));
+app.use("/api/vip-cards", require("../src/routes/vipCards"));
+app.use("/api/auth", require("../src/routes/auth"));
+app.use("/api/users", require("../src/routes/users"));
 
 let pass = 0;
 let fail = 0;
@@ -158,6 +161,54 @@ function check(name, cond, extra = "") {
   check("구글 전용 카드도 여전히 유효", isActive(legacyCard) === true);
   const expired = store.vipCards.find((c) => c.card_number === "V0002");
   check("만료 카드는 무효", isActive(expired) === false);
+
+  out.push("\n[카드 등록 해제 — 사장 전용]");
+  // 손님에게는 "한 번 등록하면 못 옮긴다"고 안내하지만, 사장님은 풀어줄 수
+  // 있어야 한다(폰 분실, 가족이 대신 등록 등).
+  const aliceCardId = store.vipCards.find((c) => c.card_number === "V0001").id;
+
+  r = await alice.post(`/api/vip-cards/${aliceCardId}/unlink`);
+  check("손님은 등록 해제 불가", r.status === 401, `got ${r.status}`);
+
+  // 직원 세션(레거시 비밀번호 로그인의 staff)으로도 막혀야 한다.
+  store.settings.staff_password_hash = bcrypt.hashSync("staffpass123", 10);
+  store.settings.staff_permissions = { settingsEdit: true };
+  const staff = request.agent(app);
+  r = await staff.post("/api/auth/login").send({ password: "staffpass123" });
+  check("직원 로그인됨", r.status === 200 && r.body.role === "staff", JSON.stringify(r.body));
+  r = await staff.post(`/api/vip-cards/${aliceCardId}/unlink`);
+  // settingsEdit 권한이 있어도 막혀야 한다 — 이건 남의 할인 권리를 회수하는
+  // 동작이라 직원 권한 토글로 열어둘 성질이 아니다.
+  check("직원은 settingsEdit 권한이 있어도 해제 불가", r.status === 401, `got ${r.status}`);
+
+  const owner = request.agent(app);
+  await owner.post("/api/auth/login").send({ password: "ownerpass123" });
+  r = await owner.post(`/api/vip-cards/${aliceCardId}/unlink`);
+  check("사장은 등록 해제 가능", r.status === 200, `got ${r.status}`);
+
+  const unlinked = store.vipCards.find((c) => c.id === aliceCardId);
+  // ⚠️ account_id 를 안 지우면 "해제"를 눌러도 그 계정에 그대로 붙어 있는
+  // 조용히 동작하지 않는 버튼이 된다.
+  check("account_id 가 비워졌다", unlinked.account_id === null, JSON.stringify(unlinked));
+  check("google_uid 도 비워졌다", unlinked.google_uid === null);
+
+  r = await alice.get("/api/members/me");
+  check("해제 후 손님에게 카드가 안 보인다", r.body.membership === null, JSON.stringify(r.body));
+
+  r = await alice.post("/api/orders").send(orderBody);
+  check("해제 후 주문은 정가", r.status === 201 && r.body.total === 230, `total=${r.body.total}`);
+
+  r = await bob.post("/api/members/register-card").send({ cardNumber: "V0001" });
+  check("해제된 카드는 다른 사람이 등록 가능", r.status === 200, JSON.stringify(r.body));
+
+  out.push("\n[등록된 카드는 삭제되지 않는다]");
+  r = await owner.delete(`/api/vip-cards/${aliceCardId}`);
+  // 예전 코드는 google_uid 만 봤다. 밥은 이메일 계정이라 google_uid 가 없어서,
+  // 그대로 뒀다면 밥이 쓰고 있는 카드가 그냥 삭제됐을 것이다.
+  check("계정으로 등록된 카드 삭제 거부", r.status === 400 && r.body.error === "cannot_delete_claimed_card", JSON.stringify(r.body));
+  const unclaimedId = store.vipCards.find((c) => c.card_number === "V0002").id;
+  r = await owner.delete(`/api/vip-cards/${unclaimedId}`);
+  check("미등록 카드는 삭제 가능", r.status === 200, JSON.stringify(r.body));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);

@@ -490,3 +490,7 @@ body {
 @media (min-width: 600px) {
   .cart-fab { width: 528px; }
 }
+
+/* VIP 카드 등록은 되돌릴 수 없는 동작이라 누르기 전에 눈에 띄게 안내한다
+   (되돌리는 건 사장님만 — Admin > 회원(VIP) > 등록해제). */
+.member-notice { color: #9a5b00; background: #fff6e5; border-radius: 8px; padding: 8px 10px; line-height: 1.5; }

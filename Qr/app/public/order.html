@@ -215,6 +215,9 @@
 
         <div id="memberNoCard">
           <p class="member-hint" data-i18n="memberNoCardHint">보유한 실물 VIP 카드번호를 입력해서 등록하세요.</p>
+          <!-- 등록이 되돌릴 수 없는 동작이라는 걸 누르기 전에 알려준다. 실제로
+               되돌리는 건 사장님만 할 수 있다(Admin > 회원(VIP) > 등록해제). -->
+          <p class="member-hint member-notice" data-i18n="memberOneTimeNotice">※ 카드는 한 번 등록하면 그 계정에 고정되며, 다른 계정으로 옮길 수 없습니다. 본인 계정으로 로그인했는지 확인 후 등록해 주세요.</p>
           <input type="text" id="memberCardInput" data-i18n-placeholder="memberCardPlaceholder" placeholder="카드번호" maxlength="30" />
           <button class="add-btn" id="memberRegisterBtn" data-i18n="memberRegisterBtn">카드 등록</button>
           <p class="member-msg" id="memberRegisterMsg" hidden></p>
