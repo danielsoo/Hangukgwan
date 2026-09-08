@@ -2273,7 +2273,7 @@
       .join("");
 
     return `<div class="receipt">
-    <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}</div></div>
+    <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}</div></div>
     <div class="divider"></div>
     <div class="meta-row"><span class="table-no">${
       isCounterOrder(o)
@@ -2288,7 +2288,7 @@
     ${itemRows}
     ${
       discountInfo.active && hasDrinkItem && discountInfo.isPercent
-        ? `<div class="price-copy-note price-copy-drink-note">※ 飲料/酒類不列入折扣</div>`
+        ? `<div class="price-copy-note price-copy-drink-note">※ 飲料/酒類恕不折扣</div>`
         : ""
     }
     <div class="total-row"><span>合計</span><span>${

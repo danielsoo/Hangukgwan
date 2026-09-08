@@ -149,7 +149,7 @@
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
-    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
+    out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
     out += padLine(`桌號 ${o.table_number}`, orderTypeLabel(o)) + "\n";
     out += time + "\n";
@@ -188,7 +188,7 @@
     });
 
     if (priceCopy && discount.active && discount.isPercent && hasDrinkItem) {
-      out += "※ 飲料/酒類不列入折扣\n";
+      out += "※ 飲料/酒類恕不折扣\n";
     }
     out += divider() + "\n";
     if (priceCopy && discount.active) {
@@ -320,7 +320,7 @@
       y += 20;
     }
 
-    line(`${storeName} ${priceCopy ? "結帳用（含金額）" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    line(`${storeName} ${priceCopy ? "結帳聯（含金額）" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
@@ -356,7 +356,7 @@
     });
 
     if (priceCopy && discount.active && discount.isPercent && hasDrinkItem) {
-      line("※ 飲料/酒類不列入折扣", sz("itemDetail", 13), wt("itemDetail", 400));
+      line("※ 飲料/酒類恕不折扣", sz("itemDetail", 13), wt("itemDetail", 400));
     }
     divider();
     if (priceCopy && discount.active) {
