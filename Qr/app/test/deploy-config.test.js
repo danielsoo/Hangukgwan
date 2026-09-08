@@ -28,6 +28,10 @@ out.push("\n[정적 출력 — 홈페이지가 CDN 에서 나가는 근거]");
 check("outputDirectory 가 site", vercel.outputDirectory === "site", String(vercel.outputDirectory));
 check("빌드 스크립트가 그 폴더를 만든다", /const DEST = path\.join\(APP_DIR, "site"\)/.test(buildScript));
 check("Web/ 이 없어도 site/ 는 만든다 (없으면 배포가 실패한다)", /fs\.mkdirSync\(DEST, \{ recursive: true \}\)/.test(buildScript));
+// vercel.json 의 첫 rewrite 가 "/" 를 /index.html 로 보낸다. 그 파일이 없으면
+// Vercel 은 다음 규칙으로 넘어가지 않고 404 를 낸다(맞는 규칙 하나만 적용하고
+// 멈춘다). 홈페이지 빌드가 없는 상황에서도 /admin 으로는 갈 수 있어야 한다.
+check("홈페이지가 없으면 /admin 으로 보내는 index.html 을 남긴다", /writeAdminFallback\(\)/.test(buildScript) && /url=\/admin/.test(buildScript));
 check("buildCommand 가 그 스크립트를 부른다", vercel.buildCommand === "node scripts/build-site.js", String(vercel.buildCommand));
 
 out.push("\n[페이지 주소가 정적 파일로 이어지는지 — 이게 없으면 전부 함수로 간다]");

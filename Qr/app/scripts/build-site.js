@@ -25,9 +25,27 @@ function run(cmd, cwd) {
 
 // site/ 는 어떤 경우에도 존재해야 한다. 없으면 Vercel 이 outputDirectory 를
 // 못 찾아 배포 자체가 실패한다 — 홈페이지를 못 만든 것과 배포가 죽는 것은
-// 전혀 다른 문제다. index.html 은 넣지 않는다(그래야 / 가 함수로 넘어가서
-// 예전처럼 /admin 으로 안내된다).
+// 전혀 다른 문제다.
 fs.mkdirSync(DEST, { recursive: true });
+
+// 홈페이지 빌드가 없을 때 "/" 를 관리자 화면으로 안내하는 최소 페이지.
+// vercel.json 의 첫 rewrite 가 "/" 를 /index.html 로 보내는데, 그 파일이
+// 없으면 Vercel 은 다음 규칙으로 넘어가지 않고 그냥 404 를 낸다(맞는 규칙
+// 하나를 적용하고 멈춘다). 예전에는 이 경우 server.js 가 /admin 으로
+// 보내줬으므로, 그 동작을 여기서 지켜준다.
+function writeAdminFallback() {
+  fs.writeFileSync(
+    path.join(DEST, "index.html"),
+    [
+      "<!doctype html>",
+      '<html lang="ko"><head><meta charset="utf-8">',
+      '<meta http-equiv="refresh" content="0; url=/admin">',
+      "<title>한국관</title></head>",
+      '<body><p>관리자 화면으로 이동합니다 — <a href="/admin">/admin</a></p></body></html>',
+      "",
+    ].join("\n")
+  );
+}
 
 // 관리자·주문 화면이 쓰는 정적 자산도 CDN 에서 나가게 같이 올린다.
 // 함수 안의 public/ 사본은 그대로 두고(라우트들이 sendFile 로 쓴다) 복사만
@@ -44,6 +62,7 @@ if (!fs.existsSync(path.join(WEB_DIR, "package.json"))) {
   console.warn("[build-site] Vercel 프로젝트 설정에서 'Include files outside of");
   console.warn("[build-site] the Root Directory in the Build Step' 를 켜주세요.");
   copyPublicAssets();
+  writeAdminFallback();
   process.exit(0);
 }
 
