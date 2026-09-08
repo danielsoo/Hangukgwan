@@ -143,6 +143,22 @@
   let tableManualDiscountValue = null; // { mode: "amount" | "percent", value: number } | null
   let counterManualDiscountValueByOrderId = new Map();
 
+  // 남이 입력한 글자를 innerHTML 안에 넣기 전에 반드시 통과시킨다.
+  //
+  // 이 대시보드는 지금까지 거의 전부 사장님·직원이 직접 입력한 값만
+  // 보여줬지만, 홈페이지 회원가입이 생기면서 처음으로 "모르는 사람이
+  // 정한 문자열"(계정 이름·이메일)이 관리자 화면에 그려지게 됐다.
+  // 그대로 innerHTML에 넣으면 손님이 이름을 <img onerror=...> 같은 걸로
+  // 지어두는 것만으로 사장님 관리자 세션에서 스크립트가 실행된다.
+  function escapeHtml(value) {
+    return String(value == null ? "" : value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   // ---------- In-app confirm/alert ----------
   // Replaces every native window.confirm()/alert() on this page. A
   // browser-native popup freezes the whole tab behind an OS-styled box that
@@ -599,6 +615,24 @@
       paymentLiveModeStatus: "✔ 실결제 모드 — ECPay 정식 가맹점 정보로 연결되어 있습니다.",
       paymentSavedMsg: "저장되었습니다",
       tabVip: "회원(VIP)",
+      tabAccounts: "계정",
+      accountsTabHint:
+        "홈페이지에서 가입한 계정 목록이에요. 손님으로 가입한 사람을 직원이나 사장으로 바꾸면, 그 사람이 홈페이지에 로그인했을 때 \"관리자 페이지\" 버튼이 생기고 관리자 화면에 들어올 수 있어요. 등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.",
+      accountSearchPlaceholder: "이름 또는 이메일로 검색",
+      accountsRefreshBtn: "새로고침",
+      accountsLoading: "불러오는 중…",
+      accountsLoadError: "계정 목록을 불러오지 못했어요.",
+      accountsEmpty: "아직 홈페이지에서 가입한 계정이 없어요.",
+      accountsNoMatch: "검색 결과가 없어요.",
+      accountRoleCustomer: "손님",
+      accountRoleStaff: "직원",
+      accountRoleOwner: "사장",
+      accountMethodPassword: "비밀번호",
+      accountMethodGoogle: "구글",
+      accountRoleConfirm: "{name} 님의 등급을 \"{role}\"(으)로 바꿀까요?",
+      accountErrSelfDemote: "본인 계정은 스스로 내릴 수 없어요. 다른 사장 계정으로 바꿔주세요.",
+      accountErrLastOwner: "마지막 사장 계정이라 내릴 수 없어요. 먼저 다른 사람을 사장으로 지정해 주세요.",
+      accountErrGeneric: "등급을 바꾸지 못했어요. 잠시 후 다시 시도해 주세요.",
       vipTabHint:
         "여기서는 이미 발급한 실물 VIP 카드의 번호를 등록해서 \"손님이 온라인에서 등록할 수 있는 상태\"로 만들어요. 카드 자체를 새로 발급하는 기능이 아니라, 발급된 카드번호를 시스템에 알려주는 화면이에요. 손님은 주문 페이지에서 구글로 로그인한 뒤 이 카드번호를 입력해서 본인 계정에 연결해요. 유효기간은 발급일로부터 1년입니다.",
       vipCardNumberPlaceholder: "카드번호 (예: V0001)",
@@ -1007,6 +1041,24 @@
       paymentLiveModeStatus: "✔ 正式付款模式 — 已連接綠界正式特店資訊。",
       paymentSavedMsg: "已儲存",
       tabVip: "會員(VIP)",
+      tabAccounts: "帳號",
+      accountsTabHint:
+        "這裡是從官網註冊的帳號。把顧客改成員工或負責人後，那個人在官網登入時就會看到「管理後台」按鈕，並且可以進入管理畫面。降級後權限也會立刻收回，不用等他重新登入。",
+      accountSearchPlaceholder: "以姓名或信箱搜尋",
+      accountsRefreshBtn: "重新整理",
+      accountsLoading: "載入中…",
+      accountsLoadError: "無法載入帳號清單。",
+      accountsEmpty: "目前還沒有從官網註冊的帳號。",
+      accountsNoMatch: "沒有符合的結果。",
+      accountRoleCustomer: "顧客",
+      accountRoleStaff: "員工",
+      accountRoleOwner: "負責人",
+      accountMethodPassword: "密碼",
+      accountMethodGoogle: "Google",
+      accountRoleConfirm: "要將 {name} 的身分改為「{role}」嗎？",
+      accountErrSelfDemote: "無法降低自己的權限，請改用其他負責人帳號操作。",
+      accountErrLastOwner: "這是最後一個負責人帳號，請先指定其他人為負責人。",
+      accountErrGeneric: "無法變更身分，請稍後再試。",
       vipTabHint:
         "這裡是把已經印製好的實體 VIP 卡卡號登記進系統，讓「顧客可以在線上註冊」。這不是發行新卡片的功能，只是把已發出的卡號告訴系統。顧客會在點餐頁面用 Google 登入後輸入這個卡號，連結到自己的帳號。有效期限是從發卡日起算 1 年。",
       vipCardNumberPlaceholder: "卡號（例：V0001）",
@@ -1392,9 +1444,14 @@
   };
 
   // ---------- Tabs ----------
+  const OWNER_ONLY_TABS = new Set(["settlement", "vip", "accounts"]);
+
   $$(".admin-tabs button").forEach((btn) => {
     btn.onclick = () => {
-      if ((btn.dataset.tab === "settlement" || btn.dataset.tab === "vip") && currentRole !== "owner") return;
+      // owner 전용 탭 — 직원 세션이 탭 버튼을 눌러도 열리지 않게. (실제
+      // 데이터 차단은 서버가 하지만, 눌리는데 아무것도 안 나오는 것보다
+      // 아예 안 눌리는 편이 덜 헷갈린다.)
+      if (OWNER_ONLY_TABS.has(btn.dataset.tab) && currentRole !== "owner") return;
       $$(".admin-tabs button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
@@ -1402,6 +1459,7 @@
       if (btn.dataset.tab === "settlement") loadSettlement();
       if (btn.dataset.tab === "reservations") loadReservations();
       if (btn.dataset.tab === "vip") loadVipCards();
+      if (btn.dataset.tab === "accounts") loadAccounts();
       // 결제 탭(item 22) — 배치도(zones)는 "테이블 / QR 코드" 탭에서만
       // 로드되던 데이터라, 그 탭을 아직 한 번도 안 열었어도 여기서 곧장
       // 볼 수 있도록 탭 전환 시점에 로드한다. tables는 로그인 직후
@@ -6207,6 +6265,135 @@
 
   $("#changePwBtn").onclick = () => changeOwnPassword("pw_current", "pw_new", "pwMsg");
   $("#changeOwnerPwBtn").onclick = () => changeOwnPassword("owner_pw_current", "owner_pw_new", "ownerPwMsg");
+
+  // ---------- 계정 관리 (owner only) ----------
+  // 홈페이지에서 가입한 계정(src/accounts.js의 users 컬렉션)의 등급을
+  // 바꾸는 화면. 손님 → 직원/사장으로 올리면 그 사람이 홈페이지에
+  // 로그인했을 때 "관리자 페이지" 버튼이 생기고 이 대시보드에 들어올 수
+  // 있게 된다(사장님 요청 2026-09-08: "어드민 계정만 ... 어드민 페이지로
+  // 들어갈 수 있는 버튼").
+  //
+  // 여기서 쓰는 /api/users 는 requireOwner다 — 직원은 목록조차 못 본다.
+  // 자기 자신을 강등하는 것과 마지막 사장을 강등하는 것은 서버가 막는다
+  // (src/routes/users.js) — 그렇게 되면 등급을 되돌려줄 사람이 아무도
+  // 없어지기 때문이다.
+  let accountsCache = [];
+
+  async function loadAccounts() {
+    const wrap = $("#accountsList");
+    if (!wrap) return;
+    wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("accountsLoading")}</p>`;
+    try {
+      const res = await fetch("/api/users");
+      if (!res.ok) {
+        wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("accountsLoadError")}</p>`;
+        return;
+      }
+      const data = await res.json();
+      accountsCache = data.users || [];
+      renderAccounts();
+    } catch (e) {
+      wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("accountsLoadError")}</p>`;
+    }
+  }
+
+  function accountRoleLabel(role) {
+    if (role === "owner") return T("accountRoleOwner");
+    if (role === "staff") return T("accountRoleStaff");
+    return T("accountRoleCustomer");
+  }
+
+  function renderAccounts() {
+    const wrap = $("#accountsList");
+    if (!wrap) return;
+    const q = ($("#accountSearch") && $("#accountSearch").value.trim().toLowerCase()) || "";
+    const rows = accountsCache.filter(
+      (u) => !q || (u.name || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q)
+    );
+
+    if (!rows.length) {
+      wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${
+        accountsCache.length ? T("accountsNoMatch") : T("accountsEmpty")
+      }</p>`;
+      return;
+    }
+
+    wrap.innerHTML = rows
+      .map((u) => {
+        const methods = [u.hasPassword ? T("accountMethodPassword") : null, u.hasGoogle ? T("accountMethodGoogle") : null]
+          .filter(Boolean)
+          .join(" · ");
+        const roleClass = u.role === "owner" ? "owner" : u.role === "staff" ? "staff" : "customer";
+        return `<div class="account-row" data-id="${u.id}">
+          <div class="account-main">
+            <div class="account-name">${escapeHtml(u.name || "-")} <span class="account-role-badge ${roleClass}">${accountRoleLabel(u.role)}</span></div>
+            <div class="account-sub">${escapeHtml(u.email || "-")}${u.phone ? ` · ${escapeHtml(u.phone)}` : ""}${methods ? ` · ${methods}` : ""}</div>
+          </div>
+          <div class="account-actions">
+            <select class="account-role-select">
+              <option value="customer"${u.role === "customer" ? " selected" : ""}>${T("accountRoleCustomer")}</option>
+              <option value="staff"${u.role === "staff" ? " selected" : ""}>${T("accountRoleStaff")}</option>
+              <option value="owner"${u.role === "owner" ? " selected" : ""}>${T("accountRoleOwner")}</option>
+            </select>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    $$("#accountsList .account-role-select").forEach((sel) => {
+      sel.onchange = async () => {
+        const row = sel.closest(".account-row");
+        const id = row.dataset.id;
+        const user = accountsCache.find((u) => u.id === id);
+        const newRole = sel.value;
+        if (!user || newRole === user.role) return;
+
+        // 관리자 권한을 주고 뺏는 일이라 되돌리기 어렵다 — 한 번 묻는다.
+        const ok = await showConfirm(
+          T("accountRoleConfirm")
+            .replace("{name}", user.name || user.email || "")
+            .replace("{role}", accountRoleLabel(newRole))
+        );
+        if (!ok) {
+          sel.value = user.role;
+          return;
+        }
+
+        sel.disabled = true;
+        try {
+          const res = await fetch(`/api/users/${id}/role`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ role: newRole }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            // 서버가 막는 두 경우(자기 강등 / 마지막 사장)는 각각 왜 안
+            // 되는지 알려줘야 사장님이 "왜 안 바뀌지?" 하지 않는다.
+            const key =
+              data.error === "cannot_demote_self"
+                ? "accountErrSelfDemote"
+                : data.error === "last_owner"
+                  ? "accountErrLastOwner"
+                  : "accountErrGeneric";
+            await showAlert(T(key));
+            sel.value = user.role;
+            return;
+          }
+          user.role = data.user.role;
+          renderAccounts();
+        } catch (e) {
+          await showAlert(T("accountErrGeneric"));
+          sel.value = user.role;
+        } finally {
+          sel.disabled = false;
+        }
+      };
+    });
+  }
+
+  if ($("#accountSearch")) $("#accountSearch").oninput = renderAccounts;
+  if ($("#accountsRefreshBtn")) $("#accountsRefreshBtn").onclick = loadAccounts;
 
   // ---------- Staff permission management (owner only) ----------
   const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "orderEdit", "reservationManage"];

@@ -31,8 +31,11 @@ input, select, button, textarea { font-family: inherit; }
 /* Top bar */
 .admin-topbar { background: var(--navy); color: #fff; display: flex; align-items: center; padding: 0 20px; height: 58px; gap: 24px; position: sticky; top: 0; z-index: 30; }
 .admin-brand { font-weight: 900; }
-.admin-tabs { display: flex; gap: 6px; flex: 1; }
-.admin-tabs button { background: transparent; border: none; color: #cfd3e0; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 18px; display:flex; align-items:center; gap:6px; }
+/* 탭이 하나 늘어날 때마다(2026-09-08 '계정' 탭) 좁은 화면에서 탭 이름이
+   '메뉴 관/리' 처럼 단어 중간에서 줄바꿈되던 문제 — 이름은 절대 쪼개지
+   않게 하고, 자리가 모자라면 탭 줄이 가로로 스크롤되게 한다. */
+.admin-tabs { display: flex; gap: 6px; flex: 1; overflow-x: auto; scrollbar-width: thin; }
+.admin-tabs button { background: transparent; border: none; color: #cfd3e0; padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 18px; display:flex; align-items:center; gap:6px; white-space: nowrap; flex: 0 0 auto; }
 .admin-tabs button.active { background: rgba(255,255,255,0.12); color: #fff; font-weight: 700; }
 .badge-count { background: var(--red); color: #fff; border-radius: 999px; font-size: 14px; padding: 1px 7px; }
 .logout-btn { background: transparent; border: 1px solid rgba(255,255,255,0.3); color: #fff; padding: 8px 14px; border-radius: 8px; cursor: pointer; }
@@ -837,3 +840,36 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .orders-board { grid-template-columns: 1fr; }
   .admin-tabs { overflow-x: auto; }
 }
+
+/* ---------- 계정(계정 관리) 탭 — owner only ---------- */
+/* 홈페이지에서 가입한 계정의 등급을 바꾸는 화면. VIP 카드 목록과 같은
+   시각 언어를 쓰되, 등급 배지 색으로 사장/직원/손님이 한눈에 갈리게 한다. */
+.accounts-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; max-width: 900px; }
+.accounts-toolbar input {
+  flex: 1 1 240px; padding: 10px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 16px; font-family: inherit;
+}
+.accounts-toolbar button {
+  padding: 10px 16px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.accounts-list { display: flex; flex-direction: column; gap: 10px; max-width: 900px; }
+.account-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+}
+.account-main { flex: 1 1 260px; min-width: 0; }
+.account-name { font-size: 15px; font-weight: 800; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account-sub { font-size: 13px; color: var(--muted); margin-top: 3px; word-break: break-all; }
+.account-role-badge {
+  font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.account-role-badge.owner { background: #fdf0d5; border-color: #e0be6b; color: #7a5a12; }
+.account-role-badge.staff { background: #e7f0fb; border-color: #a8c6ea; color: #24527f; }
+.account-role-badge.customer { background: #f1f1ef; border-color: var(--line); color: var(--muted); }
+.account-actions select {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 14px; font-family: inherit; background: #fff; cursor: pointer;
+}
+.account-actions select:disabled { opacity: 0.5; cursor: default; }

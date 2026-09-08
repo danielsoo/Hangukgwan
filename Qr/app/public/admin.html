@@ -32,6 +32,7 @@
       <button data-tab="tables" data-i18n="tabTables">테이블 / QR 코드</button>
       <button data-tab="reservations" data-i18n="tabReservations">예약</button>
       <button data-tab="vip" class="owner-only" data-i18n="tabVip">회원(VIP)</button>
+      <button data-tab="accounts" class="owner-only" data-i18n="tabAccounts">계정</button>
       <button data-tab="settlement" class="owner-only" data-i18n="tabSettlement">결산</button>
       <button data-tab="settings" data-i18n="tabSettings">설정</button>
     </nav>
@@ -160,6 +161,22 @@
         <button id="vipAddCardBtn" data-i18n="vipAddCardBtn">+ 카드 등록</button>
       </div>
       <div id="vipCardsList" class="vip-cards-list"></div>
+    </section>
+
+    <!-- ACCOUNTS (계정) TAB — owner-only. 홈페이지에서 가입한 계정들의
+         등급을 바꾸는 곳. 손님을 직원/사장으로 올리면 그 사람 홈페이지
+         헤더에 "관리자 페이지" 버튼이 생긴다(사장님 요청 2026-09-08). -->
+    <section id="tab-accounts" class="tab-panel owner-only" hidden>
+      <p class="settings-hint" data-i18n="accountsTabHint">
+        홈페이지에서 가입한 계정 목록이에요. 손님으로 가입한 사람을 직원이나 사장으로 바꾸면,
+        그 사람이 홈페이지에 로그인했을 때 "관리자 페이지" 버튼이 생기고 관리자 화면에 들어올 수 있어요.
+        등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.
+      </p>
+      <div class="accounts-toolbar">
+        <input type="search" id="accountSearch" data-i18n-placeholder="accountSearchPlaceholder" placeholder="이름 또는 이메일로 검색" />
+        <button id="accountsRefreshBtn" data-i18n="accountsRefreshBtn">새로고침</button>
+      </div>
+      <div id="accountsList" class="accounts-list"></div>
     </section>
 
     <!-- SETTLEMENT (결산) TAB — owner-only, shows sales/revenue -->
