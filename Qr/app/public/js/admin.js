@@ -668,7 +668,7 @@
       tfsItemTakeout: "메뉴별 포장 표시 (└ 포장)",
       tfsItemPrice: "결제용(금액) 표시 (└ NT$)",
       tfsTotal: "합계",
-      tfsOrderNote: "전체 주문 메모",
+      tfsOrderNote: "결제용 하단 안내 문구 (※...)",
       tfsPrintTime: "인쇄 시간",
       tfsSizeColLabel: "크기",
       tfsWeightColLabel: "굵기",
@@ -1076,7 +1076,7 @@
       tfsItemTakeout: "單品外帶標示（└ 外帶）",
       tfsItemPrice: "結帳單金額顯示（└ NT$）",
       tfsTotal: "合計",
-      tfsOrderNote: "整單備註",
+      tfsOrderNote: "結帳單下方提示文字（※...）",
       tfsPrintTime: "列印時間",
       tfsSizeColLabel: "大小",
       tfsWeightColLabel: "粗細",
@@ -2154,7 +2154,16 @@
     // 하는 숫자라 다른 세부사항(소/맵기 등)과 별도로 조절할 수 있게 뺐다.
     itemPrice: 13, // └ NT$(결제용 사본 품목 금액) 줄
     total: 16, // 合計 row
-    orderNote: 11, // 訂單備註 (whole-order note) line
+    // 원래 이름 그대로 orderNote(전체 주문 메모, o.note 렌더링)를 위한
+    // 크기였는데, 손님 주문 화면에서 整單備註 입력칸이 완전히 삭제되면서
+    // (커밋 e0f1b86) o.note는 다시는 채워질 수 없는 값이 됐다(2026-09-08
+    // 피드백: "여전히 저 가장 아래 빨간 글씨가 그거 아니야?" — 맞음, 같은
+    // 문제였다). 그 렌더링(.order-note)은 지웠고, 이 크기 값은 결제용
+    // (금액) 사본 하단에만 찍히는 참고 문구 두 가지(price-copy-note —
+    // "※本單僅供結帳參考..." / "※ 飲料/酒類恕不折扣")에 그대로 재사용
+    // 중이라 키 이름·서버 저장 필드는 바꾸지 않고 놔둠(설정 라벨만 실제
+    // 역할에 맞게 수정 — 아래 tfsOrderNote 참고).
+    orderNote: 11,
     printTime: 10, // footer 列印時間 line
     // 사장님 피드백(2026-09-06): "그 부분들 전부 글자 굵기 조절하는것도
     // 추가해줘" — 위 크기 항목과 정확히 같은 11개 부위에 대한 굵기
@@ -2310,7 +2319,6 @@
         : `NT$${o.total}`
     }</span></div>
     ${priceCopy ? `<div class="price-copy-note">※本單僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
-    ${o.note ? `<div class="order-note">訂單備註：${o.note}</div>` : ""}
     <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
   </div>`;
   }
@@ -2389,7 +2397,6 @@
   .item-price-final { font-weight: ${fs.itemPriceWeight}; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
   .total-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
-  .order-note { font-size: ${fs.orderNote}px; font-weight: ${fs.orderNoteWeight}; color: #c0161f; margin-top: 2mm; }
   .price-copy-note { font-size: ${fs.orderNote}px; color: #555; margin-top: 2mm; text-align: center; }
   .price-copy-drink-note { color: #966; margin-top: 1mm; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; font-weight: ${fs.printTimeWeight}; color: #555; margin-top: 3mm; }
@@ -2581,12 +2588,14 @@
 
   // A small sample order for the live actual-size preview in the settings
   // card — deliberately touches every element a real ticket can have (two
-  // dishes, a meat-type choice, a spice-level choice, a takeout dish, and a
-  // whole-order note) so every font-size field's effect is visible in the
-  // preview at once. 품목별 note(itemNote)는 뺐다 — 손님 주문 화면에서
-  // 완전히 제거된 기능이라 실제 주문에 다시는 나타나지 않는다(사장님
+  // dishes, a meat-type choice, a spice-level choice, a takeout dish) so
+  // every font-size field's effect is visible in the preview at once.
+  // 품목별 note(itemNote)와 전체 주문 note(o.note)는 둘 다 뺐다 — 손님
+  // 주문 화면에서 완전히 제거된 기능이라(itemNote: 커밋 d5440f5, 전체
+  // 주문 note: 커밋 e0f1b86) 실제 주문에 다시는 나타나지 않는다(사장님
   // 피드백 2026-09-08: "요청사항 손님한테 받는 거 아예 없애기로
-  // 했었잖아. 여전히 있는데? 미리보기에는?").
+  // 했었잖아. 여전히 있는데?" → itemNote 제거 → "여전히 저 가장 아래
+  // 빨간 글씨가 그거 아니야?" → o.note도 같은 이유로 제거).
   function sampleTicketOrderForPreview() {
     return {
       id: "preview",
@@ -2598,7 +2607,6 @@
       order_type: "mixed",
       created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
       total: 670,
-      note: "餐具x3",
       // unit_price/category_key 추가(2026-09-08, tfsItemPrice 미리보기 위해) —
       // 결제용(금액) 사본은 lineTotalOf(unit_price 기반)로 금액을 계산하므로
       // 이 값이 없으면 "NT$NaN"이 찍힌다. 음료(可樂)도 하나 넣어서 결제용

@@ -199,7 +199,8 @@
       out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
     }
     if (priceCopy) out += "※本單僅供結帳參考，實際折扣依系統結帳畫面為準\n";
-    if (o.note) out += "訂單備註：" + o.note + "\n";
+    // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
+    // e0f1b86) — 다시는 채워지지 않으므로 렌더링을 지웠다.
     out += CMD.ALIGN_CENTER + "列印時間：" + new Date().toLocaleString("zh-TW") + "\n";
     out += CMD.FEED_AND_CUT;
     return out;
@@ -370,7 +371,9 @@
       row("合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
     if (priceCopy) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
-    if (o.note) line("訂單備註：" + o.note, sz("orderNote", 11), wt("orderNote", 400));
+    // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
+    // e0f1b86) — 다시는 채워지지 않으므로 렌더링을 지웠다. orderNote
+    // 크기 설정 자체는 위 결제 참고 문구가 계속 쓰고 있어 그대로 둠.
     line("列印時間：" + new Date().toLocaleString("zh-TW"), sz("printTime", 10), wt("printTime", 400), { align: "center" });
 
     const totalHeight = y + 24;
