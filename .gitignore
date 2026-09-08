@@ -32,3 +32,10 @@ kiosk-app/keystore/
 
 # e2e 브라우저 테스트가 남기는 스크린샷 (Qr/app/test/e2e-*.js)
 _screens/
+
+# Firebase 서비스 계정 비공개 키 (Firebase Console > 프로젝트 설정 > 서비스 계정
+# > 새 비공개 키 생성). 이 파일 하나로 우리 Firebase 프로젝트에 서버 권한으로
+# 접근할 수 있다. 저장소에 올리지 않고, 값은 Vercel 환경변수
+# FIREBASE_SERVICE_ACCOUNT 에만 넣는다. (Qr/app/src/firebaseAdmin.js 참고)
+*firebase-adminsdk*.json
+serviceAccountKey.json

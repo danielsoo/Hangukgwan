@@ -30,9 +30,15 @@ function getAdminApp() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) return null;
   try {
-    const admin = require("firebase-admin");
+    // firebase-admin v13 부터는 예전의 `admin.credential.cert(...)` /
+    // `admin.apps` / `app.auth()` 네임스페이스가 사라지고 아래의 모듈식
+    // API 만 남았다. package.json 이 ^14 를 받고 있으므로 여기도 그쪽을
+    // 쓴다. 예전 방식으로 두면 키를 제대로 넣어도 초기화 단계에서
+    // "Cannot read properties of undefined (reading 'cert')" 로 조용히
+    // 실패해서, Google 로그인만 안 되는 상태가 된다.
+    const { initializeApp, getApp, getApps, cert } = require("firebase-admin/app");
     const serviceAccount = JSON.parse(raw);
-    adminApp = admin.apps && admin.apps.length ? admin.app() : admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    adminApp = getApps().length ? getApp() : initializeApp({ credential: cert(serviceAccount) });
     return adminApp;
   } catch (e) {
     console.error("[firebaseAdmin] failed to initialize — check FIREBASE_SERVICE_ACCOUNT:", e.message);
@@ -58,7 +64,8 @@ async function verifyIdToken(idToken) {
   const app = getAdminApp();
   if (!app || !idToken) return null;
   try {
-    const decoded = await app.auth().verifyIdToken(idToken);
+    const { getAuth } = require("firebase-admin/auth");
+    const decoded = await getAuth(app).verifyIdToken(idToken);
     return { uid: decoded.uid, email: decoded.email || null, name: decoded.name || decoded.email || "손님" };
   } catch (e) {
     return null;
