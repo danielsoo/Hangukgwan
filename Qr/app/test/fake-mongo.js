@@ -22,18 +22,74 @@ class ObjectId {
   }
 }
 
+function cmp(a, b) {
+  if (a instanceof Date || b instanceof Date) {
+    return new Date(a).getTime() - new Date(b).getTime();
+  }
+  if (a === b) return 0;
+  return a > b ? 1 : -1;
+}
+
+// Supports the operator subset this codebase and connect-mongo actually use.
+// connect-mongo is the reason $or/$gt/$exists are here: its session lookup is
+// `{_id: sid, $or: [{expires: {$exists: false}}, {expires: {$gt: now}}]}`, and
+// without them every session read missed and the browser looked logged out on
+// the very next request.
+function matchOne(val, cond) {
+  if (cond && typeof cond === "object" && !(cond instanceof ObjectId) && !(cond instanceof Date) && !Array.isArray(cond)) {
+    const ops = Object.keys(cond);
+    if (ops.length && ops.every((k) => k.startsWith("$"))) {
+      for (const [op, want] of Object.entries(cond)) {
+        switch (op) {
+          case "$in":
+            if (!want.some((w) => String(w) === String(val) || w === val)) return false;
+            break;
+          case "$nin":
+            if (want.some((w) => String(w) === String(val) || w === val)) return false;
+            break;
+          case "$ne":
+            if (val === want) return false;
+            break;
+          case "$exists":
+            if (want !== (val !== undefined && val !== null)) return false;
+            break;
+          case "$gt":
+            if (!(val !== undefined && cmp(val, want) > 0)) return false;
+            break;
+          case "$gte":
+            if (!(val !== undefined && cmp(val, want) >= 0)) return false;
+            break;
+          case "$lt":
+            if (!(val !== undefined && cmp(val, want) < 0)) return false;
+            break;
+          case "$lte":
+            if (!(val !== undefined && cmp(val, want) <= 0)) return false;
+            break;
+          default:
+            return false;
+        }
+      }
+      return true;
+    }
+  }
+  const want = cond instanceof ObjectId ? String(cond) : cond;
+  if (val instanceof ObjectId || want instanceof ObjectId) return String(val) === String(want);
+  return val === want;
+}
+
 function matches(doc, filter) {
   for (const [key, cond] of Object.entries(filter || {})) {
-    const val = key === "_id" ? String(doc._id) : doc[key];
-    if (cond && typeof cond === "object" && !(cond instanceof ObjectId)) {
-      if ("$in" in cond) {
-        if (!cond.$in.includes(val)) return false;
-        continue;
-      }
-      return false;
+    if (key === "$or") {
+      if (!cond.some((sub) => matches(doc, sub))) return false;
+      continue;
     }
-    const want = cond instanceof ObjectId ? String(cond) : cond;
-    if (key === "_id" ? String(val) !== String(want) : val !== want) return false;
+    if (key === "$and") {
+      if (!cond.every((sub) => matches(doc, sub))) return false;
+      continue;
+    }
+    const val = key === "_id" ? (doc._id instanceof ObjectId ? String(doc._id) : doc._id) : doc[key];
+    const want = key === "_id" && cond instanceof ObjectId ? String(cond) : cond;
+    if (!matchOne(val, want)) return false;
   }
   return true;
 }
@@ -142,6 +198,10 @@ class MongoClient {
   }
   db() {
     return theDb;
+  }
+  // connect-mongo (the express-session store) calls the *static* form.
+  static async connect() {
+    return new MongoClient();
   }
 }
 

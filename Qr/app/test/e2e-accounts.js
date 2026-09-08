@@ -49,7 +49,7 @@ function check(name, cond, extra = "") {
   const evil = '<img src=x onerror="window.__pwned=1">'
   const api = await browser.newContext()
   const apiPage = await api.newPage()
-  await apiPage.goto(`${base}/login/`)
+  await apiPage.goto(`${base}/admin`)
   await apiPage.evaluate(
     async ([evilName]) => {
       await fetch("/api/account/register", {
@@ -72,14 +72,16 @@ function check(name, cond, extra = "") {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   page.on("dialog", (d) => d.dismiss());
-  await page.goto(`${base}/signup/`, { waitUntil: "networkidle" });
-  await page.fill('input[autocomplete="name"]', "사장님");
-  await page.fill('input[type="email"]', "boss@hangukgwan.tw");
-  await page.fill('input[autocomplete="new-password"]', "bosspass1234");
-  await page.click('button[type="submit"]');
-  await page.waitForURL("**/account/**", { timeout: 15000 });
-
+  // 사장 계정 생성 + 로그인도 API 로 — 이 테스트의 대상은 관리자 화면이다.
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
+  await page.evaluate(async () => {
+    await fetch("/api/account/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "boss@hangukgwan.tw", password: "bosspass1234", name: "사장님" }),
+    });
+  });
+  await page.reload({ waitUntil: "networkidle" });
   check("대시보드 진입", await page.locator("#dashboard").isVisible());
   const accountsTab = page.locator('.admin-tabs button[data-tab="accounts"]');
   check("계정 탭 버튼이 있다", await accountsTab.isVisible());

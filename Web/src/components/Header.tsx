@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/context/LanguageContext'
 import { useTheme } from '@/context/ThemeContext'
-import { ORDER_URL } from '@/lib/config'
+import { useAuth } from '@/context/AuthContext'
 
 const NAV: { href: string; key: 'home' | 'menu' | 'about' | 'loc' | 'group' }[] = [
   { href: '/', key: 'home' },
@@ -17,7 +17,13 @@ const NAV: { href: string; key: 'home' | 'menu' | 'about' | 'loc' | 'group' }[] 
 export default function Header() {
   const { tr, cycleLang, langLabel, langTitle } = useLanguage()
   const { theme, toggleTheme } = useTheme()
+  const { user, loading, legacyAdmin } = useAuth()
   const pathname = usePathname()
+
+  // 관리자 버튼은 owner/staff 계정에만. 기존 비밀번호 로그인으로 관리자
+  // 화면에 들어가 있는 세션(legacyAdmin)도 같은 취급 — 계정 정보는 없지만
+  // 관리자인 건 맞으니 버튼은 보여준다.
+  const isAdmin = !!user?.isAdmin || legacyAdmin
 
   const themeTitle = theme === 'light' ? '切換為深色 · 어두운 화면으로 · Switch to dark' : '切換為淺色 · 밝은 화면으로 · Switch to light'
 
@@ -100,25 +106,54 @@ export default function Header() {
             <span style={{ fontSize: 8, color: 'var(--muted)' }}>▾</span>
           </button>
 
-          <a
-            href={ORDER_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hg-member-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 7,
-              padding: '7px clamp(8px, 2.6vw, 14px)',
-              fontSize: 'clamp(10.5px, 2.8vw, 12.5px)',
-              letterSpacing: '0.04em',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            <span style={{ display: 'block', width: 6, height: 6, border: '1px solid var(--accent)', borderRadius: '50%', flexShrink: 0 }} />
-            {tr.member.nav}
-          </a>
+          {/* 계정 — 로그인 상태를 아직 모르는 동안(첫 /api/account/me 응답 전)
+              에는 아무것도 그리지 않는다. "로그인"이 잠깐 떴다가 이름으로
+              바뀌는 깜빡임을 막기 위해서다. 예전에는 이 자리가 주문 화면으로
+              나가는 바깥 링크였는데, 이제 회원 기능이 이 사이트 안에 있으므로
+              내 계정(또는 로그인)으로 보낸다. */}
+          {!loading ? (
+            <>
+              {isAdmin ? (
+                <Link
+                  href="/account/"
+                  className="hg-cta-outline-gold"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '7px clamp(8px, 2.6vw, 13px)',
+                    fontSize: 'clamp(10.5px, 2.8vw, 12.5px)',
+                    letterSpacing: '0.04em',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    textDecoration: 'none',
+                  }}
+                >
+                  {tr.auth.adminPage}
+                </Link>
+              ) : null}
+              <Link
+                href={user ? '/account/' : '/login/'}
+                className="hg-member-btn"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '7px clamp(8px, 2.6vw, 14px)',
+                  fontSize: 'clamp(10.5px, 2.8vw, 12.5px)',
+                  letterSpacing: '0.04em',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  maxWidth: 150,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  textDecoration: 'none',
+                }}
+              >
+                <span style={{ display: 'block', width: 6, height: 6, border: '1px solid var(--accent)', borderRadius: '50%', flexShrink: 0 }} />
+                {user ? user.name || tr.member.nav : tr.auth.login}
+              </Link>
+            </>
+          ) : null}
 
           <button
             onClick={toggleTheme}

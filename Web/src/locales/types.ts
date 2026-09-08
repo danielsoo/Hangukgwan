@@ -129,4 +129,70 @@ export interface TranslationsType {
     rights: string
     orderLink: string
   }
+  auth: {
+    login: string
+    logout: string
+    signup: string
+    myAccount: string
+    adminPage: string
+    loginTitle: string
+    loginSubtitle: string
+    signupTitle: string
+    signupSubtitle: string
+    email: string
+    password: string
+    passwordHint: string
+    name: string
+    phoneOptional: string
+    continueWithGoogle: string
+    or: string
+    noAccount: string
+    haveAccount: string
+    submitting: string
+    backHome: string
+    accountTitle: string
+    roleLabel: string
+    roleCustomer: string
+    roleStaff: string
+    roleOwner: string
+    loginMethods: string
+    methodPassword: string
+    methodGoogle: string
+    profile: string
+    save: string
+    saved: string
+    changePassword: string
+    setPassword: string
+    currentPassword: string
+    newPassword: string
+    passwordChanged: string
+    adminHint: string
+    loading: string
+    vipTitle: string
+    vipNone: string
+    vipOneTimeNotice: string
+    vipRegistered: string
+    vipExpired: string
+    vipDiscountLabel: string
+    vipExpiryLabel: string
+    ordersTitle: string
+    ordersEmpty: string
+    ordersTable: string
+    ordersTakeout: string
+    errors: {
+      invalid_email: string
+      weak_password: string
+      name_required: string
+      email_taken: string
+      invalid_credentials: string
+      wrong_current_password: string
+      google_login_not_configured: string
+      firebase_sdk_load_failed: string
+      card_number_required: string
+      card_not_found: string
+      card_already_claimed: string
+      already_registered: string
+      server_error: string
+    }
+  }
 }
