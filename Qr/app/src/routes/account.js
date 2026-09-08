@@ -262,7 +262,22 @@ function hasWebConfig() {
 }
 
 // Tells the website which sign-in buttons to render.
+//
+// 이 응답은 누가 보든 똑같다(로그인 여부와 무관). 그런데 홈페이지가 페이지를
+// 열 때마다 부르는 두 요청 중 하나라, 2026-09-08 측정에서 방문마다 서버리스
+// 함수 + 몽고 왕복을 치르고 있었다(중앙값 411ms, 콜드 919ms).
+// 캐시는 **엣지에만** 맡긴다. 처음엔 Cache-Control 에
+// `s-maxage=60, stale-while-revalidate=300` 을 넣었는데, SWR 은 공유 캐시와
+// 브라우저 캐시 양쪽에 적용되는 지시어라 크롬이 페이지를 열 때마다 배경
+// 재검증 요청을 하나씩 더 만들었다 — 요청을 줄이려던 것이 늘리고 있었다
+// (브라우저 테스트가 networkidle 에 영영 도달하지 못해서 드러났다).
+//
+// CDN-Cache-Control 은 CDN 만 읽고 브라우저는 무시한다. 이게 원래 쓰려던
+// 도구다. 사장님이 Firebase 설정을 바꾸면 최대 1분 늦게 반영되는 대신,
+// 그 사이 방문자들은 함수를 깨우지 않는다.
 router.get("/methods", (req, res) => {
+  res.set("Cache-Control", "public, max-age=0, must-revalidate");
+  res.set("CDN-Cache-Control", "public, max-age=60");
   res.json({ email: true, google: isConfigured() && hasWebConfig() });
 });
 

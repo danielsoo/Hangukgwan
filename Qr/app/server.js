@@ -181,6 +181,8 @@ app.use("/api/reservations", require("./src/routes/reservations"));
 app.use("/api/line/webhook", require("./src/routes/lineWebhook"));
 app.use("/api/payment", require("./src/routes/payments"));
 app.use("/api/vip-cards", require("./src/routes/vipCards"));
+// 사장 전용 진단 수치 (읽기 전용) — src/routes/diag.js 주석 참고.
+app.use("/api/_diag", require("./src/routes/diag"));
 app.use("/api/members", require("./src/routes/members"));
 
 // Only start a listening server for local dev / Railway / Render. On

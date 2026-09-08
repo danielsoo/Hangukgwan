@@ -85,6 +85,16 @@ const CONSOLE_SNIPPET = `{
     check(name, r.body.google === expected, `google=${r.body.google}, 기대=${expected}`);
   }
 
+  out.push("\n[엣지 캐시 — 페이지마다 함수를 깨우지 않도록]");
+  store.settings.firebase_web_config = GOOD;
+  const h = (await request(app).get("/api/account/methods")).headers;
+  const cc = h["cache-control"] || "";
+  const cdn = h["cdn-cache-control"] || "";
+  check("엣지에 캐시하라고 지시한다", /max-age=\d+/.test(cdn) && !/max-age=0/.test(cdn), cdn);
+  check("브라우저에는 안 남긴다 (설정 바꾼 뒤 그 기기만 옛날 상태가 되지 않게)", /max-age=0/.test(cc), cc);
+  // SWR 은 브라우저에도 적용돼서 페이지마다 배경 재검증 요청을 하나 더 만든다.
+  check("stale-while-revalidate 는 안 쓴다", !/stale-while-revalidate/.test(cc) , cc);
+
   out.push("\n[이메일 로그인은 어떤 경우에도 켜져 있다]");
   delete store.settings.firebase_web_config;
   let r = await request(app).get("/api/account/methods");

@@ -41,11 +41,23 @@ function resolveSiteDir() {
 // 이름이 바뀌므로 오래 캐시해도 낡은 파일이 남을 일이 없다. 반대로 HTML
 // 은 이름이 그대로라 짧게 잡는다 — 안 그러면 배포 후에도 손님 폰에
 // 예전 페이지가 계속 보인다.
+// max-age 는 **브라우저**용, s-maxage 는 **Vercel 엣지**용이다. 처음엔
+// max-age 만 붙였는데, 배포본을 재보니 모든 응답이 x-vercel-cache: MISS 였다
+// — 함수 응답은 s-maxage 가 있어야 엣지가 캐시한다. 엣지 캐시는 배포할 때마다
+// 자동으로 비워지므로 길게 잡아도 낡은 파일이 남지 않는다.
+//
+// 이 파일이 응답하는 건 정적 출력(site/, vercel.json 의 outputDirectory)이
+// 놓친 경로뿐이다 — 대부분은 여기까지 오지 않고 CDN 에서 끝난다.
 function cacheControl(res, filePath) {
   if (filePath.includes(`${path.sep}_next${path.sep}static${path.sep}`)) {
+    // 파일 이름에 내용 해시가 박혀 있어 내용이 바뀌면 이름이 바뀐다.
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    res.setHeader("CDN-Cache-Control", "public, max-age=31536000");
   } else if (filePath.endsWith(".html")) {
+    // 이름이 그대로라 브라우저에는 남기지 않는다 — 배포 후에도 손님 폰에
+    // 예전 페이지가 보이면 안 된다. 엣지는 배포마다 비워지니 맡겨도 된다.
     res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    res.setHeader("CDN-Cache-Control", "public, max-age=3600");
   }
 }
 
