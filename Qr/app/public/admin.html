@@ -567,6 +567,10 @@
               <label class="ticket-font-field"><span data-i18n="tfsPrintTime">인쇄 시간</span><input type="number" id="tfsPrintTime" min="8" max="40" /><input type="number" id="tfsPrintTimeWeight" min="100" max="900" step="100" /></label>
             </div>
             <div class="ticket-font-preview-wrap">
+              <div class="ticket-font-preview-toggle">
+                <button type="button" id="tfsPreviewKitchenBtn" class="active" data-i18n="tfsPreviewKitchenBtn">주방용</button>
+                <button type="button" id="tfsPreviewPriceBtn" data-i18n="tfsPreviewPriceBtn">결제용(금액)</button>
+              </div>
               <iframe id="ticketFontPreviewFrame" class="ticket-font-preview-frame" title="ticket preview"></iframe>
             </div>
           </div>

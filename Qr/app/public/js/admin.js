@@ -673,6 +673,8 @@
       tfsPrintTime: "인쇄 시간",
       tfsSizeColLabel: "크기",
       tfsWeightColLabel: "굵기",
+      tfsPreviewKitchenBtn: "주방용",
+      tfsPreviewPriceBtn: "결제용(금액)",
       ticketFontSavedMsg: "저장되었습니다",
       ticketFontResetBtn: "기본값으로",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
@@ -1080,6 +1082,8 @@
       tfsPrintTime: "列印時間",
       tfsSizeColLabel: "大小",
       tfsWeightColLabel: "粗細",
+      tfsPreviewKitchenBtn: "廚房用",
+      tfsPreviewPriceBtn: "結帳用（金額）",
       ticketFontSavedMsg: "已儲存",
       ticketFontResetBtn: "恢復預設值",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
@@ -2585,17 +2589,25 @@
   // is visible in the preview at once.
   function sampleTicketOrderForPreview() {
     return {
+      id: "preview",
+      status: "new",
       table_number: "7",
       // "mixed" + one takeout item below, so this preview also shows what
       // the per-dish 外帶 sub-line (see buildTicketHtml's detailLines) looks
       // like at whatever font sizes the owner is trying out.
       order_type: "mixed",
       created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
-      total: 780,
+      total: 670,
       note: "餐具x3",
+      // unit_price/category_key 추가(2026-09-08, tfsItemPrice 미리보기 위해) —
+      // 결제용(금액) 사본은 lineTotalOf(unit_price 기반)로 금액을 계산하므로
+      // 이 값이 없으면 "NT$NaN"이 찍힌다. 음료(可樂)도 하나 넣어서 결제용
+      // 사본 전용 "※ 飲料/酒類恕不折扣" 문구까지(할인이 걸려 있을 때) 이
+      // 미리보기에서 확인할 수 있게 한다.
       items: [
-        { name_zh: "石鍋拌飯", qty: 1, option_choice: "牛", spice_choice: "中辣", order_type: "dine_in" },
-        { name_zh: "辣炒年糕", qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥", order_type: "takeout" },
+        { name_zh: "石鍋拌飯", unit_price: 230, qty: 1, option_choice: "牛", spice_choice: "中辣", order_type: "dine_in" },
+        { name_zh: "辣炒年糕", unit_price: 190, qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥", order_type: "takeout" },
+        { name_zh: "可樂", unit_price: 60, qty: 1, category_key: "drink", order_type: "dine_in" },
       ],
     };
   }
@@ -2620,15 +2632,39 @@
   // screenPreview:false here — the settings-card preview is an <iframe>
   // already fixed at 80mm wide, so it should show the ticket at true 1x
   // size, not the 2.4x-zoomed "paper on a desk" look of the real preview tab.
-  // 사장님 피드백(2026-09-08): "금액 버전도 설정할 수 있게 해줘" —
-  // 새로 추가한 결제용(금액) 표시 크기·굵기(tfsItemPrice)는 주방용
-  // 사본에는 안 나오므로, 미리보기도 buildTicketHtml(주방용 한 장)
-  // 대신 buildDualTicketHtml(주방용+결제용 두 장)로 바꿔서 이 설정이
-  // 실제로 어디에 적용되는지 스크롤해서 바로 볼 수 있게 한다.
+  // 사장님 피드백(2026-09-08): "금액 버전도 설정할 수 있게 해줘 ...
+  // 이렇게 똑같이 금액 나오는 걸로 미리보기 보면서 따로 설정할 수 있게
+  // 해달라는 의미였어" — 처음엔 buildDualTicketHtml(주방용+결제용 두
+  // 장을 이어붙임)로 바꿨었는데, 미리보기 iframe이 고정 높이(440px)라
+  // 두 번째 장은 안에서 스크롤해야만 보여서 마치 반영이 안 된 것처럼
+  // 보였다. 그 대신 주방용/결제용(금액) 두 버튼으로 전환하는 탭을 두고,
+  // 한 번에 하나씩 실제 크기 그대로 또렷하게 보여준다.
+  let ticketFontPreviewMode = "kitchen"; // "kitchen" | "price"
+
   function updateTicketFontPreview() {
     const frame = $("#ticketFontPreviewFrame");
     if (!frame) return;
-    frame.srcdoc = buildDualTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs());
+    frame.srcdoc = buildTicketHtml(sampleTicketOrderForPreview(), readTicketFontInputs(), {
+      screenPreview: false,
+      priceCopy: ticketFontPreviewMode === "price",
+    });
+  }
+
+  const tfsPreviewKitchenBtn = $("#tfsPreviewKitchenBtn");
+  const tfsPreviewPriceBtn = $("#tfsPreviewPriceBtn");
+  if (tfsPreviewKitchenBtn && tfsPreviewPriceBtn) {
+    tfsPreviewKitchenBtn.onclick = () => {
+      ticketFontPreviewMode = "kitchen";
+      tfsPreviewKitchenBtn.classList.add("active");
+      tfsPreviewPriceBtn.classList.remove("active");
+      updateTicketFontPreview();
+    };
+    tfsPreviewPriceBtn.onclick = () => {
+      ticketFontPreviewMode = "price";
+      tfsPreviewPriceBtn.classList.add("active");
+      tfsPreviewKitchenBtn.classList.remove("active");
+      updateTicketFontPreview();
+    };
   }
 
   // 크기·굵기 모두 <input type=number>라서 oninput 하나로 충분하지만,

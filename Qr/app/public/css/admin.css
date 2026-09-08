@@ -433,12 +433,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ticket-font-field-header .ticket-font-col-label { flex: none; width: 64px; text-align: center; font-size: 13px; color: var(--muted); font-weight: 700; }
 .ticket-font-preview-wrap {
   flex-shrink: 0; background: #dfe3e7; border-radius: 10px; padding: 16px;
-  display: flex; justify-content: center;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
 .ticket-font-preview-frame {
   width: 302px; height: 440px; border: none; background: #fff;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
 }
+/* 사장님 피드백(2026-09-08): "금액 나오는 걸로 미리보기 보면서 따로
+   설정할 수 있게 해달라는 의미였어" — 주방용/결제용(금액) 두 사본을
+   한 좁은 iframe 안에 이어붙여 스크롤해야 보이게 하는 대신(스크롤이
+   있는 줄 모르고 못 볼 수 있음), 탭처럼 전환하는 버튼 두 개를 두고
+   현재 선택된 쪽만 실제 크기로 또렷하게 보여준다. see admin.js
+   ticketFontPreviewMode/updateTicketFontPreview(). */
+.ticket-font-preview-toggle { display: flex; gap: 6px; }
+.ticket-font-preview-toggle button {
+  padding: 5px 12px; border-radius: 999px; border: 1.5px solid var(--line, #d8dbe0);
+  background: #fff; color: var(--muted, #667); font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.ticket-font-preview-toggle button.active { background: #1f2430; border-color: #1f2430; color: #fff; }
 .notice-preview-banner:empty { display: none; }
 .notice-preview-empty { text-align: center; margin: 0 16px; }
 
