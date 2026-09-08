@@ -227,9 +227,13 @@ async function run() {
   // Separate lower-privilege login for staff — same admin page, but the
   // owner controls what a staff session is allowed to do (see
   // staff_permissions below, toggled from Admin > 설정 > 직원 권한 관리).
-  if (!store.settings.staff_password_hash) {
-    const pw = process.env.STAFF_PASSWORD || "staff1234";
-    store.settings.staff_password_hash = bcrypt.hashSync(pw, 10);
+  // 사장이 Admin > 설정 > 직원 권한 관리 에서 직접 정한다. STAFF_PASSWORD 를
+  // 넣어두면 그 값으로 한 번 초기화하지만, 없으면 비워둔다 — 예전에는
+  // "staff1234" 로 채웠는데, 그건 저장소를 본 사람 누구나 직원으로 로그인할 수
+  // 있다는 뜻이었다. 비어 있는 동안 직원 로그인만 막히고(POST /auth/login 의
+  // staffHash 분기를 그냥 건너뛴다) 사장 로그인과 나머지는 평소대로 동작한다.
+  if (!store.settings.staff_password_hash && process.env.STAFF_PASSWORD) {
+    store.settings.staff_password_hash = bcrypt.hashSync(process.env.STAFF_PASSWORD, 10);
     console.log("Seeded staff password from STAFF_PASSWORD env (change it in Admin > Settings > 직원 권한 관리).");
   }
   if (!store.settings.staff_permissions) {

@@ -74,7 +74,9 @@ router.get("/me", (req, res) => {
           orderEdit: !!staffPerms.orderEdit,
           reservationManage: !!staffPerms.reservationManage,
         };
-  res.json({ isAdmin: true, role, permissions });
+  // staffPasswordSet: 사장 화면이 "직원 비밀번호가 아직 정해지지 않았다" 를
+  // 띄우기 위한 것. 해시 자체는 절대 내보내지 않는다.
+  res.json({ isAdmin: true, role, permissions, staffPasswordSet: !!store.settings.staff_password_hash });
 });
 
 // Each role changes its own password (owner changes the owner password,

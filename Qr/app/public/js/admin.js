@@ -711,6 +711,8 @@
       ticketFontSavedMsg: "저장되었습니다",
       ticketFontResetBtn: "기본값으로",
       staffPasswordLabel: "직원 로그인 비밀번호 재설정 (6자 이상)",
+      staffPasswordIsSet: "직원 비밀번호가 설정되어 있습니다.",
+      staffPasswordNotSet: "아직 정해지지 않았습니다 — 정하기 전까지 직원은 로그인할 수 없어요.",
       staffPasswordSaveBtn: "직원 비밀번호 저장",
       staffPermSaved: "저장되었습니다",
       staffPasswordSaved: "직원 비밀번호가 변경되었습니다",
@@ -1137,6 +1139,8 @@
       ticketFontSavedMsg: "已儲存",
       ticketFontResetBtn: "恢復預設值",
       staffPasswordLabel: "重設員工登入密碼（至少 6 碼）",
+      staffPasswordIsSet: "已設定員工密碼。",
+      staffPasswordNotSet: "尚未設定 — 設定前員工無法登入。",
       staffPasswordSaveBtn: "儲存員工密碼",
       staffPermSaved: "已儲存",
       staffPasswordSaved: "員工密碼已變更",
@@ -1355,6 +1359,7 @@
     if (data.isAdmin) {
       currentRole = data.role || "owner";
       staffPermissions = data.permissions || staffPermissions;
+      renderStaffPasswordStatus(data.staffPasswordSet !== false);
       showDashboard();
     } else {
       showLogin();
@@ -7042,6 +7047,16 @@
     };
   });
 
+  // 직원 비밀번호는 사장이 여기서 정할 때까지 아예 없는 상태다(직원 로그인만
+  // 막히고 나머지는 정상). 그 상태를 눈에 보이게 해둔다 — 안 그러면 "직원이
+  // 로그인이 안 된다" 는 문의로만 드러난다.
+  function renderStaffPasswordStatus(isSet) {
+    const el = $("#staffPwStatus");
+    if (!el) return;
+    el.textContent = isSet ? T("staffPasswordIsSet") : T("staffPasswordNotSet");
+    el.style.color = isSet ? "" : "#b5232c";
+  }
+
   $("#setStaffPasswordBtn").onclick = async () => {
     const newPassword = $("#staff_new_password").value;
     const msg = $("#staffPwMsg");
@@ -7060,6 +7075,7 @@
       msg.style.color = "#1a8a44";
       msg.textContent = T("staffPasswordSaved");
       $("#staff_new_password").value = "";
+      renderStaffPasswordStatus(true);
     } else {
       msg.style.color = "#b5232c";
       msg.textContent = T("staffPasswordFailed");
