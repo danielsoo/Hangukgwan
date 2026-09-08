@@ -665,7 +665,6 @@
       tfsTime: "주문 시간",
       tfsItemName: "메뉴 이름",
       tfsItemDetail: "세부사항 (└ 소/맵기)",
-      tfsItemNote: "메뉴별 요청사항 (└ 비고)",
       tfsItemTakeout: "메뉴별 포장 표시 (└ 포장)",
       tfsItemPrice: "결제용(금액) 표시 (└ NT$)",
       tfsTotal: "합계",
@@ -1074,7 +1073,6 @@
       tfsTime: "點餐時間",
       tfsItemName: "菜品名稱",
       tfsItemDetail: "細項（└ 肉類/辣度）",
-      tfsItemNote: "單品要求（└ 備註）",
       tfsItemTakeout: "單品外帶標示（└ 外帶）",
       tfsItemPrice: "結帳單金額顯示（└ NT$）",
       tfsTotal: "合計",
@@ -2148,7 +2146,6 @@
     time: 13, // order time, its own row under the table number
     itemName: 16, // each dish's name + quantity
     itemDetail: 13, // └ meat-type/spice lines under a dish
-    itemNote: 13, // └ 備註 (customer note) line under a dish
     itemTakeout: 13, // └ 外帶 line under a dish ordered as takeout
     // 사장님 피드백(2026-09-08): "크기, 두께 전부 설정할 수 있잖아 영수증.
     // 거기에 금액 버전도 설정할 수 있게 해줘 현재 있는 것과 같이" — 결제용
@@ -2173,7 +2170,6 @@
     timeWeight: 700,
     itemNameWeight: 900,
     itemDetailWeight: 400,
-    itemNoteWeight: 400,
     itemTakeoutWeight: 900,
     itemPriceWeight: 700,
     totalWeight: 900,
@@ -2252,7 +2248,11 @@
         // comment above for why this exists even when the order-level badge
         // already says takeout/mixed.
         if (it.order_type === "takeout") detailLines.push(`<div class="item-detail item-takeout">└ 外帶</div>`);
-        if (it.note) detailLines.push(`<div class="item-detail item-note">└ 備註：${it.note}</div>`);
+        // 메뉴별 개별 요청사항(itemNote) 입력칸은 손님 주문 화면에서 완전히
+        // 제거됐고(커밋 d5440f5) 관리자 쪽에도 대신 입력할 곳이 없어서, 이
+        // 줄은 어떤 주문에서도 다시는 채워질 일이 없다 — 렌더링 자체를
+        // 지웠다(사장님 피드백: "요청사항 손님한테 받는 거 아예 없애기로
+        // 했었잖아. 여전히 있는데?").
         // priceCopy 전용 — 품목 금액(단가+애드온 합계)×수량. 주방용
         // 사본에는 안 넣는다(주방은 가격을 알 필요가 없고, 오히려 화면이
         // 복잡해질 뿐이다). 할인이 걸려 있는 特約95折/VIP9折(퍼센트)이면
@@ -2383,7 +2383,6 @@
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
-  .item-note { font-size: ${fs.itemNote}px; font-weight: ${fs.itemNoteWeight}; color: #c0161f; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
   .item-price { font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; color: #000; }
   .item-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
@@ -2558,7 +2557,6 @@
     time: "tfsTime",
     itemName: "tfsItemName",
     itemDetail: "tfsItemDetail",
-    itemNote: "tfsItemNote",
     itemTakeout: "tfsItemTakeout",
     itemPrice: "tfsItemPrice",
     total: "tfsTotal",
@@ -2574,7 +2572,6 @@
     timeWeight: "tfsTimeWeight",
     itemNameWeight: "tfsItemNameWeight",
     itemDetailWeight: "tfsItemDetailWeight",
-    itemNoteWeight: "tfsItemNoteWeight",
     itemTakeoutWeight: "tfsItemTakeoutWeight",
     itemPriceWeight: "tfsItemPriceWeight",
     totalWeight: "tfsTotalWeight",
@@ -2584,9 +2581,12 @@
 
   // A small sample order for the live actual-size preview in the settings
   // card — deliberately touches every element a real ticket can have (two
-  // dishes, a meat-type choice, a spice-level choice, a per-dish note, a
-  // takeout dish, and a whole-order note) so every font-size field's effect
-  // is visible in the preview at once.
+  // dishes, a meat-type choice, a spice-level choice, a takeout dish, and a
+  // whole-order note) so every font-size field's effect is visible in the
+  // preview at once. 품목별 note(itemNote)는 뺐다 — 손님 주문 화면에서
+  // 완전히 제거된 기능이라 실제 주문에 다시는 나타나지 않는다(사장님
+  // 피드백 2026-09-08: "요청사항 손님한테 받는 거 아예 없애기로
+  // 했었잖아. 여전히 있는데? 미리보기에는?").
   function sampleTicketOrderForPreview() {
     return {
       id: "preview",
@@ -2606,7 +2606,7 @@
       // 미리보기에서 확인할 수 있게 한다.
       items: [
         { name_zh: "石鍋拌飯", unit_price: 230, qty: 1, option_choice: "牛", spice_choice: "中辣", order_type: "dine_in" },
-        { name_zh: "辣炒年糕", unit_price: 190, qty: 2, option_choice: null, spice_choice: null, note: "不要洋蔥", order_type: "takeout" },
+        { name_zh: "辣炒年糕", unit_price: 190, qty: 2, option_choice: null, spice_choice: null, order_type: "takeout" },
         { name_zh: "可樂", unit_price: 60, qty: 1, category_key: "drink", order_type: "dine_in" },
       ],
     };

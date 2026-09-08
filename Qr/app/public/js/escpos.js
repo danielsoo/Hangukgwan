@@ -168,7 +168,9 @@
       // default and stays implicit, only 外帶 is called out per dish, same
       // as buildTicketHtml()'s HTML ticket in admin.js.
       if (it.order_type === "takeout") out += CMD.BOLD_ON + "  └ 外帶" + CMD.BOLD_OFF + "\n";
-      if (it.note) out += "  └ 備註：" + it.note + "\n";
+      // 品項別 요청사항(備註) 입력칸은 손님 주문 화면에서 완전히 제거됐고
+      // 관리자 쪽에도 대신 입력할 곳이 없어서 다시는 채워지지 않는다 —
+      // 렌더링을 지웠다(admin.js buildReceiptBodyHtml와 동일 처리).
       // priceCopy 전용 — 주방용 사본에는 안 넣는다. 할인이 걸려 있으면
       // (特約95折/VIP9折만, 재량 할인은 품목별로 안 나눔 — 위 admin.js
       // computeTicketDiscountInfo 주석 참고) 원가→할인가를 같이 찍는다.
@@ -336,7 +338,6 @@
       // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
       if (it.takeout_choice) line("  └ " + it.takeout_choice, sz("itemTakeout", 13), wt("itemTakeout", 900));
       if (it.order_type === "takeout") line("  └ 外帶", sz("itemTakeout", 13), wt("itemTakeout", 900));
-      if (it.note) line("  └ 備註：" + it.note, sz("itemNote", 13), wt("itemNote", 400));
       // priceCopy 전용 — 주방용 사본에는 안 넣는다. 할인이 걸려 있으면
       // (特約95折/VIP9折만, 위 admin.js computeTicketDiscountInfo 주석 참고)
       // 원가→할인가로 찍는다. 사장님 피드백(2026-09-08): "크기, 두께 전부

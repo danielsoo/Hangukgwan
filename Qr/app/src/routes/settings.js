@@ -312,7 +312,6 @@ const TICKET_FONT_KEYS = [
   "time",
   "itemName",
   "itemDetail",
-  "itemNote",
   "itemTakeout",
   // 사장님 피드백(2026-09-08): "크기, 두께 전부 설정할 수 있잖아 영수증.
   // 거기에 금액 버전도 설정할 수 있게 해줘" — 결제용(금액) 사본에서만
