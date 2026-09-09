@@ -58,10 +58,10 @@ function movePartySize(store, fromNumber, toNumber) {
   const to = store.tables.find((t) => String(t.number) === String(toNumber));
   if (!from || !to || !from.party_size) return false;
   to.party_size = (to.party_size || 0) + from.party_size;
-  // 「언제부터 앉아 있는가」는 옮겨도 그대로 따라가야 한다. 여기서 지금
-  // 시각으로 새로 찍으면, 이 손님이 아까 시킨 것들이 「이번에 앉은 뒤에
-  // 시킨 것」에서 빠져버린다 — 한 번 더 옮길 때 그 주문들이 따라오지 않는다
-  // (seatingStartOf 참고). 두 자리를 합칠 때는 더 이른 쪽이 이 자리의 시작이다.
+  // 「언제부터 앉아 있는가」도 그대로 따라간다. 자리를 옮겼다고 이 손님이
+  // 방금 온 손님이 되는 것은 아니다 — 사장님(2026-09-10): "자리를 옮기던
+  // 시간이 오래 걸리던 전체 결제를 하지 않는 이상 이 손님은 같은 손님."
+  // 두 자리를 합칠 때는 더 이른 쪽이 이 자리의 시작이다.
   const starts = [to.party_size_updated_at, from.party_size_updated_at].filter(Boolean).sort();
   to.party_size_updated_at = starts[0] || new Date().toISOString();
   from.party_size = null;
@@ -69,25 +69,4 @@ function movePartySize(store, fromNumber, toNumber) {
   return true;
 }
 
-/**
- * 이 자리에 지금 앉아 있는 손님이 언제부터 앉아 있는가 — Taipei 시각
- * "YYYY-MM-DD HH:MM:SS" 로, 주문의 created_at 과 그대로 비교할 수 있게.
- *
- * 인원수를 찍은 시각이 곧 그 손님이 앉은 시각이다. 결제가 끝나면 인원수가
- * 지워지므로(위 clearPartySizeIfSettled), 이 값이 있다는 것은 "그 손님이
- * 아직 앉아 있다" 는 뜻이고 그 뒤의 주문은 전부 그 손님 것이다.
- *
- * 자리 이동에서 이게 필요한 이유: 사장님(2026-09-10) "이미 주문한 것도
- * 같이 이동하게 해줘." 이 손님이 아까 결제한 라운드도 따라가야 하는데,
- * 경계가 없으면 오늘 낮에 그 자리에 앉았다 간 다른 손님의 결제까지 함께
- * 옮겨진다. 그건 아무도 눈치채지 못하고 되돌릴 수도 없다.
- */
-function seatingStartOf(table) {
-  if (!table || !table.party_size || !table.party_size_updated_at) return null;
-  const t = new Date(table.party_size_updated_at);
-  if (Number.isNaN(t.getTime())) return null;
-  // 대만은 UTC+8 고정(서머타임 없음)이라 이 변환은 늘 정확하다.
-  return new Date(t.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
-}
-
-module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf };
+module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize };

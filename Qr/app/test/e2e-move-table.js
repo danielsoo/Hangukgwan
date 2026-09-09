@@ -72,8 +72,10 @@ function check(name, cond, extra = "") {
   const second = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 2 }] });
   check("주문 두 건이 만들어졌다", first.status === 201 && second.status === 201,
     `${first.status}/${second.status}`);
-  // 이 손님이 아까 결제한 라운드 — 사장님(2026-09-10) "이미 주문한 것도
-  // 같이 이동하게 해줘. 그냥 테이블을 변경된 걸로 해줘." 이것도 따라가야 한다.
+  // 이 손님이 아까 결제한 라운드 — 이건 그 자리에 남아야 한다.
+  // 사장님(2026-09-10): "아냐아냐. 결제한 건 옮기면 안되지."
+  // 결제는 그 자리에서 그때 끝난 일이다. 영수증도 나갔고 장부에도 그 자리로
+  // 들어갔다. 자리를 옮긴다고 그걸 뒤로 돌려 고치면 안 된다.
   const paid = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 1 }] });
   await api(`/api/orders/${paid.body.id}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
@@ -82,15 +84,13 @@ function check(name, cond, extra = "") {
   out.push("\n[빈 자리로 옮긴다]");
   const moved = await post("/api/orders/move", { from: A, to: B });
   check("옮겨진다", moved.status === 200, JSON.stringify(moved));
-  check("세 건이 다 옮겨진다", moved.body.moved === 3, JSON.stringify(moved.body));
-  check("그 중 결제 완료가 한 건이라고 알려준다", moved.body.moved_paid === 1, JSON.stringify(moved.body));
+  check("안 받은 주문 두 건만 옮긴다", moved.body.moved === 2, JSON.stringify(moved.body));
   {
     const all = (await api("/api/orders")).body;
     const byId = Object.fromEntries(all.map((o) => [o.id, o]));
     check("첫 주문이 새 자리에 있다", String(byId[first.body.id].table_number) === String(B));
     check("둘째 주문도 새 자리에 있다", String(byId[second.body.id].table_number) === String(B));
-    // 이 손님이 아까 결제한 라운드도 같이 간다 — 테이블이 통째로 바뀐 것이다.
-    check("이미 결제한 라운드도 따라간다", String(byId[paid.body.id].table_number) === String(B),
+    check("이미 결제한 라운드는 그 자리에 남는다", String(byId[paid.body.id].table_number) === String(A),
       String(byId[paid.body.id].table_number));
     check("어디서 왔는지 남는다", String(byId[first.body.id].moved_from) === String(A),
       byId[first.body.id].moved_from);
@@ -119,19 +119,10 @@ function check(name, cond, extra = "") {
       all.filter((o) => String(o.table_number) === String(C) && o.status !== "paid").length === 3);
   }
 
-  {
-    // 한 번 더 옮겨도 아까 결제한 라운드가 계속 따라와야 한다. 옮길 때
-    // 「앉은 시각」을 지금으로 새로 찍으면 여기서 떨어져 나간다.
-    const all = (await api("/api/orders")).body;
-    const byId = Object.fromEntries(all.map((o) => [o.id, o]));
-    check("두 번 옮겨도 결제한 라운드가 따라온다", String(byId[paid.body.id].table_number) === String(C),
-      String(byId[paid.body.id].table_number));
-  }
-
-  out.push("\n[먼저 앉았다 간 손님 것은 안 따라간다]");
-  // 아무 경계 없이 "이 테이블의 모든 주문" 을 옮기면, 낮에 그 자리에 앉았다
-  // 간 다른 손님의 결제까지 함께 옮겨진다. 그건 아무도 눈치채지 못하고
-  // 되돌릴 수도 없다. 경계는 「지금 앉아 있는 손님이 앉은 시각」이다.
+  out.push("\n[먼저 앉았다 간 손님 것은 건드리지 않는다]");
+  // 결제된 주문은 애초에 안 옮기므로 이건 저절로 지켜진다. 그래도 눈으로
+  // 확인해둔다 — 나중에 "이 테이블의 모든 주문" 으로 넓히고 싶은 유혹이
+  // 올 때, 그러면 낮에 앉았다 간 손님의 결제까지 옮겨진다는 걸 여기가 말해준다.
   {
     const D = tabless[3].number;
     const E = tabless[4].number;
@@ -161,6 +152,49 @@ function check(name, cond, extra = "") {
     check("먼저 앉았던 손님의 결제는 그 자리에 남는다",
       String(byId[oldGuest.body.id].table_number) === String(D),
       String(byId[oldGuest.body.id].table_number));
+  }
+
+  out.push("\n[전체 결제 전까지는 같은 손님이다]");
+  // 사장님(2026-09-10): "어떤 손님이 주문을 하고 몇개만 주문을 하던 자리를
+  // 옮기던 시간이 오래 걸리던 전체 결제를 하지 않는 이상 이 손님은 같은
+  // 손님으로 인식을 할거야."
+  //
+  // 그 「같은 손님」을 들고 있는 것이 인원수(party_size)다. 자리를 옮겨도
+  // 따라가고, 일부만 결제해도 남고, 전체 결제에서만 사라진다.
+  {
+    const F = tabless[5].number;
+    const G = tabless[6].number;
+    await put(`/api/tables/${F}/party-size`, { partySize: 4 });
+    const r1 = await post("/api/orders", { tableNumber: F, items: [{ itemId, qty: 1 }] });
+    const r2 = await post("/api/orders", { tableNumber: F, items: [{ itemId, qty: 1 }] });
+    // 한 라운드만 결제 — 손님은 아직 앉아 있다.
+    await api(`/api/orders/${r1.body.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
+    });
+    {
+      const t = (await api("/api/tables")).body.find((x) => String(x.number) === String(F));
+      check("일부만 결제하면 인원수가 남는다", t.party_size === 4, `${t.party_size}`);
+    }
+    // 자리를 옮겨도 같은 손님이다 — 새 자리에서 인원수를 다시 묻지 않는다.
+    await post("/api/orders/move", { from: F, to: G });
+    {
+      const tables = (await api("/api/tables")).body;
+      check("옮겨도 인원수가 그대로 따라간다",
+        tables.find((x) => String(x.number) === String(G)).party_size === 4);
+      check("옛 자리에는 안 남는다", !tables.find((x) => String(x.number) === String(F)).party_size);
+      const all = (await api("/api/orders")).body;
+      const byId = Object.fromEntries(all.map((o) => [o.id, o]));
+      check("결제한 라운드는 옛 자리에 그대로", String(byId[r1.body.id].table_number) === String(F));
+      check("안 받은 라운드만 새 자리로", String(byId[r2.body.id].table_number) === String(G));
+    }
+    // 전체 결제 — 이때 비로소 다른 손님이 된다.
+    await api(`/api/orders/${r2.body.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
+    });
+    {
+      const t = (await api("/api/tables")).body.find((x) => String(x.number) === String(G));
+      check("전체 결제하면 그때 인원수가 사라진다", !t.party_size, `${t.party_size}`);
+    }
   }
 
   out.push("\n[막아야 하는 것들]");

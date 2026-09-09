@@ -1694,8 +1694,8 @@
     adminLang === "zh" ? `確定要刪除「${name}」這個區域嗎？（區域內的桌號不會被刪除，只會取消配置）` : `"${name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`;
   const fmtMoveTableHint = (from) =>
     adminLang === "zh"
-      ? `「${from}」這組客人的訂單會整組移過去，包含已經結帳的那幾輪。移動後請提醒客人改掃新桌號的 QR code。`
-      : `"${from}" 손님의 주문이 통째로 옮겨갑니다 — 이미 결제한 라운드까지 함께요. 옮긴 뒤에는 손님이 새 자리의 QR 코드로 주문해야 합니다.`;
+      ? `「${from}」尚未結帳的訂單會整組移過去。已經結帳的那幾輪留在原桌。移動後請提醒客人改掃新桌號的 QR code。`
+      : `"${from}"의 아직 결제되지 않은 주문이 통째로 옮겨갑니다. 이미 결제한 것은 그 자리에 그대로 남습니다. 옮긴 뒤에는 손님이 새 자리의 QR 코드로 주문해야 합니다.`;
   const fmtConfirmMove = (from, to) =>
     adminLang === "zh" ? `將「${from}」的客人移到「${to}」嗎？` : `"${from}" 손님을 "${to}"으로 옮길까요?`;
   const fmtConfirmMoveMerge = (from, to) =>
@@ -1704,10 +1704,10 @@
       : `"${to}"에는 이미 손님이 있습니다. 두 자리가 한 테이블로 합쳐집니다(인원수는 더해집니다). 계속할까요?`;
   // 옮긴 뒤 한 번 더 짚어준다. 손님 폰에는 아직 옛 자리 화면이 떠 있어서,
   // 거기서 그대로 시키면 옛 자리로 들어간다.
-  const fmtMovedDone = (to, moved, paid) =>
+  const fmtMovedDone = (to, moved) =>
     adminLang === "zh"
-      ? `已移到「${to}」（${moved} 筆${paid ? `，含已結帳 ${paid} 筆` : ""}）。請提醒客人改掃新桌號的 QR code。`
-      : `"${to}"으로 옮겼습니다 (주문 ${moved}건${paid ? `, 결제 완료 ${paid}건 포함` : ""}). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
+      ? `已移到「${to}」（${moved} 筆）。請提醒客人改掃新桌號的 QR code。`
+      : `"${to}"으로 옮겼습니다 (주문 ${moved}건). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
   const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
@@ -6390,7 +6390,7 @@
           // 머물러 있으면 정말 옮겨졌는지 알 수 없다.
           openTableDetail(String(t.number), t.label || String(t.number));
           if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
-          await showAlert(fmtMovedDone(t.label || t.number, body.moved || 0, body.moved_paid || 0));
+          await showAlert(fmtMovedDone(t.label || t.number, body.moved || 0));
         } catch (e) {
           btn.disabled = false;
           await showAlert(T("moveTableFailed"));
