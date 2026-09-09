@@ -398,6 +398,10 @@
       tableDelTitle: "삭제",
       noOrdersYetAdmin: "아직 주문이 없습니다.",
       unpaidTotalLabel: "현재 미결제 합계:",
+      clearPartySizeBtn: "👥 손님 나감 (인원수 비우기)",
+      clearPartySizeConfirm: "이 테이블의 등록된 인원수를 비울까요? 다음 손님에게 인원수를 다시 물어봅니다.",
+      clearPartySizeDone: "인원수를 비웠습니다.",
+      clearPartySizeFailed: "인원수를 비우지 못했습니다. 다시 시도해주세요.",
       unpaidTotalLabel2: "미결제 합계:",
       paySelectedBtn: "결제 완료",
       paySelectedFailedMsg: "일부 품목은 결제 완료 처리에 실패했어요. 화면을 새로고침해서 다시 확인해주세요.",
@@ -828,6 +832,10 @@
       tableDelTitle: "刪除",
       noOrdersYetAdmin: "目前尚無訂單。",
       unpaidTotalLabel: "目前未結帳金額：",
+      clearPartySizeBtn: "👥 客人已離開（清除人數）",
+      clearPartySizeConfirm: "要清除這桌已登記的人數嗎？下一位客人會重新被詢問人數。",
+      clearPartySizeDone: "已清除人數。",
+      clearPartySizeFailed: "清除人數失敗，請再試一次。",
       unpaidTotalLabel2: "未結帳金額：",
       paySelectedBtn: "結帳完成",
       paySelectedFailedMsg: "部分品項結帳失敗，請重新整理後再確認一次。",
@@ -3586,12 +3594,15 @@
       const badge = unpaid.length > 0
         ? `<div class="table-order-badge active">${fmtOrderCount(unpaid.length, unpaid.reduce((s, o) => s + o.total, 0))}</div>`
         : `<div class="table-order-badge empty">${T("tableEmptyBadge")}</div>`;
-      // Only shown while the table actually has an order in flight — a
-      // party size registered on an otherwise-empty table is stale data
-      // (see the party_size auto-clear in src/routes/orders.js's PATCH
-      // handler) and showing it here would make an empty table look
-      // occupied, exactly the "비어있음인데 인원수가 남아있다" bug reported.
-      const partyBadge = t.party_size && unpaid.length > 0 ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
+      // 인원수가 등록돼 있으면 주문이 아직 없어도 보여준다.
+      //
+      // 예전에는 주문이 있을 때만 보여줬다. "인원수만 남은 테이블은 낡은
+      // 값"이라고 보고, 그런 테이블이 차 있는 것처럼 보이지 않게 하려던
+      // 것이다. 그런데 사장님 규칙(2026-09-09)에서는 인원수가 저절로
+      // 사라지지 않고 직원이 「손님 나감」으로 직접 비운다 — 그러려면 어느
+      // 테이블에 숫자가 남아 있는지가 눈에 보여야 한다. 숨기면 아무도
+      // 모르고, 다음 손님이 인원수를 안 물어보는 이유도 알 수 없게 된다.
+      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
       const delBtn = canTableEdit() && !mergePayMode && tableEditMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
       chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
@@ -3682,8 +3693,15 @@
     // 품목이 결제완료된 라운드는 o.total(품목 전체 합)보다 작아야 하므로
     // 헬퍼를 그대로 재사용한다.
     const unpaidTotal = unpaidOrders.reduce((s, o) => s + remainingAmountOf(o), 0);
-    // Same "only while actually occupied" rule as the table-list badge above.
-    const partyText = table && table.party_size && unpaidOrders.length > 0 ? ` · ${fmtPartyCount(table.party_size)}` : "";
+    // 인원수가 등록돼 있으면 주문이 아직 없어도 보여준다.
+    //
+    // 예전에는 "받을 돈이 있을 때만" 보여줬다. 그런데 사장님 규칙
+    // (2026-09-09: "결제를 완료했다고 직원이 누르지 않는 한 ... 계속 같은
+    // 손님")에서는 인원수가 시간이 지나도 저절로 사라지지 않으므로, 손님이
+    // 그냥 나가버린 테이블은 직원이 직접 비워야 한다. 그러려면 그 숫자가
+    // 화면에 보여야 한다 — 안 보이면 무엇을 비우는지 알 수 없고, 애초에
+    // 비워야 한다는 것도 모른다.
+    const partyText = table && table.party_size ? ` · ${fmtPartyCount(table.party_size)}` : "";
     // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
     // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
     // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 헤더/footer에 각각
@@ -3706,10 +3724,25 @@
     const titleText = table && table.is_counter
       ? `${label || openTableLabel || tableNumber}${focusTag}`
       : `${T("tableLabel")} ${label || tableNumber}${focusTag}`;
+    // 사장님 요청(2026-09-09): "결제를 완료했다고 직원이 누르지 않는 한
+    // 한번이라도 주문한 손님은 계속 같은 손님으로 취급할거야."
+    //
+    // 그래서 인원수는 시간이 지났다고 알아서 사라지지 않는다. 대신 손님이
+    // 결제 없이 그냥 나간 경우(인원수만 찍고 안 시켰거나, 주문이 전부
+    // 취소된 경우)를 직원이 직접 정리할 수 있어야 한다 — 안 그러면 그
+    // 숫자가 계속 남아서 다음 손님에게 인원수를 안 묻게 된다.
+    //
+    // 결제할 것이 남아 있는 동안에는 이 버튼을 내놓지 않는다. 그때 눌러야
+    // 하는 건 「결제 완료」이고, 그쪽이 인원수까지 알아서 정리한다.
+    // 실수로 눌러도 되돌릴 수 있다 — 손님에게 인원수만 다시 물으면 된다.
+    const showClearParty = !!(table && !table.is_counter && table.party_size && unpaidOrders.length === 0);
     const header = `
       <h2>${titleText}${partyText}</h2>
-      <div style="margin-top:-6px;">
+      <div style="margin-top:-6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
+        ${showClearParty
+          ? `<button type="button" id="clearPartySizeBtn" class="table-detail-clear-party">${T("clearPartySizeBtn")}</button>`
+          : ""}
       </div>
     `;
     const tabsHtml = `
@@ -3845,6 +3878,35 @@
           resetTableDetailScroll();
         };
       });
+
+    // 「손님 나감」 — 등록된 인원수를 직원이 직접 비운다. 결제 없이 손님이
+    // 나간 테이블(인원수만 찍고 안 시켰거나 주문이 전부 취소된 경우)을
+    // 정리하는 유일한 길이다. 시간이 지났다고 알아서 지우지는 않으므로,
+    // 이 버튼을 누르지 않으면 그 숫자가 그대로 남는다.
+    const clearPartyBtn = $("#clearPartySizeBtn");
+    if (clearPartyBtn) {
+      clearPartyBtn.onclick = async () => {
+        if (!(await showConfirm(T("clearPartySizeConfirm")))) return;
+        clearPartyBtn.disabled = true;
+        try {
+          const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, { method: "DELETE" });
+          if (!res.ok) throw new Error("failed");
+          // 화면의 tables 사본도 같이 맞춰준다 — 다음 폴링을 기다리지 않고
+          // 버튼이 바로 사라지고 인원수 표시도 없어져야 한다.
+          const t = tables.find((x) => String(x.number) === String(tableNumber));
+          if (t) {
+            t.party_size = null;
+            t.party_size_updated_at = null;
+          }
+          await loadTables();
+          openTableDetail(tableNumber, label, focusOrderId);
+          if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+        } catch (e) {
+          clearPartyBtn.disabled = false;
+          await showAlert(T("clearPartySizeFailed"));
+        }
+      };
+    }
     $("#tableDetailBody")
       .querySelectorAll("[data-edit-id]")
       .forEach((btn) => {
@@ -5215,7 +5277,7 @@
     const unassignBtn = canTableEdit() ? `<button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>` : "";
     el.innerHTML = `
       ${unassignBtn}
-      <span>${t.label || t.number}</span>${t.party_size && unpaid.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
     `;
     container.appendChild(el);
 
@@ -5554,7 +5616,7 @@
             tableEl.style.width = w + "px";
             tableEl.style.height = h + "px";
             tableEl.innerHTML = `
-              <span>${t.label || t.number}</span>${t.party_size && bundledOrders.length > 0 ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
             `;
             tableEl.onclick = () => openTableDetail(t.number, t.label);
             zoneEl.appendChild(tableEl);

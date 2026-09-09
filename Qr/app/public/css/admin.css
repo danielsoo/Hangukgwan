@@ -987,3 +987,21 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-size: 14px; font-family: inherit; background: #fff; cursor: pointer;
 }
 .account-actions select:disabled { opacity: 0.5; cursor: default; }
+
+/* 「손님 나감 (인원수 비우기)」 — 결제할 게 없는 테이블에만 나온다.
+   자주 쓰는 버튼이 아니고 되돌릴 수 있는 동작이라, 결제 버튼처럼 눈에
+   확 띄면 안 된다. 다만 태블릿에서 손가락으로 눌러야 하므로 높이는
+   충분히 준다. */
+.table-detail-clear-party {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 8px 14px;
+  min-height: 38px;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.table-detail-clear-party:hover { border-color: var(--navy); color: var(--navy); }
+.table-detail-clear-party:disabled { opacity: 0.5; cursor: default; }

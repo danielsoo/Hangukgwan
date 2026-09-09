@@ -8,6 +8,7 @@
 // page and nothing here changes existing behavior.
 const express = require("express");
 const { store, save, nextId } = require("../db");
+const { clearPartySizeIfSettled } = require("../partySize");
 const { nowLocal } = require("../time");
 const ecpay = require("../ecpay");
 
@@ -122,13 +123,7 @@ router.post("/callback", async (req, res) => {
     // silently inheriting this party's headcount. (If a new order came in
     // for this table after checkout started, this stays untouched — the
     // party is evidently still there.)
-    if (unpaidOrdersForTable(payment.table_number).length === 0) {
-      const table = store.tables.find((t) => String(t.number) === String(payment.table_number));
-      if (table) {
-        table.party_size = null;
-        table.party_size_updated_at = null;
-      }
-    }
+    clearPartySizeIfSettled(store, payment.table_number);
     await save();
   } else if (!success && payment.status === "pending") {
     payment.status = "failed";

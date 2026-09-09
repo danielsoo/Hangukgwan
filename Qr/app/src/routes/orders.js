@@ -23,7 +23,7 @@ function resolveSelectedAddons(mi, requestedNames) {
   return chosen;
 }
 
-const { clearIfStale } = require("../partySize");
+const { clearPartySizeIfSettled } = require("../partySize");
 
 const router = express.Router();
 
@@ -195,11 +195,6 @@ router.post("/", async (req, res) => {
   // exception: there's no headcount to ask a takeout customer for, and
   // public/js/order.js's initPartySize() already skips that modal for it.
   const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
-  // 손님 화면이 보는 것과 똑같은 기준으로 판단해야 한다 — GET
-  // /api/tables/:n/party-size 는 오래된 숫자를 만료시키는데 여기만 그걸
-  // 그대로 인정하면, 화면은 "이미 답했다"고 넘어가는데 주문만 거절되는
-  // 어긋남이 생긴다(src/partySize.js 참고).
-  if (orderingTable) clearIfStale(store, orderingTable);
   if (!orderingTable || (!orderingTable.is_counter && !orderingTable.party_size)) {
     return res.status(400).json({ error: "party_size_required" });
   }
@@ -488,27 +483,19 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   order.status = status;
   order.updated_at = nowLocal();
 
-  // Once this table has no order left in flight (every order is now either
-  // paid or cancelled), clear its registered party size — same cleanup the
-  // admin's bulk "전체 결제 완료" already does explicitly, but this covers
-  // every other way a table can empty out too: a single order paid off one
-  // at a time through the normal new->preparing->served->paid flow, or an
-  // order cancelled outright with none left behind. Without this, a table
-  // could sit at "비어있음" (empty) in the admin table list while still
-  // showing a stale headcount from whoever ordered last — and worse, the
-  // next customer who scans that table's QR code would silently inherit
-  // that stale party size instead of being asked fresh (see initPartySize()
-  // in public/js/order.js), even though they're a different party entirely.
-  const stillActive = store.orders.some(
-    (o) => o.table_number === order.table_number && o.status !== "paid" && o.status !== "cancelled"
-  );
-  if (!stillActive) {
-    const table = store.tables.find((t) => t.number === order.table_number);
-    if (table && table.party_size) {
-      table.party_size = null;
-      table.party_size_updated_at = null;
-    }
-  }
+  // 직원이 「결제 완료」를 눌러 이 테이블에 안 받은 돈이 없어졌으면, 그
+  // 손님은 나간 것이므로 등록된 인원수를 지운다 — 다음 손님이 앞 손님
+  // 인원수를 물려받지 않도록.
+  //
+  // 결제일 때만 한다. 예전에는 "살아 있는 주문이 하나도 없으면" 지웠는데,
+  // 그러면 주방에 재료가 떨어져 마지막 한 접시를 취소하는 순간 앉아 계신
+  // 손님이 나간 것으로 처리돼서 인원수를 다시 묻게 됐다.
+  // 사장님(2026-09-09): "결제를 완료했다고 직원이 누르지 않는 한 한번이라도
+  // 주문한 손님은 계속 같은 손님으로 취급할거야."
+  // 주문이 전부 취소돼서 받을 돈이 아예 없는 테이블은 결제할 것이 없으므로
+  // 이 길로 들어오지 않는다 — 결제 탭의 「손님 나감」 버튼으로 직원이 직접
+  // 비운다(DELETE /api/tables/:n/party-size).
+  if (status === "paid") clearPartySizeIfSettled(store, order.table_number);
 
   await save();
   broadcastOrdersChanged();
@@ -667,16 +654,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   const allPaid = order.items.every((it) => it.paid);
   if (allPaid) {
     order.status = "paid";
-    const stillActive = store.orders.some(
-      (o) => o.table_number === order.table_number && o.status !== "paid" && o.status !== "cancelled"
-    );
-    if (!stillActive) {
-      const table = store.tables.find((t) => t.number === order.table_number);
-      if (table && table.party_size) {
-        table.party_size = null;
-        table.party_size_updated_at = null;
-      }
-    }
+    clearPartySizeIfSettled(store, order.table_number);
   }
 
   await save();

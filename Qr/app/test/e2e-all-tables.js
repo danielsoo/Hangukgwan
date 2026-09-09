@@ -215,10 +215,10 @@ function check(name, cond, extra = "") {
   check("결제 후에는 인원수가 지워진다(=다음 손님에게 다시 묻는다)", stale.length === 0,
     `남아 있는 테이블: ${stale.map((r) => `${r.n}(${r.partySizeAfter}명)`).join(", ")}`);
 
-  // ── 4) 실제 가게에서 벌어지는 어긋난 경우들 ─────────────────────────
-  // 1~3번은 "정상 한 바퀴"라 전부 통과한다. 사장님이 겪는 건 그 바깥이므로
-  // 여기서 실제로 있을 법한 경우를 하나씩 만들어 본다.
-  out.push("\n[4) 정상 흐름 바깥]");
+  // ── 4) "한 번이라도 주문했으면 같은 손님" 규칙 ────────────────────
+  // 사장님(2026-09-09): "구분 할 수 있어. 결제를 완료했다고 직원이 누르지
+  // 않는 한 한번이라도 주문한 손님은 계속 같은 손님으로 취급할거야."
+  out.push("\n[4) 직원이 결제 완료를 누를 때까지는 같은 손님]");
   const edge = await page.evaluate(async () => {
     const H = { "Content-Type": "application/json" };
     const j = async (url, opts) => {
@@ -226,99 +226,136 @@ function check(name, cond, extra = "") {
       let b = null; try { b = await r.json(); } catch {}
       return { status: r.status, body: b };
     };
-    // /api/menu/admin 은 카테고리 배열이고 각 카테고리 안에 items 가 있다.
-    // 예전엔 배열의 [0](=카테고리)을 메뉴로 착각해서 가격이 undefined 였다.
     const menu = await j("/api/menu/admin");
     const item = (menu.body || []).flatMap((c) => c.items || [])[0];
     const order = (n) => j("/api/orders", { method: "POST", headers: H,
       body: JSON.stringify({ tableNumber: n, items: [{ itemId: item && item.id, qty: 1 }] }) });
     const setPs = (n, size) => j(`/api/tables/${n}/party-size`, { method: "PUT", headers: H, body: JSON.stringify({ partySize: size }) });
-    const getPs = (n) => j(`/api/tables/${n}/party-size`);
+    const getPs = async (n) => (await j(`/api/tables/${n}/party-size`)).body.party_size;
     const pay = (id) => j(`/api/orders/${id}`, { method: "PATCH", headers: H, body: JSON.stringify({ status: "paid", paymentMethod: "cash" }) });
     const cancel = (id) => j(`/api/orders/${id}`, { method: "PATCH", headers: H, body: JSON.stringify({ status: "cancelled" }) });
 
     const r = {};
 
-    // (a) 손님이 인원수만 찍고 주문 없이 나갔다 — 흔하다. 자리를 뜨거나,
-    //     메뉴 보고 마음이 바뀌거나, QR만 찍어보고 만 경우.
-    //     방금 찍은 건 당연히 유지돼야 하고(메뉴 고르는 중), 오래된 건
-    //     버려져야 한다. 시간을 되돌릴 수 없으니 등록 시각을 과거로 옮겨
-    //     "3시간 전에 찍고 나간 테이블"을 만든다.
+    // (a) 주방에 재료가 떨어져 마지막 한 접시를 취소했다. 손님은 그대로
+    //     앉아 계신다 — 인원수를 다시 물으면 안 된다.
     await setPs("11", 4);
-    r.a_justNow = (await getPs("11")).body.party_size; // 유지돼야 함
-    r.__ageThese = ["11"]; // 아래에서 Node 쪽이 시각을 과거로 옮긴다
+    const o11 = await order("11");
+    await cancel(o11.body.id);
+    r.a_afterCancel = await getPs("11");
+    //     그리고 바로 다시 주문할 수 있어야 한다(인원수를 다시 안 물어도).
+    const o11b = await order("11");
+    r.a_reorderStatus = o11b.status;
+    r.a_reorderError = o11b.body && o11b.body.error;
 
-    // (a2) 오래 드시는 손님 — 주문이 살아 있으면 3시간이 지나도 유지돼야
-    //      한다. 식사 중에 인원수를 다시 묻는 건 원래 문제만큼 나쁘다.
-    await setPs("16", 6);
-    await order("16");
-    r.__ageThese.push("16");
-
-    // (b) 주문을 넣었다가 전부 취소했다.
+    // (b) 직원이 결제 완료를 눌렀다 — 여기서만 손님이 끝난다.
     await setPs("12", 3);
     const o12 = await order("12");
-    await cancel(o12.body.id);
-    r.b_afterCancel = (await getPs("12")).body.party_size;
+    await pay(o12.body.id);
+    r.b_afterPaid = await getPs("12");
 
-    // (c) 1차 결제하고 같은 손님이 2차 주문(추가 주문)을 한다.
-    await setPs("13", 2);
+    // (c) 두 라운드 중 한 라운드만 결제 — 아직 받을 돈이 남았다.
+    await setPs("13", 5);
     const o13a = await order("13");
-    await pay(o13a.body.id);
-    r.c_afterFirstRoundPaid = (await getPs("13")).body.party_size;
     const o13b = await order("13");
-    r.c_secondRoundOrderStatus = o13b.status;
-    r.c_secondRoundError = o13b.body && o13b.body.error;
+    await pay(o13a.body.id);
+    r.c_oneRoundPaid = await getPs("13");
+    await pay(o13b.body.id);
+    r.c_bothPaid = await getPs("13");
 
-    // (d) 두 라운드가 살아 있는 상태에서 한 라운드만 결제.
-    await setPs("15", 5);
-    const o15a = await order("15");
-    const o15b = await order("15");
-    await pay(o15a.body.id);
-    r.d_oneRoundPaid = (await getPs("15")).body.party_size;
-    await pay(o15b.body.id);
-    r.d_bothPaid = (await getPs("15")).body.party_size;
+    // (d) 인원수만 찍고 주문 없이 나갔다 — 결제할 것도 없어서 직원이
+    //     결제 완료를 누를 일이 없다. 직원이 직접 비우기 전까지는 남는다.
+    await setPs("15", 2);
+    r.d_stillThere = await getPs("15");
 
     return r;
   });
 
-  // (a) 이게 진짜 문제다. 인원수만 찍고 주문 없이 나가면 지워주는 사람이
-  //     아무도 없다 — 결제도 취소도 없으니 정리 규칙이 걸리지 않는다.
-  //     다음 손님은 앞 손님 인원수를 그대로 물려받고 아예 안 물어본다.
-  // 시간을 되돌릴 수 없으므로, 등록 시각만 과거로 옮겨 "몇 시간 전에 찍고
-  // 나간 테이블"을 만든다. 테스트 전용 라우트를 제품 코드에 뚫는 대신
-  // (그런 뒷문은 언젠가 운영에서 열린다) 이 테스트가 앱과 같은 프로세스에서
-  // 도는 점을 이용해 저장소를 직접 만진다.
-  {
-    const { store, save } = require("../src/db");
-    for (const n of edge.__ageThese) {
-      const t = store.tables.find((x) => x.number === n);
-      t.party_size_updated_at = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
-    }
-    await save();
-  }
-  const aged = await page.evaluate(async () => {
-    const g = async (n) => (await (await fetch(`/api/tables/${n}/party-size`)).json()).party_size;
-    return { a_leftWithoutOrdering: await g("11"), a2_longMeal: await g("16") };
-  });
-  edge.a_leftWithoutOrdering = aged.a_leftWithoutOrdering;
-  edge.a2_longMeal = aged.a2_longMeal;
+  check("(a) 주문을 취소해도 인원수는 그대로다(손님은 앉아 계신다)",
+    edge.a_afterCancel === 4, `${edge.a_afterCancel}`);
+  check("(a) 취소 뒤 바로 다시 주문할 수 있다(인원수를 다시 안 묻는다)",
+    edge.a_reorderStatus === 200 || edge.a_reorderStatus === 201,
+    `${edge.a_reorderStatus} / ${edge.a_reorderError}`);
+  check("(b) 직원이 결제 완료를 누르면 인원수가 지워진다", !edge.b_afterPaid, `${edge.b_afterPaid}`);
+  check("(c) 한 라운드만 결제하면 그대로 둔다", edge.c_oneRoundPaid === 5, `${edge.c_oneRoundPaid}`);
+  check("(c) 전부 결제하면 지워진다", !edge.c_bothPaid, `${edge.c_bothPaid}`);
+  check("(d) 주문 없이 나간 테이블은 직원이 비우기 전까지 남는다", edge.d_stillThere === 2, `${edge.d_stillThere}`);
 
-  check("(a) 방금 인원수를 찍은 손님은 다시 묻지 않는다", edge.a_justNow === 4, `${edge.a_justNow}`);
-  check("(a) 주문 없이 인원수만 찍고 나간 뒤에는 다음 손님에게 다시 묻는다",
-    !edge.a_leftWithoutOrdering, `남은 인원수: ${edge.a_leftWithoutOrdering}`);
-  check("(a2) 오래 드시는 손님(주문 살아 있음)의 인원수는 지우지 않는다",
-    edge.a2_longMeal === 6, `${edge.a2_longMeal}`);
-  check("(b) 주문을 전부 취소하면 인원수가 지워진다", !edge.b_afterCancel, `남은 인원수: ${edge.b_afterCancel}`);
-  check("(c) 1차 결제 후 인원수가 지워진다", !edge.c_afterFirstRoundPaid, `남은 인원수: ${edge.c_afterFirstRoundPaid}`);
-  // 결제가 끝난 테이블은 "그 손님이 더 시키는 것"과 "새 손님이 앉은 것"을
-  // 서버가 구별할 수 없다. 그래서 다시 묻는 게 맞다 — 손님 화면도 그때
-  // 인원수 창을 다시 띄운다(order.js 의 party_size_required 처리). 잘못된
-  // 인원수를 물려주는 것보다 한 번 더 묻는 쪽을 택한다.
-  check("(c) 결제 끝난 테이블의 새 주문은 인원수를 다시 묻는다(의도된 동작)",
-    edge.c_secondRoundError === "party_size_required", `${edge.c_secondRoundOrderStatus} / ${edge.c_secondRoundError}`);
-  check("(d) 한 라운드만 결제하면 인원수가 그대로 남는다(손님이 아직 앉아 있다)",
-    !!edge.d_oneRoundPaid, `인원수: ${edge.d_oneRoundPaid}`);
-  check("(d) 전부 결제하면 지워진다", !edge.d_bothPaid, `남은 인원수: ${edge.d_bothPaid}`);
+  // ── 5) 직원이 직접 비우는 버튼이 실제로 동작하는가 ──────────────────
+  out.push("\n[5) 결제 탭의 「손님 나감」 버튼]");
+  // 갓 만든 DB 는 테이블이 어느 구역에도 놓여 있지 않다(씨앗은 좌표만 넣고
+  // zone_id 는 비워 둔다). 결제 탭 배치도는 구역 안의 테이블만 그리므로,
+  // 실제 가게처럼 배치된 상태를 먼저 만든다 — 관리자 화면의 "구역에 테이블
+  // 추가"가 부르는 것과 같은 라우트.
+  const placed = await page.evaluate(async () => {
+    const H = { "Content-Type": "application/json" };
+    const tables = await (await fetch("/api/tables")).json();
+    const zones = await (await fetch("/api/zones")).json();
+    let x = 20;
+    let y = 40;
+    for (const t of tables) {
+      await fetch(`/api/tables/${t.id}`, { method: "PATCH", headers: H,
+        body: JSON.stringify({ zoneId: zones[0].id, x, y, width: 70, height: 70 }) });
+      x += 80;
+      if (x > 500) { x = 20; y += 80; }
+    }
+    const after = await (await fetch("/api/tables")).json();
+    return after.filter((t) => t.zone_id != null).length;
+  });
+  check("테이블을 배치도에 놓았다", placed >= 40, `${placed}개`);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  await page.locator('.admin-tabs button[data-tab="payment"]').click();
+  // 배치도는 탭을 누른 순간 한 번, 그 뒤로는 4초 주문 폴링마다 다시 그려진다.
+  await page.locator("#paymentFloorPlan .table-block").first().waitFor({ timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(400);
+
+  // 15번 테이블 — 인원수만 있고 주문은 없는 상태.
+  // 타일 안에는 번호 말고 인원수 배지(👥N)도 들어 있어서 통짜 텍스트로는
+  // 못 고른다 — 번호가 든 첫 span 으로 찾는다.
+  const tileFor = (n) => page.locator(`#paymentFloorPlan .table-block:has(> span:text-is("${n}"))`).first();
+  const tile15 = tileFor("15");
+  check("15번 테이블 타일이 있다", (await tile15.count()) > 0);
+  await tile15.click();
+  await page.waitForTimeout(700);
+  check("주문이 없는 테이블에 「손님 나감」 버튼이 보인다",
+    await page.locator("#clearPartySizeBtn").isVisible());
+  {
+    const fsx = require("fs");
+    const dir = path.join(__dirname, "..", "..", "..", "_screens");
+    fsx.mkdirSync(dir, { recursive: true });
+    const m = await page.locator("#tableDetailBackdrop .modal").boundingBox();
+    await page.screenshot({ path: path.join(dir, "clear-party-button.png"),
+      clip: { x: m.x, y: m.y, width: m.width, height: Math.min(m.height, 320) } });
+  }
+  await page.locator("#clearPartySizeBtn").click();
+  await page.waitForTimeout(300);
+  check("누르면 확인부터 묻는다", await page.locator("#appDialogBackdrop").isVisible());
+  await page.locator("#appDialogOk").click();
+  await page.waitForTimeout(900);
+  const after15 = await page.evaluate(async () => (await (await fetch("/api/tables/15/party-size")).json()).party_size);
+  check("확인하면 인원수가 비워진다", !after15, `${after15}`);
+  check("비운 뒤에는 버튼이 사라진다", !(await page.locator("#clearPartySizeBtn").isVisible()));
+
+  // 받을 돈이 남은 테이블에는 이 버튼이 나오면 안 된다 — 거기서 눌러야
+  // 하는 건 「결제 완료」다.
+  await page.locator("#tableDetailClose").click();
+  await page.waitForTimeout(400);
+  const tile11 = tileFor("11");
+  await tile11.click();
+  await page.waitForTimeout(700);
+  check("받을 돈이 남은 테이블에는 「손님 나감」이 없다",
+    !(await page.locator("#clearPartySizeBtn").isVisible()));
+  await page.locator("#tableDetailClose").click();
+  await page.waitForTimeout(300);
+
+  // 손님이 남의 테이블 인원수를 지울 수 없어야 한다.
+  const asGuest = await browser.newContext();
+  const gp = await asGuest.newPage();
+  await gp.goto(`${base}/order.html?table=11`, { waitUntil: "domcontentloaded" }).catch(() => {});
+  const guestTry = await gp.evaluate(async () => (await fetch("/api/tables/11/party-size", { method: "DELETE" })).status);
+  check("로그인 안 한 사람은 인원수를 지울 수 없다", guestTry === 401 || guestTry === 403, `${guestTry}`);
+  await asGuest.close();
 
   const shots = path.join(__dirname, "..", "..", "..", "_screens");
   fs.mkdirSync(shots, { recursive: true });

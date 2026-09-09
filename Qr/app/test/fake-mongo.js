@@ -87,6 +87,16 @@ function matches(doc, filter) {
       if (!cond.every((sub) => matches(doc, sub))) return false;
       continue;
     }
+    // "tables.id": 41 처럼 배열 안을 가리키는 조건 — 배열 원소 중 하나라도
+    // 맞으면 참이다. 진짜 MongoDB 가 하는 일이고, src/db.js 의
+    // patchArrayItem() 이 이 형태로 필터를 건다.
+    if (key.includes(".") && key !== "_id") {
+      const [field, sub] = key.split(".");
+      if (Array.isArray(doc[field])) {
+        if (!doc[field].some((el) => matchOne(el && el[sub], cond))) return false;
+        continue;
+      }
+    }
     const val = key === "_id" ? (doc._id instanceof ObjectId ? String(doc._id) : doc._id) : doc[key];
     const want = key === "_id" && cond instanceof ObjectId ? String(cond) : cond;
     if (!matchOne(val, want)) return false;
@@ -139,9 +149,35 @@ class Collection {
       return { matchedCount: 0 };
     }
     if (update.$set) {
-      const candidate = { ...doc, ...update.$set };
+      // "tables.$.zone_id" 같은 위치 지정 갱신 — $ 는 이 문서에서 필터에
+      // 맞은 첫 배열 원소를 가리킨다. 예전에는 이걸 몰라서 그런 키를 문서에
+      // 통째로 붙여 넣고(그래서 아무 일도 일어나지 않고) 조용히 넘어갔다.
+      // src/db.js 의 patchArrayItem() 이 배치도 드래그/크기조절/이름변경에
+      // 모두 이 형태를 쓰므로, 그 경로가 테스트에서 전부 무의미해져 있었다.
+      const plain = {};
+      const positional = new Map(); // field -> { sub: value }
+      for (const [k, v] of Object.entries(update.$set)) {
+        const m = /^([^.]+)\.\$\.(.+)$/.exec(k);
+        if (m) {
+          if (!positional.has(m[1])) positional.set(m[1], {});
+          positional.get(m[1])[m[2]] = v;
+        } else {
+          plain[k] = v;
+        }
+      }
+      for (const [field, patch] of positional) {
+        const arr = doc[field];
+        if (!Array.isArray(arr)) continue;
+        // 필터에서 이 배열을 고르는 조건을 찾아 그 원소를 집는다.
+        const cond = Object.entries(filter).find(([k]) => k.startsWith(field + "."));
+        const el = cond
+          ? arr.find((x) => matchOne(x && x[cond[0].slice(field.length + 1)], cond[1]))
+          : arr[0];
+        if (el) Object.assign(el, patch);
+      }
+      const candidate = { ...doc, ...plain };
       this._checkUnique(candidate, doc._id);
-      Object.assign(doc, update.$set);
+      Object.assign(doc, plain);
     }
     return { matchedCount: 1 };
   }

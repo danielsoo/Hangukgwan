@@ -2,7 +2,6 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { clearIfStale } = require("../partySize");
 const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
@@ -164,12 +163,9 @@ router.put("/:tableNumber/party-size", async (req, res) => {
 // party size registered — so a page refresh (or re-scanning the QR code
 // mid-visit) doesn't ask again for the same party. Only exposes the one
 // field (not the rest of the table record).
-router.get("/:tableNumber/party-size", async (req, res) => {
+router.get("/:tableNumber/party-size", (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
-  // 주문 없이 오래 남아 있던 숫자면 여기서 지운다 — 이 라우트가 손님 화면이
-  // "물어볼까 말까"를 정하는 유일한 자리다(public/js/order.js initPartySize).
-  if (clearIfStale(store, table)) await save();
   // is_counter tells the customer page (see initPartySize in public/js/order.js)
   // this QR is the 포장 카운터, not a real table — it skips the headcount
   // prompt entirely rather than treating a missing party_size as "not asked yet".
@@ -180,7 +176,11 @@ router.get("/:tableNumber/party-size", async (req, res) => {
 // (admin's "전체 결제 완료" and the online-payment callback both call this),
 // so the *next* party that scans this table's QR code is asked fresh
 // instead of silently inheriting the previous party's headcount.
-router.delete("/:tableNumber/party-size", async (req, res) => {
+// 직원 전용이다. 손님 화면은 이 라우트를 부르지 않는다(GET 으로 물어볼지
+// 정하고, PUT 으로 답을 저장할 뿐이다). 예전에는 아무 보호가 없어서, 주소만
+// 알면 누구나 남의 테이블 인원수를 지울 수 있었다 — 이제 결제 탭의
+// 「손님 나감」 버튼이 실제로 쓰는 길이므로 확실히 막는다.
+router.delete("/:tableNumber/party-size", requireAdmin, async (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
   table.party_size = null;
