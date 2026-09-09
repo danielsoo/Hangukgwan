@@ -1700,6 +1700,9 @@
       if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
       if (!$("#tab-settlement").hidden) loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
       if (!$("#tab-reservations").hidden) renderReservations();
+      // 설정 화면 — 「주문 받는 시간」 카드와 찾기 결과도 JS 가 글자를 만든다.
+      refreshOrderHoursI18n();
+      if ($("#settingsSearch")) renderSettingsSearch($("#settingsSearch").value);
     };
   });
 
@@ -6558,7 +6561,12 @@
 
   // 지금 실제로 받고 있는지를 맨 위에 적어준다. 규칙만 보여주면 사장님이
   // 머리로 시계를 맞춰봐야 하고, 그러다 "왜 손님이 주문을 못 하지" 가 된다.
+  // 마지막으로 받은 상태를 들고 있는다. 언어를 바꿨을 때 이 줄만 예전
+  // 언어로 남으면 안 되는데, 이 값은 서버에서 오는 것이라 다시 그리려면
+  // 갖고 있어야 한다.
+  let lastOrderingState = null;
   function renderOrderHoursState(state) {
+    lastOrderingState = state || null;
     const el = $("#orderHoursState");
     if (!el) return;
     // 상태를 모르면 빈 띠를 남겨두지 않는다. 색만 있고 글자가 없는 칸은
@@ -6571,12 +6579,12 @@
     const closed = state.enabled && !state.open;
     el.classList.toggle("is-closed", closed);
     if (!state.enabled) {
-      el.innerHTML = `${T("orderHoursOff")}<span class="oh-state-sub">${T("orderHoursOffSub")}</span>`;
+      el.innerHTML = `${T("orderHoursOff")}<span class="oh-state-sub"> · ${T("orderHoursOffSub")}</span>`;
       el.classList.remove("is-closed");
       return;
     }
     if (state.open) {
-      el.innerHTML = `${T("orderHoursOpenNow")}<span class="oh-state-sub">${T("orderHoursTodayLabel")} ${state.ranges_text || ""}</span>`;
+      el.innerHTML = `${T("orderHoursOpenNow")}<span class="oh-state-sub"> · ${T("orderHoursTodayLabel")} ${state.ranges_text || ""}</span>`;
       return;
     }
     const bits = [];
@@ -6589,7 +6597,7 @@
     } else if (state.ranges_text) {
       bits.push(state.ranges_text);
     }
-    el.innerHTML = `${T("orderHoursClosedNow")}<span class="oh-state-sub">${bits.join(" · ")}</span>`;
+    el.innerHTML = `${T("orderHoursClosedNow")}<span class="oh-state-sub"> · ${bits.join(" · ")}</span>`;
   }
 
   function applyOrderHoursCfg(cfg) {
@@ -6615,7 +6623,16 @@
     if (!el) return;
     el.hidden = false;
     el.classList.add("is-closed");
-    el.innerHTML = `${T("orderHoursUnavailable")}<span class="oh-state-sub">${T("orderHoursUnavailableSub")}</span>`;
+    el.innerHTML = `${T("orderHoursUnavailable")}<span class="oh-state-sub"> · ${T("orderHoursUnavailableSub")}</span>`;
+  }
+
+  // 언어를 바꾸면 이 카드도 같이 바뀌어야 한다. 여기 글자는 대부분
+  // data-i18n 이 아니라 JS 가 만들어 넣은 것이라(요일 이름, 드롭다운 항목,
+  // 「삭제」·「+ 시간대 추가」, 상태 줄) 그냥 두면 이 카드만 예전 언어로 남는다.
+  function refreshOrderHoursI18n() {
+    renderOrderHoursRanges();
+    renderOrderHoursDayRules();
+    renderOrderHoursState(lastOrderingState);
   }
 
   async function loadOrderHours() {

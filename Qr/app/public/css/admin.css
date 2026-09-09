@@ -540,9 +540,11 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 주문 받는 시간 (2026-09-10) — 손님이 QR 로 주문할 수 있는 시각.
    위 「영업시간」 칸은 손님에게 보여주는 문구고, 여기가 실제로 막는 규칙이다. */
 .order-hours-state {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  /* flex + gap 으로 띄우면 화면에는 떨어져 보이지만 복사하면 두 문장이
+     붙어버린다("지금 주문 안 받는 중다시 받는 시각 오늘 11:00"). 그래서
+     한 줄의 글로 두고 가운뎃점으로 나눈다 — 좁은 화면에서 자연스럽게
+     줄바꿈되는 것도 덤이다. */
+  display: block;
   font-size: 16px;
   font-weight: 600;
   padding: 10px 14px;

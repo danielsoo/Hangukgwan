@@ -138,6 +138,25 @@ function hm(offsetMinutes) {
     check("주소를 알아도 서버가 막는다", r.status === 403 && r.error === "closed_now", JSON.stringify(r));
   }
 
+  // 손님 화면도 언어를 따라가야 한다. 이 띠는 JS 가 만들어 넣는 글이라
+  // data-i18n 으로 저절로 바뀌지 않는다.
+  {
+    await guestPage.evaluate(() => {
+      const btn = document.querySelector('.lang-option[data-lang="ko"]');
+      if (btn) btn.click();
+    });
+    await guestPage.waitForTimeout(700);
+    const ko = await guestPage.locator("#closedBanner").innerText();
+    check("손님 화면 안내가 한국어로 바뀐다", ko.includes("주문") && !ko.includes("目前無法點餐"), ko);
+    await guestPage.evaluate(() => {
+      const btn = document.querySelector('.lang-option[data-lang="zh"]');
+      if (btn) btn.click();
+    });
+    await guestPage.waitForTimeout(700);
+    check("중국어로 되돌아온다", (await guestPage.locator("#closedBanner").innerText()).includes("目前無法點餐"),
+      await guestPage.locator("#closedBanner").innerText());
+  }
+
   out.push("\n[영업시간 밖 — 직원은 그대로]");
   // 전화 주문이나 마감 후 정리 주문을 직원이 대신 넣는 일은 실제로 있다.
   // 그것까지 막으면 직원은 시스템을 우회하고, 그 매출은 장부에서 사라진다.
@@ -195,6 +214,38 @@ function hm(offsetMinutes) {
     check("월요일 휴무가 저장된다", (saved.closed_days || []).includes(1), JSON.stringify(saved.closed_days));
     check("저장 뒤에도 토요일 편집기가 열려 있다",
       (await adminPage.locator('#ohDayRules [data-oh-dayranges="6"] .oh-range').count()) >= 1);
+  }
+
+  out.push("\n[언어를 바꾸면 이 카드도 같이 바뀐다]");
+  // 2026-09-10 사장님: "이 기능애들도 언어 중국어 한국어 적용되게 해줘."
+  // 이 카드의 글자는 대부분 data-i18n 이 아니라 JS 가 만들어 넣은 것이라
+  // (요일 이름, 드롭다운 항목, 「삭제」, 상태 줄) 그냥 두면 여기만 예전
+  // 언어로 남는다. 중국어로 쓰는 직원이 열어봐야만 드러나는 종류의 문제다.
+  {
+    const koState = await adminPage.locator("#orderHoursState").innerText();
+    const koDay = await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText();
+    const koMode = await adminPage.locator('#ohDayRules select[data-oh-mode="0"] option').first().innerText();
+    const koRemove = await adminPage.locator("#ohRanges .oh-range button").first().innerText();
+
+    await adminPage.locator('.admin-lang-btn[data-admin-lang="zh"]').click();
+    await adminPage.waitForTimeout(500);
+    const zhState = await adminPage.locator("#orderHoursState").innerText();
+    const zhDay = await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText();
+    const zhMode = await adminPage.locator('#ohDayRules select[data-oh-mode="0"] option').first().innerText();
+    const zhRemove = await adminPage.locator("#ohRanges .oh-range button").first().innerText();
+
+    check("상태 줄이 중국어로 바뀐다", zhState !== koState && /停止接單|開放點餐|沒有任何限制/.test(zhState), `${koState} → ${zhState}`);
+    check("요일 이름이 중국어로 바뀐다", zhDay !== koDay, `${koDay} → ${zhDay}`);
+    check("드롭다운 항목이 중국어로 바뀐다", zhMode !== koMode, `${koMode} → ${zhMode}`);
+    check("「삭제」 버튼도 바뀐다", zhRemove !== koRemove, `${koRemove} → ${zhRemove}`);
+    check("설정 분류 이름도 바뀐다",
+      (await adminPage.locator('.settings-nav-btn[data-category="order"] .nav-name').innerText()).includes("點餐"),
+      await adminPage.locator('.settings-nav-btn[data-category="order"] .nav-name').innerText());
+
+    await adminPage.locator('.admin-lang-btn[data-admin-lang="ko"]').click();
+    await adminPage.waitForTimeout(400);
+    check("한국어로 되돌아온다",
+      (await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText()) === koDay);
   }
   {
     const shots = path.join(__dirname, "..", "..", "..", "_screens");
