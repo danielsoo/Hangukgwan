@@ -72,7 +72,8 @@ function check(name, cond, extra = "") {
   const second = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 2 }] });
   check("주문 두 건이 만들어졌다", first.status === 201 && second.status === 201,
     `${first.status}/${second.status}`);
-  // 이미 결제된 주문 한 건 — 이건 그 자리에 남아야 한다.
+  // 이 손님이 아까 결제한 라운드 — 사장님(2026-09-10) "이미 주문한 것도
+  // 같이 이동하게 해줘. 그냥 테이블을 변경된 걸로 해줘." 이것도 따라가야 한다.
   const paid = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 1 }] });
   await api(`/api/orders/${paid.body.id}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
@@ -81,14 +82,15 @@ function check(name, cond, extra = "") {
   out.push("\n[빈 자리로 옮긴다]");
   const moved = await post("/api/orders/move", { from: A, to: B });
   check("옮겨진다", moved.status === 200, JSON.stringify(moved));
-  check("미결제 주문 두 건만 옮겼다", moved.body.moved === 2, JSON.stringify(moved.body));
+  check("세 건이 다 옮겨진다", moved.body.moved === 3, JSON.stringify(moved.body));
+  check("그 중 결제 완료가 한 건이라고 알려준다", moved.body.moved_paid === 1, JSON.stringify(moved.body));
   {
     const all = (await api("/api/orders")).body;
     const byId = Object.fromEntries(all.map((o) => [o.id, o]));
     check("첫 주문이 새 자리에 있다", String(byId[first.body.id].table_number) === String(B));
     check("둘째 주문도 새 자리에 있다", String(byId[second.body.id].table_number) === String(B));
-    // 이미 결제된 주문은 그 자리에서 실제로 일어난 매출이다.
-    check("결제된 주문은 옛 자리에 남는다", String(byId[paid.body.id].table_number) === String(A),
+    // 이 손님이 아까 결제한 라운드도 같이 간다 — 테이블이 통째로 바뀐 것이다.
+    check("이미 결제한 라운드도 따라간다", String(byId[paid.body.id].table_number) === String(B),
       String(byId[paid.body.id].table_number));
     check("어디서 왔는지 남는다", String(byId[first.body.id].moved_from) === String(A),
       byId[first.body.id].moved_from);
@@ -115,6 +117,50 @@ function check(name, cond, extra = "") {
     const all = (await api("/api/orders")).body;
     check("세 건이 한 자리에 모인다",
       all.filter((o) => String(o.table_number) === String(C) && o.status !== "paid").length === 3);
+  }
+
+  {
+    // 한 번 더 옮겨도 아까 결제한 라운드가 계속 따라와야 한다. 옮길 때
+    // 「앉은 시각」을 지금으로 새로 찍으면 여기서 떨어져 나간다.
+    const all = (await api("/api/orders")).body;
+    const byId = Object.fromEntries(all.map((o) => [o.id, o]));
+    check("두 번 옮겨도 결제한 라운드가 따라온다", String(byId[paid.body.id].table_number) === String(C),
+      String(byId[paid.body.id].table_number));
+  }
+
+  out.push("\n[먼저 앉았다 간 손님 것은 안 따라간다]");
+  // 아무 경계 없이 "이 테이블의 모든 주문" 을 옮기면, 낮에 그 자리에 앉았다
+  // 간 다른 손님의 결제까지 함께 옮겨진다. 그건 아무도 눈치채지 못하고
+  // 되돌릴 수도 없다. 경계는 「지금 앉아 있는 손님이 앉은 시각」이다.
+  {
+    const D = tabless[3].number;
+    const E = tabless[4].number;
+    // 손님 1 — 앉고, 시키고, 다 결제하고 나간다(결제하면 인원수가 지워진다).
+    await put(`/api/tables/${D}/party-size`, { partySize: 2 });
+    const oldGuest = await post("/api/orders", { tableNumber: D, items: [{ itemId, qty: 1 }] });
+    await api(`/api/orders/${oldGuest.body.id}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
+    });
+    {
+      const tables = (await api("/api/tables")).body;
+      const d = tables.find((t) => String(t.number) === String(D));
+      check("다 결제하면 인원수가 지워진다", !d.party_size, `${d.party_size}`);
+    }
+    // 주문 시각은 초 단위라, 실제 손님처럼 시간이 흐른 뒤에 다음 손님이
+    // 앉아야 경계가 의미를 갖는다. 현실에서는 몇 분씩 벌어진다.
+    await page.waitForTimeout(1200);
+    // 손님 2 — 같은 자리에 새로 앉는다.
+    await put(`/api/tables/${D}/party-size`, { partySize: 4 });
+    const newGuest = await post("/api/orders", { tableNumber: D, items: [{ itemId, qty: 1 }] });
+
+    const r = await post("/api/orders/move", { from: D, to: E });
+    check("지금 손님 것만 옮긴다", r.body.moved === 1, JSON.stringify(r.body));
+    const all = (await api("/api/orders")).body;
+    const byId = Object.fromEntries(all.map((o) => [o.id, o]));
+    check("지금 손님 주문은 옮겨진다", String(byId[newGuest.body.id].table_number) === String(E));
+    check("먼저 앉았던 손님의 결제는 그 자리에 남는다",
+      String(byId[oldGuest.body.id].table_number) === String(D),
+      String(byId[oldGuest.body.id].table_number));
   }
 
   out.push("\n[막아야 하는 것들]");

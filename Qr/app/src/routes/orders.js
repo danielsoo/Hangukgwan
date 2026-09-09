@@ -24,7 +24,7 @@ function resolveSelectedAddons(mi, requestedNames) {
   return chosen;
 }
 
-const { clearPartySizeIfSettled, movePartySize } = require("../partySize");
+const { clearPartySizeIfSettled, movePartySize, seatingStartOf } = require("../partySize");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
 
@@ -561,9 +561,29 @@ router.post("/move", requireAdmin, async (req, res) => {
   // 픽업번호·이름으로 구분되므로, 테이블로 옮기면 누구 것인지 알 수 없게 된다.
   if (fromTable.is_counter || toTable.is_counter) return res.status(400).json({ error: "counter_not_movable" });
 
-  const moving = store.orders.filter(
-    (o) => String(o.table_number) === from && o.status !== "paid" && o.status !== "cancelled"
+  // 이 손님이 시킨 것은 전부 따라간다 — 이미 결제한 라운드까지.
+  // 사장님(2026-09-10): "이미 주문한 것도 같이 이동하게 해줘. 그냥 테이블을
+  // 변경된 걸로 해줘."
+  //
+  // 그런데 경계는 있어야 한다. 아무 경계 없이 "이 테이블의 모든 주문" 을
+  // 옮기면, 오늘 낮에 그 자리에 앉았다 간 다른 손님의 결제까지 함께
+  // 옮겨진다. 그건 아무도 눈치채지 못하고 되돌릴 수도 없다.
+  //
+  // 경계는 「지금 앉아 있는 손님이 앉은 시각」이다(src/partySize.js 의
+  // seatingStartOf). 인원수를 찍은 때가 곧 그 손님이 앉은 때이고, 결제가
+  // 끝나면 인원수가 지워지므로 그 값이 있다는 것은 그 손님이 아직 앉아
+  // 있다는 뜻이다.
+  //
+  // 그 시각을 모르면(인원수가 없는 자리) 안 받은 주문만 옮긴다. 확실하지
+  // 않을 때 남의 결제 기록까지 옮기는 것보다, 덜 옮기고 직원이 한 번 더
+  // 보는 편이 낫다.
+  const seatingStart = seatingStartOf(fromTable);
+  const tableOrders = store.orders.filter(
+    (o) => String(o.table_number) === from && o.status !== "cancelled"
   );
+  const moving = seatingStart
+    ? tableOrders.filter((o) => String(o.created_at || "") >= seatingStart)
+    : tableOrders.filter((o) => o.status !== "paid");
   if (moving.length === 0) return res.status(400).json({ error: "nothing_to_move" });
 
   const now = nowLocal();
@@ -584,7 +604,14 @@ router.post("/move", requireAdmin, async (req, res) => {
   await saveOrders(moving);
   await save();
   broadcastOrdersChanged();
-  res.json({ ok: true, moved: moving.length, from, to, party_size: toTable.party_size || null });
+  res.json({
+    ok: true,
+    moved: moving.length,
+    moved_paid: moving.filter((o) => o.status === "paid").length,
+    from,
+    to,
+    party_size: toTable.party_size || null,
+  });
 });
 
 // Admin: update order status. Advancing an order forward (조리 시작 /
