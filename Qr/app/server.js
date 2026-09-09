@@ -14,6 +14,7 @@ const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-tak
 const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-orders-collection");
 const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
 const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
+const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-hours");
 
 const app = express();
 
@@ -139,6 +140,9 @@ app.use(async (req, res, next) => {
       await applyServiceStart20260910(store, { save });
       // 결제기록·정산·예약도 밖으로 — 지금은 옮길 게 몇 줄뿐이라 가장 싸다.
       await applySplitCollections20260910(store, { save, getDb, connectDB });
+      // 영업시간 밖에는 손님이 QR 로 주문하지 못하게 — 직원은 그대로 된다
+      // (src/openHours.js).
+      await applyOrderHours20260910(store, { save });
       migratedOnce = true;
     }
     next();

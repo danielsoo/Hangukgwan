@@ -507,6 +507,26 @@
           <button id="saveSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="settingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
+        <!-- 주문 받는 시간 (2026-09-10) — 위 「영업시간」 칸과 다른 것이다.
+             그 칸은 손님에게 그대로 보여주는 문구고, 여기가 실제로 주문을
+             막는 규칙이다. 왜 나눴는지는 src/openHours.js 첫머리. -->
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsOrderHoursTitle">주문 받는 시간</h3>
+          <p class="settings-hint" data-i18n="settingsOrderHoursHint">
+            이 시간 밖에서는 손님이 QR 코드로 주문할 수 없습니다. 메뉴는 그대로 보이고 주문 버튼만 잠깁니다.
+            <strong>직원·사장님은 로그인한 상태면 언제든 주문할 수 있습니다</strong> — 전화 주문이나 마감 후 정리 주문을 대신 넣을 수 있어요.
+          </p>
+          <div class="order-hours-state" id="orderHoursState"></div>
+          <label class="perm-toggle-row"><span data-i18n="orderHoursEnabledLabel">영업시간 밖 주문 막기</span><input type="checkbox" id="oh_enabled" /></label>
+          <div id="ohRanges" class="oh-ranges"></div>
+          <button type="button" id="ohAddRange" class="oh-add" data-i18n="orderHoursAddRange">+ 시간대 추가</button>
+          <div class="oh-closed-days">
+            <span class="oh-label" data-i18n="orderHoursClosedDays">정기 휴무일</span>
+            <div id="ohClosedDays" class="oh-days"></div>
+          </div>
+          <button id="saveOrderHoursBtn" data-i18n="saveSettingsBtn">설정 저장</button>
+          <div class="save-msg" id="orderHoursMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
+        </div>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsLocationTitle">위치 기반 주문 제한</h3>
           <p class="settings-hint" data-i18n="settingsLocationHint">

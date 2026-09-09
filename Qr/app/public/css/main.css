@@ -170,6 +170,34 @@ body {
   line-height: 1.5;
 }
 
+/* 영업시간 밖 안내 — 손님이 메뉴는 그대로 보되 주문만 막힌 상태.
+   사장님: "메뉴는 보이고 주문만 잠금". 그래서 메뉴를 가리지 않는 띠 하나로
+   두고, 잠긴 버튼(.is-closed)은 눌리지 않는다는 게 눈으로 보이게 한다. */
+.closed-banner {
+  margin: 0 16px 14px;
+  background: #8a1c1c;
+  color: #fff;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.closed-banner b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.closed-banner .closed-sub {
+  opacity: 0.9;
+  font-size: 12px;
+}
+button.is-closed,
+button.is-closed:hover {
+  background: #b9b3ad;
+  color: #f3f0ec;
+  cursor: not-allowed;
+}
+
 /* Category tabs */
 .cat-tabs-row {
   display: flex;

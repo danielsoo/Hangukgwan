@@ -105,6 +105,8 @@ function check(name, cond, extra = "") {
   check("이전 불가 안내가 보인다", /옮길 수 없|轉移|cannot be moved/.test(body), body.slice(0, 400));
   await page.screenshot({ path: path.join(shots, "22-site-account-customer.png"), fullPage: true });
 
+  await require("./disable-order-hours")();
+
   out.push("\n[VIP 카드 등록]");
   const iso = new Date().toISOString().slice(0, 10);
   store.vipCards.push({ id: 9001, card_number: "V0001", discount_percent: 10, issue_date: iso, google_uid: null, account_id: null });

@@ -496,6 +496,51 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .perm-no-orderCancel .need-orderCancel { display: none !important; }
 .perm-no-reservationManage .need-reservationManage { display: none !important; }
 .perm-toggle-row { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* 주문 받는 시간 (2026-09-10) — 손님이 QR 로 주문할 수 있는 시각.
+   위 「영업시간」 칸은 손님에게 보여주는 문구고, 여기가 실제로 막는 규칙이다. */
+.order-hours-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  margin: 0 0 14px;
+  background: #eef4ec;
+  color: #2f6b3a;
+}
+.order-hours-state.is-closed { background: #f7ecec; color: #8a1c1c; }
+.order-hours-state .oh-state-sub { font-weight: 400; color: var(--muted); }
+.oh-ranges { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.oh-range { display: flex; align-items: center; gap: 8px; }
+.oh-range input[type="time"] { width: auto; flex: 0 0 auto; margin: 0; }
+.oh-range .oh-dash { color: var(--muted); }
+.settings-card .oh-range button {
+  margin: 0;
+  padding: 6px 12px;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line, #ddd);
+}
+.settings-card .oh-add { margin: 0 0 16px; padding: 8px 14px; background: transparent; color: var(--navy); border: 1px solid var(--navy); }
+.oh-closed-days { margin: 0 0 16px; }
+.oh-label { display: block; font-size: 16px; color: var(--muted); margin-bottom: 8px; }
+.oh-days { display: flex; flex-wrap: wrap; gap: 8px; }
+.oh-day {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  margin: 0 !important;
+  padding: 6px 12px;
+  border: 1px solid var(--line, #ddd);
+  border-radius: 999px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.oh-day input { width: auto; margin: 0; }
 .perm-toggle-row input[type="checkbox"] { width: auto; margin-top: 0; transform: scale(1.3); }
 /* Live "실제 코드 UI" previews next to the logo/cover-photo uploads — shows
    exactly how the upload will render for a customer, not a raw thumbnail. */

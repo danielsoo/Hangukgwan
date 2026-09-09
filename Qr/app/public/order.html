@@ -38,6 +38,11 @@
     <button class="store-info-btn" id="memberBtn" hidden>회원</button>
   </div>
 
+  <!-- 영업시간 밖일 때만 보인다 (public/js/order.js applyOrderingState).
+       사장님 공지(noticeBanner)와 따로 두는 이유: 공지를 덮어써 버리면
+       "오늘 김밥 없습니다" 같은 안내가 밤사이 조용히 사라진다. -->
+  <div class="closed-banner" id="closedBanner" hidden></div>
+
   <div class="notice-banner" id="noticeBanner" hidden></div>
 
   <div class="cat-tabs-row">

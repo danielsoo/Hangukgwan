@@ -1,6 +1,7 @@
 const express = require("express");
 const { store, save, nextId, saveOrder, saveOrders, findOrders } = require("../db");
 const { requireAdmin, requireOwner } = require("../auth");
+const { isOpenNow, orderingState } = require("../openHours");
 const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
 const { isActive: isVipActive, cardBelongsTo } = require("../vip");
@@ -188,6 +189,21 @@ router.post("/", async (req, res) => {
   const { tableNumber, items, note, lat, lng } = req.body || {};
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
+  }
+
+  // 영업시간 밖에는 손님이 주문할 수 없다 (2026-09-10 사장님: "영업시간이
+  // 아닐 때는 직원을 제외하고 qr 코드로 주문 안되게 해줘").
+  //
+  // 직원은 예외다. 마감 뒤 정리 주문이나 전화 주문을 직원이 대신 넣는 일은
+  // 실제로 있고, 그것까지 막으면 직원은 시스템을 우회한다 — 그러면 그 매출이
+  // 장부에서 통째로 사라진다. 막는 목적은 "손님이 아무 때나 QR 로 주문을
+  // 던져놓는 것" 이지 직원의 손을 묶는 게 아니다.
+  //
+  // 화면에서도 잠그지만(public/js/order.js) 여기서 한 번 더 막는다. 주소를
+  // 아는 사람이 그냥 POST 하면 화면 잠금은 아무 의미가 없고, QR 주소는
+  // 테이블마다 종이에 인쇄돼 벽에 붙어 있다.
+  if (!(req.session && req.session.isAdmin) && !isOpenNow(store.settings)) {
+    return res.status(403).json({ error: "closed_now", ordering: orderingState(store.settings) });
   }
 
   // Party size is required before a table can order at all (see the

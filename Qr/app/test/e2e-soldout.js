@@ -53,6 +53,7 @@ function check(name, cond, extra = "") {
   });
   await page.reload({ waitUntil: "networkidle" });
   check("사장 로그인", await page.locator("#dashboard").isVisible());
+  await require("./disable-order-hours")();
 
   await page.locator('.admin-tabs button[data-tab="menu"]').click();
   await page.waitForTimeout(900);

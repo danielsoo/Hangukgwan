@@ -6,6 +6,7 @@ const { SETTING_BYTES, SETTING_CHECKED_AT, LIMIT_BYTES, levelFor, recordStoreSiz
 const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, serviceStartedAt } = require("../serviceStart");
 const { nowLocal } = require("../time");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
+const { normalize: normalizeOrderHours, orderingState } = require("../openHours");
 const canEditSettings = requirePermission("settingsEdit");
 
 const router = express.Router();
@@ -54,6 +55,10 @@ function publicSettings() {
   // 포함하지 않는다). PUSHER_KEY/PUSHER_CLUSTER 둘 다 설정된 경우에만
   // admin.js가 폴링 대신 이 채널을 구독하고, 미설정 시엔 enabled:false로
   // 내려가서 기존 폴링 방식 그대로 동작한다.
+  // 지금 손님이 주문할 수 있는 시간인가 — 계산은 서버 한 곳에서만 한다
+  // (src/openHours.js). 손님 화면이 스스로 시각을 재면 손님 폰의 시계가
+  // 기준이 되어버려서, 시계가 틀린 폰 하나 때문에 주문이 되거나 안 된다.
+  map.ordering = orderingState(store.settings);
   map.realtime = {
     enabled: !!(process.env.PUSHER_KEY && process.env.PUSHER_CLUSTER),
     key: process.env.PUSHER_KEY || null,
@@ -83,6 +88,29 @@ router.put("/", canEditSettings, async (req, res) => {
   if (TAEGEUK_SEASON_MODES.includes(b.taegeuk_season_mode)) store.settings.taegeukSeasonMode = b.taegeuk_season_mode;
   await save();
   res.json(publicSettings());
+});
+
+// 손님 화면이 1분마다 물어보는 아주 작은 응답 — 지금 주문을 받는지만.
+// /api/settings 전체를 다시 받게 하지 않는 이유는 그 안에 메뉴 사진 주소,
+// Firebase 설정 같은 것까지 들어 있어서, 테이블 20개가 1분마다 그걸 다시
+// 받아가면 아무 의미 없는 트래픽이 된다.
+router.get("/ordering", (req, res) => {
+  res.json(orderingState(store.settings));
+});
+
+// 주문 받는 시간 — 손님이 QR 로 주문할 수 있는 시각. 손님에게 보여주는
+// 「영업시간」 문구(store_hours)와 일부러 분리돼 있다. 자세한 이유는
+// src/openHours.js 첫머리.
+router.get("/order-hours", requireAdmin, (req, res) => {
+  // 화면의 폼을 채우는 용도라, 저장된 게 없으면 「영업시간」 문구에서
+  // 읽어온 출발점을 보여준다(enabled 는 그대로 0 이라 아무것도 안 막는다).
+  res.json(normalizeOrderHours(store.settings.order_hours || {}, store.settings.store_hours));
+});
+
+router.put("/order-hours", canEditSettings, async (req, res) => {
+  store.settings.order_hours = normalizeOrderHours(req.body, store.settings.store_hours);
+  await save();
+  res.json(Object.assign({}, store.settings.order_hours, { ordering: orderingState(store.settings) }));
 });
 
 const upload = multer({

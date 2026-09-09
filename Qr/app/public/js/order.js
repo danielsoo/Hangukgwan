@@ -96,6 +96,14 @@
   let storeLng = null;
   let partySize = null;
   let onlinePaymentEnabled = false;
+
+  // 지금 손님이 주문할 수 있는 시간인가 — 서버(/api/settings 의 ordering)가
+  // 정해서 내려준다. 여기서 직접 시각을 재지 않는 이유: 기준이 손님 폰의
+  // 시계가 되어버린다. 시계가 어긋난 폰 하나 때문에 주문이 되거나 안 되고,
+  // 여행 온 손님 폰은 아예 다른 시간대일 수도 있다.
+  // enabled 가 false 면(사장님이 안 켰거나 설정이 이상하면) 아무것도 막지
+  // 않는다 — 못 막는 것보다 잘못 막는 게 훨씬 비싸다(src/openHours.js).
+  let ordering = { enabled: false, open: true };
   // True when this QR points at the counter's takeout-only order flow
   // instead of a real dine-in table (see the "포장 카운터" section in Admin >
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
@@ -216,6 +224,80 @@
     toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
   }
 
+  function orderingClosed() {
+    return !!(ordering && ordering.enabled && !ordering.open);
+  }
+
+  /** "오늘 17:00" / "내일 11:00" / "09/15 11:00" — 며칠 뒤인지는 서버가 센다. */
+  function nextOpenLabel() {
+    if (!ordering || !ordering.next_open_at) return "";
+    const time = ordering.next_open_at.slice(11, 16);
+    if (ordering.next_open_days === 0) return `${t("closedTodayWord")} ${time}`;
+    if (ordering.next_open_days === 1) return `${t("closedTomorrowWord")} ${time}`;
+    return `${ordering.next_open_at.slice(5, 10).replace("-", "/")} ${time}`;
+  }
+
+  /** 알림창 한 줄로 쓸 문구 — 주문을 눌렀는데 그 사이 영업이 끝난 경우. */
+  function closedMessage() {
+    const parts = [t("closedTitle")];
+    const when = nextOpenLabel();
+    if (when) parts.push(`${t("closedNextOpenLabel")} ${when}`);
+    else if (ordering && ordering.ranges_text) parts.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
+    return parts.join("\n");
+  }
+
+  /**
+   * 영업시간 밖이면 띠를 띄우고 담기·주문 버튼을 잠근다.
+   *
+   * 메뉴 자체는 그대로 둔다 (사장님: "메뉴는 보이고 주문만 잠금"). 지나가다
+   * QR 을 찍은 손님이 뭘 파는지는 볼 수 있어야 한다.
+   *
+   * 이건 어디까지나 화면일 뿐이고, 진짜로 막는 건 서버다
+   * (src/routes/orders.js). QR 주소는 테이블마다 종이에 인쇄돼 있어서
+   * 화면만 잠그면 주소를 아는 사람에게는 아무 의미가 없다.
+   */
+  function applyOrderingState() {
+    const closed = orderingClosed();
+    const banner = $("#closedBanner");
+    if (closed) {
+      const lines = [`<b>${t("closedTitle")}</b>`];
+      if (ordering.ranges_text) lines.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
+      const when = nextOpenLabel();
+      if (when) lines.push(`${t("closedNextOpenLabel")} ${when}`);
+      banner.innerHTML = `${lines.join("<br>")}<div class="closed-sub">${t("closedCallStaff")}</div>`;
+      banner.hidden = false;
+    } else {
+      banner.hidden = true;
+    }
+    for (const id of ["#addToCartBtn", "#submitOrderBtn"]) {
+      const btn = $(id);
+      if (!btn) continue;
+      btn.disabled = closed;
+      btn.classList.toggle("is-closed", closed);
+    }
+  }
+
+  // 영업 시작·종료 시각을 걸치고 앉아 있는 손님이 있다. 20:58 에 페이지를
+  // 열고 21:05 에 주문을 누르면 서버는 막는데 화면은 열려 있는 것처럼 보인다
+  // — 그 반대(11:00 이 지났는데 화면은 계속 잠겨 있어서 손님이 나가버리는
+  // 것)가 더 나쁘다. 그래서 1분마다 서버에 다시 물어본다.
+  // 화면을 보고 있을 때만 물어본다 — 주머니 속 폰까지 1분마다 깨울 이유는 없다.
+  async function refreshOrderingState() {
+    if (document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch("/api/settings/ordering");
+      if (!res.ok) return;
+      ordering = await res.json();
+      applyOrderingState();
+    } catch (e) {
+      // 네트워크가 잠깐 끊긴 것으로 주문을 막지는 않는다. 다음 분에 다시 묻는다.
+    }
+  }
+  setInterval(refreshOrderingState, 60000);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshOrderingState();
+  });
+
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
@@ -224,6 +306,8 @@
     storeLat = Number.isNaN(lat) ? null : lat;
     storeLng = Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;
+    if (s.ordering) ordering = s.ordering;
+    applyOrderingState();
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     $("#storeName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
     $("#storeInfoName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
@@ -650,6 +734,11 @@
   };
 
   $("#addToCartBtn").onclick = () => {
+    // 버튼은 이미 disabled 지만, 키보드나 스크립트로도 눌릴 수 있다.
+    if (orderingClosed()) {
+      showToast(t("closedTitle"));
+      return;
+    }
     if (currentItem.mix_options) {
       const opts = Object.keys(mixQty);
       const totalQty = opts.reduce((sum, o) => sum + mixQty[o], 0);
@@ -910,6 +999,12 @@
         const body = await res.json().catch(() => ({}));
         if (body.error === "out_of_range") throw new Error("out_of_range");
         if (body.error === "location_required") throw new Error("location_required");
+        if (body.error === "closed_now") {
+          // 서버가 내려준 최신 상태로 화면을 맞춘다 — 주문을 누르는 사이에
+          // 영업이 끝난 경우라, 화면은 아직 열려 있는 줄 알고 있다.
+          if (body.ordering) ordering = body.ordering;
+          throw new Error("closed_now");
+        }
         if (body.error === "party_size_required") throw new Error("party_size_required");
         if (body.error === "customer_name_required") throw new Error("customer_name_required");
         if (body.error === "customer_phone_required") throw new Error("customer_phone_required");
@@ -928,7 +1023,8 @@
       $("#cartBackdrop").hidden = true;
       showConfirmation(order);
     } catch (e) {
-      if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
+      if (e.message === "closed_now") alert(closedMessage());
+      else if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
       else if (e.message === "party_size_required") showPartySizeModal();
       else if (e.message === "customer_name_required" || e.message === "customer_phone_required") {
@@ -946,6 +1042,8 @@
     } finally {
       btn.disabled = false;
       btn.textContent = t("placeOrder");
+      // 위에서 무조건 풀어준 잠금을, 영업시간 밖이면 다시 건다.
+      applyOrderingState();
     }
   };
 

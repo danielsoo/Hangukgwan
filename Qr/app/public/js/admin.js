@@ -578,6 +578,26 @@
       labelMinSpend: "1인당 최소 주문 금액 (NT$)",
       saveSettingsBtn: "설정 저장",
       savedMsg: "저장되었습니다",
+      settingsOrderHoursTitle: "주문 받는 시간",
+      settingsOrderHoursHint: "이 시간 밖에서는 손님이 QR 코드로 주문할 수 없습니다. 메뉴는 그대로 보이고 주문 버튼만 잠깁니다. 직원·사장님은 로그인한 상태면 언제든 주문할 수 있습니다 — 전화 주문이나 마감 후 정리 주문을 대신 넣을 수 있어요.",
+      orderHoursEnabledLabel: "영업시간 밖 주문 막기",
+      orderHoursAddRange: "+ 시간대 추가",
+      orderHoursRemoveRange: "삭제",
+      orderHoursClosedDays: "정기 휴무일",
+      orderHoursOff: "지금은 아무것도 막지 않습니다",
+      orderHoursOffSub: "위 스위치를 켜면 영업시간 밖 주문이 막힙니다",
+      orderHoursOpenNow: "지금 주문 받는 중",
+      orderHoursClosedNow: "지금 주문 안 받는 중",
+      orderHoursNextOpen: "다시 받는 시각",
+      orderHoursToday: "오늘",
+      orderHoursTomorrow: "내일",
+      daySun: "일",
+      dayMon: "월",
+      dayTue: "화",
+      dayWed: "수",
+      dayThu: "목",
+      dayFri: "금",
+      daySat: "토",
       settingsLocationTitle: "위치 기반 주문 제한",
       settingsLocationHint: "매장 위치를 설정하면, 설정한 반경 밖에서는 주문이 접수되지 않습니다. QR 코드를 사진으로 찍어 다른 곳에서 사용하는 것을 막기 위한 기능입니다. <strong>매장 안에 계실 때</strong> 아래 버튼을 눌러주세요.",
       captureLocationBtn: "📍 지금 위치를 매장 위치로 저장",
@@ -1077,6 +1097,26 @@
       labelMinSpend: "每人低消金額（NT$）",
       saveSettingsBtn: "儲存設定",
       savedMsg: "已儲存",
+      settingsOrderHoursTitle: "可點餐時間",
+      settingsOrderHoursHint: "在此時間之外，客人無法用 QR 點餐。菜單照常顯示，只有點餐按鈕會鎖住。店員與老闆登入後隨時都能點餐。",
+      orderHoursEnabledLabel: "非營業時間停止接單",
+      orderHoursAddRange: "+ 新增時段",
+      orderHoursRemoveRange: "刪除",
+      orderHoursClosedDays: "公休日",
+      orderHoursOff: "目前沒有任何限制",
+      orderHoursOffSub: "開啟上方開關後，非營業時間將無法點餐",
+      orderHoursOpenNow: "目前開放點餐",
+      orderHoursClosedNow: "目前停止接單",
+      orderHoursNextOpen: "下次開放",
+      orderHoursToday: "今天",
+      orderHoursTomorrow: "明天",
+      daySun: "日",
+      dayMon: "一",
+      dayTue: "二",
+      dayWed: "三",
+      dayThu: "四",
+      dayFri: "五",
+      daySat: "六",
       settingsLocationTitle: "位置限制點餐",
       settingsLocationHint: "設定店家位置後，超出範圍就無法送出訂單。此功能可防止有人拍下 QR Code 在別處使用。<strong>請在店內時</strong>按下方按鈕。",
       captureLocationBtn: "📍 將目前位置設為店家位置",
@@ -6266,6 +6306,103 @@
     });
   }
 
+  // ---------- 주문 받는 시간 ----------
+  // 손님이 QR 로 주문할 수 있는 시각. 위 「영업시간」 칸(store_hours)은
+  // 손님에게 그대로 보여주는 문구고, 여기가 실제로 막는 규칙이다. 왜 나눴는지는
+  // src/openHours.js 첫머리 — 한 줄로 합쳐두면 문구를 고치다 장사를 막는다.
+  const OH_DAY_KEYS = ["daySun", "dayMon", "dayTue", "dayWed", "dayThu", "dayFri", "daySat"];
+  let orderHoursCfg = { enabled: 0, ranges: [], closed_days: [] };
+
+  function renderOrderHoursRanges() {
+    const wrap = $("#ohRanges");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    orderHoursCfg.ranges.forEach((r, i) => {
+      const row = document.createElement("div");
+      row.className = "oh-range";
+      row.innerHTML = `
+        <input type="time" data-oh="start" data-i="${i}" value="${r.start}" />
+        <span class="oh-dash">~</span>
+        <input type="time" data-oh="end" data-i="${i}" value="${r.end}" />
+        <button type="button" data-oh-remove="${i}">${T("orderHoursRemoveRange")}</button>`;
+      wrap.appendChild(row);
+    });
+    wrap.querySelectorAll("input[data-oh]").forEach((el) => {
+      el.onchange = () => {
+        const r = orderHoursCfg.ranges[parseInt(el.dataset.i, 10)];
+        if (r) r[el.dataset.oh] = el.value;
+      };
+    });
+    wrap.querySelectorAll("button[data-oh-remove]").forEach((el) => {
+      el.onclick = () => {
+        orderHoursCfg.ranges.splice(parseInt(el.dataset.ohRemove, 10), 1);
+        renderOrderHoursRanges();
+      };
+    });
+  }
+
+  function renderOrderHoursDays() {
+    const wrap = $("#ohClosedDays");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    OH_DAY_KEYS.forEach((key, day) => {
+      const label = document.createElement("label");
+      label.className = "oh-day";
+      const checked = orderHoursCfg.closed_days.includes(day) ? " checked" : "";
+      label.innerHTML = `<input type="checkbox" data-oh-day="${day}"${checked} /> ${T(key)}`;
+      wrap.appendChild(label);
+    });
+    wrap.querySelectorAll("input[data-oh-day]").forEach((el) => {
+      el.onchange = () => {
+        const day = parseInt(el.dataset.ohDay, 10);
+        const at = orderHoursCfg.closed_days.indexOf(day);
+        if (el.checked && at < 0) orderHoursCfg.closed_days.push(day);
+        if (!el.checked && at >= 0) orderHoursCfg.closed_days.splice(at, 1);
+      };
+    });
+  }
+
+  // 지금 실제로 받고 있는지를 맨 위에 적어준다. 규칙만 보여주면 사장님이
+  // 머리로 시계를 맞춰봐야 하고, 그러다 "왜 손님이 주문을 못 하지" 가 된다.
+  function renderOrderHoursState(state) {
+    const el = $("#orderHoursState");
+    if (!el || !state) return;
+    const closed = state.enabled && !state.open;
+    el.classList.toggle("is-closed", closed);
+    if (!state.enabled) {
+      el.innerHTML = `${T("orderHoursOff")}<span class="oh-state-sub">${T("orderHoursOffSub")}</span>`;
+      el.classList.remove("is-closed");
+      return;
+    }
+    if (state.open) {
+      el.innerHTML = `${T("orderHoursOpenNow")}<span class="oh-state-sub">${state.ranges_text || ""}</span>`;
+      return;
+    }
+    const when = state.next_open_at ? state.next_open_at.slice(11, 16) : "";
+    const dayWord =
+      state.next_open_days === 0 ? T("orderHoursToday") : state.next_open_days === 1 ? T("orderHoursTomorrow") : "";
+    const sub = when ? `${T("orderHoursNextOpen")} ${dayWord} ${when}`.replace(/\s+/g, " ") : state.ranges_text || "";
+    el.innerHTML = `${T("orderHoursClosedNow")}<span class="oh-state-sub">${sub}</span>`;
+  }
+
+  async function loadOrderHours() {
+    try {
+      const res = await fetch("/api/settings/order-hours");
+      if (!res.ok) return;
+      const cfg = await res.json();
+      orderHoursCfg = {
+        enabled: cfg.enabled ? 1 : 0,
+        ranges: (cfg.ranges || []).map((r) => ({ start: r.start, end: r.end })),
+        closed_days: (cfg.closed_days || []).slice(),
+      };
+      $("#oh_enabled").checked = !!orderHoursCfg.enabled;
+      renderOrderHoursRanges();
+      renderOrderHoursDays();
+    } catch (e) {
+      /* 이 칸 하나 때문에 설정 화면 전체가 막히면 안 된다 */
+    }
+  }
+
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
@@ -6290,6 +6427,8 @@
     // 영업 시작 시각은 매출 숫자를 바꾸는 설정이라 사장님만 볼 수 있는
     // 별도 라우트에서 온다(직원은 403 — 그때는 조용히 넘어간다).
     if (currentRole === "owner") loadServiceStart();
+    loadOrderHours();
+    renderOrderHoursState(s.ordering);
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     refreshLogoPreview();
     renderNoticePreview($("#s_store_notice").value);
@@ -6670,6 +6809,41 @@
     await saveServiceStart();
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(payload.taegeuk_season_mode);
     const msg = $("#settingsMsg");
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2000);
+  };
+
+  $("#ohAddRange").onclick = () => {
+    if (orderHoursCfg.ranges.length >= 6) return;
+    orderHoursCfg.ranges.push({ start: "11:00", end: "21:00" });
+    renderOrderHoursRanges();
+  };
+
+  $("#saveOrderHoursBtn").onclick = async () => {
+    const res = await fetch("/api/settings/order-hours", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: $("#oh_enabled").checked ? 1 : 0,
+        ranges: orderHoursCfg.ranges,
+        closed_days: orderHoursCfg.closed_days,
+      }),
+    });
+    if (res.ok) {
+      const saved = await res.json();
+      // 서버가 다듬은 결과를 그대로 다시 그린다 — 화면과 실제로 저장된 것이
+      // 다르면, 사장님은 자기가 적은 대로 막히고 있다고 믿게 된다.
+      orderHoursCfg = {
+        enabled: saved.enabled ? 1 : 0,
+        ranges: (saved.ranges || []).map((r) => ({ start: r.start, end: r.end })),
+        closed_days: (saved.closed_days || []).slice(),
+      };
+      $("#oh_enabled").checked = !!orderHoursCfg.enabled;
+      renderOrderHoursRanges();
+      renderOrderHoursDays();
+      renderOrderHoursState(saved.ordering);
+    }
+    const msg = $("#orderHoursMsg");
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
   };

@@ -103,6 +103,10 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     const { save } = require("../src/db");
     const { SETTING_KEY } = require("../src/serviceStart");
     delete store.settings[SETTING_KEY];
+    // 같은 이유로 「주문 받는 시간」도 꺼둔다. 이 테스트는 아무 때나 돌고,
+    // 켜져 있으면 새벽에 돌릴 때만 주문이 403 으로 막혀서 실패한다 —
+    // 그 규칙 자체는 test/open-hours.test.js 와 test/e2e-open-hours.js 가 잰다.
+    store.settings.order_hours = { enabled: 0, ranges: [], closed_days: [] };
     await save();
   }
 
