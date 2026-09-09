@@ -72,10 +72,8 @@ function check(name, cond, extra = "") {
   const second = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 2 }] });
   check("주문 두 건이 만들어졌다", first.status === 201 && second.status === 201,
     `${first.status}/${second.status}`);
-  // 이 손님이 아까 결제한 라운드 — 이건 그 자리에 남아야 한다.
-  // 사장님(2026-09-10): "아냐아냐. 결제한 건 옮기면 안되지."
-  // 결제는 그 자리에서 그때 끝난 일이다. 영수증도 나갔고 장부에도 그 자리로
-  // 들어갔다. 자리를 옮긴다고 그걸 뒤로 돌려 고치면 안 된다.
+  // 이 손님이 아까 결제한 라운드 — 이것도 따라가야 한다.
+  // 사장님(2026-09-10): "결국 같은 손님인 거잖아. 그럼 따라가는 게 맞는 거 같은데."
   const paid = await post("/api/orders", { tableNumber: A, items: [{ itemId, qty: 1 }] });
   await api(`/api/orders/${paid.body.id}`, {
     method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: "paid" }),
@@ -84,13 +82,14 @@ function check(name, cond, extra = "") {
   out.push("\n[빈 자리로 옮긴다]");
   const moved = await post("/api/orders/move", { from: A, to: B });
   check("옮겨진다", moved.status === 200, JSON.stringify(moved));
-  check("안 받은 주문 두 건만 옮긴다", moved.body.moved === 2, JSON.stringify(moved.body));
+  check("이 손님 것 세 건이 다 옮겨진다", moved.body.moved === 3, JSON.stringify(moved.body));
+  check("그 중 결제 완료가 한 건이라고 알려준다", moved.body.moved_paid === 1, JSON.stringify(moved.body));
   {
     const all = (await api("/api/orders")).body;
     const byId = Object.fromEntries(all.map((o) => [o.id, o]));
     check("첫 주문이 새 자리에 있다", String(byId[first.body.id].table_number) === String(B));
     check("둘째 주문도 새 자리에 있다", String(byId[second.body.id].table_number) === String(B));
-    check("이미 결제한 라운드는 그 자리에 남는다", String(byId[paid.body.id].table_number) === String(A),
+    check("이미 결제한 라운드도 따라간다", String(byId[paid.body.id].table_number) === String(B),
       String(byId[paid.body.id].table_number));
     check("어디서 왔는지 남는다", String(byId[first.body.id].moved_from) === String(A),
       byId[first.body.id].moved_from);
@@ -119,10 +118,10 @@ function check(name, cond, extra = "") {
       all.filter((o) => String(o.table_number) === String(C) && o.status !== "paid").length === 3);
   }
 
-  out.push("\n[먼저 앉았다 간 손님 것은 건드리지 않는다]");
-  // 결제된 주문은 애초에 안 옮기므로 이건 저절로 지켜진다. 그래도 눈으로
-  // 확인해둔다 — 나중에 "이 테이블의 모든 주문" 으로 넓히고 싶은 유혹이
-  // 올 때, 그러면 낮에 앉았다 간 손님의 결제까지 옮겨진다는 걸 여기가 말해준다.
+  out.push("\n[먼저 앉았다 간 손님 것은 안 따라간다]");
+  // 이 손님이 결제한 라운드까지 옮기기 때문에, 경계가 없으면 낮에 그 자리에
+  // 앉았다 간 다른 손님의 결제까지 함께 옮겨진다. 그건 아무도 눈치채지
+  // 못하고 되돌릴 수도 없다. 경계는 「지금 앉아 있는 손님이 앉은 시각」이다.
   {
     const D = tabless[3].number;
     const E = tabless[4].number;
@@ -152,6 +151,15 @@ function check(name, cond, extra = "") {
     check("먼저 앉았던 손님의 결제는 그 자리에 남는다",
       String(byId[oldGuest.body.id].table_number) === String(D),
       String(byId[oldGuest.body.id].table_number));
+  }
+
+  {
+    // 한 번 더 옮겨도 아까 결제한 라운드가 계속 따라와야 한다. 옮길 때
+    // 「앉은 시각」을 지금으로 새로 찍으면 여기서 떨어져 나간다.
+    const all = (await api("/api/orders")).body;
+    const byId = Object.fromEntries(all.map((o) => [o.id, o]));
+    check("두 번 옮겨도 결제한 라운드가 따라온다", String(byId[paid.body.id].table_number) === String(C),
+      String(byId[paid.body.id].table_number));
   }
 
   out.push("\n[전체 결제 전까지는 같은 손님이다]");
@@ -184,8 +192,8 @@ function check(name, cond, extra = "") {
       check("옛 자리에는 안 남는다", !tables.find((x) => String(x.number) === String(F)).party_size);
       const all = (await api("/api/orders")).body;
       const byId = Object.fromEntries(all.map((o) => [o.id, o]));
-      check("결제한 라운드는 옛 자리에 그대로", String(byId[r1.body.id].table_number) === String(F));
-      check("안 받은 라운드만 새 자리로", String(byId[r2.body.id].table_number) === String(G));
+      check("결제한 라운드도 새 자리로", String(byId[r1.body.id].table_number) === String(G));
+      check("안 받은 라운드도 새 자리로", String(byId[r2.body.id].table_number) === String(G));
     }
     // 전체 결제 — 이때 비로소 다른 손님이 된다.
     await api(`/api/orders/${r2.body.id}`, {
@@ -224,6 +232,52 @@ function check(name, cond, extra = "") {
     }, [String(C), String(A)]);
     check("로그인 안 하면 못 옮긴다", r === 401 || r === 403, `${r}`);
     await guest.close();
+  }
+
+  out.push("\n[자리 이동 빌지]");
+  // 2026-09-10 사장님: "자리이동하면 자리이동 빌지도 하나 나왔으면 좋겠어."
+  // 주방과 홀에는 이미 옛 번호가 찍힌 주문서가 나가 있다. 화면에서만 바뀌면
+  // 종이를 들고 다니는 사람은 그 사실을 모른다.
+  {
+    // 종이에 실제로 나가는 바이트를 본다. 프린터가 없는 자리에서는
+    // 브라우저 인쇄로 떨어지는데, 그건 아래에서 따로 확인한다.
+    const slip = await page.evaluate(() => {
+      const bytes = window.buildEscPosMoveSlip(
+        { from: "5", to: "8", at: "19:32", partySize: 4, orders: [{ id: 12, time: "19:05", summary: "돌솥비빔밥×2" }] },
+        "한국관"
+      );
+      // GS v 0 밴드가 몇 줄씩 나가는지 — 값싼 프린터는 큰 이미지를 통째로
+      // 버린다(2026-09-09 "어떤 테이블은 주방만 나옴"). 주문서와 같은
+      // 포장 함수를 쓰는지 여기서 확인된다.
+      const bands = [];
+      for (let i = 0; i < bytes.length - 8; i++) {
+        if (bytes[i] === 0x1d && bytes[i + 1] === 0x76 && bytes[i + 2] === 0x30 && bytes[i + 3] === 0x00) {
+          const wb = bytes[i + 4] | (bytes[i + 5] << 8);
+          const rows = bytes[i + 6] | (bytes[i + 7] << 8);
+          bands.push({ wb, rows });
+          i += 8 + wb * rows - 1;
+        }
+      }
+      return { len: bytes.length, init: bytes[0] === 0x1b && bytes[1] === 0x40, bands,
+        tail: Array.from(bytes.slice(-7)) };
+    });
+    check("빌지 바이트가 만들어진다", slip.len > 1000, `${slip.len}`);
+    check("프린터 초기화로 시작한다", slip.init);
+    check("래스터로 나간다", slip.bands.length >= 1, JSON.stringify(slip.bands));
+    check("밴드가 128줄을 넘지 않는다", slip.bands.every((b) => b.rows <= 128), JSON.stringify(slip.bands));
+    check("한 밴드가 프린터 버퍼보다 작다", slip.bands.every((b) => b.wb * b.rows <= 16384), JSON.stringify(slip.bands));
+    check("끝에 커팅이 들어간다", slip.tail.slice(-4).join(",") === "29,86,66,0", JSON.stringify(slip.tail));
+  }
+  {
+    // 프린터가 하나도 안 잡힌 자리에서는 브라우저 인쇄로 떨어진다. 그때
+    // 나가는 종이에 무엇이 찍히는지 — 팝업을 열어보기는 어려우니 만들어지는
+    // 내용을 그대로 본다.
+    const printed = await page.evaluate(() =>
+      window.__moveSlipHtmlForTest({ from: "5", to: "8", at: "19:32", partySize: 4, orders: [] })
+    );
+    check("브라우저 인쇄용 종이도 만들어진다", printed.includes("자리 이동"), printed.slice(0, 80));
+    check("옛 자리와 새 자리가 크게 찍힌다", /class="big">\s*5 → 8/.test(printed), printed.slice(0, 400));
+    check("새 QR 안내가 들어간다", printed.includes("새 자리 QR"));
   }
 
   out.push("\n[화면에서]");

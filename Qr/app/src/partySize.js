@@ -69,4 +69,25 @@ function movePartySize(store, fromNumber, toNumber) {
   return true;
 }
 
-module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize };
+/**
+ * 이 자리에 지금 앉아 있는 손님이 언제부터 앉아 있는가 — Taipei 시각
+ * "YYYY-MM-DD HH:MM:SS" 로, 주문의 created_at 과 그대로 비교할 수 있게.
+ *
+ * 인원수를 찍은 시각이 곧 그 손님이 앉은 시각이다. 전체 결제가 끝나면
+ * 인원수가 지워지므로(위 clearPartySizeIfSettled), 이 값이 있다는 것은
+ * "그 손님이 아직 앉아 있다" 는 뜻이고 그 뒤의 주문은 전부 그 손님 것이다.
+ * 사장님(2026-09-10): "전체 결제를 하지 않는 이상 이 손님은 같은 손님."
+ *
+ * 자리 이동이 이걸 쓴다. 이 손님이 아까 결제한 라운드도 같이 옮겨야 하는데,
+ * 경계가 없으면 오늘 낮에 그 자리에 앉았다 간 다른 손님의 결제까지 함께
+ * 옮겨진다. 그건 아무도 눈치채지 못하고 되돌릴 수도 없다.
+ */
+function seatingStartOf(table) {
+  if (!table || !table.party_size || !table.party_size_updated_at) return null;
+  const t = new Date(table.party_size_updated_at);
+  if (Number.isNaN(t.getTime())) return null;
+  // 대만은 UTC+8 고정(서머타임 없음)이라 이 변환은 늘 정확하다.
+  return new Date(t.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+}
+
+module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf };

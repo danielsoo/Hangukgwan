@@ -1694,8 +1694,8 @@
     adminLang === "zh" ? `確定要刪除「${name}」這個區域嗎？（區域內的桌號不會被刪除，只會取消配置）` : `"${name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`;
   const fmtMoveTableHint = (from) =>
     adminLang === "zh"
-      ? `「${from}」尚未結帳的訂單會整組移過去。已經結帳的那幾輪留在原桌。移動後請提醒客人改掃新桌號的 QR code。`
-      : `"${from}"의 아직 결제되지 않은 주문이 통째로 옮겨갑니다. 이미 결제한 것은 그 자리에 그대로 남습니다. 옮긴 뒤에는 손님이 새 자리의 QR 코드로 주문해야 합니다.`;
+      ? `「${from}」這組客人的訂單會整組移過去，包含已經結帳的那幾輪 — 同一組客人。移動後會列印一張換桌單，並請提醒客人改掃新桌號的 QR code。`
+      : `"${from}" 손님의 주문이 통째로 옮겨갑니다 — 이미 결제한 라운드까지, 같은 손님이니까요. 옮기면 자리 이동 빌지가 한 장 나오고, 손님은 새 자리의 QR 코드로 주문하시면 됩니다.`;
   const fmtConfirmMove = (from, to) =>
     adminLang === "zh" ? `將「${from}」的客人移到「${to}」嗎？` : `"${from}" 손님을 "${to}"으로 옮길까요?`;
   const fmtConfirmMoveMerge = (from, to) =>
@@ -1704,10 +1704,10 @@
       : `"${to}"에는 이미 손님이 있습니다. 두 자리가 한 테이블로 합쳐집니다(인원수는 더해집니다). 계속할까요?`;
   // 옮긴 뒤 한 번 더 짚어준다. 손님 폰에는 아직 옛 자리 화면이 떠 있어서,
   // 거기서 그대로 시키면 옛 자리로 들어간다.
-  const fmtMovedDone = (to, moved) =>
+  const fmtMovedDone = (to, moved, paid) =>
     adminLang === "zh"
-      ? `已移到「${to}」（${moved} 筆）。請提醒客人改掃新桌號的 QR code。`
-      : `"${to}"으로 옮겼습니다 (주문 ${moved}건). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
+      ? `已移到「${to}」（${moved} 筆${paid ? `，含已結帳 ${paid} 筆` : ""}）。請提醒客人改掃新桌號的 QR code。`
+      : `"${to}"으로 옮겼습니다 (주문 ${moved}건${paid ? `, 결제 완료 ${paid}건 포함` : ""}). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
   const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
@@ -6384,13 +6384,16 @@
           if (!res.ok) throw new Error("failed");
           const body = await res.json().catch(() => ({}));
           $("#moveTableBackdrop").hidden = true;
+          // 종이가 먼저다. 화면을 다시 그리기 전에 뽑아야, 인쇄가 실패해도
+          // 직원이 그 사실을 바로 본다.
+          await printMoveSlip(buildMoveSlipInfo(fromNumber, fromLabel, t, body));
           await loadOrders();
           await loadTables();
           // 옮긴 자리를 바로 열어준다 — 옮겼는데 화면이 빈 옛 자리에
           // 머물러 있으면 정말 옮겨졌는지 알 수 없다.
           openTableDetail(String(t.number), t.label || String(t.number));
           if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
-          await showAlert(fmtMovedDone(t.label || t.number, body.moved || 0));
+          await showAlert(fmtMovedDone(t.label || t.number, body.moved || 0, body.moved_paid || 0));
         } catch (e) {
           btn.disabled = false;
           await showAlert(T("moveTableFailed"));
@@ -6400,6 +6403,34 @@
     });
     $("#moveTableBackdrop").hidden = false;
   }
+
+  // 빌지에 실을 내용. 서버가 돌려준 옮긴 주문 id 로 화면의 주문을 찾아
+  // 품목을 한 줄로 줄인다 — 종이는 좁고, 여기서 필요한 건 "무엇이 딸려
+  // 왔는지" 를 알아볼 정도다.
+  function buildMoveSlipInfo(fromNumber, fromLabel, toTable, body) {
+    const ids = body.moved_ids || [];
+    const movedOrders = ids
+      .map((id) => orders.find((o) => o.id === id))
+      .filter(Boolean)
+      .map((o) => ({
+        id: o.id,
+        time: (o.created_at || "").slice(11, 16),
+        summary: (o.items || []).map((it) => `${itemName(it)}×${it.qty}`).join(", "),
+      }));
+    const toNum = toTable.label || toTable.number;
+    return {
+      storeName: (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관",
+      from: fromLabel || fromNumber,
+      to: toNum,
+      at: new Date().toTimeString().slice(0, 5),
+      partySize: body.party_size || null,
+      orders: movedOrders,
+    };
+  }
+
+  // 테스트가 종이 내용을 확인할 수 있게 열어둔다. 브라우저 인쇄는 팝업이라
+  // 자동으로 열어보기 어렵고, 정작 중요한 건 그 종이에 무엇이 찍히는가다.
+  window.__moveSlipHtmlForTest = buildMoveSlipHtml;
 
   $("#moveTableClose") && ($("#moveTableClose").onclick = () => ($("#moveTableBackdrop").hidden = true));
   $("#moveTableBackdrop") && $("#moveTableBackdrop").addEventListener("click", (e) => {
@@ -8146,6 +8177,91 @@
     document.body.appendChild(iframe);
     setTimeout(() => iframe.remove(), 1000);
     return true;
+  }
+
+  // ---------- 자리 이동 빌지 ----------
+  // 2026-09-10 사장님: "자리이동하면 자리이동 빌지도 하나 나왔으면 좋겠어."
+  //
+  // 주방과 홀에는 이미 옛 번호가 찍힌 주문서가 나가 있다. 화면에서만 바뀌면
+  // 종이를 들고 다니는 사람은 그 사실을 모른다.
+  //
+  // 주문서와 같은 사다리를 탄다: 앱 브릿지 → RawBT → QZ Tray → 브라우저 인쇄.
+  // 어느 한 칸이 안 되는 매장에서도 종이가 나와야 하고, 그 순서를 여기서
+  // 새로 정하면 주문서와 어긋난다.
+  async function printMoveSlip(info) {
+    if (typeof buildEscPosMoveSlip !== "function") return false;
+    let bytes;
+    try {
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      bytes = buildEscPosMoveSlip(info, storeName);
+    } catch (e) {
+      console.warn("자리 이동 빌지를 만들지 못했습니다:", e);
+      return false;
+    }
+
+    const bridge = appPrintBridge();
+    if (bridge) {
+      if (await sendRasterTicketBytes(bytes, bridge)) return true;
+    } else {
+      try {
+        const res = await fetch("/api/settings/escpos");
+        const cfg = res.ok ? await res.json() : {};
+        if (cfg.rawbtEnabled && (await sendRasterTicketBytes(bytes, null))) return true;
+        // QZ Tray 는 같은 래스터 바이트를 base64 로 받는다 — 텍스트 모드로
+        // 따로 만들지 않는다. 한국어·중국어는 프린터 코드페이지에 기대지
+        // 않고 그림으로 찍는 편이 어느 기계에서도 같게 나온다.
+        if (cfg.enabled && cfg.printerName && typeof qz !== "undefined") {
+          await ensureQzConnected();
+          const config = qz.configs.create(cfg.printerName);
+          await qz.print(config, [{ type: "raw", format: "command", flavor: "base64", data: bytesToBase64(bytes) }]);
+          return true;
+        }
+      } catch (e) {
+        console.warn("자리 이동 빌지 인쇄 실패, 브라우저 인쇄로 넘어갑니다:", e);
+      }
+    }
+
+    // 마지막 칸 — 프린터가 하나도 안 잡힌 자리에서도 종이는 나와야 한다.
+    const win = window.open("", "_blank");
+    if (!win) return false;
+    win.document.open();
+    win.document.write(buildMoveSlipHtml(info));
+    win.document.close();
+    setTimeout(() => {
+      win.focus();
+      win.print();
+    }, 300);
+    return true;
+  }
+
+  function buildMoveSlipHtml(info) {
+    const esc = (v) =>
+      String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const rows = (info.orders || [])
+      .map((o) => `<div class="row"><span>#${esc(o.id)} ${esc(o.time || "")}</span><span>${esc(o.summary || "")}</span></div>`)
+      .join("");
+    return `<!doctype html><html><head><meta charset="utf-8"><title>자리 이동</title><style>
+      @page { margin: 4mm; }
+      body { font-family: "Noto Sans TC","Noto Sans KR",sans-serif; width: 72mm; margin: 0 auto; color: #000; }
+      .store { text-align: center; font-size: 13px; }
+      h1 { text-align: center; font-size: 20px; margin: 6px 0 10px; }
+      .big { text-align: center; font-size: 34px; font-weight: 700; margin: 10px 0; }
+      hr { border: none; border-top: 2px solid #000; margin: 8px 0; }
+      .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; gap: 8px; }
+      .qr { text-align: center; font-size: 14px; font-weight: 700; margin-top: 8px; }
+      .qr small { display: block; font-weight: 400; font-size: 12px; }
+    </style></head><body>
+      <div class="store">${esc(info.storeName || "한국관")}</div>
+      <h1>자리 이동 · 換桌</h1>
+      <hr>
+      <div class="big">${esc(info.from)} → ${esc(info.to)}</div>
+      <hr>
+      <div class="row"><span>시각 / 時間</span><span>${esc(info.at || "")}</span></div>
+      ${info.partySize ? `<div class="row"><span>인원 / 人數</span><span>${esc(info.partySize)}</span></div>` : ""}
+      ${rows ? `<hr>${rows}` : ""}
+      <hr>
+      <div class="qr">손님은 새 자리 QR 로 주문<small>請客人改掃新桌號 QR</small></div>
+    </body></html>`;
   }
 
   async function tryPrintViaRawBt(o) {

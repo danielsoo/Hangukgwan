@@ -277,6 +277,66 @@
   // 한장은 각각의 가격이 나오게" — opts.priceCopy는 buildEscPosTicket()과
   // 같은 의미(품목별 금액 + 음료·주류 표시, 참고용 문구), RawBT/앱 브릿지
   // 경로(tryPrintViaRawBt)에서 이 비트맵 방식을 쓴다.
+  /**
+   * 그려놓은 캔버스를 흑백 1비트로 바꿔 ESC/POS "GS v 0" 래스터 명령으로 싼다.
+   *
+   * 주문서와 자리 이동 빌지가 같은 코드를 쓴다. 아래 밴드 나누기는 값싼
+   * 프린터가 큰 이미지를 통째로 버리는 문제(2026-09-09)를 피하려고 넣은
+   * 것인데, 그 지식이 한 군데에만 있으면 나중에 만든 다른 빌지가 조용히
+   * 같은 병에 걸린다.
+   */
+  function rasterCanvasToEscPos(canvas, ctx) {
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const widthBytes = canvas.width / 8; // 576/8 = 72 exactly, no row padding needed
+    const bytes = [];
+    bytes.push(0x1b, 0x40); // ESC @ - init, same as CMD.INIT above
+
+    // 비트맵을 통째로 GS v 0 한 번에 보내지 않고 가로로 잘라서 여러 번
+    // 보낸다.
+    //
+    // 2026-09-09 사장님: "주문서 출력이 어떤 테이블은 고객, 주방용 2가지로,
+    // 어쩔때는 주방만 나옴."
+    //
+    // 재보니 결제용 사본은 품목마다 금액 줄이 하나씩 더 붙어서 주방용보다
+    // 항상 크다 — 품목 5개면 40KB 대 55KB, 10개면 59KB 대 87KB, 20개면
+    // 96KB 대 149KB. 그런데 이걸 GS v 0 명령 하나에 전부 실어 보내고
+    // 있었다. 이 프린터(XP-N160II)를 포함해 이 값싼 영수증 프린터들은
+    // 입력 버퍼가 대개 64KB 안팎이라, 한 명령이 그보다 크면 프린터가
+    // 그 이미지를 통째로 버린다. 주방용은 들어가고 결제용만 넘치는
+    // 크기대라서, 정확히 "주방용만 나오는" 증상이 된다. 그리고 주문을
+    // 많이 한 테이블일수록 잘 터지니 "어떤 테이블은" 처럼 보인다.
+    //
+    // 밴드 하나는 128줄(=128 × 72 = 9216바이트)이라 버퍼가 아무리 작아도
+    // 안전하고, GS v 0 는 부를 때마다 그 높이만큼 종이를 밀기 때문에
+    // 여러 번 나눠 보내도 이어 붙어 한 장으로 나온다 — 성숙한 ESC/POS
+    // 라이브러리들이 전부 쓰는 방식이다.
+    const BAND_ROWS = 128;
+    for (let bandTop = 0; bandTop < canvas.height; bandTop += BAND_ROWS) {
+      const bandRows = Math.min(BAND_ROWS, canvas.height - bandTop);
+      bytes.push(0x1d, 0x76, 0x30, 0x00); // GS v 0, m=0 (normal size)
+      bytes.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
+      bytes.push(bandRows & 0xff, (bandRows >> 8) & 0xff);
+      for (let py = bandTop; py < bandTop + bandRows; py++) {
+        const rowStart = py * canvas.width * 4;
+        for (let bx = 0; bx < widthBytes; bx++) {
+          let b = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const idx = rowStart + (bx * 8 + bit) * 4;
+            // Luminance threshold — canvas only ever draws solid black on
+            // solid white here, so this really just tests "was this pixel
+            // touched by fillText/stroke", with a little anti-aliasing slop.
+            const lum = img.data[idx] * 0.3 + img.data[idx + 1] * 0.59 + img.data[idx + 2] * 0.11;
+            if (lum < 128) b |= 0x80 >> bit;
+          }
+          bytes.push(b);
+        }
+      }
+    }
+    bytes.push(0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x42, 0x00); // feed + partial cut, same as CMD.FEED_AND_CUT above
+
+      return new Uint8Array(bytes);
+  }
+
   function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
     const sz = (k, d) => fs[k] || d;
@@ -412,58 +472,99 @@
       ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
     });
 
-    // ---- threshold to 1-bit + pack into ESC/POS "GS v 0" raster format ----
-    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const widthBytes = canvas.width / 8; // 576/8 = 72 exactly, no row padding needed
-    const bytes = [];
-    bytes.push(0x1b, 0x40); // ESC @ - init, same as CMD.INIT above
+    return rasterCanvasToEscPos(canvas, ctx);
+  }
 
-    // 비트맵을 통째로 GS v 0 한 번에 보내지 않고 가로로 잘라서 여러 번
-    // 보낸다.
-    //
-    // 2026-09-09 사장님: "주문서 출력이 어떤 테이블은 고객, 주방용 2가지로,
-    // 어쩔때는 주방만 나옴."
-    //
-    // 재보니 결제용 사본은 품목마다 금액 줄이 하나씩 더 붙어서 주방용보다
-    // 항상 크다 — 품목 5개면 40KB 대 55KB, 10개면 59KB 대 87KB, 20개면
-    // 96KB 대 149KB. 그런데 이걸 GS v 0 명령 하나에 전부 실어 보내고
-    // 있었다. 이 프린터(XP-N160II)를 포함해 이 값싼 영수증 프린터들은
-    // 입력 버퍼가 대개 64KB 안팎이라, 한 명령이 그보다 크면 프린터가
-    // 그 이미지를 통째로 버린다. 주방용은 들어가고 결제용만 넘치는
-    // 크기대라서, 정확히 "주방용만 나오는" 증상이 된다. 그리고 주문을
-    // 많이 한 테이블일수록 잘 터지니 "어떤 테이블은" 처럼 보인다.
-    //
-    // 밴드 하나는 128줄(=128 × 72 = 9216바이트)이라 버퍼가 아무리 작아도
-    // 안전하고, GS v 0 는 부를 때마다 그 높이만큼 종이를 밀기 때문에
-    // 여러 번 나눠 보내도 이어 붙어 한 장으로 나온다 — 성숙한 ESC/POS
-    // 라이브러리들이 전부 쓰는 방식이다.
-    const BAND_ROWS = 128;
-    for (let bandTop = 0; bandTop < canvas.height; bandTop += BAND_ROWS) {
-      const bandRows = Math.min(BAND_ROWS, canvas.height - bandTop);
-      bytes.push(0x1d, 0x76, 0x30, 0x00); // GS v 0, m=0 (normal size)
-      bytes.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
-      bytes.push(bandRows & 0xff, (bandRows >> 8) & 0xff);
-      for (let py = bandTop; py < bandTop + bandRows; py++) {
-        const rowStart = py * canvas.width * 4;
-        for (let bx = 0; bx < widthBytes; bx++) {
-          let b = 0;
-          for (let bit = 0; bit < 8; bit++) {
-            const idx = rowStart + (bx * 8 + bit) * 4;
-            // Luminance threshold — canvas only ever draws solid black on
-            // solid white here, so this really just tests "was this pixel
-            // touched by fillText/stroke", with a little anti-aliasing slop.
-            const lum = img.data[idx] * 0.3 + img.data[idx + 1] * 0.59 + img.data[idx + 2] * 0.11;
-            if (lum < 128) b |= 0x80 >> bit;
-          }
-          bytes.push(b);
-        }
-      }
+  /**
+   * 자리 이동 빌지 — 2026-09-10 사장님: "자리이동하면 자리이동 빌지도 하나
+   * 나왔으면 좋겠어."
+   *
+   * 주방과 홀에는 이미 옛 번호가 찍힌 주문서가 나가 있다. 화면에서만 바뀌면
+   * 종이를 들고 다니는 사람은 그 사실을 모른다 — 그래서 종이도 한 장 나와야
+   * 한다. 붙여두거나 옛 주문서 위에 얹어두는 용도라, 멀리서도 번호가 읽히게
+   * 큰 글씨 두 개(옛 자리 → 새 자리)가 이 종이의 전부다.
+   *
+   * info = { from, to, at, partySize, note, orders: [{ id, time, summary }] }
+   */
+  function buildEscPosMoveSlip(info, storeName) {
+    info = info || {};
+    const orders = info.orders || [];
+
+    const measureCanvas = document.createElement("canvas");
+    measureCanvas.width = RASTER_DOTS_WIDE;
+    const mctx = measureCanvas.getContext("2d");
+    const ops = [];
+    let y = 24;
+    const push = (op, px, gap) => {
+      y += Math.round(px * PX_TO_DOTS);
+      ops.push(Object.assign(op, { y }));
+      y += gap;
+    };
+    const text = (t, px, weight, align, gap) => {
+      mctx.font = rasterFont(px, weight);
+      push({ type: "text", text: fitText(mctx, t, RASTER_DOTS_WIDE - RASTER_PAD * 2), px, weight, align }, px, gap);
+    };
+    const row = (l, r, px, weight, gap) => {
+      mctx.font = rasterFont(px, weight);
+      push({ type: "row", left: l, right: r, px, weight }, px, gap);
+    };
+    const divider = () => {
+      y += 6;
+      ops.push({ type: "divider", y });
+      y += 14;
+    };
+
+    text(storeName || "한국관", 13, 400, "center", 10);
+    text("자리 이동 · 換桌", 20, 700, "center", 16);
+    divider();
+    // 이 한 줄이 이 종이의 전부다. 멀리서 읽히게 제일 크게.
+    text(`${info.from} → ${info.to}`, 34, 700, "center", 18);
+    divider();
+    row("시각 / 時間", info.at || "", 13, 400, 8);
+    if (info.partySize) row("인원 / 人數", `${info.partySize}`, 13, 400, 8);
+    if (info.note) row("", info.note, 13, 400, 8);
+    if (orders.length) {
+      divider();
+      text(`옮긴 주문 / 移動訂單 ${orders.length}`, 13, 700, "left", 10);
+      orders.forEach((o) => {
+        row(`#${o.id} ${o.time || ""}`.trim(), o.summary || "", 13, 400, 6);
+      });
     }
-    bytes.push(0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x42, 0x00); // feed + partial cut, same as CMD.FEED_AND_CUT above
+    divider();
+    // 손님 폰에는 아직 옛 자리 화면이 떠 있다.
+    text("손님은 새 자리 QR 로 주문", 14, 700, "center", 4);
+    text("請客人改掃新桌號 QR", 13, 400, "center", 10);
 
-    return new Uint8Array(bytes);
+    const canvas = document.createElement("canvas");
+    canvas.width = RASTER_DOTS_WIDE;
+    canvas.height = y + 24;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#000";
+    ctx.textBaseline = "alphabetic";
+    ops.forEach((op) => {
+      if (op.type === "divider") {
+        ctx.fillRect(RASTER_PAD, op.y, canvas.width - RASTER_PAD * 2, 2);
+        return;
+      }
+      if (op.type === "row") {
+        ctx.font = rasterFont(op.px, op.weight);
+        ctx.textAlign = "left";
+        ctx.fillText(op.left, RASTER_PAD, op.y);
+        ctx.textAlign = "right";
+        ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
+        return;
+      }
+      ctx.font = rasterFont(op.px, op.weight);
+      ctx.textAlign = op.align === "center" ? "center" : "left";
+      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
+    });
+
+    return rasterCanvasToEscPos(canvas, ctx);
   }
 
   window.buildEscPosTicket = buildEscPosTicket;
   window.buildEscPosRasterTicket = buildEscPosRasterTicket;
+  window.buildEscPosMoveSlip = buildEscPosMoveSlip;
 })();
