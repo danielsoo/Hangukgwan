@@ -397,6 +397,15 @@
       settlementDiscountManual: "직접 입력",
       settlementTableTitle: "테이블별 매출",
       settlementTableName: "테이블",
+      settlementMoneyInTitle: "💰 돈이 어떻게 들어왔나",
+      settlementSoldTitle: "🍚 무엇이 팔렸나",
+      settlementWhenWhereTitle: "⏰ 언제, 어디서",
+      settlementReconcileOk: "✓ 결제수단 총합이 위 매출과 정확히 일치해요. 이 숫자로 서랍을 맞추시면 됩니다.",
+      settlementNoData: "이 기간에는 기록이 없어요.",
+      settlementCountSuffix: "건",
+      settlementQtySuffix: "개",
+      settlementItemsExpand: "전체 보기",
+      settlementItemsCollapse: "접기",
       onSale: "판매 중",
       soldOut: "품절",
       soldOutToday: "오늘만 품절",
@@ -873,6 +882,15 @@
       settlementDiscountManual: "自行輸入",
       settlementTableTitle: "各桌營收",
       settlementTableName: "桌號",
+      settlementMoneyInTitle: "💰 收入來源",
+      settlementSoldTitle: "🍚 賣了什麼",
+      settlementWhenWhereTitle: "⏰ 何時、哪一桌",
+      settlementReconcileOk: "✓ 各結帳方式的總和與上方營收完全一致，可以直接對帳。",
+      settlementNoData: "這段期間沒有記錄。",
+      settlementCountSuffix: "筆",
+      settlementQtySuffix: "份",
+      settlementItemsExpand: "顯示全部",
+      settlementItemsCollapse: "收合",
       onSale: "供應中",
       soldOut: "已售完",
       soldOutToday: "今日售完",
@@ -7689,18 +7707,36 @@
     const closeBtn = $("#settlementCloseBtn");
     closeBtn.disabled = !data.date;
     closeBtn.title = data.date ? "" : T("settlementCloseRangeHint");
-    $("#settlementRevenue").textContent = `NT$${Number(data.total_revenue || 0).toLocaleString()}`;
-    $("#settlementPaidCount").textContent = data.paid_order_count;
-    $("#settlementProblemCount").textContent = data.problem_order_count;
-    $("#settlementCancelledCount").textContent = data.cancelled_order_count;
+    const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
+    const share = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
+
+    // ── 1. 오늘 한눈에 ────────────────────────────────────────────
+    // 사장님(2026-09-10): "결산 탭 보는 게 너무 복잡해. 눈에 딱 들어오지도
+    // 않고." 매출 하나만 크게 두고, 그것을 설명하는 값들은 옆에 작게 둔다.
+    $("#settlementRevenue").textContent = nt(data.total_revenue);
+    $("#settlementHeroSub").textContent = fmtSettlementHeroSub(data);
+    $("#settlementGuests").textContent = Number(data.guest_count || 0).toLocaleString();
+    $("#settlementAvgPerGuest").textContent = nt(data.avg_per_guest);
+    $("#settlementAvgPerOrder").textContent = nt(data.avg_per_order);
     $("#settlementTurnover").textContent =
       data.avg_turnover_minutes != null ? `${data.avg_turnover_minutes}${T("settlementTurnoverMinutes")}` : T("settlementTurnoverNoData");
 
+    // 챙길 것이 있을 때만 띠를 만든다. "미결제 0건"을 매일 보여주면 그
+    // 자리가 배경이 되어, 정작 숫자가 생긴 날에도 눈에 안 들어온다.
+    const alerts = [];
+    if (data.problem_order_count > 0) {
+      alerts.push(`<div class="stl-alert warn">⚠️ ${T("settlementProblemCount").replace("⚠️ ", "")} ${data.problem_order_count}${T("settlementCountSuffix")} · ${nt(data.problem_amount)}</div>`);
+    }
+    if (data.cancelled_order_count > 0) {
+      alerts.push(`<div class="stl-alert info">${T("settlementCancelledCount")} ${data.cancelled_order_count}${T("settlementCountSuffix")} · ${nt(data.cancelled_amount)}</div>`);
+    }
+    const alertsEl = $("#settlementAlerts");
+    alertsEl.innerHTML = alerts.join("");
+    alertsEl.hidden = alerts.length === 0;
+
     const problemSection = $("#settlementProblemSection");
-    const problemCard = $("#settlementProblemCard");
     if (data.problem_order_count > 0) {
       problemSection.hidden = false;
-      problemCard.classList.add("has-problems");
       $("#settlementProblemList").innerHTML = data.problem_orders
         .map((o) => {
           const time = o.created_at.slice(11, 16);
@@ -7719,23 +7755,9 @@
         .join("");
     } else {
       problemSection.hidden = true;
-      problemCard.classList.remove("has-problems");
     }
 
-    $("#settlementItemsBody").innerHTML = data.item_breakdown
-      .map(
-        (it) => `
-          <tr>
-            <td>${itemDisplayName(it)}</td>
-            <td>${it.qty}</td>
-            <td>NT$${it.subtotal.toLocaleString()}</td>
-          </tr>`
-      )
-      .join("");
-
-    // 결제수단별 집계 (2026-09-07 사장님 요청) — src/settlement.js가 넘겨주는
-    // payment_method_breakdown의 raw method 키(cash/linepay/card/other/
-    // online/unspecified)를 화면 표시용 라벨로 바꿔서 보여준다.
+    // ── 2. 돈이 어떻게 들어왔나 ───────────────────────────────────
     const paymentMethodLabel = (method) =>
       ({
         cash: T("paymentMethodCash"),
@@ -7745,98 +7767,54 @@
         online: T("paymentMethodOnline"),
         unspecified: T("paymentMethodUnspecified"),
       })[method] || method;
-    $("#settlementPaymentMethodBody").innerHTML = (data.payment_method_breakdown || [])
-      .map(
-        (pm) => `
-          <tr>
-            <td>${paymentMethodLabel(pm.method)}</td>
-            <td>${pm.order_count}</td>
-            <td>NT$${pm.revenue.toLocaleString()}</td>
-          </tr>`
-      )
-      .join("");
-    $("#settlementPaymentMethodTotal").textContent = `NT$${Number(data.payment_method_total || 0).toLocaleString()}`;
 
-    // ── 사장님 요청(2026-09-10): "합계 등등 다양하게 그냥 왠만한 모든 걸
-    // 기록해서 결산 페이지에서 볼 수 있었으면 좋겠어" ──────────────────
-    const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
-    // 비중은 합계 대비로 계산한다. 합계가 0이면 나눗셈을 하지 않는다.
-    const share = (v, total) => (total > 0 ? `${Math.round((v / total) * 100)}%` : "–");
-
-    $("#settlementGuests").textContent = Number(data.guest_count || 0).toLocaleString();
-    $("#settlementAvgPerGuest").textContent = nt(data.avg_per_guest);
-    $("#settlementAvgPerOrder").textContent = nt(data.avg_per_order);
-    $("#settlementDiscountTotal").textContent = nt(data.discount_total);
-    // 할인이 있을 때만 "할인 전" 금액을 덧붙인다 — 없으면 매출과 같아서
-    // 같은 숫자를 두 번 보여주는 셈이 된다.
-    $("#settlementGrossRevenue").textContent = data.discount_total
-      ? `${T("settlementGrossRevenuePrefix")} ${nt(data.gross_revenue)}`
-      : "";
-    // 취소·미결제는 건수 옆에 금액을 붙인다. 몇 건인지보다 얼마인지가
-    // 사장님이 실제로 알고 싶은 것이다.
-    if (data.cancelled_amount) {
-      $("#settlementCancelledCount").textContent = `${data.cancelled_order_count} (${nt(data.cancelled_amount)})`;
-    }
-    if (data.problem_amount) {
-      $("#settlementProblemCount").textContent = `${data.problem_order_count} (${nt(data.problem_amount)})`;
-    }
+    renderBars("#settlementPaymentMethodBars", (data.payment_method_breakdown || [])
+      .map((pm) => ({ name: paymentMethodLabel(pm.method), value: pm.revenue, count: pm.order_count })));
+    $("#settlementPaymentMethodTotal").textContent = nt(data.payment_method_total);
+    // 총합이 위의 매출과 같아야 서랍의 현금을 맞출 수 있다. 예전에는 할인
+    // 때문에 어긋났고(2026-09-10 고침), 그래서 맞다는 것을 눈으로 확인할 수
+    // 있게 한 줄 적어둔다.
+    $("#settlementReconcileNote").textContent =
+      data.payment_method_total === data.total_revenue ? T("settlementReconcileOk") : "";
 
     const orderTypeLabel = (t) =>
       ({ dine_in: T("settlementOrderTypeDineIn"), takeout: T("settlementOrderTypeTakeout"), mixed: T("settlementOrderTypeMixed") })[t] || t;
-    const typeTotal = (data.order_type_breakdown || []).reduce((a, e) => a + e.revenue, 0);
-    $("#settlementOrderTypeBody").innerHTML = (data.order_type_breakdown || [])
-      .map((e) => `
-          <tr>
-            <td>${orderTypeLabel(e.order_type)}</td>
-            <td>${e.order_count}</td>
-            <td>${nt(e.revenue)}</td>
-            <td class="share">${share(e.revenue, typeTotal)}</td>
-          </tr>`)
-      .join("");
+    renderBars("#settlementOrderTypeBars", (data.order_type_breakdown || [])
+      .map((e) => ({ name: orderTypeLabel(e.order_type), value: e.revenue, count: e.order_count })));
 
+    const discountLabel = (t) =>
+      ({ vip95: "特約95折", vip10: "VIP9折", manual: T("settlementDiscountManual"), unspecified: T("paymentMethodUnspecified") })[t] || t;
+    const discountRows = data.discount_breakdown || [];
+    // 할인이 한 건도 없으면 이 묶음을 통째로 감춘다 — 빈 표는 자리만 먹는다.
+    $("#settlementDiscountBlock").hidden = discountRows.length === 0;
+    renderBars("#settlementDiscountBars", discountRows
+      .map((e) => ({ name: discountLabel(e.discount_type), value: e.amount, count: e.order_count })));
+    $("#settlementGrossRevenue").textContent = nt(data.gross_revenue);
+
+    // ── 3. 무엇이 팔렸나 ─────────────────────────────────────────
     // 분류 이름은 메뉴 관리의 카테고리에서 가져온다 — 결산에만 따로 적어두면
-    // 사장님이 카테고리 이름을 바꿨을 때 여기만 옛 이름으로 남는다.
+    // 사장님이 이름을 바꿨을 때 여기만 옛 이름으로 남는다.
     const categoryLabel = (key) => {
       if (key === "uncategorized") return T("settlementCategoryNone");
       const c = (categories || []).find((x) => x.key === key);
       return c ? catName(c) : key;
     };
-    const catTotal = (data.category_breakdown || []).reduce((a, e) => a + e.subtotal, 0);
-    $("#settlementCategoryBody").innerHTML = (data.category_breakdown || [])
-      .map((e) => `
-          <tr>
-            <td>${categoryLabel(e.category_key)}</td>
-            <td>${e.qty}</td>
-            <td>${nt(e.subtotal)}</td>
-            <td class="share">${share(e.subtotal, catTotal)}</td>
-          </tr>`)
-      .join("");
+    renderBars("#settlementCategoryBars", (data.category_breakdown || [])
+      .map((e) => ({ name: categoryLabel(e.category_key), value: e.subtotal, count: e.qty, countUnit: T("settlementQtySuffix") })));
 
-    const discountLabel = (t) =>
-      ({ vip95: "特約95折", vip10: "VIP9折", manual: T("settlementDiscountManual"), unspecified: T("paymentMethodUnspecified") })[t] || t;
-    const discountRows = data.discount_breakdown || [];
-    // 할인이 한 건도 없으면 빈 표 대신 카드를 통째로 감춘다.
-    $("#settlementDiscountCard").hidden = discountRows.length === 0;
-    $("#settlementDiscountBody").innerHTML = discountRows
-      .map((e) => `
-          <tr>
-            <td>${discountLabel(e.discount_type)}</td>
-            <td>${e.order_count}</td>
-            <td>${nt(e.amount)}</td>
-          </tr>`)
-      .join("");
+    // 품목은 40줄이 넘는다. 다 펼치면 이 표 하나가 화면 절반을 먹어서
+    // 아래 것들이 전부 스크롤 밖으로 밀린다 — 위 10개만 두고, 필요할 때
+    // 사장님이 펼친다.
+    renderSettlementItems(data.item_breakdown || [], false);
 
-    // 테이블은 40개까지 있어서 전부 늘어놓으면 표만 길어진다 — 매출 순으로
-    // 위 15개만 보여준다. 어느 자리가 잘 도는지 보려는 표이므로 충분하다.
-    $("#settlementTableBody").innerHTML = (data.table_breakdown || [])
+    // ── 4. 언제, 어디서 ──────────────────────────────────────────
+    renderBars("#settlementTableBars", (data.table_breakdown || [])
       .slice(0, 15)
-      .map((e) => `
-          <tr>
-            <td>${e.table_number === "COUNTER" ? T("counterSectionTitle").replace("📦 ", "") : fmtOrderTableTag(e.table_number)}</td>
-            <td>${e.order_count}</td>
-            <td>${nt(e.revenue)}</td>
-          </tr>`)
-      .join("");
+      .map((e) => ({
+        name: e.table_number === "COUNTER" ? T("counterSectionTitle").replace("📦 ", "") : fmtOrderTableTag(e.table_number),
+        value: e.revenue,
+        count: e.order_count,
+      })));
 
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
@@ -7974,6 +7952,93 @@
       row.onclick = () => loadSettlement(row.dataset.date, row.dataset.date);
     });
   }
+
+  // ── 결산 화면 부품들 (2026-09-10) ────────────────────────────────
+  // 사장님: "눈에 딱 들어오지도 않고 뭔가 체계적이지 못한 것 같아."
+
+  // 이름·막대·금액·비중 한 줄짜리. 표 대신 막대를 쓰는 이유는 "현금이
+  // 절반쯤"을 숫자를 읽지 않고 알 수 있어서다. 그리고 CSS 막대라서 차트
+  // 라이브러리가 못 뜨는 상황(네트워크가 막힌 가게 태블릿 등)에서도 그대로
+  // 보인다 — 마감 숫자가 라이브러리 하나에 달려 있으면 안 된다.
+  function renderBars(selector, rows) {
+    const el = $(selector);
+    if (!el) return;
+    if (!rows.length) {
+      el.innerHTML = `<div class="stl-bars-empty">${T("settlementNoData")}</div>`;
+      return;
+    }
+    const max = Math.max(...rows.map((r) => r.value)) || 1;
+    const total = rows.reduce((a, r) => a + r.value, 0);
+    el.innerHTML = rows
+      .map((r) => {
+        const pct = total > 0 ? Math.round((r.value / total) * 100) : 0;
+        const width = Math.max(2, Math.round((r.value / max) * 100));
+        const count = r.count != null ? `<span class="stl-bar-count">${r.count}${r.countUnit || T("settlementCountSuffix")}</span>` : "";
+        return `
+          <div class="stl-bar-row">
+            <span class="stl-bar-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}${count}</span>
+            <span class="stl-bar-track"><span class="stl-bar-fill" style="width:${width}%"></span></span>
+            <span class="stl-bar-amount">NT$${Number(r.value || 0).toLocaleString()}</span>
+            <span class="stl-bar-share">${pct}%</span>
+          </div>`;
+      })
+      .join("");
+  }
+
+  // 큰 숫자 아래 한 줄 — "75건 · 9월 9일" 처럼 그 숫자가 무엇의 합인지.
+  function fmtSettlementHeroSub(data) {
+    const period = data.date
+      ? data.date
+      : `${data.start_date} ~ ${data.end_date}`;
+    return `${period} · ${T("settlementPaidCount")} ${data.paid_order_count}${T("settlementCountSuffix")}`;
+  }
+
+  const SETTLEMENT_ITEMS_PREVIEW = 10;
+  function renderSettlementItems(items, expanded) {
+    const shown = expanded ? items : items.slice(0, SETTLEMENT_ITEMS_PREVIEW);
+    $("#settlementItemsBody").innerHTML = shown
+      .map(
+        (it) => `
+          <tr>
+            <td>${itemDisplayName(it)}</td>
+            <td>${it.qty}</td>
+            <td>NT$${it.subtotal.toLocaleString()}</td>
+          </tr>`
+      )
+      .join("");
+    const more = $("#settlementItemsMore");
+    if (!more) return;
+    if (items.length <= SETTLEMENT_ITEMS_PREVIEW) {
+      more.hidden = true;
+      return;
+    }
+    more.hidden = false;
+    more.textContent = expanded
+      ? T("settlementItemsCollapse")
+      : `${T("settlementItemsExpand")} (${items.length - SETTLEMENT_ITEMS_PREVIEW})`;
+    more.onclick = () => renderSettlementItems(items, !expanded);
+  }
+
+  // 블록 안 탭 — 세로로 계속 쌓지 않으려는 것이다. 같은 묶음 안에서만
+  // 갈아 끼우므로 그룹(data-tabgroup)별로 따로 다룬다.
+  document.querySelectorAll(".stl-tabs").forEach((group) => {
+    const block = group.closest(".stl-block");
+    group.querySelectorAll(".stl-tab").forEach((btn) => {
+      btn.onclick = () => {
+        group.querySelectorAll(".stl-tab").forEach((b) => b.classList.toggle("active", b === btn));
+        block.querySelectorAll(".stl-pane").forEach((pane) => {
+          pane.hidden = pane.dataset.pane !== btn.dataset.pane;
+        });
+        // 숨겨져 있던 캔버스는 크기가 0이라 그 상태로 그려진 차트가
+        // 찌그러져 있다 — 보이게 된 다음 한 번 다시 그린다.
+        if (lastSettlementData) {
+          if (btn.dataset.pane === "whenHourly") renderHourlyChart(lastSettlementData.hourly_breakdown || []);
+          if (btn.dataset.pane === "whenTrend") renderTrendChart(lastSettlementData.daily_breakdown || []);
+          if (btn.dataset.pane === "soldItems") renderItemsChart(lastSettlementData.item_breakdown || []);
+        }
+      };
+    });
+  });
 
   function settlementDateRangeChanged() {
     const start = $("#settlementStartDate").value;

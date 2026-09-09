@@ -232,58 +232,101 @@
             <button id="settlementCloseBtn" type="button" class="settlement-close-btn" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
           </div>
 
-          <div class="settlement-summary-cards">
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementRevenue">매출 (결제 완료)</div>
-              <div class="settlement-card-value" id="settlementRevenue">NT$0</div>
+          <!-- ── 결산 화면 다시 짜기 (2026-09-10) ───────────────────────
+               사장님: "지금 사실 결산 탭 보는 게 너무 복잡해. 눈에 딱
+               들어오지도 않고 뭔가 체계적이지 못한 것 같아."
+
+               맞는 말이다. 항목을 요청받을 때마다 카드와 표를 아래로 계속
+               붙여서, 화면이 5,000픽셀이 넘고 위계가 없어졌다. 매출과
+               "평균 테이블 회전 시간"이 같은 크기로 나란히 있었고, 40줄짜리
+               품목표가 화면 절반을 먹어서 나머지는 전부 스크롤 아래였다.
+
+               마감에 이 화면을 여는 이유는 셋뿐이다 —
+                 1. 오늘 얼마 벌었나
+                 2. 서랍의 현금이 맞나 (결제수단)
+                 3. 놓친 결제가 있나
+               그래서 그 셋을 맨 위에 크게 두고, 나머지(뭐가 팔렸나 / 언제,
+               어디서)는 아래에 탭으로 접어 넣는다. 매일 보는 것과 가끔 보는
+               것을 같은 크기로 늘어놓으면 매일 보는 것이 안 보인다. -->
+
+          <!-- 1. 오늘 한눈에 — 큰 숫자 하나와 그것을 설명하는 작은 줄들 -->
+          <div class="stl-hero">
+            <div class="stl-hero-main">
+              <div class="stl-hero-label" data-i18n="settlementRevenue">매출 (결제 완료)</div>
+              <div class="stl-hero-value" id="settlementRevenue">NT$0</div>
+              <div class="stl-hero-sub" id="settlementHeroSub"></div>
             </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementPaidCount">결제 완료 주문</div>
-              <div class="settlement-card-value" id="settlementPaidCount">0</div>
-            </div>
-            <div class="settlement-card settlement-card-warn" id="settlementProblemCard">
-              <div class="settlement-card-label" data-i18n="settlementProblemCount">⚠️ 미결제/문제 주문</div>
-              <div class="settlement-card-value" id="settlementProblemCount">0</div>
-            </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementCancelledCount">취소된 주문</div>
-              <div class="settlement-card-value" id="settlementCancelledCount">0</div>
-            </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementTurnover">평균 테이블 회전 시간</div>
-              <div class="settlement-card-value" id="settlementTurnover">–</div>
-            </div>
-            <!-- 사장님 요청(2026-09-10): "합계 등등 다양하게 그냥 왠만한 모든
-                 걸 기록해서 결산 페이지에서 볼 수 있었으면 좋겠어" — 아래는
-                 전부 주문에 이미 들어 있던 값이고, 화면에만 없던 것들이다. -->
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementGuests">손님 수</div>
-              <div class="settlement-card-value" id="settlementGuests">0</div>
-            </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementAvgPerGuest">1인당 평균</div>
-              <div class="settlement-card-value" id="settlementAvgPerGuest">NT$0</div>
-            </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementAvgPerOrder">주문당 평균</div>
-              <div class="settlement-card-value" id="settlementAvgPerOrder">NT$0</div>
-            </div>
-            <div class="settlement-card">
-              <div class="settlement-card-label" data-i18n="settlementDiscountTotal">할인해준 금액</div>
-              <div class="settlement-card-value" id="settlementDiscountTotal">NT$0</div>
-              <div class="settlement-card-sub" id="settlementGrossRevenue"></div>
+            <div class="stl-hero-side">
+              <div class="stl-stat">
+                <span class="stl-stat-label" data-i18n="settlementGuests">손님 수</span>
+                <span class="stl-stat-value" id="settlementGuests">0</span>
+              </div>
+              <div class="stl-stat">
+                <span class="stl-stat-label" data-i18n="settlementAvgPerGuest">1인당 평균</span>
+                <span class="stl-stat-value" id="settlementAvgPerGuest">NT$0</span>
+              </div>
+              <div class="stl-stat">
+                <span class="stl-stat-label" data-i18n="settlementAvgPerOrder">주문당 평균</span>
+                <span class="stl-stat-value" id="settlementAvgPerOrder">NT$0</span>
+              </div>
+              <div class="stl-stat">
+                <span class="stl-stat-label" data-i18n="settlementTurnover">평균 테이블 회전 시간</span>
+                <span class="stl-stat-value" id="settlementTurnover">–</span>
+              </div>
             </div>
           </div>
 
-          <div id="settlementProblemSection" class="settlement-wide-card settlement-card-problem-block" hidden>
-            <h3 data-i18n="settlementProblemTitle">⚠️ 결제되지 않은 주문</h3>
-            <p class="settings-hint" data-i18n="settlementProblemHint">아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.</p>
+          <!-- 챙겨야 할 것만 띠로. 아무 문제가 없으면 통째로 사라진다 —
+               "0건"을 매일 보여주면 그 자리가 배경이 되어, 정작 숫자가
+               생긴 날에도 안 보인다. -->
+          <div class="stl-alerts" id="settlementAlerts" hidden></div>
+
+          <!-- 2. 돈이 어떻게 들어왔나 — 마감에 서랍을 맞추는 자리 -->
+          <section class="stl-block">
+            <h3 class="stl-block-title" data-i18n="settlementMoneyInTitle">💰 돈이 어떻게 들어왔나</h3>
+            <div class="stl-two-col">
+              <div>
+                <h4 class="stl-sub-title" data-i18n="settlementPaymentMethodTitle">결제수단별 집계</h4>
+                <div class="stl-bars" id="settlementPaymentMethodBars"></div>
+                <div class="stl-total-row">
+                  <span data-i18n="settlementPaymentMethodTotalLabel">총합</span>
+                  <strong id="settlementPaymentMethodTotal">NT$0</strong>
+                </div>
+                <p class="stl-note" id="settlementReconcileNote"></p>
+              </div>
+              <div>
+                <h4 class="stl-sub-title" data-i18n="settlementOrderTypeTitle">매장 / 포장</h4>
+                <div class="stl-bars" id="settlementOrderTypeBars"></div>
+                <div id="settlementDiscountBlock" hidden>
+                  <h4 class="stl-sub-title" style="margin-top:22px;" data-i18n="settlementDiscountTitle">할인 내역</h4>
+                  <div class="stl-bars" id="settlementDiscountBars"></div>
+                  <div class="stl-total-row">
+                    <span data-i18n="settlementGrossRevenuePrefix">할인 전</span>
+                    <strong id="settlementGrossRevenue">NT$0</strong>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- 놓친 결제 상세 — 위 띠에서 이어지는 자리라 그 바로 아래 둔다 -->
+          <div id="settlementProblemSection" class="stl-block stl-block-warn" hidden>
+            <h3 class="stl-block-title" data-i18n="settlementProblemTitle">⚠️ 결제되지 않은 주문</h3>
+            <p class="stl-note" data-i18n="settlementProblemHint">아래 주문들은 이 날짜 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.</p>
             <div id="settlementProblemList"></div>
           </div>
 
-          <div class="settlement-charts-grid">
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementItemsTitle">품목별 판매 현황</h3>
+          <!-- 3. 무엇이 팔렸나 — 분류부터 보고, 필요하면 품목으로 -->
+          <section class="stl-block">
+            <h3 class="stl-block-title" data-i18n="settlementSoldTitle">🍚 무엇이 팔렸나</h3>
+            <div class="stl-tabs" data-tabgroup="sold">
+              <button type="button" class="stl-tab active" data-pane="soldCategory" data-i18n="settlementCategoryTitle">분류별 매출</button>
+              <button type="button" class="stl-tab" data-pane="soldItems" data-i18n="settlementItemsTitle">품목별 판매 현황</button>
+            </div>
+            <div class="stl-pane" data-pane="soldCategory">
+              <div class="stl-bars" id="settlementCategoryBars"></div>
+            </div>
+            <div class="stl-pane" data-pane="soldItems" hidden>
               <div class="settlement-chart-wrap">
                 <canvas id="settlementItemsChart"></canvas>
               </div>
@@ -297,109 +340,33 @@
                 </thead>
                 <tbody id="settlementItemsBody"></tbody>
               </table>
+              <button type="button" class="stl-more" id="settlementItemsMore" hidden></button>
             </div>
+          </section>
 
-            <!-- 결제수단별 집계 — 사장님 요청(2026-09-07): "결제종류 현금,
-                 라인페이, 신용카드, 기타... 정산에서도 서로 분류해서도
-                 집계해줘 총합도 있고". src/settlement.js의
-                 payment_method_breakdown/payment_method_total 참고. -->
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementPaymentMethodTitle">결제수단별 집계</h3>
-              <table class="settlement-items-table" id="settlementPaymentMethodTable">
-                <thead>
-                  <tr>
-                    <th data-i18n="settlementPaymentMethodName">결제수단</th>
-                    <th data-i18n="settlementPaymentMethodCount">건수</th>
-                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
-                  </tr>
-                </thead>
-                <tbody id="settlementPaymentMethodBody"></tbody>
-                <tfoot>
-                  <tr style="font-weight:700;border-top:2px solid var(--ink);">
-                    <td data-i18n="settlementPaymentMethodTotalLabel">총합</td>
-                    <td></td>
-                    <td id="settlementPaymentMethodTotal">NT$0</td>
-                  </tr>
-                </tfoot>
-              </table>
+          <!-- 4. 언제, 어디서 — 가끔 보는 것들. 기본은 접혀 있다 -->
+          <section class="stl-block">
+            <h3 class="stl-block-title" data-i18n="settlementWhenWhereTitle">⏰ 언제, 어디서</h3>
+            <div class="stl-tabs" data-tabgroup="when">
+              <button type="button" class="stl-tab active" data-pane="whenHourly" data-i18n="settlementHourlyTitle">시간대별 방문 &amp; 인기 메뉴</button>
+              <button type="button" class="stl-tab" data-pane="whenTable" data-i18n="settlementTableTitle">테이블별 매출</button>
+              <button type="button" class="stl-tab" data-pane="whenTrend" data-i18n="settlementTrendTitle">매출 추이 (선택한 기간)</button>
             </div>
-
-            <!-- 매장/포장, 분류별, 할인, 테이블별 — 사장님 요청(2026-09-10).
-                 전부 주문에 이미 들어 있던 값을 모아 세는 것뿐이다. -->
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementOrderTypeTitle">매장 / 포장</h3>
-              <table class="settlement-items-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="settlementOrderTypeName">구분</th>
-                    <th data-i18n="settlementPaymentMethodCount">건수</th>
-                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
-                    <th data-i18n="settlementShare">비중</th>
-                  </tr>
-                </thead>
-                <tbody id="settlementOrderTypeBody"></tbody>
-              </table>
+            <div class="stl-pane" data-pane="whenHourly">
+              <p class="stl-note" data-i18n="settlementHourlyHint">막대에 마우스를 올리면 그 시간대에 잘 팔린 메뉴를 볼 수 있어요.</p>
+              <div class="settlement-chart-wrap">
+                <canvas id="settlementHourlyChart"></canvas>
+              </div>
             </div>
-
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementCategoryTitle">분류별 매출</h3>
-              <table class="settlement-items-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="settlementCategoryName">분류</th>
-                    <th data-i18n="settlementItemQty">수량</th>
-                    <th data-i18n="settlementItemSubtotal">소계</th>
-                    <th data-i18n="settlementShare">비중</th>
-                  </tr>
-                </thead>
-                <tbody id="settlementCategoryBody"></tbody>
-              </table>
+            <div class="stl-pane" data-pane="whenTable" hidden>
+              <div class="stl-bars" id="settlementTableBars"></div>
             </div>
-
-            <div class="settlement-wide-card settlement-chart-card" id="settlementDiscountCard">
-              <h3 data-i18n="settlementDiscountTitle">할인 내역</h3>
-              <p class="settings-hint" data-i18n="settlementDiscountHint">매출에서 이미 빠진 금액이에요. 얼마를 깎아드렸는지 보여줍니다.</p>
-              <table class="settlement-items-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="settlementDiscountKind">종류</th>
-                    <th data-i18n="settlementPaymentMethodCount">건수</th>
-                    <th data-i18n="settlementDiscountAmount">할인액</th>
-                  </tr>
-                </thead>
-                <tbody id="settlementDiscountBody"></tbody>
-              </table>
-            </div>
-
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementTableTitle">테이블별 매출</h3>
-              <table class="settlement-items-table">
-                <thead>
-                  <tr>
-                    <th data-i18n="settlementTableName">테이블</th>
-                    <th data-i18n="settlementPaymentMethodCount">건수</th>
-                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
-                  </tr>
-                </thead>
-                <tbody id="settlementTableBody"></tbody>
-              </table>
-            </div>
-
-            <div class="settlement-wide-card settlement-chart-card">
-              <h3 data-i18n="settlementTrendTitle">매출 추이 (선택한 기간)</h3>
+            <div class="stl-pane" data-pane="whenTrend" hidden>
               <div class="settlement-chart-wrap">
                 <canvas id="settlementTrendChart"></canvas>
               </div>
             </div>
-          </div>
-
-          <div class="settlement-wide-card settlement-chart-card">
-            <h3 data-i18n="settlementHourlyTitle">시간대별 방문 &amp; 인기 메뉴</h3>
-            <p class="settings-hint" data-i18n="settlementHourlyHint">막대에 마우스를 올리면 그 시간대에 잘 팔린 메뉴를 볼 수 있어요.</p>
-            <div class="settlement-chart-wrap">
-              <canvas id="settlementHourlyChart"></canvas>
-            </div>
-          </div>
+          </section>
 
           <div class="settlement-wide-card settlement-chart-card settlement-history-card">
             <h3 data-i18n="settlementHistoryTitle">지난 정산 기록 추이</h3>
