@@ -55,6 +55,19 @@ check("호스트도 보여준다", dry.out.includes("cluster0.example.mongodb.ne
 check("아직 안 바꿨다고 말한다", dry.out.includes("아직 아무것도 바꾸지 않았습니다"));
 check("운영 DB 면 멈추라고 알려준다", dry.out.includes("운영 데이터베이스"));
 
+out.push("\n[왜 안 되는지 먼저 알려준다]");
+// "왜 안 되지"를 짐작하게 두지 않는다. 이미 맞는데 다른 이유로 못 들어가는
+// 경우(주소를 잘못 열었다)와, 정말 비밀번호가 다른 경우는 해야 할 일이 전혀
+// 다르다. DB 에 못 붙어도 그것 때문에 멈추면 안 된다.
+check("붙기 전에 지금 상태를 확인하려 한다",
+  src.includes("로그인") && src.includes("compareSync(password, hash)"), "상태 확인이 없다");
+check("DB 에 못 붙어도 계속 진행한다", dry.out.includes("아직 아무것도 바꾸지 않았습니다"), dry.out);
+check("못 붙었으면 그렇다고 말한다", dry.out.includes("확인하지 못했습니다"), dry.out);
+check("이미 맞으면 주소를 짚어준다", src.includes("/admin") && src.includes("손님 계정"), "안내가 없다");
+check("기본값이면 그렇다고 알려준다", src.includes("changeme123"), "기본값 안내가 없다");
+check("상태 확인은 읽기만 한다",
+  src.indexOf("projection: { settings: 1, menuItems: 1 }") < src.indexOf("updateOne"), "확인 단계에서 쓰고 있다");
+
 out.push("\n[비밀번호가 화면에 새지 않는다]");
 // 이 스크립트를 돌리는 자리는 대개 다른 사람도 볼 수 있는 터미널이다.
 check("비밀번호 값이 안 찍힌다", !dry.out.includes("hello12345"), dry.out);

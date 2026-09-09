@@ -58,7 +58,42 @@ function hostOf(u) {
   console.log(`  쓸 값   : .env 의 ${envName} (${password.length}자)`);
   console.log("");
 
+  // --yes 없이 부르면, 지금 그 DB 의 비밀번호가 어떤 상태인지 먼저 알려준다.
+  // "왜 안 되지"를 짐작하지 않고 눈으로 보게 하려는 것이다 — 이미 맞는데
+  // 다른 이유로 못 들어가는 경우(주소를 잘못 열었거나)와, 정말 비밀번호가
+  // 다른 경우는 해야 할 일이 전혀 다르다.
   if (!confirmed) {
+    const client = new MongoClient(uri, { serverSelectionTimeoutMS: 8000 });
+    try {
+      await client.connect();
+      const doc = await client.db(dbName).collection("store")
+        .findOne({ _id: "main" }, { projection: { settings: 1, menuItems: 1 } });
+      if (!doc) {
+        console.log("  이 데이터베이스에는 아직 데이터가 없습니다.");
+        console.log("  서버를 한 번 띄우면(npm start) 메뉴와 비밀번호가 만들어집니다.");
+      } else {
+        const hash = doc.settings && doc.settings[key];
+        console.log(`  지금 상태 : 메뉴 ${(doc.menuItems || []).length}개 · ${who} 비밀번호 ${hash ? "있음" : "없음"}`);
+        if (hash) {
+          const same = bcrypt.compareSync(password, hash);
+          console.log(`             .env 의 ${envName} 로 로그인 ${same ? "됩니다 ✓" : "안 됩니다 ✗"}`);
+          if (!same && bcrypt.compareSync("changeme123", hash)) {
+            console.log("             (지금은 기본값 changeme123 입니다 — 처음 만들 때 .env 에 그 줄이 없었던 것)");
+          }
+          if (same) {
+            console.log("");
+            console.log("  비밀번호는 이미 맞습니다. 주소를 확인해보세요 —");
+            console.log(`    관리자   http://localhost:${process.env.PORT || 3000}/admin`);
+            console.log("    홈페이지(다른 포트)의 「로그인」은 손님 계정이라 이 비밀번호가 아닙니다.");
+          }
+        }
+      }
+    } catch (e) {
+      console.log("  (지금 상태는 확인하지 못했습니다:", e.message + ")");
+    } finally {
+      await client.close().catch(() => {});
+    }
+    console.log("");
     console.log("  아직 아무것도 바꾸지 않았습니다.");
     console.log("  위 DB 가 맞으면 --yes 를 붙여 다시 실행해주세요:");
     console.log(`    node scripts/set-admin-password.js --yes${staff ? " --staff" : ""}`);
