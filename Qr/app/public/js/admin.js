@@ -583,7 +583,13 @@
       orderHoursEnabledLabel: "영업시간 밖 주문 막기",
       orderHoursAddRange: "+ 시간대 추가",
       orderHoursRemoveRange: "삭제",
-      orderHoursClosedDays: "정기 휴무일",
+      orderHoursBaseLabel: "기본 시간 (요일별로 따로 정하지 않은 날)",
+      orderHoursByDayLabel: "요일별",
+      orderHoursDayDefault: "기본과 같음",
+      orderHoursDayCustom: "직접 지정",
+      orderHoursDayClosed: "휴무",
+      orderHoursTodayLabel: "오늘",
+      orderHoursTodayHoliday: "오늘은 휴무",
       orderHoursOff: "지금은 아무것도 막지 않습니다",
       orderHoursOffSub: "위 스위치를 켜면 영업시간 밖 주문이 막힙니다",
       orderHoursOpenNow: "지금 주문 받는 중",
@@ -1102,7 +1108,13 @@
       orderHoursEnabledLabel: "非營業時間停止接單",
       orderHoursAddRange: "+ 新增時段",
       orderHoursRemoveRange: "刪除",
-      orderHoursClosedDays: "公休日",
+      orderHoursBaseLabel: "預設時間（未另外設定的星期）",
+      orderHoursByDayLabel: "各星期設定",
+      orderHoursDayDefault: "同預設",
+      orderHoursDayCustom: "自訂",
+      orderHoursDayClosed: "公休",
+      orderHoursTodayLabel: "今天",
+      orderHoursTodayHoliday: "今天公休",
       orderHoursOff: "目前沒有任何限制",
       orderHoursOffSub: "開啟上方開關後，非營業時間將無法點餐",
       orderHoursOpenNow: "目前開放點餐",
@@ -6311,13 +6323,13 @@
   // 손님에게 그대로 보여주는 문구고, 여기가 실제로 막는 규칙이다. 왜 나눴는지는
   // src/openHours.js 첫머리 — 한 줄로 합쳐두면 문구를 고치다 장사를 막는다.
   const OH_DAY_KEYS = ["daySun", "dayMon", "dayTue", "dayWed", "dayThu", "dayFri", "daySat"];
-  let orderHoursCfg = { enabled: 0, ranges: [], closed_days: [] };
+  let orderHoursCfg = { enabled: 0, ranges: [], closed_days: [], day_ranges: {} };
 
-  function renderOrderHoursRanges() {
-    const wrap = $("#ohRanges");
-    if (!wrap) return;
-    wrap.innerHTML = "";
-    orderHoursCfg.ranges.forEach((r, i) => {
+  // 기본 시간과 요일별 시간이 똑같이 생긴 편집기를 쓴다. 두 벌로 나눠 쓰면
+  // 한쪽만 고치는 일이 반드시 생긴다.
+  function renderRangeEditor(container, ranges, opts) {
+    container.innerHTML = "";
+    ranges.forEach((r, i) => {
       const row = document.createElement("div");
       row.className = "oh-range";
       row.innerHTML = `
@@ -6325,40 +6337,87 @@
         <span class="oh-dash">~</span>
         <input type="time" data-oh="end" data-i="${i}" value="${r.end}" />
         <button type="button" data-oh-remove="${i}">${T("orderHoursRemoveRange")}</button>`;
-      wrap.appendChild(row);
+      container.appendChild(row);
     });
-    wrap.querySelectorAll("input[data-oh]").forEach((el) => {
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "oh-add";
+    add.textContent = T("orderHoursAddRange");
+    add.onclick = () => {
+      if (ranges.length >= 6) return;
+      ranges.push({ start: "11:00", end: "21:00" });
+      renderRangeEditor(container, ranges, opts);
+    };
+    container.appendChild(add);
+
+    container.querySelectorAll("input[data-oh]").forEach((el) => {
       el.onchange = () => {
-        const r = orderHoursCfg.ranges[parseInt(el.dataset.i, 10)];
+        const r = ranges[parseInt(el.dataset.i, 10)];
         if (r) r[el.dataset.oh] = el.value;
       };
     });
-    wrap.querySelectorAll("button[data-oh-remove]").forEach((el) => {
+    container.querySelectorAll("button[data-oh-remove]").forEach((el) => {
       el.onclick = () => {
-        orderHoursCfg.ranges.splice(parseInt(el.dataset.ohRemove, 10), 1);
-        renderOrderHoursRanges();
+        ranges.splice(parseInt(el.dataset.ohRemove, 10), 1);
+        renderRangeEditor(container, ranges, opts);
       };
     });
   }
 
-  function renderOrderHoursDays() {
-    const wrap = $("#ohClosedDays");
+  function renderOrderHoursRanges() {
+    const wrap = $("#ohRanges");
+    if (wrap) renderRangeEditor(wrap, orderHoursCfg.ranges);
+  }
+
+  // 요일마다 세 가지 중 하나다: 기본과 같음 / 직접 지정 / 휴무.
+  // 「휴무」를 「구간이 하나도 없는 요일」로 표현하지 않는 이유는
+  // src/openHours.js 의 normalizeDayRanges 주석에 있다 — 시간을 다 지운
+  // 요일이 조용히 휴무가 되면 안 된다.
+  function ohDayMode(day) {
+    if (orderHoursCfg.closed_days.includes(day)) return "closed";
+    if (orderHoursCfg.day_ranges[String(day)]) return "custom";
+    return "default";
+  }
+
+  function ohSetDayMode(day, mode) {
+    const at = orderHoursCfg.closed_days.indexOf(day);
+    if (at >= 0) orderHoursCfg.closed_days.splice(at, 1);
+    if (mode === "closed") orderHoursCfg.closed_days.push(day);
+    if (mode === "custom") {
+      if (!orderHoursCfg.day_ranges[String(day)]) {
+        // 기본 시간을 복사해서 시작한다 — 빈 칸부터 채우게 하지 않는다.
+        orderHoursCfg.day_ranges[String(day)] = orderHoursCfg.ranges.map((r) => ({ start: r.start, end: r.end }));
+      }
+    } else {
+      delete orderHoursCfg.day_ranges[String(day)];
+    }
+    renderOrderHoursDayRules();
+  }
+
+  function renderOrderHoursDayRules() {
+    const wrap = $("#ohDayRules");
     if (!wrap) return;
     wrap.innerHTML = "";
     OH_DAY_KEYS.forEach((key, day) => {
-      const label = document.createElement("label");
-      label.className = "oh-day";
-      const checked = orderHoursCfg.closed_days.includes(day) ? " checked" : "";
-      label.innerHTML = `<input type="checkbox" data-oh-day="${day}"${checked} /> ${T(key)}`;
-      wrap.appendChild(label);
+      const mode = ohDayMode(day);
+      const row = document.createElement("div");
+      row.className = "oh-day-rule" + (mode === "closed" ? " is-closed" : "");
+      const opt = (v, label) => `<option value="${v}"${mode === v ? " selected" : ""}>${label}</option>`;
+      row.innerHTML = `
+        <span class="oh-day-name">${T(key)}</span>
+        <select data-oh-mode="${day}">
+          ${opt("default", T("orderHoursDayDefault"))}
+          ${opt("custom", T("orderHoursDayCustom"))}
+          ${opt("closed", T("orderHoursDayClosed"))}
+        </select>
+        <div class="oh-day-ranges" data-oh-dayranges="${day}"></div>`;
+      wrap.appendChild(row);
+      if (mode === "custom") {
+        renderRangeEditor(row.querySelector(`[data-oh-dayranges="${day}"]`), orderHoursCfg.day_ranges[String(day)]);
+      }
     });
-    wrap.querySelectorAll("input[data-oh-day]").forEach((el) => {
-      el.onchange = () => {
-        const day = parseInt(el.dataset.ohDay, 10);
-        const at = orderHoursCfg.closed_days.indexOf(day);
-        if (el.checked && at < 0) orderHoursCfg.closed_days.push(day);
-        if (!el.checked && at >= 0) orderHoursCfg.closed_days.splice(at, 1);
-      };
+    wrap.querySelectorAll("select[data-oh-mode]").forEach((el) => {
+      el.onchange = () => ohSetDayMode(parseInt(el.dataset.ohMode, 10), el.value);
     });
   }
 
@@ -6375,33 +6434,47 @@
       return;
     }
     if (state.open) {
-      el.innerHTML = `${T("orderHoursOpenNow")}<span class="oh-state-sub">${state.ranges_text || ""}</span>`;
+      el.innerHTML = `${T("orderHoursOpenNow")}<span class="oh-state-sub">${T("orderHoursTodayLabel")} ${state.ranges_text || ""}</span>`;
       return;
     }
-    const when = state.next_open_at ? state.next_open_at.slice(11, 16) : "";
-    const dayWord =
-      state.next_open_days === 0 ? T("orderHoursToday") : state.next_open_days === 1 ? T("orderHoursTomorrow") : "";
-    const sub = when ? `${T("orderHoursNextOpen")} ${dayWord} ${when}`.replace(/\s+/g, " ") : state.ranges_text || "";
-    el.innerHTML = `${T("orderHoursClosedNow")}<span class="oh-state-sub">${sub}</span>`;
+    const bits = [];
+    if (state.today_closed) bits.push(T("orderHoursTodayHoliday"));
+    if (state.next_open_at) {
+      const when = state.next_open_at.slice(11, 16);
+      const dayWord =
+        state.next_open_days === 0 ? T("orderHoursToday") : state.next_open_days === 1 ? T("orderHoursTomorrow") : "";
+      bits.push(`${T("orderHoursNextOpen")} ${dayWord} ${when}`.replace(/\s+/g, " "));
+    } else if (state.ranges_text) {
+      bits.push(state.ranges_text);
+    }
+    el.innerHTML = `${T("orderHoursClosedNow")}<span class="oh-state-sub">${bits.join(" · ")}</span>`;
+  }
+
+  function applyOrderHoursCfg(cfg) {
+    orderHoursCfg = {
+      enabled: cfg.enabled ? 1 : 0,
+      ranges: (cfg.ranges || []).map((r) => ({ start: r.start, end: r.end })),
+      closed_days: (cfg.closed_days || []).slice(),
+      day_ranges: Object.fromEntries(
+        Object.entries(cfg.day_ranges || {}).map(([d, rs]) => [d, rs.map((r) => ({ start: r.start, end: r.end }))])
+      ),
+    };
+    $("#oh_enabled").checked = !!orderHoursCfg.enabled;
+    renderOrderHoursRanges();
+    renderOrderHoursDayRules();
   }
 
   async function loadOrderHours() {
     try {
       const res = await fetch("/api/settings/order-hours");
       if (!res.ok) return;
-      const cfg = await res.json();
-      orderHoursCfg = {
-        enabled: cfg.enabled ? 1 : 0,
-        ranges: (cfg.ranges || []).map((r) => ({ start: r.start, end: r.end })),
-        closed_days: (cfg.closed_days || []).slice(),
-      };
-      $("#oh_enabled").checked = !!orderHoursCfg.enabled;
-      renderOrderHoursRanges();
-      renderOrderHoursDays();
+      applyOrderHoursCfg(await res.json());
     } catch (e) {
       /* 이 칸 하나 때문에 설정 화면 전체가 막히면 안 된다 */
     }
   }
+
+
 
   async function loadSettings() {
     const res = await fetch("/api/settings");
@@ -6813,12 +6886,6 @@
     setTimeout(() => (msg.hidden = true), 2000);
   };
 
-  $("#ohAddRange").onclick = () => {
-    if (orderHoursCfg.ranges.length >= 6) return;
-    orderHoursCfg.ranges.push({ start: "11:00", end: "21:00" });
-    renderOrderHoursRanges();
-  };
-
   $("#saveOrderHoursBtn").onclick = async () => {
     const res = await fetch("/api/settings/order-hours", {
       method: "PUT",
@@ -6827,20 +6894,14 @@
         enabled: $("#oh_enabled").checked ? 1 : 0,
         ranges: orderHoursCfg.ranges,
         closed_days: orderHoursCfg.closed_days,
+        day_ranges: orderHoursCfg.day_ranges,
       }),
     });
     if (res.ok) {
       const saved = await res.json();
       // 서버가 다듬은 결과를 그대로 다시 그린다 — 화면과 실제로 저장된 것이
       // 다르면, 사장님은 자기가 적은 대로 막히고 있다고 믿게 된다.
-      orderHoursCfg = {
-        enabled: saved.enabled ? 1 : 0,
-        ranges: (saved.ranges || []).map((r) => ({ start: r.start, end: r.end })),
-        closed_days: (saved.closed_days || []).slice(),
-      };
-      $("#oh_enabled").checked = !!orderHoursCfg.enabled;
-      renderOrderHoursRanges();
-      renderOrderHoursDays();
+      applyOrderHoursCfg(saved);
       renderOrderHoursState(saved.ordering);
     }
     const msg = $("#orderHoursMsg");

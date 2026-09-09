@@ -240,6 +240,7 @@
   /** 알림창 한 줄로 쓸 문구 — 주문을 눌렀는데 그 사이 영업이 끝난 경우. */
   function closedMessage() {
     const parts = [t("closedTitle")];
+    if (ordering && ordering.today_closed) parts.push(t("closedTodayHoliday"));
     const when = nextOpenLabel();
     if (when) parts.push(`${t("closedNextOpenLabel")} ${when}`);
     else if (ordering && ordering.ranges_text) parts.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
@@ -261,7 +262,11 @@
     const banner = $("#closedBanner");
     if (closed) {
       const lines = [`<b>${t("closedTitle")}</b>`];
-      if (ordering.ranges_text) lines.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
+      // 요일마다 시간이 다를 수 있으니 여기 적히는 건 "오늘" 의 시간이다
+      // (서버가 오늘 것으로 골라서 보낸다). 오늘이 휴무면 시간 대신 그렇게
+      // 적는다 — 빈 줄을 두면 손님은 시간을 못 봤다고 생각한다.
+      if (ordering.today_closed) lines.push(t("closedTodayHoliday"));
+      else if (ordering.ranges_text) lines.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
       const when = nextOpenLabel();
       if (when) lines.push(`${t("closedNextOpenLabel")} ${when}`);
       banner.innerHTML = `${lines.join("<br>")}<div class="closed-sub">${t("closedCallStaff")}</div>`;

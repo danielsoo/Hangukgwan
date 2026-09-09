@@ -518,12 +518,10 @@
           </p>
           <div class="order-hours-state" id="orderHoursState"></div>
           <label class="perm-toggle-row"><span data-i18n="orderHoursEnabledLabel">영업시간 밖 주문 막기</span><input type="checkbox" id="oh_enabled" /></label>
+          <span class="oh-label" data-i18n="orderHoursBaseLabel">기본 시간 (요일별로 따로 정하지 않은 날)</span>
           <div id="ohRanges" class="oh-ranges"></div>
-          <button type="button" id="ohAddRange" class="oh-add" data-i18n="orderHoursAddRange">+ 시간대 추가</button>
-          <div class="oh-closed-days">
-            <span class="oh-label" data-i18n="orderHoursClosedDays">정기 휴무일</span>
-            <div id="ohClosedDays" class="oh-days"></div>
-          </div>
+          <span class="oh-label" data-i18n="orderHoursByDayLabel">요일별</span>
+          <div id="ohDayRules" class="oh-day-rules"></div>
           <button id="saveOrderHoursBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="orderHoursMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>

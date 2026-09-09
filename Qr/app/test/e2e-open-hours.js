@@ -169,13 +169,46 @@ function hm(offsetMinutes) {
   }
   check("시간대 칸이 그려진다", (await adminPage.locator("#ohRanges .oh-range").count()) >= 1,
     `count=${await adminPage.locator("#ohRanges .oh-range").count()}`);
-  check("휴무 요일 7개가 그려진다", (await adminPage.locator("#ohClosedDays .oh-day").count()) === 7);
+  check("요일 7줄이 그려진다", (await adminPage.locator("#ohDayRules .oh-day-rule").count()) === 7,
+    `count=${await adminPage.locator("#ohDayRules .oh-day-rule").count()}`);
+  // 요일별로 다르게 잡을 수 있어야 한다 (2026-09-10 사장님: "요일마다 다를
+  // 수 있는데 그것도 넣었어?"). 「직접 지정」을 고르면 그 요일만 시간
+  // 편집기가 열리고, 기본 시간을 복사해서 시작한다 — 빈 칸부터 채우게 하지 않는다.
+  {
+    const sat = adminPage.locator('#ohDayRules select[data-oh-mode="6"]');
+    await sat.selectOption("custom");
+    await adminPage.waitForTimeout(300);
+    const rows = await adminPage.locator('#ohDayRules [data-oh-dayranges="6"] .oh-range').count();
+    check("토요일만 시간 편집기가 열린다", rows >= 1, `rows=${rows}`);
+    check("다른 요일은 안 열린다",
+      (await adminPage.locator('#ohDayRules [data-oh-dayranges="3"] .oh-range').count()) === 0);
+    await adminPage.locator('#ohDayRules select[data-oh-mode="1"]').selectOption("closed");
+    await adminPage.waitForTimeout(200);
+    check("휴무로 고른 요일은 표시가 난다",
+      await adminPage.locator('#ohDayRules .oh-day-rule.is-closed').first().isVisible());
+    // 저장하면 서버가 다듬은 결과가 그대로 다시 그려져야 한다 — 화면과
+    // 실제로 저장된 것이 다르면 사장님은 자기가 적은 대로 막히고 있다고 믿는다.
+    await adminPage.locator("#saveOrderHoursBtn").click();
+    await adminPage.waitForTimeout(700);
+    const saved = await adminPage.evaluate(async () => (await fetch("/api/settings/order-hours")).json());
+    check("토요일 시간이 저장된다", !!(saved.day_ranges && saved.day_ranges["6"]), JSON.stringify(saved.day_ranges));
+    check("월요일 휴무가 저장된다", (saved.closed_days || []).includes(1), JSON.stringify(saved.closed_days));
+    check("저장 뒤에도 토요일 편집기가 열려 있다",
+      (await adminPage.locator('#ohDayRules [data-oh-dayranges="6"] .oh-range').count()) >= 1);
+  }
   {
     const shots = path.join(__dirname, "..", "..", "..", "_screens");
     fs.mkdirSync(shots, { recursive: true });
     // 요소로 직접 찍는다 — clip 은 화면 밖으로 나가 있으면 조용히 실패한다.
     await adminPage.locator("#orderHoursState").locator("xpath=..")
       .screenshot({ path: path.join(shots, "closed-admin.png") });
+    // 요일별을 하나 펼친 모습도 같이 남긴다 — 접혀 있으면 이 기능이 있는지
+    // 화면만 보고는 알 수 없다.
+    await adminPage.locator('#ohDayRules select[data-oh-mode="6"]').selectOption("custom");
+    await adminPage.locator('#ohDayRules select[data-oh-mode="1"]').selectOption("closed");
+    await adminPage.waitForTimeout(300);
+    await adminPage.locator("#orderHoursState").locator("xpath=..")
+      .screenshot({ path: path.join(shots, "closed-admin-byday.png") });
   }
 
   out.push("\n[영업시간이 되면 풀린다]");

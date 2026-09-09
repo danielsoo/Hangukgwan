@@ -524,23 +524,25 @@ body:not(.role-staff) .staff-only { display: none !important; }
   color: var(--muted);
   border: 1px solid var(--line, #ddd);
 }
-.settings-card .oh-add { margin: 0 0 16px; padding: 8px 14px; background: transparent; color: var(--navy); border: 1px solid var(--navy); }
-.oh-closed-days { margin: 0 0 16px; }
-.oh-label { display: block; font-size: 16px; color: var(--muted); margin-bottom: 8px; }
-.oh-days { display: flex; flex-wrap: wrap; gap: 8px; }
-.oh-day {
-  display: inline-flex !important;
+.settings-card .oh-add { align-self: flex-start; margin: 4px 0 16px; padding: 8px 14px; background: transparent; color: var(--navy); border: 1px solid var(--navy); }
+.oh-label { display: block; font-size: 16px; color: var(--muted); margin: 0 0 8px; }
+/* 요일별 — 기본과 같음 / 직접 지정 / 휴무. 직접 지정한 요일만 그 밑에
+   시간 편집기가 열린다. 안 그러면 7줄이 전부 펼쳐져서 어느 요일이 기본과
+   다른지 한눈에 안 보인다. */
+.oh-day-rules { display: flex; flex-direction: column; gap: 6px; margin: 0 0 16px; }
+.oh-day-rule {
+  display: grid;
+  grid-template-columns: 32px minmax(140px, 200px) 1fr;
   align-items: center;
-  gap: 6px;
-  width: auto;
-  margin: 0 !important;
-  padding: 6px 12px;
-  border: 1px solid var(--line, #ddd);
-  border-radius: 999px;
-  font-size: 16px;
-  color: var(--ink);
+  gap: 10px;
+  padding: 6px 0;
 }
-.oh-day input { width: auto; margin: 0; }
+.oh-day-rule .oh-day-name { font-size: 16px; font-weight: 600; color: var(--ink); }
+.oh-day-rule select { width: 100%; margin: 0; }
+.oh-day-rule.is-closed .oh-day-name { color: #8a1c1c; }
+.oh-day-ranges { grid-column: 1 / -1; padding-left: 42px; }
+.oh-day-ranges:empty { display: none; }
+.oh-day-ranges .oh-range { margin-bottom: 6px; }
 .perm-toggle-row input[type="checkbox"] { width: auto; margin-top: 0; transform: scale(1.3); }
 /* Live "실제 코드 UI" previews next to the logo/cover-photo uploads — shows
    exactly how the upload will render for a customer, not a raw thumbnail. */

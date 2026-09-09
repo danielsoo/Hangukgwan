@@ -12,8 +12,15 @@
 //
 // 저장 형태 (settings.order_hours)
 //   enabled      0/1  — 이 규칙을 쓸지. 없으면(아직 정한 적 없음) 안 막는다.
-//   ranges       [{ start: "11:00", end: "21:00" }, ...]  — 이 안에서만 받는다
+//   ranges       [{ start: "11:00", end: "21:00" }, ...]  — 기본 영업시간
 //   closed_days  [0..6] — 0 이 일요일. 그 요일은 하루 종일 안 받는다.
+//   day_ranges   { "6": [{...}] } — 그 요일만 기본과 다를 때. 적어둔 요일만
+//                넣는다(없는 요일은 기본을 쓴다). 2026-09-10 사장님:
+//                "요일마다 다를 수 있는데 그것도 넣었어?"
+//
+// 세 가지가 겹칠 때의 순서는 하나뿐이다: 휴무 > 요일별 > 기본.
+// 휴무가 가장 세다 — 문 닫은 날에 시간을 적어둔 채로 두는 일은 흔한데,
+// 그때 시간이 이기면 휴무일에 주문이 들어온다.
 //
 // 안전한 쪽은 언제나 "받는다" 쪽이다. 설정이 없거나, 비었거나, 이상하면
 // 막지 않는다 — 못 막아서 생기는 손해보다 잘못 막아서 생기는 손해가 크다.
@@ -117,6 +124,24 @@ function normalizeClosedDays(input) {
   return [...set].sort((a, b) => a - b);
 }
 
+/**
+ * 요일별 예외를 다듬는다. { "6": [{start,end}] } 처럼 요일 번호를 키로 쓴다.
+ * 빈 배열은 저장하지 않는다 — "이 요일은 구간이 없다" 와 "기본을 쓴다" 가
+ * 같은 모양이 되어버리면, 화면에서 시간을 다 지운 요일이 조용히 휴무가 된다.
+ * 문을 닫는 날은 closed_days 로만 표현한다.
+ */
+function normalizeDayRanges(input) {
+  if (!input || typeof input !== "object") return {};
+  const out = {};
+  for (const key of Object.keys(input)) {
+    const day = parseInt(key, 10);
+    if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+    const ranges = normalizeRanges(input[key]);
+    if (ranges.length) out[String(day)] = ranges;
+  }
+  return out;
+}
+
 /** 저장할 형태로 다듬는다. 사장님이 화면에서 보낸 값이 그대로 들어온다. */
 function normalize(input, fallbackText) {
   const src = input && typeof input === "object" ? input : {};
@@ -127,6 +152,7 @@ function normalize(input, fallbackText) {
     enabled: src.enabled ? 1 : 0,
     ranges,
     closed_days: normalizeClosedDays(src.closed_days),
+    day_ranges: normalizeDayRanges(src.day_ranges),
   };
 }
 
@@ -143,44 +169,61 @@ function normalize(input, fallbackText) {
  */
 function orderHours(settings) {
   const raw = settings && settings.order_hours;
-  if (!raw || typeof raw !== "object") return { enabled: 0, ranges: [], closed_days: [] };
+  if (!raw || typeof raw !== "object") {
+    return { enabled: 0, ranges: [], closed_days: [], day_ranges: {} };
+  }
   const ranges = normalizeRanges(raw.ranges);
+  const dayRanges = normalizeDayRanges(raw.day_ranges);
+  // 기본이 비어 있어도 요일별로만 적어둔 경우가 있을 수 있다 — 그때까지
+  // 「읽을 게 없다」로 보고 열어버리면 사장님이 적어둔 규칙이 통째로 무시된다.
+  const hasAnyRanges = ranges.length > 0 || Object.keys(dayRanges).length > 0;
   return {
-    enabled: raw.enabled && ranges.length ? 1 : 0,
+    enabled: raw.enabled && hasAnyRanges ? 1 : 0,
     ranges,
     closed_days: normalizeClosedDays(raw.closed_days),
+    day_ranges: dayRanges,
   };
 }
 
-function isClosedDay(cfg, dateStr) {
-  return cfg.closed_days.includes(weekdayOf(dateStr));
+/**
+ * 그 날짜에 적용되는 구간. 순서는 휴무 > 요일별 > 기본.
+ * 휴무면 빈 배열이고, 빈 배열은 "그날은 아무것도 안 받는다" 는 뜻이다.
+ */
+function rangesForDate(cfg, dateStr) {
+  const day = weekdayOf(dateStr);
+  if (cfg.closed_days.includes(day)) return [];
+  const own = cfg.day_ranges && cfg.day_ranges[String(day)];
+  if (own && own.length) return own;
+  return cfg.ranges;
 }
 
 /**
  * 지금 주문을 받는 시간인가.
  *
  * 자정을 넘는 구간(17:00~02:00)도 다룬다 — 그런 구간은 "시작한 날" 에
- * 속한다. 그래서 화요일 01:00 은 월요일이 휴무인지로 갈린다. 지금 이 가게는
- * 그런 구간이 없지만, 나중에 생겼을 때 조용히 틀리는 것보다 낫다.
+ * 속한다. 그래서 화요일 01:00 은 월요일 규칙으로 판단한다. 요일마다 시간이
+ * 다르면 이게 그냥 사소한 게 아니게 된다 — 금요일만 새벽 2시까지 하는
+ * 가게에서 토요일 01:00 은 금요일 영업의 연장이다.
  */
 function isOpenNow(settings, now = nowLocal()) {
   const cfg = orderHours(settings);
   if (!cfg.enabled) return true;
-  if (!cfg.ranges.length) return true;
 
   const date = String(now).slice(0, 10);
   const mins = minutesOf(String(now).slice(11, 16));
 
-  for (const r of cfg.ranges) {
+  // 오늘 시작하는 구간
+  for (const r of rangesForDate(cfg, date)) {
     const s = minutesOf(r.start);
     const e = minutesOf(r.end);
-    if (s < e) {
-      if (mins >= s && mins < e && !isClosedDay(cfg, date)) return true;
-    } else {
-      // 자정을 넘는 구간
-      if (mins >= s && !isClosedDay(cfg, date)) return true;
-      if (mins < e && !isClosedDay(cfg, shiftDate(date, -1))) return true;
-    }
+    if (s < e ? mins >= s && mins < e : mins >= s) return true;
+  }
+  // 어제 시작해서 자정을 넘긴 구간
+  const prev = shiftDate(date, -1);
+  for (const r of rangesForDate(cfg, prev)) {
+    const s = minutesOf(r.start);
+    const e = minutesOf(r.end);
+    if (s > e && mins < e) return true;
   }
   return false;
 }
@@ -193,12 +236,11 @@ function isOpenNow(settings, now = nowLocal()) {
  */
 function nextOpenAt(settings, now = nowLocal()) {
   const cfg = orderHours(settings);
-  if (!cfg.enabled || !cfg.ranges.length) return null;
+  if (!cfg.enabled) return null;
   const today = String(now).slice(0, 10);
   for (let i = 0; i < 14; i++) {
     const date = shiftDate(today, i);
-    if (isClosedDay(cfg, date)) continue;
-    for (const r of cfg.ranges) {
+    for (const r of rangesForDate(cfg, date)) {
       const at = `${date} ${r.start}`;
       if (at > String(now).slice(0, 16)) return at;
     }
@@ -207,8 +249,8 @@ function nextOpenAt(settings, now = nowLocal()) {
 }
 
 /** "11:00~14:00, 17:00~21:00" — 화면에 그대로 쓸 수 있는 문구. */
-function rangesText(cfg) {
-  return cfg.ranges.map((r) => `${r.start}~${r.end}`).join(", ");
+function rangesText(ranges) {
+  return (ranges || []).map((r) => `${r.start}~${r.end}`).join(", ");
 }
 
 /**
@@ -219,12 +261,19 @@ function orderingState(settings, now = nowLocal()) {
   const cfg = orderHours(settings);
   const open = isOpenNow(settings, now);
   const next = open ? null : nextOpenAt(settings, now);
+  const todayRanges = rangesForDate(cfg, String(now).slice(0, 10));
   return {
     enabled: !!cfg.enabled,
     open,
     ranges: cfg.ranges,
     closed_days: cfg.closed_days,
-    ranges_text: rangesText(cfg),
+    day_ranges: cfg.day_ranges,
+    // 손님에게 보여줄 문구는 "오늘" 의 시간이어야 한다. 요일마다 시간이
+    // 다른 가게에서 기본 시간을 보여주면, 손님은 오늘 안 하는 시간을 읽고
+    // 그때 다시 온다.
+    today_ranges: todayRanges,
+    today_closed: cfg.enabled ? todayRanges.length === 0 : false,
+    ranges_text: rangesText(todayRanges),
     next_open_at: next,
     // "오늘 17:00" 인지 "내일 11:00" 인지는 여기서 정해서 내려보낸다.
     // 손님 폰에서 계산하면 폰의 시계와 시간대가 기준이 되는데, 여행 온
@@ -235,6 +284,7 @@ function orderingState(settings, now = nowLocal()) {
 
 module.exports = {
   DEFAULT_RANGES,
+  rangesForDate,
   MAX_RANGES,
   parseHoursText,
   normalize,
