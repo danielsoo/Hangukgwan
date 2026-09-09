@@ -368,6 +368,28 @@
             </div>
           </section>
 
+          <!-- 5. 지난 주문 불러오기 — 사장님(2026-09-10): "전에 있던 테이블
+               그거 불러올 수 있으면 좋겠어. 어느 테이블에서 언제 몇시에
+               뭐를 시켰고..." 기록은 이미 다 남고 있었고, 없던 건 꺼내
+               보는 길뿐이었다. 위 날짜 범위를 그대로 따라간다. -->
+          <section class="stl-block">
+            <h3 class="stl-block-title" data-i18n="settlementOrdersTitle">📋 지난 주문 불러오기</h3>
+            <div class="stl-order-filters">
+              <input type="text" id="settlementOrderSearch" data-i18n-placeholder="settlementOrdersSearchPlaceholder"
+                     placeholder="메뉴 이름, 손님 이름, 픽업 번호로 찾기" />
+              <input type="text" id="settlementOrderTable" inputmode="numeric"
+                     data-i18n-placeholder="settlementOrdersTablePlaceholder" placeholder="테이블 번호" />
+              <select id="settlementOrderStatus">
+                <option value="" data-i18n="settlementOrdersAllStatus">전체 상태</option>
+                <option value="paid" data-i18n="statusPaid">결제 완료</option>
+                <option value="cancelled" data-i18n="statusCancelled">취소</option>
+              </select>
+              <button type="button" id="settlementOrderSearchBtn" data-i18n="settlementOrdersSearchBtn">찾기</button>
+            </div>
+            <p class="stl-note" id="settlementOrdersCount"></p>
+            <div id="settlementOrdersList" class="stl-orders"></div>
+          </section>
+
           <div class="settlement-wide-card settlement-chart-card settlement-history-card">
             <h3 data-i18n="settlementHistoryTitle">지난 정산 기록 추이</h3>
             <p class="settings-hint" data-i18n="settlementHistoryHint">매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능). 왼쪽에서 날짜를 골라 들어가 보세요.</p>

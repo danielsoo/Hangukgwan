@@ -406,6 +406,19 @@
       settlementQtySuffix: "개",
       settlementItemsExpand: "전체 보기",
       settlementItemsCollapse: "접기",
+      settlementOrdersTitle: "📋 지난 주문 불러오기",
+      settlementOrdersSearchPlaceholder: "메뉴 이름, 손님 이름, 픽업 번호로 찾기",
+      settlementOrdersTablePlaceholder: "테이블 번호",
+      settlementOrdersAllStatus: "전체 상태",
+      settlementOrdersSearchBtn: "찾기",
+      settlementOrdersLoading: "불러오는 중…",
+      settlementOrdersFailed: "주문을 불러오지 못했어요. 다시 시도해주세요.",
+      settlementOrdersNone: "이 조건에 맞는 주문이 없어요.",
+      settlementOrdersTruncated: " (가장 최근 것부터 보여드려요. 더 보시려면 날짜를 좁혀주세요)",
+      settlementOrdersPickupSuffix: "번",
+      settlementOrdersPaidWith: "결제:",
+      settlementOrdersPaidAt: "결제 시각:",
+      settlementOrdersStatus: "상태:",
       onSale: "판매 중",
       soldOut: "품절",
       soldOutToday: "오늘만 품절",
@@ -891,6 +904,19 @@
       settlementQtySuffix: "份",
       settlementItemsExpand: "顯示全部",
       settlementItemsCollapse: "收合",
+      settlementOrdersTitle: "📋 查詢過往訂單",
+      settlementOrdersSearchPlaceholder: "以菜名、客人姓名或取餐號搜尋",
+      settlementOrdersTablePlaceholder: "桌號",
+      settlementOrdersAllStatus: "全部狀態",
+      settlementOrdersSearchBtn: "搜尋",
+      settlementOrdersLoading: "載入中…",
+      settlementOrdersFailed: "訂單載入失敗，請再試一次。",
+      settlementOrdersNone: "沒有符合條件的訂單。",
+      settlementOrdersTruncated: "（僅顯示最新的部分，若要看更多請縮小日期範圍）",
+      settlementOrdersPickupSuffix: "號",
+      settlementOrdersPaidWith: "結帳方式：",
+      settlementOrdersPaidAt: "結帳時間：",
+      settlementOrdersStatus: "狀態：",
       onSale: "供應中",
       soldOut: "已售完",
       soldOutToday: "今日售完",
@@ -7816,6 +7842,9 @@
         count: e.order_count,
       })));
 
+    // 날짜를 바꾸면 아래 주문 목록도 그 범위로 따라간다.
+    loadSettlementOrders();
+
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
     renderHourlyChart(data.hourly_breakdown || []);
@@ -8039,6 +8068,131 @@
       };
     });
   });
+
+  // ── 지난 주문 불러오기 (2026-09-10) ──────────────────────────────
+  // 사장님: "어느 테이블에서 언제 몇시에 뭐를 시켰고 그런 게 다 기록을
+  // 하고 있잖아 우리가. 그래서 ... 나중에 필요할 때 불러올 수 있게."
+  //
+  // 기록은 이미 다 남고 있었다. 없던 건 꺼내 보는 길뿐이라, 서버의
+  // GET /api/orders/history 를 그대로 보여준다. 날짜는 위 결산 범위를
+  // 따라가므로, "지난주 금요일"을 고르면 그 날 주문이 여기 뜬다.
+  let settlementOrdersExpanded = new Set();
+
+  async function loadSettlementOrders() {
+    const listEl = $("#settlementOrdersList");
+    const countEl = $("#settlementOrdersCount");
+    if (!listEl) return;
+    const params = new URLSearchParams();
+    const start = $("#settlementStartDate").value;
+    const end = $("#settlementEndDate").value;
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    const q = $("#settlementOrderSearch").value.trim();
+    const table = $("#settlementOrderTable").value.trim();
+    const status = $("#settlementOrderStatus").value;
+    if (q) params.set("q", q);
+    if (table) params.set("table", table);
+    if (status) params.set("status", status);
+
+    countEl.textContent = T("settlementOrdersLoading");
+    listEl.innerHTML = "";
+    let data;
+    try {
+      const res = await fetch(`/api/orders/history?${params.toString()}`);
+      if (!res.ok) throw new Error("failed");
+      data = await res.json();
+    } catch (e) {
+      countEl.textContent = T("settlementOrdersFailed");
+      return;
+    }
+    settlementOrdersExpanded = new Set();
+    renderSettlementOrders(data);
+  }
+
+  function renderSettlementOrders(data) {
+    const listEl = $("#settlementOrdersList");
+    const countEl = $("#settlementOrdersCount");
+    const orders = data.orders || [];
+    countEl.textContent = orders.length
+      ? `${orders.length}${T("settlementCountSuffix")}${data.truncated ? T("settlementOrdersTruncated") : ""}`
+      : T("settlementOrdersNone");
+    listEl.innerHTML = orders
+      .map((o) => {
+        const time = String(o.created_at || "").slice(11, 16);
+        const day = String(o.created_at || "").slice(5, 10);
+        // 포장 카운터는 테이블 번호가 없다 — 픽업 번호와 이름으로 부른다.
+        const who = o.pickup_number && o.customer_name
+          ? `📦 ${o.pickup_number}${T("settlementOrdersPickupSuffix")} ${escapeHtml(o.customer_name)}`
+          : fmtOrderTableTag(o.table_number);
+        const peek = (o.items || []).map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
+        const open = settlementOrdersExpanded.has(o.id);
+        return `
+          <div class="stl-order${o.status === "cancelled" ? " cancelled" : ""}" data-order-id="${o.id}">
+            <button type="button" class="stl-order-head">
+              <span class="stl-order-time">${day} ${time}</span>
+              <span class="stl-order-table">${who}</span>
+              <span class="stl-order-peek">${escapeHtml(peek)}</span>
+              <span class="stl-order-total">NT$${Number(o.total || 0).toLocaleString()}</span>
+              <span class="stl-order-caret">${open ? "▴" : "▾"}</span>
+            </button>
+            ${open ? renderSettlementOrderBody(o) : ""}
+          </div>`;
+      })
+      .join("");
+    listEl.querySelectorAll(".stl-order-head").forEach((btn) => {
+      btn.onclick = () => {
+        const id = parseInt(btn.closest(".stl-order").dataset.orderId, 10);
+        if (settlementOrdersExpanded.has(id)) settlementOrdersExpanded.delete(id);
+        else settlementOrdersExpanded.add(id);
+        renderSettlementOrders(data);
+      };
+    });
+  }
+
+  function renderSettlementOrderBody(o) {
+    const lines = (o.items || [])
+      .map((it) => {
+        const extras = [
+          it.option_choice,
+          it.spice_choice && it.spice_choice !== "基本" ? it.spice_choice : null,
+          it.takeout_choice,
+          it.order_type === "takeout" ? T("settlementOrderTypeTakeout") : null,
+          ...(it.selected_addons || []).map((a) => `+${a.name}`),
+        ].filter(Boolean);
+        return `
+          <div class="stl-order-line">
+            <span>${itemDisplayName(it)} <span style="color:var(--muted)">x${it.qty}</span></span>
+            <span>NT$${Number((it.unit_price || 0) * (it.qty || 0)).toLocaleString()}</span>
+          </div>
+          ${extras.length ? `<div class="stl-order-line-sub">└ ${escapeHtml(extras.join(" · "))}</div>` : ""}`;
+      })
+      .join("");
+    // 결제수단·인원수·할인은 나중에 "그때 어떻게 계산했더라"를 확인하는
+    // 값들이다. 없으면 그 줄을 아예 안 만든다.
+    const meta = [
+      o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentMethodLabelFor(o.payment_method)}` : null,
+      o.party_size ? fmtPartyCount(o.party_size) : null,
+      o.discount_amount ? `${T("settlementDiscountAmount")} NT$${Number(o.discount_amount).toLocaleString()}` : null,
+      o.paid_at ? `${T("settlementOrdersPaidAt")} ${String(o.paid_at).slice(5, 16)}` : null,
+      `${T("settlementOrdersStatus")} ${statusLabel(o.status)}`,
+    ].filter(Boolean);
+    return `<div class="stl-order-body">${lines}<div class="stl-order-meta">${escapeHtml(meta.join(" · "))}</div></div>`;
+  }
+
+  const paymentMethodLabelFor = (m) =>
+    ({
+      cash: T("paymentMethodCash"), linepay: T("paymentMethodLinepay"), card: T("paymentMethodCard"),
+      other: T("paymentMethodOther"), online: T("paymentMethodOnline"), unspecified: T("paymentMethodUnspecified"),
+    })[m] || m;
+
+  $("#settlementOrderSearchBtn").onclick = loadSettlementOrders;
+  $("#settlementOrderSearch").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") loadSettlementOrders();
+  });
+  $("#settlementOrderTable").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") loadSettlementOrders();
+  });
+  $("#settlementOrderStatus").onchange = loadSettlementOrders;
 
   function settlementDateRangeChanged() {
     const start = $("#settlementStartDate").value;

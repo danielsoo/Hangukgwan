@@ -1,6 +1,6 @@
 const express = require("express");
-const { store, save, nextId, saveOrder, saveOrders } = require("../db");
-const { requireAdmin } = require("../auth");
+const { store, save, nextId, saveOrder, saveOrders, findOrders } = require("../db");
+const { requireAdmin, requireOwner } = require("../auth");
 const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
 const { isActive: isVipActive, cardBelongsTo } = require("../vip");
@@ -25,6 +25,7 @@ function resolveSelectedAddons(mi, requestedNames) {
 
 const { clearPartySizeIfSettled } = require("../partySize");
 const { isAvailableNow } = require("../availability");
+const { serviceStartedAt } = require("../serviceStart");
 
 const router = express.Router();
 
@@ -382,6 +383,74 @@ router.post("/", async (req, res) => {
 // across however many separate tickets were sent in). Excludes paid/
 // cancelled orders, so it naturally empties out the moment the table is
 // settled via the admin "전체 결제 완료" bulk-pay action.
+// 지난 주문 불러오기.
+//
+// GET /:id 보다 반드시 위에 둔다 — 아래에 두면 Express 가 "history" 를
+// 주문 번호로 읽어서 404 가 난다(위 PATCH /reorder 도 같은 이유로 앞에 있다).
+//
+// 사장님(2026-09-10): "전에 있던 테이블 그거 불러올 수 있으면 좋겠어. 어느
+// 테이블에서 언제 몇시에 뭐를 시켰고 그런 게 다 기록을 하고 있잖아 우리가.
+// 그래서 그게 결제완료가 되는 순간 그거 자체로도 저장이 되어서 나중에
+// 필요할 때 불러올 수 있게."
+//
+// 기록은 이미 다 남고 있다(주문 한 건이 자기 문서로 저장된다 — src/db.js).
+// 없던 건 "꺼내 보는 길"뿐이다. 위의 GET / 는 주방 화면용이라 메모리에
+// 들고 있는 최근 며칠치만 본다. 여기는 컬렉션에 직접 물어보므로 몇 달 전
+// 것도 나온다.
+//
+// 찾는 방법은 세 가지다 — 날짜 범위, 테이블 번호, 그리고 메뉴 이름이나
+// 손님 이름으로 훑기. "지난주 금요일 7번 테이블" 이 가장 흔한 물음이라
+// 날짜와 테이블을 같이 걸 수 있게 했다.
+router.get("/history", requireOwner, async (req, res) => {
+  const q = req.query || {};
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(q.start || "") ? q.start : null;
+  const end = /^\d{4}-\d{2}-\d{2}$/.test(q.end || "") ? q.end : start;
+  const filter = {};
+  if (start) {
+    filter.created_at = { $gte: `${start} 00:00:00`, $lte: `${end} 23:59:59` };
+  }
+  // 영업 시작 전(=테스트) 주문은 여기서도 뺀다 — 결산에서 안 세는 것을
+  // 목록에서만 보여주면 두 화면의 숫자가 달라 보인다(src/serviceStart.js).
+  const started = serviceStartedAt(store);
+  if (started) {
+    const from = filter.created_at && filter.created_at.$gte;
+    filter.created_at = Object.assign({}, filter.created_at, {
+      $gte: from && from > started ? from : started,
+    });
+  }
+  if (q.table) filter.table_number = String(q.table);
+  if (q.status) filter.status = String(q.status);
+
+  // 최근 것부터. 한 번에 200건까지 — 그보다 많이 필요하면 날짜를 좁히는
+  // 편이 화면에서도 찾기 쉽다.
+  const limit = Math.min(500, Math.max(1, parseInt(q.limit, 10) || 200));
+  let list = await findOrders(filter, { sort: { created_at: -1 }, limit });
+
+  // 메뉴 이름·손님 이름·픽업 번호로 훑기. 몇 백 건 안에서 찾는 것이라
+  // 여기서 걸러도 충분하고, 이름이 세 언어로 나뉘어 있어 데이터베이스
+  // 질의로 만들면 오히려 복잡해진다.
+  const needle = String(q.q || "").trim().toLowerCase();
+  if (needle) {
+    list = list.filter((o) => {
+      const hay = [
+        o.customer_name, o.pickup_number, o.table_number, o.note,
+        ...(o.items || []).flatMap((it) => [it.name_ko, it.name_zh, it.name_en, it.code]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(needle);
+    });
+  }
+
+  res.json({
+    orders: list,
+    count: list.length,
+    // 200건에서 잘렸는지 화면이 알 수 있어야 "이게 전부"라고 오해하지 않는다.
+    truncated: list.length >= limit,
+  });
+});
+
 router.get("/table/:tableNumber", (req, res) => {
   const list = store.orders
     .filter((o) => String(o.table_number) === String(req.params.tableNumber) && o.status !== "paid" && o.status !== "cancelled")
