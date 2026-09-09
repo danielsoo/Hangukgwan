@@ -7,7 +7,7 @@
 // (Admin > 설정 > 온라인 결제), none of this is reachable from the customer
 // page and nothing here changes existing behavior.
 const express = require("express");
-const { store, save, nextId } = require("../db");
+const { store, save, nextId, saveOrders } = require("../db");
 const { clearPartySizeIfSettled } = require("../partySize");
 const { nowLocal } = require("../time");
 const ecpay = require("../ecpay");
@@ -103,9 +103,11 @@ router.post("/callback", async (req, res) => {
     payment.paid_at = nowLocal();
     payment.ecpay_trade_no = body.TradeNo || null;
     payment.simulate_paid = String(body.SimulatePaid) === "1";
+    const paidNow = [];
     for (const orderId of payment.order_ids) {
       const order = store.orders.find((o) => o.id === orderId);
       if (order && order.status !== "paid") {
+        paidNow.push(order);
         order.status = "paid";
         order.updated_at = nowLocal();
         // 정산 결제수단별 집계(src/settlement.js)에서 "온라인결제"로 따로
@@ -124,7 +126,9 @@ router.post("/callback", async (req, res) => {
     // for this table after checkout started, this stays untouched — the
     // party is evidently still there.)
     clearPartySizeIfSettled(store, payment.table_number);
-    await save();
+    // 결제된 주문들은 자기 컬렉션으로, store 문서는 결제 기록(payments)과
+    // 인원수 때문에 한 번. 둘 다 작아서 나란히 보낸다.
+    await Promise.all([saveOrders(paidNow), save()]);
   } else if (!success && payment.status === "pending") {
     payment.status = "failed";
     payment.failure_msg = body.RtnMsg || null;

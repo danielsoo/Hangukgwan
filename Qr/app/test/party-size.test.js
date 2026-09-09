@@ -58,7 +58,7 @@ const fs = require("fs");
 const path = require("path");
 const ordersSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "orders.js"), "utf8");
 check("주문 상태 변경에서 결제일 때만 인원수를 정리한다",
-  /if \(status === "paid"\) clearPartySizeIfSettled\(/.test(ordersSrc));
+  /status === "paid" && clearPartySizeIfSettled\(/.test(ordersSrc));
 check("예전의 \"살아 있는 주문이 없으면 지운다\" 규칙이 남아 있지 않다",
   !/party_size = null/.test(ordersSrc), "orders.js 안에서 직접 지우는 코드가 남아 있다");
 const paymentsSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "payments.js"), "utf8");

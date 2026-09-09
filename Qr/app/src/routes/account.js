@@ -14,7 +14,7 @@ const express = require("express");
 const accounts = require("../accounts");
 const { verifyIdToken, isConfigured } = require("../firebaseAdmin");
 const { requireUser } = require("../auth");
-const { store } = require("../db");
+const { store, findOrders } = require("../db");
 
 const router = express.Router();
 
@@ -203,11 +203,14 @@ router.post("/change-password", requireUser, async (req, res) => {
 //
 // 다른 사람 주문이 섞일 수 없도록 반드시 세션의 userId 로만 거른다 —
 // 쿼리 파라미터로 계정을 받지 않는다.
-router.get("/orders", requireUser, (req, res) => {
-  const mine = store.orders
-    .filter((o) => o.account_id && String(o.account_id) === String(req.session.userId))
-    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
-    .slice(0, 50)
+router.get("/orders", requireUser, async (req, res) => {
+  // 손님의 지난 주문은 몇 달 전 것도 보여줘야 한다. 메모리의 store.orders 는
+  // 최근 며칠치뿐이므로(src/db.js) 컬렉션에 직접 물어본다 — account_id 에
+  // 인덱스가 걸려 있어 손님 한 명 것만 골라 온다.
+  const mine = (await findOrders(
+    { account_id: req.session.userId },
+    { sort: { created_at: -1 }, limit: 50 }
+  ))
     .map((o) => ({
       id: o.id,
       table_number: o.table_number,

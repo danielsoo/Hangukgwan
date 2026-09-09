@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId } = require("../db");
+const { store, save, nextId, findOrders } = require("../db");
 const { requireOwner } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
 const { sendLineMessage, formatSettlementSummary } = require("../line");
@@ -24,12 +24,22 @@ function saveSettlementSnapshot(snapshot) {
 // tab shows when opened, so the owner never has to press a button to "do"
 // the settlement. Accepts either ?date=YYYY-MM-DD (single day) or
 // ?start=YYYY-MM-DD&end=YYYY-MM-DD (inclusive range, e.g. "이번 주").
-router.get("/", requireOwner, (req, res) => {
+router.get("/", requireOwner, async (req, res) => {
   const today = taipeiDateString();
   const start = req.query.start || req.query.date || today;
   const end = req.query.end || req.query.date || start;
-  res.json(computeSettlement(store, start, end));
+  // 메모리의 store.orders 는 최근 며칠치뿐이다(src/db.js) — 지난 달 결산을
+  // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
+  // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
+  const orders = await ordersInRange(start, end);
+  res.json(computeSettlement(orders, start, end));
 });
+
+// 결산이 볼 주문을 날짜 범위로 가져온다. 인덱스는 created_at 에 걸려 있다
+// (src/migrations/2026-09-10-orders-collection.js).
+function ordersInRange(start, end) {
+  return findOrders({ created_at: { $gte: `${start} 00:00:00`, $lte: `${end} 23:59:59` } });
+}
 
 // Permanent nightly snapshots (written by the cron job below, or manually
 // via POST /close) — kept in case orders are later edited/pruned and the
@@ -45,7 +55,7 @@ router.get("/history", requireOwner, (req, res) => {
 // snapshot for that date rather than duplicating it.
 router.post("/close", requireOwner, async (req, res) => {
   const date = (req.body && req.body.date) || taipeiDateString();
-  const snapshot = computeSettlement(store, date);
+  const snapshot = computeSettlement(await ordersInRange(date, date), date);
   saveSettlementSnapshot(snapshot);
   await save();
   res.json(snapshot);
@@ -74,7 +84,7 @@ router.get("/cron-close", async (req, res) => {
     }
   }
   const date = taipeiDateString();
-  const snapshot = computeSettlement(store, date);
+  const snapshot = computeSettlement(await ordersInRange(date, date), date);
   saveSettlementSnapshot(snapshot);
   await save();
 

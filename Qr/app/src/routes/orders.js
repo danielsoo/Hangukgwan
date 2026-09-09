@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId } = require("../db");
+const { store, save, nextId, saveOrder, saveOrders } = require("../db");
 const { requireAdmin } = require("../auth");
 const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
@@ -369,7 +369,10 @@ router.post("/", async (req, res) => {
     account_id: customer && customer.accountId ? customer.accountId : null,
   };
   store.orders.push(order);
-  await save();
+  // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
+  // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이
+  // 싸다 — 예전에는 이 한 줄이 몇 MB를 다시 쓰는 일이었다.
+  await Promise.all([saveOrder(order), save()]);
   broadcastOrdersChanged();
 
   res.status(201).json(order);
@@ -431,11 +434,16 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   if (!Array.isArray(orderIds) || orderIds.length === 0) {
     return res.status(400).json({ error: "invalid_order_ids" });
   }
+  const touched = [];
   orderIds.forEach((id, index) => {
     const order = store.orders.find((o) => o.id === parseInt(id, 10));
-    if (order) order.queue_order = index;
+    if (order) {
+      order.queue_order = index;
+      touched.push(order);
+    }
   });
-  await save();
+  // 순서를 바꾼 주문만 쓴다.
+  await saveOrders(touched);
   broadcastOrdersChanged();
   res.json({ ok: true });
 });
@@ -500,9 +508,12 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 주문이 전부 취소돼서 받을 돈이 아예 없는 테이블은 결제할 것이 없으므로
   // 이 길로 들어오지 않는다 — 결제 탭의 「손님 나감」 버튼으로 직원이 직접
   // 비운다(DELETE /api/tables/:n/party-size).
-  if (status === "paid") clearPartySizeIfSettled(store, order.table_number);
+  const partyCleared = status === "paid" && clearPartySizeIfSettled(store, order.table_number);
 
-  await save();
+  // 이 주문 하나만 쓴다. store 문서는 인원수가 실제로 비워졌을 때만 —
+  // 사장님이 5~20초를 기다리던 버튼이 바로 이 자리다.
+  await saveOrder(order);
+  if (partyCleared) await save();
   broadcastOrdersChanged();
   res.json(order);
 });
@@ -583,7 +594,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   order.total = order.vip_discount_percent ? Math.round((total * (100 - order.vip_discount_percent)) / 100) : total;
   order.updated_at = nowLocal();
 
-  await save();
+  await saveOrder(order);
   broadcastOrdersChanged();
   res.json(order);
 });
@@ -661,12 +672,14 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   // paid였던 경우 포함) 이 주문 전체를 paid로 넘긴다 — PATCH /:id와 같은
   // party_size 정리 규칙도 그대로 적용한다.
   const allPaid = order.items.every((it) => it.paid);
+  let partyCleared = false;
   if (allPaid) {
     order.status = "paid";
-    clearPartySizeIfSettled(store, order.table_number);
+    partyCleared = clearPartySizeIfSettled(store, order.table_number);
   }
 
-  await save();
+  await saveOrder(order);
+  if (partyCleared) await save();
   broadcastOrdersChanged();
   res.json({ updatedOrder: order });
 });

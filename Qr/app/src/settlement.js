@@ -26,8 +26,13 @@ const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 // day). Passing just one date computes that single day, same as before —
 // the admin 결산 tab now also lets the owner widen this into a date range
 // (e.g. "이번 주" or "이번 달") to see totals across multiple days at once.
-function computeSettlement(store, startDate, endDate = startDate) {
-  const rangeOrders = store.orders.filter((o) => {
+// 2026-09-10: 주문이 store 문서 밖으로 나가면서(src/db.js), 메모리의
+// store.orders 는 "안 끝난 주문 + 최근 며칠"만 담는다. 결산은 지난 달치도
+// 봐야 하므로 여기서 store 를 뒤지면 조용히 적게 나온다 — 돈 숫자가 조용히
+// 틀리는 건 최악이다. 그래서 이 함수는 계산만 하고, 어떤 주문을 볼지는
+// 부르는 쪽이 질의해서 넘긴다(src/routes/settlements.js).
+function computeSettlement(orders, startDate, endDate = startDate) {
+  const rangeOrders = (orders || []).filter((o) => {
     const d = o.created_at.slice(0, 10);
     return d >= startDate && d <= endDate;
   });

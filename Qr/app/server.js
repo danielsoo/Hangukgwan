@@ -5,12 +5,13 @@ const express = require("express");
 const session = require("express-session");
 const compression = require("compression");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB } = require("./src/db");
 const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
 const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-takeout-options");
+const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-orders-collection");
 
 const app = express();
 
@@ -130,6 +131,8 @@ app.use(async (req, res, next) => {
       await applyFollowup202609(store, { save });
       await applyMenuFixes20260904(store, { save, deletePhoto });
       await applyTakeoutOptions20260907(store, { save });
+      // 주문을 store 문서 밖으로 — 이 앱이 느렸던 가장 큰 이유다(src/db.js).
+      await applyOrdersCollection20260910(store, { save, getDb, connectDB });
       migratedOnce = true;
     }
     next();
@@ -146,6 +149,15 @@ app.use(
       mongoUrl: process.env.MONGODB_URI,
       dbName: process.env.MONGODB_DB || "hangukgwan",
       collectionName: "sessions",
+      // 세션 만료 시각만 늘리는 쓰기를 요청마다 하지 않는다.
+      //
+      // resave:false 는 "세션 내용이 안 바뀌면 다시 저장하지 마라"이지만,
+      // connect-mongo 는 그와 별개로 만료 시각을 갱신하려고 매 요청 touch
+      // 를 한다 — 그래서 관리자 화면이 4초마다 폴링할 때마다 Mongo 에 쓰기가
+      // 한 번씩 더 나갔다. touchAfter 를 두면 마지막 갱신에서 이만큼 지난
+      // 뒤에만 쓴다. 세션은 12시간짜리라 10분 단위로 늘려도 만료가 앞당겨질
+      // 일이 없다.
+      touchAfter: 10 * 60, // 초
     }),
     resave: false,
     saveUninitialized: false,

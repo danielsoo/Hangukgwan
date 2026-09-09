@@ -77,6 +77,28 @@ function matchOne(val, cond) {
   return val === want;
 }
 
+// 필드를 골라 내보낸다. {orders: 0} 처럼 빼는 형태와 {orders: 1} 처럼
+// 고르는 형태 둘 다 — src/db.js 의 refreshStore() 가 store 문서에서 주문을
+// 빼고 읽는 데 쓴다. 예전에는 두 번째 인자를 통째로 무시해서, "주문을 안
+// 읽는다"는 이 변경의 핵심이 테스트에서 확인되지 않았다.
+function project(doc, projection) {
+  if (!projection || !Object.keys(projection).length) return doc;
+  const keys = Object.keys(projection).filter((k) => k !== "_id");
+  const including = keys.some((k) => projection[k]);
+  const out = {};
+  if (including) {
+    if (projection._id !== 0) out._id = doc._id;
+    for (const k of keys) if (projection[k] && k in doc) out[k] = doc[k];
+    return out;
+  }
+  for (const [k, v] of Object.entries(doc)) {
+    if (k === "_id" && projection._id === 0) continue;
+    if (keys.includes(k)) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 function matches(doc, filter) {
   for (const [key, cond] of Object.entries(filter || {})) {
     if (key === "$or") {
@@ -129,8 +151,9 @@ class Collection {
       }
     }
   }
-  async findOne(filter) {
-    return this.docs.find((d) => matches(d, filter)) || null;
+  async findOne(filter, opts = {}) {
+    const doc = this.docs.find((d) => matches(d, filter)) || null;
+    return doc ? project(doc, opts.projection) : null;
   }
   async insertOne(doc) {
     const _id = doc._id || new ObjectId();
@@ -179,6 +202,12 @@ class Collection {
       this._checkUnique(candidate, doc._id);
       Object.assign(doc, plain);
     }
+    if (update.$unset) {
+      for (const k of Object.keys(update.$unset)) delete doc[k];
+    }
+    if (update.$inc) {
+      for (const [k, v] of Object.entries(update.$inc)) doc[k] = (doc[k] || 0) + v;
+    }
     return { matchedCount: 1 };
   }
   async replaceOne(filter, doc, opts = {}) {
@@ -192,11 +221,41 @@ class Collection {
     if (idx >= 0) this.docs.splice(idx, 1);
     return { deletedCount: idx >= 0 ? 1 : 0 };
   }
+  // 여러 건을 한 번에 쓴다. src/db.js 의 saveOrders() 와 주문 이관
+  // 마이그레이션이 쓴다. 예전에는 이 메서드가 없어서, 그 경로를 지나는
+  // 테스트가 있었다면 그냥 터졌을 것이다 — 없어서 안 터졌을 뿐이고,
+  // 그건 "통과"가 아니라 "안 지나감"이다.
+  async bulkWrite(ops = []) {
+    let upserted = 0;
+    let modified = 0;
+    let deleted = 0;
+    for (const op of ops) {
+      if (op.replaceOne) {
+        const { filter, replacement, upsert } = op.replaceOne;
+        const idx = this.docs.findIndex((d) => matches(d, filter));
+        if (idx >= 0) { this.docs[idx] = { ...replacement }; modified++; }
+        else if (upsert) { this.docs.push({ ...replacement }); upserted++; }
+      } else if (op.updateOne) {
+        const { filter, update, upsert } = op.updateOne;
+        await this.updateOne(filter, update, { upsert });
+        modified++;
+      } else if (op.deleteOne) {
+        const idx = this.docs.findIndex((d) => matches(d, op.deleteOne.filter));
+        if (idx >= 0) { this.docs.splice(idx, 1); deleted++; }
+      } else if (op.insertOne) {
+        await this.insertOne(op.insertOne.document);
+        upserted++;
+      } else {
+        throw new Error(`fake-mongo: bulkWrite 가 모르는 연산 ${Object.keys(op).join(",")}`);
+      }
+    }
+    return { upsertedCount: upserted, modifiedCount: modified, deletedCount: deleted };
+  }
   async countDocuments(filter = {}) {
     return this.docs.filter((d) => matches(d, filter)).length;
   }
-  find(filter = {}) {
-    let rows = this.docs.filter((d) => matches(d, filter));
+  find(filter = {}, opts = {}) {
+    let rows = this.docs.filter((d) => matches(d, filter)).map((d) => project(d, opts.projection));
     const chain = {
       sort(spec) {
         const [field, dir] = Object.entries(spec)[0];
