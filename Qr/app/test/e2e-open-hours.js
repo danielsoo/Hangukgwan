@@ -245,6 +245,45 @@ function hm(offsetMinutes) {
     check("그 날 휴무가 저장된다", !!(saved.date_rules && saved.date_rules[someDate] && saved.date_rules[someDate].closed),
       JSON.stringify(saved.date_rules));
     check("이유도 같이 저장된다", (saved.date_rules[someDate] || {}).note === "태풍", JSON.stringify(saved.date_rules));
+
+    // 사유는 선택이다 (2026-09-10 사장님: "사유도 적을 수 있게 해줘 필수는
+    // 아니지만"). 시간만 줄인 날에도 적을 수 있어야 하고, 안 적어도 규칙은
+    // 그대로 살아 있어야 한다.
+    const other = adminPage.locator("#ohCalGrid .oh-cal-day").nth(17);
+    const otherDate = await other.getAttribute("data-oh-date");
+    await other.click();
+    await adminPage.waitForTimeout(250);
+    await adminPage.locator("#ohDatePanel select[data-oh-datemode]").selectOption("custom");
+    await adminPage.waitForTimeout(250);
+    check("시간 지정한 날에도 이유 칸이 나온다", await adminPage.locator("#ohDatePanel .oh-note").isVisible());
+    check("예시가 그 상황에 맞게 바뀐다",
+      !(await adminPage.locator("#ohDatePanel input[data-oh-note]").getAttribute("placeholder")).includes("휴무"),
+      await adminPage.locator("#ohDatePanel input[data-oh-note]").getAttribute("placeholder"));
+    await adminPage.locator("#ohDatePanel input[data-oh-note]").fill("태풍으로 저녁만");
+    await adminPage.locator("#saveOrderHoursBtn").click();
+    await adminPage.waitForTimeout(800);
+    {
+      const s2 = await adminPage.evaluate(async () => (await fetch("/api/settings/order-hours")).json());
+      check("시간 지정한 날의 이유가 저장된다", (s2.date_rules[otherDate] || {}).note === "태풍으로 저녁만",
+        JSON.stringify(s2.date_rules));
+      check("그 날 시간도 같이 저장된다", ((s2.date_rules[otherDate] || {}).ranges || []).length >= 1,
+        JSON.stringify(s2.date_rules));
+    }
+
+    // 안 적어도 된다.
+    const third = adminPage.locator("#ohCalGrid .oh-cal-day").nth(19);
+    const thirdDate = await third.getAttribute("data-oh-date");
+    await third.click();
+    await adminPage.waitForTimeout(250);
+    await adminPage.locator("#ohDatePanel select[data-oh-datemode]").selectOption("closed");
+    await adminPage.waitForTimeout(250);
+    await adminPage.locator("#saveOrderHoursBtn").click();
+    await adminPage.waitForTimeout(800);
+    {
+      const s3 = await adminPage.evaluate(async () => (await fetch("/api/settings/order-hours")).json());
+      check("이유 없이도 휴무가 저장된다", !!(s3.date_rules[thirdDate] || {}).closed, JSON.stringify(s3.date_rules));
+      check("빈 이유는 저장되지 않는다", !("note" in (s3.date_rules[thirdDate] || {})), JSON.stringify(s3.date_rules));
+    }
     check("저장 뒤에도 달력에 남아 있다",
       (await adminPage.locator(`#ohCalGrid .oh-cal-day[data-oh-date="${someDate}"]`).getAttribute("class")).includes("mode-closed"));
 

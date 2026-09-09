@@ -119,6 +119,19 @@ check("다음날은 저절로 돌아온다", oh.isOpenNow(typhoon, "2026-09-12 1
   check("이유도 같이 알려준다", st.today_note === "태풍", st.today_note);
   check("다음 영업은 다음날 11:00", st.next_open_at === "2026-09-12 11:00", st.next_open_at);
 }
+// 문을 닫지 않고 시간만 줄인 날도 이유를 손님에게 전한다 — 휴무일 때만
+// 되면 "태풍이라 저녁만 합니다" 를 알릴 방법이 없다.
+{
+  const st = oh.orderingState({
+    order_hours: {
+      enabled: 1, ranges: [{ start: "11:00", end: "21:00" }], closed_days: [], day_ranges: {},
+      date_rules: { "2026-09-11": { ranges: [{ start: "17:00", end: "21:00" }], note: "태풍으로 저녁만" } },
+    },
+  }, "2026-09-11 12:00:00");
+  check("시간만 줄인 날도 이유가 나간다", st.today_note === "태풍으로 저녁만", st.today_note);
+  check("그 날은 휴무가 아니다", st.today_closed === false);
+  check("그 날 시간을 보여준다", st.ranges_text === "17:00~21:00", st.ranges_text);
+}
 
 // 그 날만 시간을 줄이는 경우 — 태풍이 지나간 오후에만 연다.
 const halfDay = {
@@ -157,6 +170,23 @@ check("날짜 형식이 아니면 버린다",
 check("빈 규칙은 저장하지 않는다",
   Object.keys(oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
     date_rules: { "2099-01-01": {} } }).date_rules).length === 0);
+// 사유는 선택이다 (2026-09-10 사장님: "사유도 적을 수 있게 해줘 필수는
+// 아니지만"). 안 적어도 규칙은 그대로 살아 있어야 한다.
+check("이유 없이도 휴무는 저장된다",
+  !!oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": { closed: 1 } } }).date_rules["2099-01-01"].closed);
+check("이유 없이 저장하면 빈 칸이 남지 않는다",
+  !("note" in oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": { closed: 1, note: "   " } } }).date_rules["2099-01-01"]));
+// 시간을 줄인 날에도 이유를 적을 수 있어야 한다 — 휴무만 되면 "태풍이라
+// 저녁만 합니다" 를 알릴 방법이 없다.
+{
+  const cfg = oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": { ranges: [{ start: "17:00", end: "21:00" }], note: "태풍으로 저녁만" } } });
+  check("시간 지정한 날에도 이유가 남는다", cfg.date_rules["2099-01-01"].note === "태풍으로 저녁만",
+    JSON.stringify(cfg.date_rules));
+  check("그 날 시간도 그대로 남는다", cfg.date_rules["2099-01-01"].ranges[0].start === "17:00");
+}
 check("이유는 40자까지",
   oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
     date_rules: { "2099-01-01": { closed: 1, note: "가".repeat(80) } } }).date_rules["2099-01-01"].note.length === 40);

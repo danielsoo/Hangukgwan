@@ -604,8 +604,9 @@
       orderHoursDateCustom: "이 날만 시간 지정",
       orderHoursMarkClosed: "휴",
       orderHoursMarkCustom: "시",
-      orderHoursNoteLabel: "이유 (손님에게도 보여요)",
+      orderHoursNoteLabel: "이유 (선택 · 적으면 손님에게도 보여요)",
       orderHoursNotePlaceholder: "예: 태풍 휴무",
+      orderHoursNotePlaceholderHours: "예: 태풍으로 저녁만 영업",
       orderHoursDayDefault: "기본과 같음",
       orderHoursDayCustom: "직접 지정",
       orderHoursDayClosed: "휴무",
@@ -1150,8 +1151,9 @@
       orderHoursDateCustom: "當日另訂時間",
       orderHoursMarkClosed: "休",
       orderHoursMarkCustom: "時",
-      orderHoursNoteLabel: "原因（顧客也看得到）",
+      orderHoursNoteLabel: "原因（選填 · 填了顧客也看得到）",
       orderHoursNotePlaceholder: "例：颱風公休",
+      orderHoursNotePlaceholderHours: "例：颱風影響，僅晚間營業",
       orderHoursDayDefault: "同預設",
       orderHoursDayCustom: "自訂",
       orderHoursDayClosed: "公休",
@@ -6773,7 +6775,9 @@
     noteWrap.querySelector("span").textContent = T("orderHoursNoteLabel");
     const noteInput = noteWrap.querySelector("input");
     noteInput.value = rule.note || "";
-    noteInput.placeholder = T("orderHoursNotePlaceholder");
+    // 예시는 고른 것에 맞춘다. 시간을 줄인 날에 "예: 태풍 휴무" 가 떠 있으면
+    // 무엇을 적으라는 건지 헷갈린다.
+    noteInput.placeholder = T(mode === "closed" ? "orderHoursNotePlaceholder" : "orderHoursNotePlaceholderHours");
     noteWrap.hidden = mode === "default";
     noteInput.oninput = () => {
       const r = orderHoursCfg.date_rules[date];
