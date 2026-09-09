@@ -172,6 +172,27 @@ function hm(offsetMinutes) {
     check("직원 주문은 들어간다", r.status === 201, JSON.stringify(r));
   }
 
+  // 수기 주문은 손님 주문 페이지를 그대로 연다(관리자 > 수기 주문). 그래서
+  // 그 화면이 직원에게도 잠기면 사장님이 말한 "직원들이 직접 앱에서 수동
+  // 주문" 이 불가능해진다. 서버만 통과시켜서는 소용이 없다 — 버튼이 안 눌린다.
+  {
+    const staffOrderPage = await admin.newPage();
+    staffOrderPage.on("dialog", (d) => d.dismiss());
+    await staffOrderPage.goto(`${base}/t/${table.number}`, { waitUntil: "networkidle" });
+    await staffOrderPage.waitForTimeout(500);
+    check("직원 화면에서는 주문 버튼이 안 잠긴다",
+      !(await staffOrderPage.locator("#submitOrderBtn").isDisabled()));
+    check("직원 화면에서는 담기 버튼도 안 잠긴다",
+      !(await staffOrderPage.locator("#addToCartBtn").isDisabled()));
+    // 그래도 지금이 영업시간 밖이라는 건 알려줘야 한다 — 안 그러면 직원은
+    // 손님도 지금 주문할 수 있는 줄 안다.
+    const banner = await staffOrderPage.locator("#closedBanner").innerText();
+    check("직원 모드라고 알려준다", banner.includes("店員") || banner.includes("직원"), banner);
+    check("손님 안내와 색이 다르다",
+      (await staffOrderPage.locator("#closedBanner").getAttribute("class")).includes("staff-mode"));
+    await staffOrderPage.close();
+  }
+
   out.push("\n[관리자 화면이 지금 상태를 말해준다]");
   // 규칙만 보여주면 사장님이 머리로 시계를 맞춰봐야 하고, 그러다
   // "왜 손님이 주문을 못 하지" 가 된다.

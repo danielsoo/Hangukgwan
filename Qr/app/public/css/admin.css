@@ -952,6 +952,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .table-picker-btn:hover { border-color: var(--red); color: var(--red); background: #fdf3f2; }
 .table-picker-btn.selected { border-color: var(--red); background: var(--red); color: #fff; }
 .table-picker-empty { color: var(--muted); font-size: 17px; padding: 16px 0; text-align: center; }
+/* 자리 이동 — 이미 손님이 있는 자리도 고를 수 있게 두되(두 테이블을 하나로
+   합치는 일이 실제로 있다), 고르기 전에 보이게 표시한다. 숨기면 "왜 저
+   자리가 없지" 가 되고, 표시가 없으면 남의 주문에 얹는 줄 모른다. */
+.table-picker-btn.occupied { background: #fdf6ec; border-color: #e6d4b8; }
+.table-picker-btn .picker-sub { display: block; font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 2px; }
+/* 옮겨온 주문 — 주방에는 이미 옛 번호가 찍힌 티켓이 나가 있다. */
+.order-card-moved { font-size: 12px; font-weight: 600; color: #8a5a1c; background: #fdf3e2; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 
 /* 주문 수정 (edit an already-placed order's items) — see openOrderEdit()
    in admin.js. order-edit-item-row-main always holds name/qty/price/delete

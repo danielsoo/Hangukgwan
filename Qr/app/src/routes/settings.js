@@ -75,8 +75,19 @@ function photoIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
+// is_staff — 지금 이 화면을 보는 사람이 로그인한 직원인가.
+//
+// 수기 주문(관리자 > 수기 주문)은 손님 주문 페이지를 그대로 연다. 그래서
+// 영업시간 밖에 그 화면이 잠기면 직원도 같이 묶인다. 사장님(2026-09-10):
+// "직원들이 직접 앱에서 수동 주문을 할 때는 가능할 수 있도록."
+// 서버는 이미 직원을 통과시키므로(src/routes/orders.js), 화면도 같은 답을
+// 알아야 한다. 비밀은 아니다 — 로그인한 본인에게 로그인했다고 말해주는 것뿐.
+function withViewer(req, body) {
+  return Object.assign(body, { is_staff: !!(req.session && req.session.isAdmin) });
+}
+
 router.get("/", (req, res) => {
-  res.json(publicSettings());
+  res.json(withViewer(req, publicSettings()));
 });
 
 router.put("/", canEditSettings, async (req, res) => {
@@ -95,7 +106,7 @@ router.put("/", canEditSettings, async (req, res) => {
 // Firebase 설정 같은 것까지 들어 있어서, 테이블 20개가 1분마다 그걸 다시
 // 받아가면 아무 의미 없는 트래픽이 된다.
 router.get("/ordering", (req, res) => {
-  res.json(orderingState(store.settings));
+  res.json(withViewer(req, orderingState(store.settings)));
 });
 
 // 주문 받는 시간 — 손님이 QR 로 주문할 수 있는 시각. 손님에게 보여주는

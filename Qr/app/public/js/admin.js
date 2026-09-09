@@ -464,6 +464,11 @@
       noOrdersYetAdmin: "아직 주문이 없습니다.",
       unpaidTotalLabel: "현재 미결제 합계:",
       clearPartySizeBtn: "👥 손님 나감 (인원수 비우기)",
+      moveTableBtn: "🔀 자리 이동",
+      moveTableModalTitle: "자리 이동 — 옮길 자리 선택",
+      moveTableOccupied: "손님 있음",
+      moveTableNoTargets: "옮길 수 있는 자리가 없습니다",
+      moveTableFailed: "자리 이동에 실패했습니다. 다시 시도해주세요",
       clearPartySizeConfirm: "이 테이블의 등록된 인원수를 비울까요? 다음 손님에게 인원수를 다시 물어봅니다.",
       clearPartySizeDone: "인원수를 비웠습니다.",
       clearPartySizeFailed: "인원수를 비우지 못했습니다. 다시 시도해주세요.",
@@ -1011,6 +1016,11 @@
       noOrdersYetAdmin: "目前尚無訂單。",
       unpaidTotalLabel: "目前未結帳金額：",
       clearPartySizeBtn: "👥 客人已離開（清除人數）",
+      moveTableBtn: "🔀 換桌",
+      moveTableModalTitle: "換桌 — 選擇要移到的桌號",
+      moveTableOccupied: "有客人",
+      moveTableNoTargets: "沒有可以移動的桌號",
+      moveTableFailed: "換桌失敗，請再試一次",
       clearPartySizeConfirm: "要清除這桌已登記的人數嗎？下一位客人會重新被詢問人數。",
       clearPartySizeDone: "已清除人數。",
       clearPartySizeFailed: "清除人數失敗，請再試一次。",
@@ -1682,6 +1692,17 @@
     adminLang === "zh" ? `確定要將桌號 ${n} 移出此區域嗎？（桌號本身不會被刪除）` : `테이블 ${n}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`;
   const fmtConfirmDeleteZone = (name) =>
     adminLang === "zh" ? `確定要刪除「${name}」這個區域嗎？（區域內的桌號不會被刪除，只會取消配置）` : `"${name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`;
+  const fmtMoveTableHint = (from) =>
+    adminLang === "zh"
+      ? `將「${from}」尚未結帳的訂單整組移到選擇的桌號。已結帳的訂單不會移動。`
+      : `"${from}"의 아직 결제되지 않은 주문을 통째로 옮깁니다. 이미 결제된 주문은 그대로 둡니다.`;
+  const fmtConfirmMove = (from, to) =>
+    adminLang === "zh" ? `將「${from}」的客人移到「${to}」嗎？` : `"${from}" 손님을 "${to}"으로 옮길까요?`;
+  const fmtConfirmMoveMerge = (from, to) =>
+    adminLang === "zh"
+      ? `「${to}」已經有客人。兩桌會合併為一桌（人數相加）。要繼續嗎？`
+      : `"${to}"에는 이미 손님이 있습니다. 두 자리가 한 테이블로 합쳐집니다(인원수는 더해집니다). 계속할까요?`;
+  const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
   const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
@@ -2624,9 +2645,12 @@
     // 포장 카운터 orders aren't a real table — "테이블 COUNTER" would be
     // meaningless to staff, so show its pickup number + name instead.
     const tableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}`;
+    // 자리를 옮긴 주문 — 주방에는 이미 옛 번호가 찍힌 티켓이 나가 있다.
+    // 이 표시가 없으면 "5번 것이 왜 8번에 있지" 가 된다.
+    const movedTag = o.moved_from ? `<span class="order-card-moved">${fmtMovedFrom(o.moved_from)}</span>` : "";
     card.innerHTML = `
       <div class="order-card-top">
-        <span>${tableTag}${typeBadge}</span>
+        <span>${tableTag}${typeBadge}${movedTag}</span>
         <span class="order-card-top-right">
           <span class="order-card-time">${time}</span>
           <span class="order-card-drag-handle" title="${T("dragHandleTitle")}">⠿</span>
@@ -4289,10 +4313,19 @@
     // 하는 건 「결제 완료」이고, 그쪽이 인원수까지 알아서 정리한다.
     // 실수로 눌러도 되돌릴 수 있다 — 손님에게 인원수만 다시 물으면 된다.
     const showClearParty = !!(table && !table.is_counter && table.party_size && unpaidOrders.length === 0);
+    // 자리 이동 — 받을 돈이 남아 있는 진짜 테이블에서만 내놓는다. 옮길 게
+    // 없으면 누를 이유가 없고, 포장 카운터는 자리가 아니다(주문들이 서로
+    // 무관한 손님 것이라 테이블로 옮기면 누구 것인지 알 수 없어진다).
+    // focusOrderId 로 좁혀 들어온 화면에서도 내놓지 않는다 — 거기서 누르면
+    // 화면에 안 보이는 다른 주문까지 같이 옮겨진다.
+    const showMoveTable = !!(table && !table.is_counter && unpaidOrders.length > 0 && !focusOrderId);
     const header = `
       <h2>${titleText}${partyText}</h2>
       <div style="margin-top:-6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
+        ${showMoveTable
+          ? `<button type="button" id="moveTableBtn" class="table-detail-clear-party">${T("moveTableBtn")}</button>`
+          : ""}
         ${showClearParty
           ? `<button type="button" id="clearPartySizeBtn" class="table-detail-clear-party">${T("clearPartySizeBtn")}</button>`
           : ""}
@@ -4460,6 +4493,9 @@
         }
       };
     }
+    const moveBtn = $("#moveTableBtn");
+    if (moveBtn) moveBtn.onclick = () => openMoveTable(tableNumber, label || openTableLabel);
+
     $("#tableDetailBody")
       .querySelectorAll("[data-edit-id]")
       .forEach((btn) => {
@@ -6301,6 +6337,66 @@
     await loadOrders();
     await loadTables();
   };
+
+  // ---------- 자리 이동 ----------
+  // 2026-09-10 사장님: "손님이 주문하고 난 후에도 좌석 이동을 가능하게 해줘.
+  // 지금은 합산 결제 기능만 있는데 자리 이동 만들어줘."
+  //
+  // 합산 결제와 다른 일이다. 합산 결제는 결제할 때만 합칠 뿐 주문이 어느
+  // 테이블 것인지는 그대로 두는데, 자리를 옮기는 건 지금부터 그 손님이 저
+  // 자리에 있다는 뜻이다 — 다음 주문도, 결산의 테이블별 매출도 새 자리로 간다.
+  function openMoveTable(fromNumber, fromLabel) {
+    const grid = $("#moveTableGrid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    $("#moveTableHint").textContent = fmtMoveTableHint(fromLabel || fromNumber);
+    const candidates = [...tables]
+      .filter((t) => !t.is_counter && String(t.number) !== String(fromNumber))
+      .sort((a, b) => parseInt(a.number, 10) - parseInt(b.number, 10));
+    if (!candidates.length) {
+      grid.innerHTML = `<div class="table-picker-empty">${T("moveTableNoTargets")}</div>`;
+    }
+    candidates.forEach((t) => {
+      // 이미 손님이 있는 자리도 고를 수 있게 둔다 — 두 테이블을 하나로 합치는
+      // 일이 실제로 있다. 다만 고르기 전에 보이게 표시한다.
+      const occupied = activeOrdersForTable(t.number).some((o) => o.status !== "paid");
+      const btn = document.createElement("button");
+      btn.className = "table-picker-btn" + (occupied ? " occupied" : "");
+      btn.innerHTML = `<span>${t.label || t.number}</span>${occupied ? `<span class="picker-sub">${T("moveTableOccupied")}</span>` : ""}`;
+      btn.onclick = async () => {
+        const msg = occupied
+          ? fmtConfirmMoveMerge(fromLabel || fromNumber, t.label || t.number)
+          : fmtConfirmMove(fromLabel || fromNumber, t.label || t.number);
+        if (!(await showConfirm(msg))) return;
+        btn.disabled = true;
+        try {
+          const res = await fetch("/api/orders/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ from: String(fromNumber), to: String(t.number) }),
+          });
+          if (!res.ok) throw new Error("failed");
+          $("#moveTableBackdrop").hidden = true;
+          await loadOrders();
+          await loadTables();
+          // 옮긴 자리를 바로 열어준다 — 옮겼는데 화면이 빈 옛 자리에
+          // 머물러 있으면 정말 옮겨졌는지 알 수 없다.
+          openTableDetail(String(t.number), t.label || String(t.number));
+          if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+        } catch (e) {
+          btn.disabled = false;
+          await showAlert(T("moveTableFailed"));
+        }
+      };
+      grid.appendChild(btn);
+    });
+    $("#moveTableBackdrop").hidden = false;
+  }
+
+  $("#moveTableClose") && ($("#moveTableClose").onclick = () => ($("#moveTableBackdrop").hidden = true));
+  $("#moveTableBackdrop") && $("#moveTableBackdrop").addEventListener("click", (e) => {
+    if (e.target.id === "moveTableBackdrop") $("#moveTableBackdrop").hidden = true;
+  });
 
   // ---------- 수기 주문 (staff enters an order on a customer's behalf, e.g.
   // no phone or prefers ordering in person) ----------

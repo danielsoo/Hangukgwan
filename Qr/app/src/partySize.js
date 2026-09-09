@@ -40,4 +40,28 @@ function clearPartySizeIfSettled(store, tableNumber) {
   return true;
 }
 
-module.exports = { hasUnpaidOrder, clearPartySizeIfSettled };
+/**
+ * 자리 이동 — 인원수도 손님을 따라간다.
+ *
+ * 2026-09-10 사장님: "손님이 주문하고 난 후에도 좌석 이동을 가능하게 해줘."
+ *
+ * 이 파일에 두는 이유: 인원수를 지우는 코드가 여기저기 흩어지면 위의 규칙이
+ * 조용히 무너진다. 여기서 비우는 건 "손님이 나갔다" 가 아니라 "그 손님이
+ * 저쪽 자리로 갔다" 이고, 그래서 저쪽에 그대로 옮겨 붙는다 — 옮긴 자리에서
+ * 인원수를 다시 물어보면 안 된다.
+ *
+ * 이미 손님이 있는 자리로 합치는 경우에는 두 인원을 더한다. 그 자리는 이제
+ * 한 테이블이고, 1인당 최소 주문 같은 계산이 인원수를 쓴다.
+ */
+function movePartySize(store, fromNumber, toNumber) {
+  const from = store.tables.find((t) => String(t.number) === String(fromNumber));
+  const to = store.tables.find((t) => String(t.number) === String(toNumber));
+  if (!from || !to || !from.party_size) return false;
+  to.party_size = (to.party_size || 0) + from.party_size;
+  to.party_size_updated_at = new Date().toISOString();
+  from.party_size = null;
+  from.party_size_updated_at = null;
+  return true;
+}
+
+module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize };

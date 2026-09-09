@@ -61,6 +61,26 @@ check("주문 상태 변경에서 결제일 때만 인원수를 정리한다",
   /status === "paid" && clearPartySizeIfSettled\(/.test(ordersSrc));
 check("예전의 \"살아 있는 주문이 없으면 지운다\" 규칙이 남아 있지 않다",
   !/party_size = null/.test(ordersSrc), "orders.js 안에서 직접 지우는 코드가 남아 있다");
+
+// 자리 이동에서도 인원수를 라우트가 직접 만지지 않는다. 여기서 비우는 건
+// "손님이 나갔다" 가 아니라 "그 손님이 저쪽 자리로 갔다" 이고, 그래서
+// 저쪽에 그대로 옮겨 붙어야 한다 — 옮긴 자리에서 다시 물어보면 안 된다.
+// 규칙이 이 파일 밖으로 새면 위의 "결제했을 때만 비운다" 가 조용히 무너진다.
+check("자리 이동도 partySize.js 를 거친다", /movePartySize\(/.test(ordersSrc));
+{
+  const { movePartySize } = require("../src/partySize");
+  const s2 = { tables: [
+    { number: "5", party_size: 3 },
+    { number: "8", party_size: null },
+    { number: "9", party_size: 2 },
+  ] };
+  check("빈 자리로 옮기면 그대로 따라간다",
+    movePartySize(s2, "5", "8") && s2.tables[1].party_size === 3 && !s2.tables[0].party_size);
+  s2.tables[0].party_size = 4;
+  check("손님이 있는 자리로 합치면 더해진다",
+    movePartySize(s2, "5", "9") && s2.tables[2].party_size === 6, String(s2.tables[2].party_size));
+  check("인원수가 없으면 아무것도 안 한다", movePartySize(s2, "5", "8") === false);
+}
 const paymentsSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "payments.js"), "utf8");
 check("온라인 결제도 같은 규칙을 쓴다", /clearPartySizeIfSettled\(/.test(paymentsSrc));
 check("온라인 결제 쪽에도 직접 지우는 코드가 없다", !/party_size = null/.test(paymentsSrc));

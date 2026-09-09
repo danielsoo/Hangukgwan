@@ -24,7 +24,7 @@ function resolveSelectedAddons(mi, requestedNames) {
   return chosen;
 }
 
-const { clearPartySizeIfSettled } = require("../partySize");
+const { clearPartySizeIfSettled, movePartySize } = require("../partySize");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
 
@@ -531,6 +531,60 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   await saveOrders(touched);
   broadcastOrdersChanged();
   res.json({ ok: true });
+});
+
+// 자리 이동 — 앉아 있는 손님을 통째로 다른 테이블로 옮긴다.
+//
+// 2026-09-10 사장님: "손님이 주문하고 난 후에도 좌석 이동을 가능하게 해줘.
+// 지금은 합산 결제 기능만 있는데 자리 이동 만들어줘."
+//
+// 합산 결제와 다른 일이다. 합산 결제는 「결제할 때만 합치기」라 주문이 어느
+// 테이블 것인지는 그대로 두는데(그쪽 주석 참고), 자리를 옮기는 건 지금부터
+// 그 손님이 저 자리에 있다는 뜻이다 — 다음 주문도, 주방 티켓도, 결산의
+// 테이블별 매출도 새 자리로 가야 한다.
+//
+// 옮기는 건 아직 안 받은 주문뿐이다. 이미 결제된 주문은 그 자리에서 실제로
+// 일어난 매출이라 건드리지 않는다 — 옮기면 그날 테이블별 매출이 사실과
+// 달라진다.
+//
+// 이 파일에는 POST /:id 가 없어서 /reorder 가 겪었던 "이름이 id 로 잡히는"
+// 문제는 없다. 그래도 나중에 POST /:id 가 생기면 그 위에 있어야 한다.
+router.post("/move", requireAdmin, async (req, res) => {
+  const from = String((req.body || {}).from || "");
+  const to = String((req.body || {}).to || "");
+  if (!from || !to || from === to) return res.status(400).json({ error: "invalid_move" });
+
+  const fromTable = store.tables.find((t) => String(t.number) === from);
+  const toTable = store.tables.find((t) => String(t.number) === to);
+  if (!fromTable || !toTable) return res.status(404).json({ error: "table_not_found" });
+  // 포장 카운터는 자리가 아니다. 그 주문들은 서로 무관한 손님들 것이고
+  // 픽업번호·이름으로 구분되므로, 테이블로 옮기면 누구 것인지 알 수 없게 된다.
+  if (fromTable.is_counter || toTable.is_counter) return res.status(400).json({ error: "counter_not_movable" });
+
+  const moving = store.orders.filter(
+    (o) => String(o.table_number) === from && o.status !== "paid" && o.status !== "cancelled"
+  );
+  if (moving.length === 0) return res.status(400).json({ error: "nothing_to_move" });
+
+  const now = nowLocal();
+  for (const o of moving) {
+    // 어디서 왔는지 남긴다. 주방에는 이미 옛 번호가 찍힌 티켓이 나가 있어서,
+    // 직원이 화면에서 그 연결을 볼 수 없으면 "5번 것이 왜 8번에 있지" 가 된다.
+    o.moved_from = from;
+    o.moved_at = now;
+    o.table_number = to;
+    o.updated_at = now;
+  }
+
+  // 인원수도 따라간다. 규칙 자체는 src/partySize.js 에 있다 — 인원수를
+  // 비우는 코드가 이 파일에 흩어지면 "결제했을 때만 비운다" 는 규칙이
+  // 조용히 무너진다.
+  movePartySize(store, from, to);
+
+  await saveOrders(moving);
+  await save();
+  broadcastOrdersChanged();
+  res.json({ ok: true, moved: moving.length, from, to, party_size: toTable.party_size || null });
 });
 
 // Admin: update order status. Advancing an order forward (조리 시작 /

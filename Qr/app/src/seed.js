@@ -269,14 +269,17 @@ async function run() {
     store_address_en: process.env.STORE_ADDRESS_EN || "",
     store_hours: process.env.STORE_HOURS || "11:00-14:00, 17:00-21:00",
     // 영업시간 밖에는 손님이 QR 로 주문하지 못하게 한다 — 직원은 그대로
-    // 된다(src/openHours.js). 위 store_hours 는 손님에게 보여주는 자유
-    // 문구라 막는 기준으로 쓸 수 없어서, 같은 시간을 규칙 형태로 한 번 더
-    // 둔다. 이미 돌아가고 있는 가게는 마이그레이션이 같은 값을 넣어준다
-    // (src/migrations/2026-09-10-order-hours.js).
-    order_hours: require("./openHours").normalize(
-      { enabled: 1 },
-      process.env.STORE_HOURS || "11:00-14:00, 17:00-21:00"
-    ),
+    // 된다(src/openHours.js).
+    //
+    // 위 store_hours(손님에게 보여주는 문구)와 일부러 다르다. 이 가게는
+    // 영업 종료 30분 전에 주문을 닫는다 — 그때부터 주방이 정리에 들어가는데
+    // 손님은 아직 앉아 있으니 QR 은 그대로 눌린다. 사장님(2026-09-10):
+    // "문닫기 30분 전이라 좌석에 앉아 있지만 마감시간이기때문에 qr 주문 불가."
+    // 같은 값을 마이그레이션도 쓴다(src/migrations/2026-09-10-order-hours.js).
+    order_hours: require("./openHours").normalize({
+      enabled: 1,
+      ranges: require("./migrations/2026-09-10-order-hours").DEFAULT_ORDER_RANGES,
+    }),
     store_min_spend: process.env.STORE_MIN_SPEND || "200",
     store_notice: process.env.STORE_NOTICE || "",
     store_cover_photo: "",

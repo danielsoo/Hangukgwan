@@ -877,6 +877,18 @@
 <!-- Manual order: pick a table, then place the order on the actual customer
      order page (opened in a new tab) -- same menu/options/cart the customer
      would use, and it prints exactly like any other order once submitted. -->
+<!-- 자리 이동 — 앉아 있는 손님을 통째로 다른 테이블로 옮긴다.
+     합산 결제(결제할 때만 합치기)와 다른 일이다. 자세한 배경은
+     src/routes/orders.js 의 POST /move 주석. -->
+<div id="moveTableBackdrop" class="modal-backdrop" hidden>
+  <div class="modal add-table-zone-modal">
+    <button class="modal-close" id="moveTableClose">✕</button>
+    <h2 data-i18n="moveTableModalTitle">자리 이동 — 옮길 자리 선택</h2>
+    <p class="settings-hint" id="moveTableHint"></p>
+    <div id="moveTableGrid" class="table-picker-grid"></div>
+  </div>
+</div>
+
 <div id="manualOrderBackdrop" class="modal-backdrop" hidden>
   <div class="modal add-table-zone-modal">
     <button class="modal-close" id="manualOrderClose">✕</button>

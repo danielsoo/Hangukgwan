@@ -104,6 +104,12 @@
   // enabled 가 false 면(사장님이 안 켰거나 설정이 이상하면) 아무것도 막지
   // 않는다 — 못 막는 것보다 잘못 막는 게 훨씬 비싸다(src/openHours.js).
   let ordering = { enabled: false, open: true };
+
+  // 지금 이 화면을 보는 사람이 로그인한 직원인가. 수기 주문은 이 페이지를
+  // 그대로 열기 때문에(관리자 > 수기 주문), 영업시간 밖에 여기가 잠기면
+  // 직원도 같이 묶인다. 사장님(2026-09-10): "직원들이 직접 앱에서 수동
+  // 주문을 할 때는 가능할 수 있도록."
+  let isStaffSession = false;
   // True when this QR points at the counter's takeout-only order flow
   // instead of a real dine-in table (see the "포장 카운터" section in Admin >
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
@@ -232,8 +238,14 @@
     );
   }
 
-  function orderingClosed() {
+  /** 지금이 영업시간 밖인가 — 사실 그 자체. 직원인지와 무관하다. */
+  function orderingClosedForCustomers() {
     return !!(ordering && ordering.enabled && !ordering.open);
+  }
+
+  /** 이 화면에서 주문을 막아야 하는가. 직원은 막지 않는다. */
+  function orderingClosed() {
+    return orderingClosedForCustomers() && !isStaffSession;
   }
 
   /** "오늘 17:00" / "내일 11:00" / "09/15 11:00" — 며칠 뒤인지는 서버가 센다. */
@@ -269,6 +281,21 @@
   function applyOrderingState() {
     const closed = orderingClosed();
     const banner = $("#closedBanner");
+    // 직원에게는 잠그지 않되, 지금이 영업시간 밖이라는 것은 알려준다.
+    // 안 알려주면 직원은 손님도 지금 주문할 수 있는 줄 안다.
+    if (!closed && orderingClosedForCustomers() && isStaffSession) {
+      banner.classList.add("staff-mode");
+      banner.innerHTML = `<b>${t("closedStaffTitle")}</b><div class="closed-sub">${t("closedStaffSub")}</div>`;
+      banner.hidden = false;
+      for (const id of ["#addToCartBtn", "#submitOrderBtn"]) {
+        const btn = $(id);
+        if (!btn) continue;
+        btn.disabled = false;
+        btn.classList.remove("is-closed");
+      }
+      return;
+    }
+    banner.classList.remove("staff-mode");
     if (closed) {
       const lines = [`<b>${t("closedTitle")}</b>`];
       // 요일마다 시간이 다를 수 있으니 여기 적히는 건 "오늘" 의 시간이다
@@ -305,7 +332,9 @@
     try {
       const res = await fetch("/api/settings/ordering");
       if (!res.ok) return;
-      ordering = await res.json();
+      const body = await res.json();
+      ordering = body;
+      isStaffSession = !!body.is_staff;
       applyOrderingState();
     } catch (e) {
       // 네트워크가 잠깐 끊긴 것으로 주문을 막지는 않는다. 다음 분에 다시 묻는다.
@@ -325,6 +354,7 @@
     storeLng = Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;
     if (s.ordering) ordering = s.ordering;
+    isStaffSession = !!s.is_staff;
     applyOrderingState();
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     $("#storeName").textContent = s[`store_name_${lang}`] || s.store_name_zh || "韓國館";
