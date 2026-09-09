@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const { store, save, refreshAndSave, nextId, savePhoto, deletePhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
+const { withAvailability, today } = require("../availability");
 const canEditMenu = requirePermission("menuEdit");
 
 const router = express.Router();
@@ -27,11 +28,55 @@ function photoIdFromUrl(url) {
 function categoriesWithItems(onlyAvailable) {
   const cats = [...store.categories].sort((a, b) => a.sort_order - b.sort_order);
   return cats.map((c) => {
-    let items = store.menuItems.filter((i) => i.category_id === c.id);
+    // 품절 기간(src/availability.js)을 여기서 한 번 계산해 available 에
+    // 담아 내보낸다. 그러면 손님 화면·관리자 화면·주문 검사까지 전부
+    // 같은 판단을 보게 된다 — 화면마다 따로 계산하면 반드시 어긋난다.
+    let items = store.menuItems
+      .filter((i) => i.category_id === c.id)
+      .map((i) => withAvailability(i, store.settings));
     if (onlyAvailable) items = items.filter((i) => i.available);
     items = items.sort((a, b) => a.sort_order - b.sort_order);
     return { ...c, items };
   });
+}
+
+// 화면이 보내온 품절 설정을 저장 형태로 옮긴다. 화면은 네 가지 중 하나를
+// 고르고(판매 중 / 오늘만 / 기간 / 계속), 여기서 available 과 날짜 두 개로
+// 편다. 규칙을 서버가 정해야 관리자 화면과 나중에 생길 다른 경로가
+// 어긋나지 않는다.
+function applySoldOut(item, mode, from, until) {
+  const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null);
+  if (mode === "on_sale") {
+    item.available = 1;
+    item.soldout_from = null;
+    item.soldout_until = null;
+    return true;
+  }
+  if (mode === "today") {
+    item.available = 1;
+    item.soldout_from = today();
+    item.soldout_until = today();
+    return true;
+  }
+  if (mode === "range") {
+    const f = date(from);
+    const u = date(until);
+    // 둘 다 비어 있으면 기간이 아니다 — 실수로 "영원히 품절"이 되어버리는
+    // 대신 거절한다.
+    if (!f && !u) return false;
+    if (f && u && u < f) return false;
+    item.available = 1;
+    item.soldout_from = f;
+    item.soldout_until = u;
+    return true;
+  }
+  if (mode === "always") {
+    item.available = 0;
+    item.soldout_from = null;
+    item.soldout_until = null;
+    return true;
+  }
+  return false;
 }
 
 // Public: menu for customers (available items only)
@@ -89,6 +134,8 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     is_signature: b.is_signature ? 1 : 0,
     photo_url: b.photo_url || null,
     available: b.available === false ? 0 : 1,
+    soldout_from: null,
+    soldout_until: null,
     sort_order: maxSort + 1,
   };
   store.menuItems.push(item);
@@ -120,10 +167,37 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
     if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
     if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;
     if (b.available !== undefined) item.available = b.available ? 1 : 0;
+    // 수정 폼도 품절 기간을 같이 보낸다(소재 화면: openItemModal).
+    if (b.soldoutMode !== undefined) applySoldOut(item, b.soldoutMode, b.soldoutFrom, b.soldoutUntil);
     updated = item;
   });
   if (!updated) return res.status(404).json({ error: "not_found" });
   res.json(updated);
+});
+
+// 메뉴 관리 표의 품절 배지를 눌렀을 때 오는 곳.
+//
+// 사장님(2026-09-09): "직원들이 다음날 잊어버릴까봐" — 잊어버리지 않게
+// 하려면 찍는 것 자체가 쉬워야 한다. 수정 폼을 열고 스무 개 칸을 지나
+// 저장하는 대신, 표에서 배지 한 번 누르고 「오늘만」 한 번 누르면 끝나게
+// 한다. 저장되는 내용은 수정 폼에서 하는 것과 완전히 같다(applySoldOut).
+router.patch("/admin/items/:id/soldout", canEditMenu, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const b = req.body || {};
+  let updated = null;
+  let bad = false;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    if (!applySoldOut(item, b.mode, b.from, b.until)) {
+      bad = true;
+      return;
+    }
+    updated = item;
+  });
+  if (bad) return res.status(400).json({ error: "invalid_soldout" });
+  if (!updated) return res.status(404).json({ error: "not_found" });
+  res.json(withAvailability(updated, store.settings));
 });
 
 // 사장님 피드백(2026-09-06): "메뉴 순서를 바꾸고 싶어. 코드 정렬로

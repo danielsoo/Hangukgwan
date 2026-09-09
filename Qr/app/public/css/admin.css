@@ -241,7 +241,37 @@ input, select, button, textarea { font-family: inherit; }
   vertical-align: middle; border: 1.5px dashed var(--red); color: var(--red); font-size: 10px; font-weight: 700;
   line-height: 1.2; text-align: center; background: #fdf0ef;
 }
+/* 품절 배지 — 수정 권한이 있으면 버튼이라 눌러서 바로 품절 설정을 연다.
+   글자 크기·색은 예전 그대로 두고(직원들이 이미 그 모양으로 알아본다)
+   누를 수 있다는 것만 손끝에 전해지도록 테두리와 커서를 준다. */
 .availability-pill { padding: 3px 10px; border-radius: 999px; font-size: 14px; font-weight: 700; }
+button.availability-pill {
+  border: 1px solid transparent;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 30px;
+}
+button.availability-pill:hover { border-color: currentColor; }
+/* 배지 밑의 "9월 12일까지" 같은 한 줄 — 표에서 하나씩 열어보지 않아도
+   언제 풀리는지 보이게 한다. */
+.soldout-note { margin-top: 3px; font-size: 13px; color: var(--muted); }
+
+/* 품절 설정 팝업의 네 가지 선택지 */
+.soldout-modes { display: flex; flex-direction: column; gap: 8px; }
+.soldout-mode {
+  text-align: left;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 16px;
+  min-height: 46px;
+  cursor: pointer;
+}
+.soldout-mode:hover { border-color: var(--navy); }
+.soldout-mode.on { border-color: var(--navy); background: var(--navy); color: #fff; }
 .availability-pill.on { background: #e7f6ec; color: var(--green); }
 .availability-pill.off { background: #f4e4e4; color: var(--red); }
 .item-table tr { cursor: pointer; }

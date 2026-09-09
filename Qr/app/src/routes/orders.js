@@ -24,6 +24,7 @@ function resolveSelectedAddons(mi, requestedNames) {
 }
 
 const { clearPartySizeIfSettled } = require("../partySize");
+const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
 
@@ -239,7 +240,11 @@ router.post("/", async (req, res) => {
   const validated = [];
   let total = 0;
   for (const it of items) {
-    const mi = store.menuItems.find((m) => m.id === parseInt(it.itemId, 10) && m.available);
+    // 품절 기간까지 따져서 "지금" 팔리는 것만 받는다(src/availability.js) —
+    // 화면에서 사라진 메뉴가 주소만 알면 주문되는 일이 없어야 한다.
+    const mi = store.menuItems.find(
+      (m) => m.id === parseInt(it.itemId, 10) && isAvailableNow(m, store.settings)
+    );
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
@@ -536,7 +541,11 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   const validated = [];
   let total = 0;
   for (const it of items) {
-    const mi = store.menuItems.find((m) => m.id === parseInt(it.itemId, 10) && m.available);
+    // 품절 기간까지 따져서 "지금" 팔리는 것만 받는다(src/availability.js) —
+    // 화면에서 사라진 메뉴가 주소만 알면 주문되는 일이 없어야 한다.
+    const mi = store.menuItems.find(
+      (m) => m.id === parseInt(it.itemId, 10) && isAvailableNow(m, store.settings)
+    );
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);

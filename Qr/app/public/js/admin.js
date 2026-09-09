@@ -371,6 +371,20 @@
       photoMissingTitle: "사진을 추가해주세요",
       onSale: "판매 중",
       soldOut: "품절",
+      soldOutToday: "오늘만 품절",
+      soldOutRange: "기간 품절",
+      soldOutAlways: "계속 품절",
+      soldOutTitle: "품절 설정",
+      itemSoldOutLabel: "품절",
+      soldOutModeOnSale: "판매 중",
+      soldOutModeToday: "오늘만 품절 (내일 영업 시작에 자동으로 풀려요)",
+      soldOutModeRange: "기간 지정",
+      soldOutModeAlways: "계속 품절 (직접 풀 때까지)",
+      soldOutFromLabel: "시작일 (비우면 오늘부터)",
+      soldOutUntilLabel: "종료일 (비우면 직접 풀 때까지)",
+      soldOutRangeInvalid: "종료일이 시작일보다 빠릅니다.",
+      soldOutRangeEmpty: "시작일이나 종료일 중 하나는 넣어주세요.",
+      soldOutSaveFailed: "품절 설정을 저장하지 못했습니다. 다시 시도해주세요.",
       itemModalAddTitle: "메뉴 추가",
       itemModalEditTitle: "메뉴 수정",
       alertMenuNameRequired: "메뉴 이름을 입력하세요",
@@ -805,6 +819,20 @@
       photoMissingTitle: "請新增照片",
       onSale: "供應中",
       soldOut: "已售完",
+      soldOutToday: "今日售完",
+      soldOutRange: "期間售完",
+      soldOutAlways: "持續售完",
+      soldOutTitle: "售完設定",
+      itemSoldOutLabel: "售完",
+      soldOutModeOnSale: "供應中",
+      soldOutModeToday: "只有今天售完（明天開店時自動恢復）",
+      soldOutModeRange: "指定期間",
+      soldOutModeAlways: "持續售完（到手動恢復為止）",
+      soldOutFromLabel: "開始日期（留空表示從今天起）",
+      soldOutUntilLabel: "結束日期（留空表示到手動恢復為止）",
+      soldOutRangeInvalid: "結束日期早於開始日期。",
+      soldOutRangeEmpty: "請至少填寫開始或結束日期其中一個。",
+      soldOutSaveFailed: "售完設定儲存失敗，請再試一次。",
       itemModalAddTitle: "新增菜品",
       itemModalEditTitle: "編輯菜品",
       alertMenuNameRequired: "請輸入菜品名稱",
@@ -1173,6 +1201,137 @@
   // language rather than through the flat T() dictionary above.
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
   const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
+
+  // ---------- 품절 기간 표시 ----------
+  // 사장님(2026-09-09): "당일 품절이라서 다음날 자동으로 품절 풀어지게...
+  // 품절 기간을 정할 수 있게도 하자."
+  //
+  // 표에서 「품절」만 보이면 이게 오늘까지인지 계속인지 알 수 없어서, 결국
+  // 하나씩 열어봐야 한다. 배지 옆에 언제까지인지 같이 적는다.
+  const md = (d) => {
+    const [, m, day] = String(d).split("-");
+    return adminLang === "zh" ? `${parseInt(m, 10)}/${parseInt(day, 10)}` : `${parseInt(m, 10)}월 ${parseInt(day, 10)}일`;
+  };
+  const todayStr = () => {
+    // 대만 기준 오늘 — 서버(src/time.js)와 같은 기준이어야 「오늘만」이
+    // 화면과 서버에서 같은 날을 가리킨다.
+    const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    return p;
+  };
+  /** 저장된 상태에서 네 가지 모드 중 무엇인지 되짚는다. */
+  function soldOutModeOf(item) {
+    if (!item.available_stored) return "always";
+    if (item.soldout_from || item.soldout_until) {
+      const t = todayStr();
+      if (item.soldout_from === t && item.soldout_until === t) return "today";
+      return "range";
+    }
+    return "on_sale";
+  }
+  /** 배지에 적을 짧은 설명. 판매 중이면 빈 문자열. */
+  function soldOutNote(item) {
+    const mode = soldOutModeOf(item);
+    if (mode === "on_sale") return "";
+    if (mode === "always") return T("soldOutAlways");
+    if (mode === "today") return T("soldOutToday");
+    if (item.soldout_from && item.soldout_until) return `${md(item.soldout_from)} ~ ${md(item.soldout_until)}`;
+    if (item.soldout_until) return adminLang === "zh" ? `售完至 ${md(item.soldout_until)}` : `${md(item.soldout_until)}까지`;
+    return adminLang === "zh" ? `${md(item.soldout_from)} 起` : `${md(item.soldout_from)}부터`;
+  }
+
+  // 메뉴 수정 폼 안의 품절 선택 상태. 폼은 한 번에 하나만 열리므로
+  // 모듈 하나짜리 값으로 충분하다.
+  let itemFormSoldOutMode = "on_sale";
+  function paintItemFormSoldOut() {
+    document.querySelectorAll("#f_soldout_modes .soldout-mode").forEach((b) => {
+      b.classList.toggle("on", b.dataset.mode === itemFormSoldOutMode);
+    });
+    $("#f_soldout_range").hidden = itemFormSoldOutMode !== "range";
+  }
+  document.querySelectorAll("#f_soldout_modes .soldout-mode").forEach((b) => {
+    b.onclick = () => {
+      itemFormSoldOutMode = b.dataset.mode;
+      if (itemFormSoldOutMode === "range" && !$("#f_soldout_from").value && !$("#f_soldout_until").value) {
+        $("#f_soldout_from").value = todayStr();
+      }
+      paintItemFormSoldOut();
+    };
+  });
+
+  // 품절 설정 팝업. 배지를 누르면 열리고, 네 가지 중 하나를 고른 뒤 확인을
+  // 누르면 서버가 available 과 날짜 두 개로 편다(src/routes/menu.js의
+  // applySoldOut) — 화면과 서버가 각자 규칙을 갖지 않도록.
+  function openSoldOutModal(item) {
+    const backdrop = $("#soldOutBackdrop");
+    const rangeFields = $("#soldOutRangeFields");
+    const errorEl = $("#soldOutError");
+    const fromEl = $("#soldOutFrom");
+    const untilEl = $("#soldOutUntil");
+    let mode = soldOutModeOf(item);
+
+    $("#soldOutItemName").textContent = `${item.code ? item.code + " " : ""}${itemName(item)}`;
+    fromEl.value = item.soldout_from || "";
+    untilEl.value = item.soldout_until || "";
+    errorEl.hidden = true;
+
+    const paint = () => {
+      backdrop.querySelectorAll(".soldout-mode").forEach((b) => {
+        b.classList.toggle("on", b.dataset.mode === mode);
+      });
+      rangeFields.hidden = mode !== "range";
+      errorEl.hidden = true;
+    };
+    backdrop.querySelectorAll(".soldout-mode").forEach((b) => {
+      b.onclick = () => {
+        mode = b.dataset.mode;
+        // 「기간 지정」으로 옮겨왔는데 칸이 비어 있으면 오늘을 넣어둔다 —
+        // 빈 칸 두 개를 마주하는 것보다 고칠 것이 있는 편이 빠르다.
+        if (mode === "range" && !fromEl.value && !untilEl.value) fromEl.value = todayStr();
+        paint();
+      };
+    });
+    paint();
+
+    const close = () => {
+      backdrop.hidden = true;
+      $("#soldOutCancel").onclick = null;
+      $("#soldOutSave").onclick = null;
+    };
+    $("#soldOutCancel").onclick = close;
+    $("#soldOutSave").onclick = async () => {
+      const from = mode === "range" ? fromEl.value || null : null;
+      const until = mode === "range" ? untilEl.value || null : null;
+      if (mode === "range") {
+        if (!from && !until) {
+          errorEl.textContent = T("soldOutRangeEmpty");
+          errorEl.hidden = false;
+          return;
+        }
+        if (from && until && until < from) {
+          errorEl.textContent = T("soldOutRangeInvalid");
+          errorEl.hidden = false;
+          return;
+        }
+      }
+      $("#soldOutSave").disabled = true;
+      try {
+        const res = await fetch(`/api/menu/admin/items/${item.id}/soldout`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode, from, until }),
+        });
+        if (!res.ok) throw new Error("failed");
+        close();
+        await loadMenu();
+      } catch (e) {
+        errorEl.textContent = T("soldOutSaveFailed");
+        errorEl.hidden = false;
+      } finally {
+        $("#soldOutSave").disabled = false;
+      }
+    };
+    backdrop.hidden = false;
+  }
   // spice_options (and an order line's saved spice_choice) are stored as raw
   // Chinese text — same convention as options ("牛,豬") — which reads fine on
   // the kitchen ticket (always Chinese, see buildTicketHtml's file comment)
@@ -3335,14 +3494,25 @@
           <td>${item.code || ""}</td>
           <td>${itemName(item)}</td>
           <td>NT$${item.price}</td>
-          <td><span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span></td>
+          <td>${canMenuEdit()
+            ? `<button type="button" class="availability-pill ${item.available ? "on" : "off"}" data-soldout-id="${item.id}" title="${T("soldOutTitle")}">${item.available ? T("onSale") : T("soldOut")}</button>`
+            : `<span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span>`}${
+              soldOutNote(item) ? `<div class="soldout-note">${soldOutNote(item)}</div>` : ""}</td>
           <td>${moveButtonsHtml}</td>
         `;
         // Staff without menuEdit can look at the menu but not open the edit
         // modal (server would 403 the save/delete anyway; this just avoids
         // showing a form they can't actually use).
-        if (canMenuEdit()) tr.onclick = () => openItemModal(item);
-        else tr.style.cursor = "default";
+        if (canMenuEdit()) {
+          tr.onclick = (e) => {
+            // 품절 배지는 자기 일(품절 설정)만 하고 끝난다 — 행 전체의
+            // "수정 창 열기"까지 같이 터지면 창 두 개가 겹친다.
+            if (e.target.closest("[data-soldout-id]")) return;
+            openItemModal(item);
+          };
+          const pill = tr.querySelector("[data-soldout-id]");
+          if (pill) pill.onclick = () => openSoldOutModal(item);
+        } else tr.style.cursor = "default";
         tbody.appendChild(tr);
       });
       block.appendChild(table);
@@ -3401,7 +3571,12 @@
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
     $("#f_is_spicy").checked = !!item?.is_spicy;
     $("#f_is_signature").checked = !!item?.is_signature;
-    $("#f_available").checked = item ? !!item.available : true;
+    // 품절은 체크박스 하나가 아니라 네 가지 중 하나다 — 표의 배지 팝업과
+    // 같은 선택지를 같은 모양으로 쓴다.
+    itemFormSoldOutMode = item ? soldOutModeOf(item) : "on_sale";
+    $("#f_soldout_from").value = (item && item.soldout_from) || "";
+    $("#f_soldout_until").value = (item && item.soldout_until) || "";
+    paintItemFormSoldOut();
     $("#f_mix_options").checked = !!item?.mix_options;
     renderAllergenCheckboxes(item?.allergens || []);
     $("#f_photo").value = "";
@@ -3469,7 +3644,11 @@
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
       is_spicy: $("#f_is_spicy").checked,
       is_signature: $("#f_is_signature").checked,
-      available: $("#f_available").checked,
+      // available 은 서버가 soldoutMode 를 보고 정한다(applySoldOut) —
+      // 여기서 같이 보내면 두 값이 어긋날 수 있다.
+      soldoutMode: itemFormSoldOutMode,
+      soldoutFrom: itemFormSoldOutMode === "range" ? $("#f_soldout_from").value || null : null,
+      soldoutUntil: itemFormSoldOutMode === "range" ? $("#f_soldout_until").value || null : null,
       mix_options: $("#f_mix_options").checked,
       allergens: collectSelectedAllergens(),
     };

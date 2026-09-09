@@ -657,8 +657,21 @@
       <div class="form-row checkboxes">
         <label><input type="checkbox" id="f_is_spicy" /> <span data-i18n="itemSpicyLabel">매운맛 🌶</span></label>
         <label><input type="checkbox" id="f_is_signature" /> <span data-i18n="itemSignatureLabel">대표 메뉴 ★</span></label>
-        <label><input type="checkbox" id="f_available" checked /> <span data-i18n="itemAvailableLabel">판매 중</span></label>
         <label><input type="checkbox" id="f_mix_options" /> <span data-i18n="itemMixOptionsLabel">옵션별 개별 수량(+/-) 허용</span></label>
+      </div>
+      <!-- 품절 기간 — 표의 배지에서도 같은 것을 고칠 수 있다(soldOutBackdrop).
+           여기 있는 이유는 메뉴를 새로 만들거나 크게 손볼 때 한 화면에서
+           끝내기 위해서다. -->
+      <label><span data-i18n="itemSoldOutLabel">품절</span></label>
+      <div class="soldout-modes" id="f_soldout_modes" style="margin-bottom:12px;">
+        <button type="button" class="soldout-mode" data-mode="on_sale" data-i18n="soldOutModeOnSale">판매 중</button>
+        <button type="button" class="soldout-mode" data-mode="today" data-i18n="soldOutModeToday">오늘만 품절 (내일 영업 시작에 자동으로 풀려요)</button>
+        <button type="button" class="soldout-mode" data-mode="range" data-i18n="soldOutModeRange">기간 지정</button>
+        <button type="button" class="soldout-mode" data-mode="always" data-i18n="soldOutModeAlways">계속 품절 (직접 풀 때까지)</button>
+      </div>
+      <div class="form-row" id="f_soldout_range" hidden style="margin-bottom:12px;">
+        <label><span data-i18n="soldOutFromLabel">시작일 (비우면 오늘부터)</span><input type="date" id="f_soldout_from" /></label>
+        <label><span data-i18n="soldOutUntilLabel">종료일 (비우면 직접 풀 때까지)</span><input type="date" id="f_soldout_until" /></label>
       </div>
       <label><span data-i18n="itemAllergensLabel">알러지 / 육류 표시 (손님 화면에 표시돼요)</span></label>
       <div class="allergen-checkboxes" id="f_allergens_list"></div>
@@ -782,6 +795,38 @@
      paymentMethodBackdrop)과 같은 스타일의 인앱 모달로 바꾼다. 모드(금액/
      퍼센트)는 버튼으로 고르고 값은 숫자 입력칸 하나로 받는다.
      See promptManualDiscount() in admin.js. -->
+<!-- 품절 설정 — 메뉴 관리 표의 품절 배지를 누르면 열린다.
+     사장님(2026-09-09): "당일 품절이라서 다음날 자동으로 품절 풀어지게...
+     직원들이 다음날 잊어버릴까봐." 잊지 않게 하려면 찍는 게 쉬워야 해서,
+     수정 폼을 열지 않고 배지에서 바로 고르게 한다. -->
+<div id="soldOutBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal">
+    <h2 style="margin-top:0;" data-i18n="soldOutTitle">품절 설정</h2>
+    <p id="soldOutItemName" style="color:var(--muted);font-size:15px;margin:0 0 14px;"></p>
+    <div class="soldout-modes">
+      <button type="button" class="soldout-mode" data-mode="on_sale" data-i18n="soldOutModeOnSale">판매 중</button>
+      <button type="button" class="soldout-mode" data-mode="today" data-i18n="soldOutModeToday">오늘만 품절 (내일 영업 시작에 자동으로 풀려요)</button>
+      <button type="button" class="soldout-mode" data-mode="range" data-i18n="soldOutModeRange">기간 지정</button>
+      <button type="button" class="soldout-mode" data-mode="always" data-i18n="soldOutModeAlways">계속 품절 (직접 풀 때까지)</button>
+    </div>
+    <div id="soldOutRangeFields" hidden style="margin-top:12px;">
+      <label style="display:block;font-size:14px;color:var(--muted);margin-bottom:10px;">
+        <span data-i18n="soldOutFromLabel">시작일 (비우면 오늘부터)</span>
+        <input type="date" id="soldOutFrom" style="width:100%;box-sizing:border-box;font-size:17px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:4px;" />
+      </label>
+      <label style="display:block;font-size:14px;color:var(--muted);">
+        <span data-i18n="soldOutUntilLabel">종료일 (비우면 직접 풀 때까지)</span>
+        <input type="date" id="soldOutUntil" style="width:100%;box-sizing:border-box;font-size:17px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:4px;" />
+      </label>
+    </div>
+    <p id="soldOutError" style="color:var(--red);font-size:14px;margin:12px 0 0;" hidden></p>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="danger-btn" id="soldOutCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="soldOutSave" data-i18n="appDialogOk">확인</button>
+    </div>
+  </div>
+</div>
+
 <div id="manualDiscountBackdrop" class="modal-backdrop" hidden>
   <div class="modal app-dialog-modal">
     <h2 style="margin-top:0;" data-i18n="manualDiscountModalTitle">직접 할인 입력</h2>
