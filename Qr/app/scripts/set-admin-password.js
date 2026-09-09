@@ -42,6 +42,33 @@ function hostOf(u) {
   return m ? m[1] : "(알 수 없음)";
 }
 
+// 실제로 떠 있는 서버에 그 비밀번호로 로그인을 한 번 해본다.
+//
+// 2026-09-10: DB 안의 해시는 맞는데(위 확인이 ✓) 브라우저에서는 계속
+// "비밀번호가 올바르지 않습니다" 가 나왔다. 그러면 남는 가능성은 둘뿐이다 —
+// 서버가 다른 DB 를 보고 있거나, 브라우저가 보내는 값이 .env 의 값과
+// 다르거나(저장된 비밀번호 자동완성, 붙여넣기에 섞인 공백·줄바꿈).
+// 그 둘은 해야 할 일이 정반대라, 짐작하지 말고 서버에 직접 물어본다.
+async function probeServer(port, pw) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 2500);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw }),
+      signal: ctl.signal,
+    });
+    if (res.ok) return "ok";
+    if (res.status === 401) return "wrong";
+    return `status_${res.status}`;
+  } catch (e) {
+    return "down";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 (async () => {
   if (!uri) {
     console.error("MONGODB_URI 가 없습니다. .env 를 확인해주세요.");
@@ -81,10 +108,48 @@ function hostOf(u) {
             console.log("             (지금은 기본값 changeme123 입니다 — 처음 만들 때 .env 에 그 줄이 없었던 것)");
           }
           if (same) {
+            // 해시는 맞다. 그럼 왜 브라우저에서는 틀렸다고 나오나 — 서버에
+            // 직접 물어본다. 여기서 ✓ 가 나오면 서버도 DB 도 멀쩡하다는
+            // 뜻이고, 남는 건 브라우저가 보내는 값뿐이다.
+            const ports = [...new Set([process.env.PORT, 3002, 3000].filter(Boolean).map(String))];
+            const results = [];
+            for (const port of ports) results.push([port, await probeServer(port, password)]);
+            const okPort = results.find((r) => r[1] === "ok");
+            const wrongPort = results.find((r) => r[1] === "wrong");
+
             console.log("");
-            console.log("  비밀번호는 이미 맞습니다. 주소를 확인해보세요 —");
-            console.log(`    관리자   http://localhost:${process.env.PORT || 3000}/admin`);
-            console.log("    홈페이지(다른 포트)의 「로그인」은 손님 계정이라 이 비밀번호가 아닙니다.");
+            console.log("  DB 의 비밀번호는 맞습니다. 떠 있는 서버에도 직접 물어봤습니다 —");
+            for (const [port, r] of results) {
+              const label =
+                r === "ok" ? "로그인 됩니다 ✓"
+                : r === "wrong" ? "틀렸다고 합니다 ✗"
+                : r === "down" ? "서버가 안 떠 있습니다"
+                : `예상 못 한 응답 (${r})`;
+              console.log(`    localhost:${port}  ${label}`);
+            }
+            console.log("");
+
+            if (okPort) {
+              console.log(`  서버는 이 비밀번호를 받아줍니다. 그러면 남는 건 브라우저가`);
+              console.log("  보내는 값입니다 — 대개 저장된 비밀번호 자동완성입니다.");
+              console.log("");
+              console.log("    1. 비밀번호 칸을 전부 지우고(⌘A → delete) 직접 타이핑해보세요.");
+              console.log("       붙여넣기는 끝에 공백·줄바꿈이 섞여 들어오는 일이 잦습니다.");
+              console.log("    2. 그래도 안 되면 Chrome 에 저장된 localhost 비밀번호를 지우세요 —");
+              console.log("       chrome://password-manager/passwords 에서 localhost 검색.");
+              console.log("    3. 또는 시크릿 창에서 열어보세요(자동완성이 안 따라옵니다):");
+              console.log(`         http://localhost:${okPort[0]}/admin`);
+            } else if (wrongPort) {
+              console.log("  DB 는 맞다는데 서버는 틀렸다고 합니다 — 서버가 다른 DB 를 보고");
+              console.log("  있다는 뜻입니다. 서버를 띄운 터미널의 마지막 줄 「DB ...」 가");
+              console.log(`  ${dbName} 인지 확인하고, 다르면 그 창을 끄고 다시 띄워주세요.`);
+            } else {
+              console.log("  서버가 안 떠 있어서 거기까지는 확인하지 못했습니다.");
+              console.log("    PORT=3002 npm run dev:local  로 띄운 뒤 다시 실행해주세요.");
+              console.log("");
+              console.log("  참고: 홈페이지의 「로그인」은 손님 계정이라 이 비밀번호가 아닙니다.");
+              console.log("       관리자는 /admin 입니다.");
+            }
           }
         }
       }

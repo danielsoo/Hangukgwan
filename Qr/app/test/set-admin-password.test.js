@@ -64,6 +64,23 @@ check("붙기 전에 지금 상태를 확인하려 한다",
 check("DB 에 못 붙어도 계속 진행한다", dry.out.includes("아직 아무것도 바꾸지 않았습니다"), dry.out);
 check("못 붙었으면 그렇다고 말한다", dry.out.includes("확인하지 못했습니다"), dry.out);
 check("이미 맞으면 주소를 짚어준다", src.includes("/admin") && src.includes("손님 계정"), "안내가 없다");
+
+out.push("\n[해시가 맞는데도 안 들어가지면, 서버에 직접 물어본다]");
+// 2026-09-10: DB 해시는 맞는데(위 확인 ✓) 브라우저에서는 계속 틀렸다고
+// 나왔다. 그러면 남는 가능성은 「서버가 다른 DB 를 본다」와 「브라우저가
+// 다른 값을 보낸다」 둘뿐인데, 해야 할 일이 정반대다. 짐작하지 않는다.
+check("떠 있는 서버에 실제로 로그인을 해본다",
+  src.includes("probeServer") && src.includes("/api/auth/login"), "서버 확인이 없다");
+check("서버는 로컬만 두드린다", src.includes("http://127.0.0.1:"), "바깥 주소를 두드린다");
+check("서버가 받아주면 브라우저 쪽을 짚어준다",
+  src.includes("자동완성") && src.includes("시크릿 창"), "브라우저 안내가 없다");
+check("서버가 거부하면 DB 가 다르다고 짚어준다",
+  src.includes("다른 DB 를 보고"), "DB 불일치 안내가 없다");
+check("서버가 안 떠 있으면 띄우는 법을 알려준다",
+  src.includes("dev:local"), "띄우는 법이 없다");
+check("서버 확인에 시간 제한이 있다",
+  src.includes("AbortController") && src.includes("clearTimeout"), "무한정 기다린다");
+check("여러 포트를 본다", src.includes("3002") && src.includes("3000"), "포트 하나만 본다");
 check("기본값이면 그렇다고 알려준다", src.includes("changeme123"), "기본값 안내가 없다");
 check("상태 확인은 읽기만 한다",
   src.indexOf("projection: { settings: 1, menuItems: 1 }") < src.indexOf("updateOne"), "확인 단계에서 쓰고 있다");
