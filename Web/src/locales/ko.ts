@@ -121,6 +121,13 @@ const ko: TranslationsType = {
     rights: '예약 없이 방문 · 현장 대기',
     orderLink: 'QR 주문',
   },
+  settings: {
+    title: '설정',
+    language: '언어',
+    theme: '화면 밝기',
+    light: '밝게',
+    dark: '어둡게',
+  },
   auth: {
     login: '로그인',
     logout: '로그아웃',

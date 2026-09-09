@@ -8,7 +8,11 @@ const STORAGE_KEY = 'hgw-theme'
 
 interface ThemeContextValue {
   theme: Theme
+  /** 지금 값을 뒤집는다. 아이콘 하나짜리 토글용. */
   toggleTheme: () => void
+  /** 원하는 값을 직접 고른다 — 설정 화면처럼 "밝게/어둡게"를 나란히 보여줄
+   *  때는 뒤집기가 아니라 고르기여야 한다. */
+  setTheme: (next: Theme) => void
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
@@ -34,8 +38,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const toggleTheme = () => {
-    const next: Theme = theme === 'light' ? 'dark' : 'light'
+  const choose = (next: Theme) => {
     setTheme(next)
     applyTheme(next)
     try {
@@ -45,7 +48,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  return <ThemeContext.Provider value={{ theme, toggleTheme }}>{children}</ThemeContext.Provider>
+  const toggleTheme = () => choose(theme === 'light' ? 'dark' : 'light')
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme, setTheme: choose }}>{children}</ThemeContext.Provider>
+  )
 }
 
 export function useTheme() {

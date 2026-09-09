@@ -121,6 +121,13 @@ const zhTW: TranslationsType = {
     rights: '無需訂位 · 現場候位',
     orderLink: '線上點餐',
   },
+  settings: {
+    title: '設定',
+    language: '語言',
+    theme: '畫面亮度',
+    light: '淺色',
+    dark: '深色',
+  },
   auth: {
     login: '登入',
     logout: '登出',

@@ -129,6 +129,13 @@ export interface TranslationsType {
     rights: string
     orderLink: string
   }
+  settings: {
+    title: string
+    language: string
+    theme: string
+    light: string
+    dark: string
+  }
   auth: {
     login: string
     logout: string

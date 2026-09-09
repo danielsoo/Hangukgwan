@@ -121,6 +121,13 @@ const en: TranslationsType = {
     rights: 'No reservations · walk-in only',
     orderLink: 'Order online',
   },
+  settings: {
+    title: 'Settings',
+    language: 'Language',
+    theme: 'Appearance',
+    light: 'Light',
+    dark: 'Dark',
+  },
   auth: {
     login: 'Sign In',
     logout: 'Sign Out',

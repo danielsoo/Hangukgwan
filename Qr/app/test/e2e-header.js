@@ -69,7 +69,7 @@ function check(name, cond, extra = "") {
     check(`가운데에 "${label}"`, navText.includes(label), navText.replace(/\n/g, " "));
   }
 
-  out.push("\n[오른쪽 순서 — 가장 오른쪽부터 프로필, 밝기, 언어]");
+  out.push("\n[오른쪽 순서 — 설정, 로그인]");
   // 사장 계정으로 로그인해야 관리자 버튼까지 있는 최대 상태가 된다.
   await page.goto(`${base}/signup/`, { waitUntil: "load" });
   await page.waitForTimeout(600);
@@ -86,12 +86,49 @@ function check(name, cond, extra = "") {
       const el = document.querySelector(`header ${sel}`);
       return el ? el.getBoundingClientRect().left : null;
     };
-    return { admin: x(".hg-cta-outline-gold"), lang: x(".hg-pill"), theme: x(".hg-theme-btn"), profile: x(".hg-member-btn") };
+    return {
+      admin: x(".hg-cta-outline-gold"),
+      settings: x(".hg-settings-btn"),
+      profile: x(".hg-member-btn"),
+      // 언어·밝기는 설정 안으로 들어갔으니 헤더에 직접 나와 있으면 안 된다.
+      langPill: x(".hg-pill"),
+      themeBtn: x(".hg-theme-btn"),
+    };
   });
-  check("프로필이 가장 오른쪽", order.profile > order.theme, JSON.stringify(order));
-  check("밝기가 그 왼쪽", order.theme > order.lang, JSON.stringify(order));
-  check("언어가 그 왼쪽", order.lang > order.admin, JSON.stringify(order));
-  check("관리자 버튼은 셋의 자리를 밀지 않는다 (맨 앞)", order.admin < order.lang, JSON.stringify(order));
+  check("로그인이 가장 오른쪽", order.profile > order.settings, JSON.stringify(order));
+  check("설정이 그 왼쪽", order.settings > order.admin, JSON.stringify(order));
+  check("관리자 버튼은 둘의 자리를 밀지 않는다 (맨 앞)", order.admin < order.settings, JSON.stringify(order));
+  check("언어 버튼이 헤더에 직접 없다", order.langPill === null, JSON.stringify(order));
+  check("밝기 버튼이 헤더에 직접 없다", order.themeBtn === null, JSON.stringify(order));
+
+  out.push("\n[설정 안에 언어와 밝기]");
+  check("처음엔 설정이 닫혀 있다", (await page.locator(".hg-panel").count()) === 0);
+  await page.click(".hg-settings-btn");
+  await page.waitForTimeout(350);
+  check("눌러서 열린다", (await page.locator(".hg-panel").count()) === 1);
+  const setText = await page.locator(".hg-panel").innerText().catch(() => "");
+  check("언어 항목", /언어/.test(setText), setText.replace(/\n/g, " "));
+  check("밝기 항목", /밝기/.test(setText), setText.replace(/\n/g, " "));
+  for (const l of ["한국어", "中文", "EN"]) {
+    check(`언어 선택지 "${l}"`, setText.includes(l), setText.replace(/\n/g, " "));
+  }
+  // 고른 것 하나가 분명히 보여야 한다.
+  const onCount = await page.locator(".hg-choice-on").count();
+  check("고른 언어와 밝기가 표시된다 (2개)", onCount === 2, `on=${onCount}`);
+  await page.locator("header").screenshot({ path: path.join(shots, "32-header-settings.png") });
+
+  // 돌려막기가 아니라 고르기 — 원하는 언어를 바로 누를 수 있어야 한다.
+  const navKo = await page.locator(".hg-header-nav").innerText();
+  await page.locator(".hg-choice", { hasText: "中文" }).first().click();
+  await page.waitForTimeout(500);
+  const navZh = await page.locator(".hg-header-nav").innerText();
+  check("고른 언어로 바로 바뀐다", navZh !== navKo && /首頁/.test(navZh), `${navKo} → ${navZh}`);
+  await page.locator(".hg-choice", { hasText: "한국어" }).first().click();
+  await page.waitForTimeout(400);
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  check("Esc 로 닫힌다", (await page.locator(".hg-panel").count()) === 0);
 
   out.push("\n[글자 크기가 전부 같다]");
   const sizes = await page.evaluate(() => {
@@ -153,12 +190,16 @@ function check(name, cond, extra = "") {
     check(`${name}: 처음엔 메뉴가 닫혀 있다`, (await sp.locator(".hg-menu-panel").count()) === 0);
     await sp.click(".hg-hamburger");
     await sp.waitForTimeout(350);
-    const panel = sp.locator(".hg-menu-panel");
+    const panel = sp.locator(".hg-panel");
     check(`${name}: 눌러서 열린다`, (await panel.count()) === 1);
     const panelText = await panel.innerText().catch(() => "");
     for (const label of ["홈", "메뉴", "소개", "오시는 길", "단체 예약"]) {
       check(`${name}: 메뉴에 "${label}"`, panelText.includes(label), panelText.replace(/\n/g, " "));
     }
+    // 사장님: "햄버거 모양이 되면 메뉴들, 로그인, 설정 이렇게 있으면 될 듯해."
+    check(`${name}: 메뉴에 로그인`, /로그인/.test(panelText), panelText.replace(/\n/g, " "));
+    check(`${name}: 메뉴에 설정`, /설정/.test(panelText), panelText.replace(/\n/g, " "));
+    check(`${name}: 설정 안에 언어와 밝기`, /언어/.test(panelText) && /밝기/.test(panelText), panelText.replace(/\n/g, " "));
     // 닫기 아이콘이 실제로 그려지는지 — 예전에 ✕(U+2715) 글자를 썼는데
     // 본문 서체에 그 자형이 없어 빈 네모로 나왔다.
     const icon = await sp.evaluate(() => {
@@ -189,10 +230,10 @@ function check(name, cond, extra = "") {
   const hp = await hoverCtx.newPage();
   await hp.goto(`${base}/`, { waitUntil: "load" });
   await hp.waitForTimeout(800);
-  await hp.hover(".hg-theme-btn");
+  await hp.hover(".hg-settings-btn");
   await hp.waitForTimeout(300);
   const hov = await hp.evaluate(() => {
-    const cs = getComputedStyle(document.querySelector(".hg-theme-btn"));
+    const cs = getComputedStyle(document.querySelector(".hg-settings-btn"));
     return { color: cs.color, bg: cs.backgroundColor };
   });
   check("호버 시 글자색과 배경색이 다르다", hov.color !== hov.bg, JSON.stringify(hov));
