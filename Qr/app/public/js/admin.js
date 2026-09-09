@@ -304,6 +304,7 @@
       loginPasswordPlaceholder: "관리자 비밀번호",
       loginBtn: "로그인",
       loginError: "비밀번호가 올바르지 않습니다. 다시 시도해주세요",
+      loginErrorAutofill: "브라우저가 저장해둔 비밀번호가 채워져 있었습니다. 칸을 비웠으니 직접 입력해주세요",
       brand: `${TAEGEUK_ICON_INLINE} 한국관 관리자`,
       tabOrders: "실시간 주문",
       tabPayment: "결제",
@@ -802,6 +803,7 @@
       loginPasswordPlaceholder: "管理員密碼",
       loginBtn: "登入",
       loginError: "密碼錯誤，請重新輸入",
+      loginErrorAutofill: "瀏覽器自動填入了已儲存的舊密碼。已清空，請直接輸入",
       brand: `${TAEGEUK_ICON_INLINE} 韓國館 管理後台`,
       tabOrders: "即時訂單",
       tabPayment: "結帳",
@@ -1699,6 +1701,22 @@
   $("#loginPassword").addEventListener("keydown", (e) => {
     if (e.key === "Enter") doLogin();
   });
+
+  // 이 칸은 autocomplete="current-password" 라서 브라우저가 저장해둔 값을
+  // 알아서 채워 넣는다. 평소에는 편한데, 저장된 값이 낡았으면 화면은
+  // "비밀번호가 올바르지 않습니다" 만 반복하고 사람은 맞는 비밀번호를
+  // 들고도 영영 못 들어간다 — 누를 때마다 같은 값이 다시 가기 때문이다.
+  //
+  // 2026-09-10 사장님이 로컬에서 막힌 게 정확히 이거였다. 서버도 DB 도
+  // 멀쩡했고(스크립트로 확인), 화면이 예전에 저장된 값을 계속 보내고 있었다.
+  //
+  // beforeinput 은 사람이 치거나 붙여넣을 때만 오고, 브라우저 자동완성으로는
+  // 오지 않는다. 그래서 이 값이 "사람이 넣은 것" 인지 구분할 수 있다.
+  let typedIntoPassword = false;
+  $("#loginPassword").addEventListener("beforeinput", () => {
+    typedIntoPassword = true;
+  });
+
   async function doLogin() {
     const password = $("#loginPassword").value;
     const res = await fetch("/api/auth/login", {
@@ -1709,9 +1727,15 @@
     if (res.ok) {
       $("#loginError").hidden = true;
       $("#loginPassword").value = "";
+      typedIntoPassword = false;
       await checkAuth();
     } else {
-      $("#loginError").textContent = T("loginError");
+      // 실패한 값은 남겨두지 않는다. 남겨두면 다음 클릭도 같은 값이다.
+      const autofilled = !typedIntoPassword;
+      $("#loginPassword").value = "";
+      typedIntoPassword = false;
+      $("#loginPassword").focus();
+      $("#loginError").textContent = T(autofilled ? "loginErrorAutofill" : "loginError");
       $("#loginError").hidden = false;
     }
   }
