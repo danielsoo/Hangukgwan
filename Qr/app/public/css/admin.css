@@ -1049,3 +1049,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 
 /* 설정 칸 아래의 설명 한 줄 — 무엇이 달라지는지 미리 알려주는 자리다. */
 .field-hint { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); font-weight: 400; }
+
+/* 요약 카드 아래 붙는 보조 한 줄 — "할인 전 NT$45,000" 처럼 맥락을 준다. */
+.settlement-card-sub { margin-top: 4px; font-size: 13px; color: var(--muted); font-weight: 400; }
+/* 비중(%) 칸은 숫자가 짧아 오른쪽으로 붙인다. */
+.settlement-items-table td.share, .settlement-items-table th.share { text-align: right; white-space: nowrap; }

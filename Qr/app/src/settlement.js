@@ -59,33 +59,136 @@ function computeSettlement(orders, startDate, endDate = startDate) {
   const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
   // 결제수단별 집계 (2026-09-07 사장님 요청: "결제종류... 정산에서도 서로
-  // 분류해서도 집계해줘 총합도 있고") — 품목 단위로 집계한다. 한 라운드를
-  // 부분결제(PATCH /:id/split-pay)로 서로 다른 결제수단으로 나눠 낸 경우
-  // (예: 일부는 현금, 나머지는 신용카드)에도 각 품목이 실제로 어느
-  // 결제수단으로 찍혔는지(it.payment_method)가 정확히 반영된다. 이 필드가
-  // 없는 오래된 데이터는 그 주문의 order.payment_method로, 그것도 없으면
-  // "unspecified"(미지정 — 이 기능 추가 이전에 결제완료된 주문)로 묶인다.
-  // 온라인 결제(손님이 직접 카드/LINE Pay로 결제, src/routes/payments.js)는
-  // "online"으로 따로 잡힌다.
+  // 분류해서도 집계해줘 총합도 있고") — 품목 단위로 나눈다. 한 라운드를
+  // 부분결제(PATCH /:id/split-pay)로 서로 다른 결제수단에 나눠 낸 경우에도
+  // 각 품목이 실제로 어느 결제수단으로 찍혔는지(it.payment_method)가
+  // 반영된다. 그 필드가 없는 옛 데이터는 주문의 order.payment_method 로,
+  // 그것도 없으면 "unspecified"(미지정)로 묶인다. 손님이 직접 낸 온라인
+  // 결제(src/routes/payments.js)는 "online" 으로 따로 잡힌다.
   //
-  // 품목 가격 합(unit_price*qty)을 기준으로 하며, 아래 item_breakdown과
-  // 같은 방식이라 VIP 카드 할인(order.discount_amount)만큼은 이 합계가
-  // total_revenue보다 약간 높게 나올 수 있다 — item_breakdown과 동일한
-  // 한계이자 관례.
+  // 2026-09-10: 할인을 빼고 세도록 고쳤다.
+  //
+  // 예전에는 품목 정가 합(unit_price×qty)을 그대로 더해서, 화면에 "매출
+  // NT$44,301" 과 "결제수단 총합 NT$44,990" 이 나란히 뜨는 일이 있었다.
+  // 차이는 VIP·재량 할인이다. 주석에는 "한계이자 관례"라고 적혀 있었지만,
+  // 이 표를 보는 이유가 마감에 서랍의 현금을 맞춰보는 것이라면 관례로
+  // 넘길 일이 아니다 — 현금 칸이 실제로 받지 않은 돈까지 세고 있으면
+  // 매일 밤 안 맞는다.
+  //
+  // 그래서 주문마다 할인을 결제수단별 비중대로 나눠서 뺀다. 한 주문을
+  // 현금 60% / 카드 40% 로 나눠 냈다면 할인도 그 비율로 나눈다. 반올림
+  // 오차는 마지막 결제수단에서 흡수해, 결제수단 총합이 그 주문의 실제
+  // 받은 금액(order.total)과 정확히 같아지게 한다. 그래야 표의 총합이
+  // 위의 "매출"과 한 원도 어긋나지 않는다.
   const paymentMethodMap = new Map();
   for (const o of paidOrders) {
+    const byMethod = new Map();
     for (const it of o.items || []) {
       const method = it.payment_method || o.payment_method || "unspecified";
-      const entry = paymentMethodMap.get(method) || { method, revenue: 0, order_ids: new Set() };
-      entry.revenue += (it.unit_price || 0) * (it.qty || 0);
+      byMethod.set(method, (byMethod.get(method) || 0) + (it.unit_price || 0) * (it.qty || 0));
+    }
+    const gross = [...byMethod.values()].reduce((a, b) => a + b, 0);
+    // 실제 받은 금액. 할인이 없으면 gross 와 같다.
+    const net = o.total != null ? o.total : gross;
+    const methods = [...byMethod.entries()];
+    let assigned = 0;
+    methods.forEach(([method, amount], idx) => {
+      const last = idx === methods.length - 1;
+      // 마지막 하나는 남은 전부를 가져간다 — 반올림으로 1원이 새거나
+      // 남지 않게 하려는 것이다.
+      const share = last ? net - assigned : gross > 0 ? Math.round((amount / gross) * net) : 0;
+      assigned += share;
+      const entry = paymentMethodMap.get(method) || { method, revenue: 0, gross: 0, order_ids: new Set() };
+      entry.revenue += share;
+      entry.gross += amount;
       entry.order_ids.add(o.id);
       paymentMethodMap.set(method, entry);
-    }
+    });
   }
   const paymentMethodBreakdown = [...paymentMethodMap.values()]
-    .map((e) => ({ method: e.method, revenue: e.revenue, order_count: e.order_ids.size }))
+    .map((e) => ({ method: e.method, revenue: e.revenue, gross: e.gross, order_count: e.order_ids.size }))
     .sort((a, b) => b.revenue - a.revenue);
   const paymentMethodTotal = paymentMethodBreakdown.reduce((sum, e) => sum + e.revenue, 0);
+
+  // ── 사장님 요청(2026-09-10): "합계 등등 다양하게 그냥 왠만한 모든 걸
+  // 기록해서 결산 페이지에서 볼 수 있었으면 좋겠어" ──────────────────
+  //
+  // 아래는 전부 이미 주문에 들어 있는 값을 모아 세는 것뿐이다 — 새로
+  // 기록하기 시작하는 게 아니라, 기록돼 있는데 화면에 안 보이던 것들이다.
+
+  // 매장 / 포장. 주문 단위의 order_type("dine_in" | "takeout" | "mixed")을
+  // 쓴다. 섞인 주문(mixed)은 따로 세서, 셋을 더하면 결제 완료 건수와 맞는다.
+  const orderTypeMap = new Map();
+  for (const o of paidOrders) {
+    const key = o.order_type || "dine_in";
+    const e = orderTypeMap.get(key) || { order_type: key, revenue: 0, order_count: 0 };
+    e.revenue += o.total || 0;
+    e.order_count += 1;
+    orderTypeMap.set(key, e);
+  }
+  const orderTypeBreakdown = [...orderTypeMap.values()].sort((a, b) => b.revenue - a.revenue);
+
+  // 분류별 매출 (밥류/면류/음료/주류…). 품목이 주문될 당시의 카테고리를
+  // 스냅샷으로 들고 있어서(category_key), 나중에 메뉴 분류를 바꿔도 지난
+  // 결산 숫자가 흔들리지 않는다.
+  const categoryMap = new Map();
+  for (const o of paidOrders) {
+    for (const it of o.items || []) {
+      const key = it.category_key || "uncategorized";
+      const e = categoryMap.get(key) || { category_key: key, qty: 0, subtotal: 0 };
+      e.qty += it.qty || 0;
+      e.subtotal += (it.unit_price || 0) * (it.qty || 0);
+      categoryMap.set(key, e);
+    }
+  }
+  const categoryBreakdown = [...categoryMap.values()].sort((a, b) => b.subtotal - a.subtotal);
+
+  // 할인 — 얼마를 깎아줬는지. 매출에서 이미 빠진 돈이라 따로 안 보면
+  // 얼마나 나갔는지 알 길이 없다. 종류별(特約95折 / VIP9折 / 직접 입력)로.
+  const discountMap = new Map();
+  let discountTotal = 0;
+  for (const o of paidOrders) {
+    const amount = o.discount_amount || 0;
+    if (!amount) continue;
+    discountTotal += amount;
+    const key = o.discount_type || "unspecified";
+    const e = discountMap.get(key) || { discount_type: key, amount: 0, order_count: 0 };
+    e.amount += amount;
+    e.order_count += 1;
+    discountMap.set(key, e);
+  }
+  const discountBreakdown = [...discountMap.values()].sort((a, b) => b.amount - a.amount);
+
+  // 손님 수와 객단가. party_size 는 테이블에서 손님이 직접 답한 인원수이고,
+  // 주문할 때 그 주문에 함께 찍힌다. 같은 테이블이 여러 번 주문하면 같은
+  // 인원이 여러 번 세어지므로, (테이블, 날짜)마다 한 번만 센다 — 아래
+  // 회전 시간 계산이 쓰는 것과 같은 묶음 기준이다.
+  const partyByTableDay = new Map();
+  for (const o of paidOrders) {
+    if (!o.party_size) continue;
+    const key = `${o.table_number}|${o.created_at.slice(0, 10)}`;
+    // 한 자리에서 인원이 달라졌다면 큰 쪽을 쓴다(중간에 일행이 합류한 경우).
+    partyByTableDay.set(key, Math.max(partyByTableDay.get(key) || 0, o.party_size));
+  }
+  const guestCount = [...partyByTableDay.values()].reduce((a, b) => a + b, 0);
+  const avgPerOrder = paidOrders.length ? Math.round(totalRevenue / paidOrders.length) : 0;
+  const avgPerGuest = guestCount ? Math.round(totalRevenue / guestCount) : 0;
+
+  // 취소와 미결제는 지금까지 "몇 건"만 보였다. 금액이 있어야 얼마나 아까운
+  // 일인지, 얼마를 놓치고 있는지 알 수 있다.
+  const cancelledAmount = cancelledOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const problemAmount = problemOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+  // 테이블별 매출 — 어느 자리가 잘 도는지. 자리 배치를 바꿀 때 쓰는 숫자다.
+  const tableMap = new Map();
+  for (const o of paidOrders) {
+    const key = String(o.table_number);
+    const e = tableMap.get(key) || { table_number: key, revenue: 0, order_count: 0 };
+    e.revenue += o.total || 0;
+    e.order_count += 1;
+    tableMap.set(key, e);
+  }
+  const tableBreakdown = [...tableMap.values()].sort((a, b) => b.revenue - a.revenue);
 
   // Item breakdown across paid orders only (what actually sold in this range).
   const itemMap = new Map();
@@ -188,6 +291,18 @@ function computeSettlement(orders, startDate, endDate = startDate) {
     item_breakdown: itemBreakdown,
     payment_method_breakdown: paymentMethodBreakdown,
     payment_method_total: paymentMethodTotal,
+    order_type_breakdown: orderTypeBreakdown,
+    category_breakdown: categoryBreakdown,
+    discount_breakdown: discountBreakdown,
+    discount_total: discountTotal,
+    // 할인 전 금액 — 매출 + 깎아준 돈. "원래 얼마짜리를 팔았나".
+    gross_revenue: totalRevenue + discountTotal,
+    guest_count: guestCount,
+    avg_per_order: avgPerOrder,
+    avg_per_guest: avgPerGuest,
+    cancelled_amount: cancelledAmount,
+    problem_amount: problemAmount,
+    table_breakdown: tableBreakdown,
     daily_breakdown: dailyBreakdown,
     hourly_breakdown: hourlyBreakdown,
     avg_turnover_minutes: avgTurnoverMinutes,

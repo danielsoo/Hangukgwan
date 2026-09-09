@@ -253,6 +253,26 @@
               <div class="settlement-card-label" data-i18n="settlementTurnover">평균 테이블 회전 시간</div>
               <div class="settlement-card-value" id="settlementTurnover">–</div>
             </div>
+            <!-- 사장님 요청(2026-09-10): "합계 등등 다양하게 그냥 왠만한 모든
+                 걸 기록해서 결산 페이지에서 볼 수 있었으면 좋겠어" — 아래는
+                 전부 주문에 이미 들어 있던 값이고, 화면에만 없던 것들이다. -->
+            <div class="settlement-card">
+              <div class="settlement-card-label" data-i18n="settlementGuests">손님 수</div>
+              <div class="settlement-card-value" id="settlementGuests">0</div>
+            </div>
+            <div class="settlement-card">
+              <div class="settlement-card-label" data-i18n="settlementAvgPerGuest">1인당 평균</div>
+              <div class="settlement-card-value" id="settlementAvgPerGuest">NT$0</div>
+            </div>
+            <div class="settlement-card">
+              <div class="settlement-card-label" data-i18n="settlementAvgPerOrder">주문당 평균</div>
+              <div class="settlement-card-value" id="settlementAvgPerOrder">NT$0</div>
+            </div>
+            <div class="settlement-card">
+              <div class="settlement-card-label" data-i18n="settlementDiscountTotal">할인해준 금액</div>
+              <div class="settlement-card-value" id="settlementDiscountTotal">NT$0</div>
+              <div class="settlement-card-sub" id="settlementGrossRevenue"></div>
+            </div>
           </div>
 
           <div id="settlementProblemSection" class="settlement-wide-card settlement-card-problem-block" hidden>
@@ -301,6 +321,67 @@
                     <td id="settlementPaymentMethodTotal">NT$0</td>
                   </tr>
                 </tfoot>
+              </table>
+            </div>
+
+            <!-- 매장/포장, 분류별, 할인, 테이블별 — 사장님 요청(2026-09-10).
+                 전부 주문에 이미 들어 있던 값을 모아 세는 것뿐이다. -->
+            <div class="settlement-wide-card settlement-chart-card">
+              <h3 data-i18n="settlementOrderTypeTitle">매장 / 포장</h3>
+              <table class="settlement-items-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="settlementOrderTypeName">구분</th>
+                    <th data-i18n="settlementPaymentMethodCount">건수</th>
+                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
+                    <th data-i18n="settlementShare">비중</th>
+                  </tr>
+                </thead>
+                <tbody id="settlementOrderTypeBody"></tbody>
+              </table>
+            </div>
+
+            <div class="settlement-wide-card settlement-chart-card">
+              <h3 data-i18n="settlementCategoryTitle">분류별 매출</h3>
+              <table class="settlement-items-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="settlementCategoryName">분류</th>
+                    <th data-i18n="settlementItemQty">수량</th>
+                    <th data-i18n="settlementItemSubtotal">소계</th>
+                    <th data-i18n="settlementShare">비중</th>
+                  </tr>
+                </thead>
+                <tbody id="settlementCategoryBody"></tbody>
+              </table>
+            </div>
+
+            <div class="settlement-wide-card settlement-chart-card" id="settlementDiscountCard">
+              <h3 data-i18n="settlementDiscountTitle">할인 내역</h3>
+              <p class="settings-hint" data-i18n="settlementDiscountHint">매출에서 이미 빠진 금액이에요. 얼마를 깎아드렸는지 보여줍니다.</p>
+              <table class="settlement-items-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="settlementDiscountKind">종류</th>
+                    <th data-i18n="settlementPaymentMethodCount">건수</th>
+                    <th data-i18n="settlementDiscountAmount">할인액</th>
+                  </tr>
+                </thead>
+                <tbody id="settlementDiscountBody"></tbody>
+              </table>
+            </div>
+
+            <div class="settlement-wide-card settlement-chart-card">
+              <h3 data-i18n="settlementTableTitle">테이블별 매출</h3>
+              <table class="settlement-items-table">
+                <thead>
+                  <tr>
+                    <th data-i18n="settlementTableName">테이블</th>
+                    <th data-i18n="settlementPaymentMethodCount">건수</th>
+                    <th data-i18n="settlementPaymentMethodRevenue">매출</th>
+                  </tr>
+                </thead>
+                <tbody id="settlementTableBody"></tbody>
               </table>
             </div>
 

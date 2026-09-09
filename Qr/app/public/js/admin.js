@@ -376,6 +376,27 @@
       storageUrgentTitle: "데이터 저장 공간이 %s / 16MB 입니다. 곧 한도예요.",
       storageUrgentSub: "미루지 마시고 개발자에게 \"store 문서 분리\"를 요청하세요. 한도에 닿으면 주문이 저장되지 않습니다.",
       storageCheckedAt: "매일 마감 정산 때 확인해요. 마지막 확인: %s",
+      settlementGuests: "손님 수",
+      settlementAvgPerGuest: "1인당 평균",
+      settlementAvgPerOrder: "주문당 평균",
+      settlementDiscountTotal: "할인해준 금액",
+      settlementGrossRevenuePrefix: "할인 전",
+      settlementShare: "비중",
+      settlementOrderTypeTitle: "매장 / 포장",
+      settlementOrderTypeName: "구분",
+      settlementOrderTypeDineIn: "매장",
+      settlementOrderTypeTakeout: "포장",
+      settlementOrderTypeMixed: "섞임",
+      settlementCategoryTitle: "분류별 매출",
+      settlementCategoryName: "분류",
+      settlementCategoryNone: "분류 없음",
+      settlementDiscountTitle: "할인 내역",
+      settlementDiscountHint: "매출에서 이미 빠진 금액이에요. 얼마를 깎아드렸는지 보여줍니다.",
+      settlementDiscountKind: "종류",
+      settlementDiscountAmount: "할인액",
+      settlementDiscountManual: "직접 입력",
+      settlementTableTitle: "테이블별 매출",
+      settlementTableName: "테이블",
       onSale: "판매 중",
       soldOut: "품절",
       soldOutToday: "오늘만 품절",
@@ -831,6 +852,27 @@
       storageUrgentTitle: "資料儲存空間已用 %s / 16MB，即將到達上限。",
       storageUrgentSub: "請盡快聯繫開發者處理「store 文件拆分」。到達上限後訂單將無法儲存。",
       storageCheckedAt: "每日結帳時自動檢查。最後檢查：%s",
+      settlementGuests: "來客數",
+      settlementAvgPerGuest: "每位平均",
+      settlementAvgPerOrder: "每筆平均",
+      settlementDiscountTotal: "折扣金額",
+      settlementGrossRevenuePrefix: "折扣前",
+      settlementShare: "占比",
+      settlementOrderTypeTitle: "內用 / 外帶",
+      settlementOrderTypeName: "類型",
+      settlementOrderTypeDineIn: "內用",
+      settlementOrderTypeTakeout: "外帶",
+      settlementOrderTypeMixed: "混合",
+      settlementCategoryTitle: "分類營收",
+      settlementCategoryName: "分類",
+      settlementCategoryNone: "未分類",
+      settlementDiscountTitle: "折扣明細",
+      settlementDiscountHint: "已從營收中扣除的金額，顯示總共折讓了多少。",
+      settlementDiscountKind: "類型",
+      settlementDiscountAmount: "折扣額",
+      settlementDiscountManual: "自行輸入",
+      settlementTableTitle: "各桌營收",
+      settlementTableName: "桌號",
       onSale: "供應中",
       soldOut: "已售完",
       soldOutToday: "今日售完",
@@ -7715,6 +7757,87 @@
       .join("");
     $("#settlementPaymentMethodTotal").textContent = `NT$${Number(data.payment_method_total || 0).toLocaleString()}`;
 
+    // ── 사장님 요청(2026-09-10): "합계 등등 다양하게 그냥 왠만한 모든 걸
+    // 기록해서 결산 페이지에서 볼 수 있었으면 좋겠어" ──────────────────
+    const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
+    // 비중은 합계 대비로 계산한다. 합계가 0이면 나눗셈을 하지 않는다.
+    const share = (v, total) => (total > 0 ? `${Math.round((v / total) * 100)}%` : "–");
+
+    $("#settlementGuests").textContent = Number(data.guest_count || 0).toLocaleString();
+    $("#settlementAvgPerGuest").textContent = nt(data.avg_per_guest);
+    $("#settlementAvgPerOrder").textContent = nt(data.avg_per_order);
+    $("#settlementDiscountTotal").textContent = nt(data.discount_total);
+    // 할인이 있을 때만 "할인 전" 금액을 덧붙인다 — 없으면 매출과 같아서
+    // 같은 숫자를 두 번 보여주는 셈이 된다.
+    $("#settlementGrossRevenue").textContent = data.discount_total
+      ? `${T("settlementGrossRevenuePrefix")} ${nt(data.gross_revenue)}`
+      : "";
+    // 취소·미결제는 건수 옆에 금액을 붙인다. 몇 건인지보다 얼마인지가
+    // 사장님이 실제로 알고 싶은 것이다.
+    if (data.cancelled_amount) {
+      $("#settlementCancelledCount").textContent = `${data.cancelled_order_count} (${nt(data.cancelled_amount)})`;
+    }
+    if (data.problem_amount) {
+      $("#settlementProblemCount").textContent = `${data.problem_order_count} (${nt(data.problem_amount)})`;
+    }
+
+    const orderTypeLabel = (t) =>
+      ({ dine_in: T("settlementOrderTypeDineIn"), takeout: T("settlementOrderTypeTakeout"), mixed: T("settlementOrderTypeMixed") })[t] || t;
+    const typeTotal = (data.order_type_breakdown || []).reduce((a, e) => a + e.revenue, 0);
+    $("#settlementOrderTypeBody").innerHTML = (data.order_type_breakdown || [])
+      .map((e) => `
+          <tr>
+            <td>${orderTypeLabel(e.order_type)}</td>
+            <td>${e.order_count}</td>
+            <td>${nt(e.revenue)}</td>
+            <td class="share">${share(e.revenue, typeTotal)}</td>
+          </tr>`)
+      .join("");
+
+    // 분류 이름은 메뉴 관리의 카테고리에서 가져온다 — 결산에만 따로 적어두면
+    // 사장님이 카테고리 이름을 바꿨을 때 여기만 옛 이름으로 남는다.
+    const categoryLabel = (key) => {
+      if (key === "uncategorized") return T("settlementCategoryNone");
+      const c = (categories || []).find((x) => x.key === key);
+      return c ? catName(c) : key;
+    };
+    const catTotal = (data.category_breakdown || []).reduce((a, e) => a + e.subtotal, 0);
+    $("#settlementCategoryBody").innerHTML = (data.category_breakdown || [])
+      .map((e) => `
+          <tr>
+            <td>${categoryLabel(e.category_key)}</td>
+            <td>${e.qty}</td>
+            <td>${nt(e.subtotal)}</td>
+            <td class="share">${share(e.subtotal, catTotal)}</td>
+          </tr>`)
+      .join("");
+
+    const discountLabel = (t) =>
+      ({ vip95: "特約95折", vip10: "VIP9折", manual: T("settlementDiscountManual"), unspecified: T("paymentMethodUnspecified") })[t] || t;
+    const discountRows = data.discount_breakdown || [];
+    // 할인이 한 건도 없으면 빈 표 대신 카드를 통째로 감춘다.
+    $("#settlementDiscountCard").hidden = discountRows.length === 0;
+    $("#settlementDiscountBody").innerHTML = discountRows
+      .map((e) => `
+          <tr>
+            <td>${discountLabel(e.discount_type)}</td>
+            <td>${e.order_count}</td>
+            <td>${nt(e.amount)}</td>
+          </tr>`)
+      .join("");
+
+    // 테이블은 40개까지 있어서 전부 늘어놓으면 표만 길어진다 — 매출 순으로
+    // 위 15개만 보여준다. 어느 자리가 잘 도는지 보려는 표이므로 충분하다.
+    $("#settlementTableBody").innerHTML = (data.table_breakdown || [])
+      .slice(0, 15)
+      .map((e) => `
+          <tr>
+            <td>${e.table_number === "COUNTER" ? T("counterSectionTitle").replace("📦 ", "") : fmtOrderTableTag(e.table_number)}</td>
+            <td>${e.order_count}</td>
+            <td>${nt(e.revenue)}</td>
+          </tr>`)
+      .join("");
+
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
     renderHourlyChart(data.hourly_breakdown || []);
@@ -7879,6 +8002,12 @@
     const s = String(v == null ? "" : v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   }
+  // CSV 는 엑셀에서 열어 정리하는 파일이라 화면 언어와 무관하게 한국어로
+  // 적는다 — 중국어 화면에서 받은 파일과 한국어 화면에서 받은 파일의 열
+  // 이름이 다르면 두 파일을 나란히 놓고 비교할 수가 없다.
+  const paymentMethodCsvLabel = (m) =>
+    ({ cash: "현금", linepay: "LinePay", card: "신용카드", other: "기타", online: "온라인결제", unspecified: "미지정" })[m] || m;
+
   function buildSettlementCsv(data) {
     const rows = [];
     rows.push(["결산 기간", data.date || `${data.start_date} ~ ${data.end_date}`]);
@@ -7887,6 +8016,55 @@
     rows.push(["취소된 주문", data.cancelled_order_count]);
     rows.push(["미결제/문제 주문", data.problem_order_count]);
     rows.push(["평균 테이블 회전 시간(분)", data.avg_turnover_minutes ?? ""]);
+    // 사장님 요청(2026-09-10) — 화면에 보이는 건 CSV 에도 다 들어가야 한다.
+    // 엑셀로 따로 정리하실 때 화면과 파일이 다르면 결국 둘 다 못 믿는다.
+    rows.push(["할인 전 매출", data.gross_revenue ?? ""]);
+    rows.push(["할인해준 금액", data.discount_total ?? 0]);
+    rows.push(["취소 금액", data.cancelled_amount ?? 0]);
+    rows.push(["미결제 금액", data.problem_amount ?? 0]);
+    rows.push(["손님 수", data.guest_count ?? 0]);
+    rows.push(["1인당 평균", data.avg_per_guest ?? 0]);
+    rows.push(["주문당 평균", data.avg_per_order ?? 0]);
+    rows.push([]);
+    rows.push(["결제수단별 집계"]);
+    rows.push(["결제수단", "건수", "매출"]);
+    (data.payment_method_breakdown || []).forEach((pm) =>
+      rows.push([paymentMethodCsvLabel(pm.method), pm.order_count, pm.revenue])
+    );
+    rows.push(["총합", "", data.payment_method_total ?? 0]);
+    rows.push([]);
+    rows.push(["매장 / 포장"]);
+    rows.push(["구분", "건수", "매출"]);
+    (data.order_type_breakdown || []).forEach((e) =>
+      rows.push([{ dine_in: "매장", takeout: "포장", mixed: "섞임" }[e.order_type] || e.order_type, e.order_count, e.revenue])
+    );
+    rows.push([]);
+    rows.push(["분류별 매출"]);
+    rows.push(["분류", "수량", "소계"]);
+    (data.category_breakdown || []).forEach((e) => {
+      const c = (categories || []).find((x) => x.key === e.category_key);
+      rows.push([c ? catName(c) : e.category_key === "uncategorized" ? "분류 없음" : e.category_key, e.qty, e.subtotal]);
+    });
+    if ((data.discount_breakdown || []).length) {
+      rows.push([]);
+      rows.push(["할인 내역"]);
+      rows.push(["종류", "건수", "할인액"]);
+      data.discount_breakdown.forEach((e) => rows.push([e.discount_type, e.order_count, e.amount]));
+    }
+    rows.push([]);
+    rows.push(["테이블별 매출"]);
+    rows.push(["테이블", "건수", "매출"]);
+    (data.table_breakdown || []).forEach((e) => rows.push([e.table_number, e.order_count, e.revenue]));
+    rows.push([]);
+    rows.push(["시간대별"]);
+    rows.push(["시간", "주문 건수", "매출"]);
+    (data.hourly_breakdown || []).forEach((h) => rows.push([`${h.hour}시`, h.order_count, h.revenue]));
+    if ((data.daily_breakdown || []).length > 1) {
+      rows.push([]);
+      rows.push(["날짜별 매출"]);
+      rows.push(["날짜", "매출"]);
+      data.daily_breakdown.forEach((d) => rows.push([d.date, d.revenue]));
+    }
     rows.push([]);
     rows.push(["품목별 판매 현황"]);
     rows.push(["메뉴", "수량", "소계"]);
