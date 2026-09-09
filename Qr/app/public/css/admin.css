@@ -459,12 +459,49 @@ button.availability-pill:hover { border-color: currentColor; }
    the (now fairly large) pile of settings cards isn't all shown at once. */
 .settings-shell { display: flex; align-items: flex-start; gap: 32px; max-width: 1320px; margin: 0 auto; }
 .settings-nav { display: flex; flex-direction: column; gap: 4px; flex: 0 0 168px; position: sticky; top: 16px; }
+.settings-nav { flex: 0 0 200px; }
 .settings-nav-btn {
-  background: transparent; border: none; text-align: left; color: var(--muted); padding: 11px 14px;
+  display: block;
+  width: 100%;
+  background: transparent; border: none; text-align: left; color: var(--muted); padding: 9px 14px;
   border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: 600;
 }
 .settings-nav-btn:hover { background: #f0f0f0; }
 .settings-nav-btn.active { background: var(--navy); color: #fff; }
+.settings-nav-btn .nav-name { display: block; }
+/* 무엇이 들어 있는 분류인지 한 줄로 적어준다. 이름만으로는 「매장 정보」와
+   「주문 규칙」 중 어디에 영업시간이 있는지 알 수 없다. */
+.settings-nav-btn .nav-sub { display: block; font-size: 13px; font-weight: 400; opacity: 0.72; margin-top: 2px; }
+.settings-nav-btn.active .nav-sub { opacity: 0.78; }
+
+/* 설정 찾기 */
+.settings-search { position: relative; max-width: 1320px; margin: 0 auto 18px; }
+.settings-search input {
+  width: 100%; max-width: 460px; padding: 11px 14px; font-size: 17px; font-family: inherit;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff;
+}
+.settings-search-results {
+  position: absolute; z-index: 30; margin-top: 4px; width: 100%; max-width: 460px;
+  background: #fff; border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); overflow: hidden; max-height: 320px; overflow-y: auto;
+}
+.settings-search-hit {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  width: 100%; padding: 11px 14px; background: transparent; border: none; border-bottom: 1px solid #f0ece6;
+  text-align: left; cursor: pointer; font-family: inherit;
+}
+.settings-search-hit:last-child { border-bottom: none; }
+.settings-search-hit:hover, .settings-search-hit:focus { background: #f6f2ea; }
+.settings-search-hit .hit-name { font-size: 16px; font-weight: 600; color: var(--ink); }
+.settings-search-hit .hit-cat { font-size: 14px; color: var(--muted); white-space: nowrap; }
+.settings-search-empty { padding: 12px 14px; font-size: 15px; color: var(--muted); }
+/* 찾아서 데려온 카드를 잠깐 짚어준다 — 분류만 바뀌고 끝나면 화면 어디를
+   봐야 하는지 여전히 알 수 없다. */
+@keyframes settingsFound {
+  from { box-shadow: 0 0 0 3px var(--navy); }
+  to { box-shadow: 0 0 0 3px rgba(0, 0, 0, 0); }
+}
+.settings-card.is-found { animation: settingsFound 1.6s ease-out; }
 .settings-content { flex: 1; min-width: 0; }
 .settings-card { background: #fff; border-radius: 12px; padding: 20px; max-width: 880px; margin: 0 0 20px; }
 .settings-card h3 { margin-top: 0; }
@@ -481,7 +518,10 @@ button.availability-pill:hover { border-color: currentColor; }
 @media (max-width: 700px) {
   .settings-shell { flex-direction: column; gap: 14px; }
   .settings-nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; position: static; width: 100%; gap: 6px; padding-bottom: 4px; }
-  .settings-nav-btn { flex: 0 0 auto; white-space: nowrap; }
+  .settings-nav-btn { flex: 0 0 auto; width: auto; white-space: nowrap; }
+  /* 가로로 눕는 좁은 화면에서는 설명줄까지 넣으면 이름이 안 보인다. */
+  .settings-nav-btn .nav-sub { display: none; }
+  .settings-search input, .settings-search-results { max-width: none; }
 }
 
 /* Role-based UI gating — see applyRoleUI() in admin.js. The server enforces

@@ -403,15 +403,28 @@
 
     <!-- SETTINGS TAB -->
     <section id="tab-settings" class="tab-panel" hidden>
+      <!-- 설정 찾기 — 2026-09-10 사장님: "설정 안에 너무 많은 게 담겨 있어.
+           나누거나 뭐가 어디에 있는지 알 수 있게 해줘."
+           분류를 나누는 것만으로는 부족하다. 찾는 사람은 그게 「매장 정보」에
+           있는지 「인쇄」에 있는지를 모르는 채로 오기 때문이다. 그래서 이름을
+           치면 어느 분류에 있는지까지 같이 보여주고, 누르면 거기로 데려간다. -->
+      <div class="settings-search">
+        <input id="settingsSearch" type="search" autocomplete="off"
+               data-i18n-placeholder="settingsSearchPlaceholder"
+               placeholder="설정 찾기 — 프린터, 비밀번호, 영업시간 …" />
+        <div id="settingsSearchResults" class="settings-search-results" hidden></div>
+      </div>
+
       <div class="settings-shell">
         <nav class="settings-nav">
-          <button data-category="display" class="settings-nav-btn active" data-i18n="settingsCatDisplay">화면</button>
-          <button data-category="store" class="settings-nav-btn" data-i18n="settingsCatStore">매장 정보</button>
-          <button data-category="account" class="settings-nav-btn" data-i18n="settingsCatAccount">계정</button>
-          <button data-category="notify" class="settings-nav-btn owner-only" data-i18n="settingsCatNotify">알림</button>
-          <button data-category="payment" class="settings-nav-btn owner-only" data-i18n="settingsCatPayment">결제</button>
-          <button data-category="vip" class="settings-nav-btn owner-only" data-i18n="settingsCatVip">회원(VIP) 로그인</button>
-          <button data-category="print" class="settings-nav-btn owner-only" data-i18n="settingsCatPrint">인쇄</button>
+          <button data-category="display" class="settings-nav-btn active"><span class="nav-name" data-i18n="settingsCatDisplay">화면</span><span class="nav-sub" data-i18n="settingsCatDisplaySub">글자 크기</span></button>
+          <button data-category="store" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatStore">매장 정보</span><span class="nav-sub" data-i18n="settingsCatStoreSub">사진 · 로고 · 공지 · 상호/주소</span></button>
+          <button data-category="order" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatOrder">주문 규칙</span><span class="nav-sub" data-i18n="settingsCatOrderSub">주문 받는 시간 · 위치 제한</span></button>
+          <button data-category="account" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatAccount">계정</span><span class="nav-sub" data-i18n="settingsCatAccountSub">비밀번호 · 직원 권한</span></button>
+          <button data-category="notify" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatNotify">알림</span><span class="nav-sub" data-i18n="settingsCatNotifySub">마감 LINE 알림</span></button>
+          <button data-category="payment" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPayment">결제</span><span class="nav-sub" data-i18n="settingsCatPaymentSub">온라인 결제 (ECPay)</span></button>
+          <button data-category="vip" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatVip">회원(VIP)</span><span class="nav-sub" data-i18n="settingsCatVipSub">구글 로그인 설정</span></button>
+          <button data-category="print" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPrint">인쇄</span><span class="nav-sub" data-i18n="settingsCatPrintSub">주방 프린터 · 빌지 글자</span></button>
         </nav>
 
         <div class="settings-content">
@@ -507,6 +520,13 @@
           <button id="saveSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="settingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
+        </div>
+
+        <!-- 주문 규칙 — "언제 받는가"(주문 받는 시간)와 "어디서 받는가"
+             (위치 제한). 2026-09-10 사장님: "설정 안에 너무 많은 게 담겨
+             있어. 나누거나 뭐가 어디에 있는지 알 수 있게 해줘." 매장 정보
+             안에 여섯 장이 쌓여 있어서, 성격이 다른 이 둘을 떼어냈다. -->
+        <div id="settings-cat-order" class="settings-category" hidden>
         <!-- 주문 받는 시간 (2026-09-10) — 위 「영업시간」 칸과 다른 것이다.
              그 칸은 손님에게 그대로 보여주는 문구고, 여기가 실제로 주문을
              막는 규칙이다. 왜 나눴는지는 src/openHours.js 첫머리. -->

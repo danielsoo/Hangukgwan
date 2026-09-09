@@ -158,11 +158,11 @@ function hm(offsetMinutes) {
   // "왜 손님이 주문을 못 하지" 가 된다.
   await adminPage.locator('.admin-tabs button[data-tab="settings"]').click();
   await adminPage.waitForTimeout(800);
-  // 「주문 받는 시간」은 설정 > 매장 정보 안에 있다 — 다른 분류를 열어둔
+  // 「주문 받는 시간」은 설정 > 주문 규칙 안에 있다 — 다른 분류를 열어둔
   // 채로는 화면에 없다(hidden).
-  await adminPage.locator('.settings-nav-btn[data-category="store"]').click();
+  await adminPage.locator('.settings-nav-btn[data-category="order"]').click();
   await adminPage.waitForTimeout(400);
-  check("설정 > 매장 정보에 카드가 보인다", await adminPage.locator("#orderHoursState").isVisible());
+  check("설정 > 주문 규칙에 카드가 보인다", await adminPage.locator("#orderHoursState").isVisible());
   {
     const t = await adminPage.locator("#orderHoursState").innerText();
     check("지금 안 받는 중이라고 적힌다", t.includes("안 받는") || t.includes("停止接單"), t);

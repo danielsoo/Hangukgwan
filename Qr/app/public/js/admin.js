@@ -505,11 +505,24 @@
       addTableToZoneCancel: "취소",
       addTableToZoneConfirm: "확인",
       settingsCatDisplay: "화면",
+      settingsCatDisplaySub: "글자 크기",
       settingsCatStore: "매장 정보",
+      settingsCatStoreSub: "사진 · 로고 · 공지 · 상호/주소",
+      settingsCatOrder: "주문 규칙",
+      settingsCatOrderSub: "주문 받는 시간 · 위치 제한",
       settingsCatAccount: "계정",
+      settingsCatAccountSub: "비밀번호 · 직원 권한",
       settingsCatNotify: "알림",
+      settingsCatNotifySub: "마감 LINE 알림",
       settingsCatPayment: "결제",
+      settingsCatPaymentSub: "온라인 결제 (ECPay)",
+      settingsCatVipSub: "구글 로그인 설정",
       settingsCatPrint: "인쇄",
+      settingsCatPrintSub: "주방 프린터 · 빌지 글자",
+      settingsSearchPlaceholder: "설정 찾기 — 프린터, 비밀번호, 영업시간 …",
+      settingsSearchEmpty: "찾는 설정이 없습니다",
+      orderHoursUnavailable: "이 화면을 아직 못 불러왔습니다",
+      orderHoursUnavailableSub: "서버를 다시 띄운 뒤 새로고침해주세요",
       livePreviewLabel: "미리보기 (손님 화면)",
       tabSettlement: "결산",
       settlementStartLabel: "시작일",
@@ -753,7 +766,7 @@
       vipAddInvalid: "카드번호, 발급일, 할인율(1~100)을 모두 올바르게 입력해주세요.",
       vipEditInvalid: "발급일과 할인율(1~100)을 올바르게 입력해주세요.",
       vipCardNumberTaken: "이미 등록된 카드번호입니다.",
-      settingsCatVip: "회원(VIP) 로그인",
+      settingsCatVip: "회원(VIP)",
       vipSettingsTitle: "회원(VIP) 구글 로그인 설정 (Firebase)",
       vipSettingsHint:
         "손님이 주문 페이지에서 구글로 로그인해 VIP 카드를 등록하려면 Firebase 프로젝트가 필요해요. 1) Firebase 콘솔(console.firebase.google.com)에서 새 프로젝트를 만들고, 2) Authentication에서 \"Google\" 로그인 방법을 켜고, 3) 웹 앱을 추가한 뒤 나오는 firebaseConfig 코드를 통째로 복사해서 아래에 붙여넣으세요. 추가로 4) 프로젝트 설정 > 서비스 계정에서 \"새 비공개 키 생성\"으로 받은 JSON 파일 내용은 여기가 아니라 배포 서버(Vercel)의 환경변수 FIREBASE_SERVICE_ACCOUNT에 등록해야 해요 (보안 정보라 이 화면에는 넣지 않아요).",
@@ -1030,11 +1043,24 @@
       addTableToZoneCancel: "取消",
       addTableToZoneConfirm: "確定",
       settingsCatDisplay: "顯示",
+      settingsCatDisplaySub: "字級",
       settingsCatStore: "店家資訊",
+      settingsCatStoreSub: "照片 · Logo · 公告 · 店名/地址",
+      settingsCatOrder: "點餐規則",
+      settingsCatOrderSub: "可點餐時間 · 位置限制",
       settingsCatAccount: "帳號",
+      settingsCatAccountSub: "密碼 · 店員權限",
       settingsCatNotify: "通知",
+      settingsCatNotifySub: "打烊 LINE 通知",
       settingsCatPayment: "付款",
+      settingsCatPaymentSub: "線上付款 (ECPay)",
+      settingsCatVipSub: "Google 登入設定",
       settingsCatPrint: "列印",
+      settingsCatPrintSub: "廚房印表機 · 出單字級",
+      settingsSearchPlaceholder: "搜尋設定 — 印表機、密碼、營業時間 …",
+      settingsSearchEmpty: "找不到相符的設定",
+      orderHoursUnavailable: "尚未載入這個設定",
+      orderHoursUnavailableSub: "請重新啟動伺服器後重新整理",
       livePreviewLabel: "預覽（顧客畫面）",
       tabSettlement: "結算",
       settlementStartLabel: "開始日期",
@@ -1278,7 +1304,7 @@
       vipAddInvalid: "請正確輸入卡號、發卡日與折扣率（1~100）。",
       vipEditInvalid: "請正確輸入發卡日與折扣率（1~100）。",
       vipCardNumberTaken: "這個卡號已經登記過了。",
-      settingsCatVip: "會員(VIP) 登入",
+      settingsCatVip: "會員(VIP)",
       vipSettingsTitle: "會員(VIP) Google 登入設定（Firebase）",
       vipSettingsHint:
         "要讓顧客在點餐頁面用 Google 登入並註冊 VIP 卡，需要一個 Firebase 專案。1) 到 Firebase 主控台（console.firebase.google.com）建立新專案，2) 在 Authentication 開啟「Google」登入方式，3) 新增網頁應用程式後，把出現的 firebaseConfig 程式碼整段複製貼到下面。另外 4) 在專案設定 > 服務帳戶用「產生新的私密金鑰」取得的 JSON 檔內容，不要貼在這裡，要設定到部署伺服器（Vercel）的環境變數 FIREBASE_SERVICE_ACCOUNT（這是機密資訊，這個畫面不會儲存）。",
@@ -1839,6 +1865,115 @@
       selectSettingsCategory(btn.dataset.category);
     };
   });
+
+  // ---------- 설정 찾기 ----------
+  // 2026-09-10 사장님: "설정 안에 너무 많은 게 담겨 있어. 나누거나 뭐가
+  // 어디에 있는지 알 수 있게 해줘."
+  //
+  // 분류를 나누는 것만으로는 부족하다. 찾는 사람은 그게 「매장 정보」에
+  // 있는지 「주문 규칙」에 있는지를 모르는 채로 오기 때문이다. 그래서 카드
+  // 이름뿐 아니라 그 안의 글자까지 훑어서, 어느 분류에 있는지와 함께
+  // 보여주고, 누르면 거기로 데려간 뒤 그 카드를 잠깐 짚어준다.
+  //
+  // 목록을 미리 만들어두지 않고 찾을 때마다 화면에서 읽는다 — 카드가
+  // 늘거나 언어가 바뀌어도 여기를 같이 고쳐야 할 일이 생기지 않는다.
+  const SETTINGS_PERMS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "reservationManage"];
+  function isGatedFromMe(el) {
+    if (el.classList.contains("owner-only") && currentRole !== "owner") return true;
+    if (el.classList.contains("staff-only") && currentRole === "owner") return true;
+    return SETTINGS_PERMS.some(
+      (k) => el.classList.contains(`need-${k}`) && document.body.classList.contains(`perm-no-${k}`)
+    );
+  }
+
+  function settingsSearchIndex() {
+    const rows = [];
+    $$(".settings-category").forEach((cat) => {
+      const category = cat.id.replace("settings-cat-", "");
+      const navBtn = $(`.settings-nav-btn[data-category="${category}"]`);
+      // 직원에게 안 보이는 분류는 찾기에도 안 나와야 한다. 눌러도 못 열고,
+      // 있다는 사실만 알려주는 꼴이 된다.
+      if (!navBtn || (navBtn.classList.contains("owner-only") && currentRole !== "owner")) return;
+      const catName = (navBtn.querySelector(".nav-name") || navBtn).textContent.trim();
+      cat.querySelectorAll(".settings-card").forEach((card) => {
+        // 권한으로 가려진 카드는 찾기에도 안 나와야 한다. 안 그러면 눌러도
+        // 아무것도 안 보이는 자리로 데려가게 된다. 지금 화면에 떠 있는지로
+        // 판단할 수 없다 — 다른 분류의 카드는 어차피 다 숨어 있다.
+        if (isGatedFromMe(card)) return;
+        const h3 = card.querySelector("h3");
+        if (!h3) return;
+        rows.push({
+          card,
+          category,
+          catName,
+          name: h3.textContent.trim(),
+          haystack: (card.textContent || "").toLowerCase(),
+        });
+      });
+    });
+    return rows;
+  }
+
+  function revealSetting(hit) {
+    selectSettingsCategory(hit.category);
+    hit.card.classList.remove("is-found");
+    // 클래스를 뗐다 붙여야 같은 카드를 두 번 찾았을 때도 다시 반짝인다.
+    void hit.card.offsetWidth;
+    hit.card.classList.add("is-found");
+    hit.card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function renderSettingsSearch(term) {
+    const box = $("#settingsSearchResults");
+    if (!box) return;
+    const q = term.trim().toLowerCase();
+    if (!q) {
+      box.hidden = true;
+      box.innerHTML = "";
+      return;
+    }
+    const hits = settingsSearchIndex().filter(
+      (r) => r.name.toLowerCase().includes(q) || r.haystack.includes(q)
+    );
+    box.innerHTML = "";
+    if (!hits.length) {
+      box.innerHTML = `<div class="settings-search-empty">${T("settingsSearchEmpty")}</div>`;
+      box.hidden = false;
+      return;
+    }
+    hits.slice(0, 12).forEach((hit) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "settings-search-hit";
+      btn.innerHTML = `<span class="hit-name"></span><span class="hit-cat"></span>`;
+      btn.querySelector(".hit-name").textContent = hit.name;
+      btn.querySelector(".hit-cat").textContent = hit.catName;
+      btn.onclick = () => {
+        revealSetting(hit);
+        $("#settingsSearch").value = "";
+        box.hidden = true;
+      };
+      box.appendChild(btn);
+    });
+    box.hidden = false;
+  }
+
+  if ($("#settingsSearch")) {
+    $("#settingsSearch").addEventListener("input", (e) => renderSettingsSearch(e.target.value));
+    $("#settingsSearch").addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        e.target.value = "";
+        renderSettingsSearch("");
+      }
+      if (e.key === "Enter") {
+        const first = $("#settingsSearchResults .settings-search-hit");
+        if (first) first.click();
+      }
+    });
+    document.addEventListener("click", (e) => {
+      if (!e.target.closest(".settings-search")) $("#settingsSearchResults").hidden = true;
+    });
+  }
 
   // ---------- Live orders ----------
   // 2026-09-07: 4초 폴링 → 2초로 절반 단축(1차 조치) → 사장님이 "폴링 자체를
@@ -6425,7 +6560,14 @@
   // 머리로 시계를 맞춰봐야 하고, 그러다 "왜 손님이 주문을 못 하지" 가 된다.
   function renderOrderHoursState(state) {
     const el = $("#orderHoursState");
-    if (!el || !state) return;
+    if (!el) return;
+    // 상태를 모르면 빈 띠를 남겨두지 않는다. 색만 있고 글자가 없는 칸은
+    // "괜찮은가 보다" 로 읽히는데, 실제로는 아무것도 못 불러온 상태다.
+    if (!state) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
     const closed = state.enabled && !state.open;
     el.classList.toggle("is-closed", closed);
     if (!state.enabled) {
@@ -6464,13 +6606,27 @@
     renderOrderHoursDayRules();
   }
 
+  // 못 불러오면 카드가 통째로 빈 채로 남는다 — 제목과 안내문만 있고 그
+  // 밑은 아무것도 없다. 2026-09-10 에 실제로 그렇게 됐다: 서버는 패치
+  // 전에 띄운 프로세스라 이 주소가 없었고(404), 화면 파일만 새것이라
+  // 사장님에게는 "설정하는 곳이 안 뜬다" 로 보였다. 조용히 넘어가지 않는다.
+  function showOrderHoursUnavailable() {
+    const el = $("#orderHoursState");
+    if (!el) return;
+    el.hidden = false;
+    el.classList.add("is-closed");
+    el.innerHTML = `${T("orderHoursUnavailable")}<span class="oh-state-sub">${T("orderHoursUnavailableSub")}</span>`;
+  }
+
   async function loadOrderHours() {
     try {
       const res = await fetch("/api/settings/order-hours");
-      if (!res.ok) return;
+      if (!res.ok) return showOrderHoursUnavailable();
       applyOrderHoursCfg(await res.json());
     } catch (e) {
-      /* 이 칸 하나 때문에 설정 화면 전체가 막히면 안 된다 */
+      // 이 칸 하나 때문에 설정 화면 전체가 막히면 안 된다 — 하지만 아무 말
+      // 없이 비어 있는 것도 안 된다.
+      showOrderHoursUnavailable();
     }
   }
 
@@ -6501,7 +6657,7 @@
     // 별도 라우트에서 온다(직원은 403 — 그때는 조용히 넘어간다).
     if (currentRole === "owner") loadServiceStart();
     loadOrderHours();
-    renderOrderHoursState(s.ordering);
+    renderOrderHoursState(s.ordering || null);
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     refreshLogoPreview();
     renderNoticePreview($("#s_store_notice").value);
