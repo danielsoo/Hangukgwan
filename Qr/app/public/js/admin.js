@@ -369,6 +369,11 @@
       moveItemDownTitle: "아래로 이동",
       photoMissing: "사진<br>없음",
       photoMissingTitle: "사진을 추가해주세요",
+      storageWarnTitle: "데이터 저장 공간이 %s / 16MB 까지 찼어요.",
+      storageWarnSub: "아직 여유는 있지만, 개발자에게 \"store 문서 분리\"를 이야기해 두세요. 한도에 닿으면 주문 저장이 안 됩니다.",
+      storageUrgentTitle: "데이터 저장 공간이 %s / 16MB 입니다. 곧 한도예요.",
+      storageUrgentSub: "미루지 마시고 개발자에게 \"store 문서 분리\"를 요청하세요. 한도에 닿으면 주문이 저장되지 않습니다.",
+      storageCheckedAt: "매일 마감 정산 때 확인해요. 마지막 확인: %s",
       onSale: "판매 중",
       soldOut: "품절",
       soldOutToday: "오늘만 품절",
@@ -817,6 +822,11 @@
       moveItemDownTitle: "下移",
       photoMissing: "尚無<br>照片",
       photoMissingTitle: "請新增照片",
+      storageWarnTitle: "資料儲存空間已用 %s / 16MB。",
+      storageWarnSub: "目前還有餘裕，但請先跟開發者提「store 文件拆分」。到達上限後訂單將無法儲存。",
+      storageUrgentTitle: "資料儲存空間已用 %s / 16MB，即將到達上限。",
+      storageUrgentSub: "請盡快聯繫開發者處理「store 文件拆分」。到達上限後訂單將無法儲存。",
+      storageCheckedAt: "每日結帳時自動檢查。最後檢查：%s",
       onSale: "供應中",
       soldOut: "已售完",
       soldOutToday: "今日售完",
@@ -1583,6 +1593,9 @@
     // is_counter on `tables` to label 포장 카운터 orders, so re-render once
     // both are guaranteed to be in.
     renderOrders();
+    // 저장 공간 경고는 로그인할 때 한 번만 본다 — 값이 하루에 한 번 갱신되는
+    // 것이라 폴링에 얹을 이유가 없다.
+    renderStorageBanner();
     if (currentRole === "owner") {
       loadStaffPermissions();
       loadLineSettings();
@@ -2181,6 +2194,44 @@
   // renderOrderCard) for when staff notice one card among many; this
   // banner is for noticing at a glance that something needs attention at
   // all, and for orders whose card isn't currently in view.
+  // ---------- 데이터 저장 공간 경고 ----------
+  // 사장님(2026-09-10): "3-4년 후에 내가 잊으면 큰일이잖아."
+  //
+  // 주문을 밖으로 뺀 뒤에도 결제기록·정산·예약은 계속 쌓여서 연 3~4MB 씩
+  // 는다. MongoDB 문서 하나는 16MB 가 한도라 언젠가는 저장이 실패하는데,
+  // 그때가 되어도 화면 어디에도 원인이 안 나온다. 그래서 한도의 25% 에서
+  // 미리 알린다 — 알림을 본 뒤에도 몇 년의 여유가 있어서, 급히 손댈 필요
+  // 없이 준비할 시간이 있다.
+  //
+  // 크기는 매일 밤 마감 정산이 재둔다(src/storeSize.js). 여기서는 그 값을
+  // 읽기만 한다 — 화면이 열릴 때마다 재면 이 기능이 막으려는 바로 그 짓을
+  // 하게 된다.
+  async function renderStorageBanner() {
+    const banner = $("#storageBanner");
+    if (!banner) return;
+    let info;
+    try {
+      const res = await fetch("/api/settings/storage");
+      if (!res.ok) return;
+      info = await res.json();
+    } catch (e) {
+      return; // 경고를 못 띄우는 것 자체가 장사를 막을 이유는 아니다
+    }
+    if (!info || (info.level !== "warn" && info.level !== "urgent")) {
+      banner.hidden = true;
+      return;
+    }
+    const mb = `${(info.bytes / 1024 / 1024).toFixed(1)}MB`;
+    const urgent = info.level === "urgent";
+    banner.className = `storage-banner ${info.level}`;
+    banner.innerHTML = `
+      <div>${urgent ? "🚨" : "ℹ️"} ${T(urgent ? "storageUrgentTitle" : "storageWarnTitle").replace("%s", mb)}</div>
+      <div class="storage-banner-sub">${T(urgent ? "storageUrgentSub" : "storageWarnSub")}</div>
+      ${info.checked_at ? `<div class="storage-banner-sub">${T("storageCheckedAt").replace("%s", info.checked_at)}</div>` : ""}
+    `;
+    banner.hidden = false;
+  }
+
   function renderPrintFailureBanner() {
     const banner = $("#printFailBanner");
     if (!banner) return;

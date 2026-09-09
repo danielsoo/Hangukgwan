@@ -1,7 +1,9 @@
 const express = require("express");
 const multer = require("multer");
-const { store, save, savePhoto, deletePhoto, getPhoto } = require("../db");
+const { store, save, savePhoto, deletePhoto, getPhoto, getDb, connectDB } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
+const { SETTING_BYTES, SETTING_CHECKED_AT, LIMIT_BYTES, levelFor, recordStoreSize } = require("../storeSize");
+const { nowLocal } = require("../time");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const canEditSettings = requirePermission("settingsEdit");
 
@@ -132,6 +134,35 @@ router.get("/logo-preview", requireAdmin, async (req, res) => {
   res.set("Content-Type", "image/svg+xml");
   res.set("Cache-Control", "no-store");
   res.send(svg);
+});
+
+// 데이터 저장 공간 상태 — 관리자 화면 맨 위의 띠가 읽는다.
+//
+// 사장님(2026-09-10): "3-4년 후에 내가 잊으면 큰일이잖아."
+// 크기는 매일 밤 마감 정산이 재서 설정에 남긴다(src/storeSize.js). 여기서는
+// 그 값을 읽어 지금 어떤 상태인지만 알려준다 — 화면을 열 때마다 재면
+// 요청마다 문서를 한 번 더 읽는 셈이라, 이 기능이 막으려는 바로 그 짓을
+// 하게 된다.
+router.get("/storage", requireAdmin, async (req, res) => {
+  // 크론이 한 번도 안 돌았거나(배포 설정이 빠졌거나, 계속 실패했거나) 값이
+  // 오래됐으면 여기서 한 번 재둔다. 이 경고가 필요한 시점은 몇 년 뒤인데,
+  // 그때 "크론이 조용히 안 돌고 있었다"로 경고 자체가 없으면 안전장치가
+  // 없는 것과 같다. 일주일에 한 번꼴이라 비용은 무시할 만하다.
+  const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+  const checkedAt = store.settings[SETTING_CHECKED_AT];
+  const checkedMs = checkedAt ? Date.parse(String(checkedAt).replace(" ", "T")) : NaN;
+  const stale = !checkedAt || Number.isNaN(checkedMs) || Date.now() - checkedMs > STALE_MS;
+  if (stale) {
+    const measured = await recordStoreSize(store, { getDb, connectDB, nowLocal });
+    if (measured) await save();
+  }
+  const bytes = store.settings[SETTING_BYTES] || null;
+  res.json({
+    bytes,
+    limit_bytes: LIMIT_BYTES,
+    level: bytes ? levelFor(bytes) : "unknown",
+    checked_at: store.settings[SETTING_CHECKED_AT] || null,
+  });
 });
 
 // Staff permission toggles — only the owner can view/change these (staff

@@ -70,6 +70,9 @@
         <button id="manualOrderBtn" data-i18n="manualOrderBtn">📝 수기 주문</button>
         <button id="refreshOrders" data-i18n="refreshBtn">새로고침</button>
       </div>
+      <!-- 데이터 저장 공간이 한도에 가까워지면 뜨는 띠. 사장님(2026-09-10):
+           "3-4년 후에 내가 잊으면 큰일이잖아" — 기억할 일로 두지 않는다. -->
+      <div id="storageBanner" class="storage-banner" hidden></div>
       <div id="printFailBanner" class="print-fail-banner" hidden></div>
       <div class="orders-board">
         <div class="order-col" data-status="new"><h3><span data-i18n="statusNew">신규 주문</span> <span class="col-count"></span></h3><div class="col-body"></div></div>

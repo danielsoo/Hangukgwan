@@ -1,7 +1,9 @@
 const express = require("express");
-const { store, save, nextId, findOrders } = require("../db");
+const { store, save, nextId, findOrders, getDb, connectDB } = require("../db");
 const { requireOwner } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
+const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
+const { nowLocal } = require("../time");
 const { sendLineMessage, formatSettlementSummary } = require("../line");
 
 const router = express.Router();
@@ -86,10 +88,19 @@ router.get("/cron-close", async (req, res) => {
   const date = taipeiDateString();
   const snapshot = computeSettlement(await ordersInRange(date, date), date);
   saveSettlementSnapshot(snapshot);
+
+  // 사장님(2026-09-10): "3-4년 후에 내가 잊으면 큰일이잖아."
+  // 매일 밤 여기서 store 문서 크기를 재둔다. 기준을 넘으면 관리자 화면에
+  // 띠가 뜨고 아래 마감 메시지에도 한 줄이 붙는다 — 사람이 달력에 적어두고
+  // 기억할 일이 아니다(src/storeSize.js).
+  await recordStoreSize(store, { getDb, connectDB, nowLocal });
   await save();
 
   if (store.settings.line_notify_enabled) {
-    await sendLineMessage(store, formatSettlementSummary(snapshot));
+    const lines = [formatSettlementSummary(snapshot)];
+    const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
+    if (warn) lines.push("", warn);
+    await sendLineMessage(store, lines.join("\n"));
   }
 
   res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count });

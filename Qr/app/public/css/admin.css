@@ -1035,3 +1035,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .table-detail-clear-party:hover { border-color: var(--navy); color: var(--navy); }
 .table-detail-clear-party:disabled { opacity: 0.5; cursor: default; }
+
+/* 데이터 저장 공간 경고 띠. 인쇄 실패 띠(.print-fail-banner)와 같은 자리에
+   같은 모양으로 뜨지만, 색으로 급한 정도를 나눈다 — "슬슬 준비하자"와
+   "지금 해야 한다"는 다른 소식이다. */
+.storage-banner {
+  font-size: 15px; line-height: 1.6; padding: 12px 16px;
+  border-radius: 10px; margin-bottom: 14px; border: 1px solid;
+}
+.storage-banner.warn { background: #fff7e6; border-color: #d08700; color: #7a4f00; }
+.storage-banner.urgent { background: #fdecea; border-color: var(--red); color: var(--red); font-weight: 700; }
+.storage-banner-sub { font-weight: 400; font-size: 13.5px; margin-top: 4px; opacity: 0.85; }
