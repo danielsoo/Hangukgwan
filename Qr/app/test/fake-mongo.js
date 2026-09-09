@@ -198,12 +198,40 @@ class Collection {
           : arr[0];
         if (el) Object.assign(el, patch);
       }
+      // "settings.admin_password_hash" 처럼 중첩된 객체 안을 가리키는 키.
+      // 진짜 MongoDB 는 그 안쪽 값을 바꾸는데, 예전에는 저 문자열을 통째로
+      // 문서의 키로 만들어 버려서 아무 일도 안 일어난 것처럼 보였다 —
+      // 위치 지정($) 갱신 때와 같은 함정이다.
+      const nested = {};
+      for (const k of Object.keys(plain)) {
+        if (!k.includes(".")) continue;
+        nested[k] = plain[k];
+        delete plain[k];
+      }
+      for (const [k, v] of Object.entries(nested)) {
+        const parts = k.split(".");
+        let cur = doc;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (cur[parts[i]] == null || typeof cur[parts[i]] !== "object") cur[parts[i]] = {};
+          cur = cur[parts[i]];
+        }
+        cur[parts[parts.length - 1]] = v;
+      }
       const candidate = { ...doc, ...plain };
       this._checkUnique(candidate, doc._id);
       Object.assign(doc, plain);
     }
     if (update.$unset) {
-      for (const k of Object.keys(update.$unset)) delete doc[k];
+      for (const k of Object.keys(update.$unset)) {
+        if (!k.includes(".")) {
+          delete doc[k];
+          continue;
+        }
+        const parts = k.split(".");
+        let cur = doc;
+        for (let i = 0; i < parts.length - 1 && cur; i++) cur = cur[parts[i]];
+        if (cur) delete cur[parts[parts.length - 1]];
+      }
     }
     if (update.$inc) {
       for (const [k, v] of Object.entries(update.$inc)) doc[k] = (doc[k] || 0) + v;
