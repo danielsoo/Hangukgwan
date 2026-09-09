@@ -226,3 +226,48 @@ a:hover {
   transition: border-color 0.2s ease, color 0.2s ease;
 }
 .hg-close-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── 헤더 한 줄 (2026-09-09) ────────────────────────────────────────
+   예전에는 위아래 두 줄이었다 — 위에 로고와 각종 버튼, 아래에 내비게이션.
+   사장님: "지금 사실상 헤더가 2개인 셈인데 하나로 합치려고 하는거야."
+
+   3열 그리드다. 가운데를 진짜 화면 중앙에 두려면 양옆이 같은 폭이어야
+   하는데(1fr auto 1fr), 로고와 오른쪽 버튼 묶음은 폭이 다르고 로그인
+   여부·언어에 따라 계속 변한다. flex 로는 가운데가 그때그때 밀린다. */
+.hg-header-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: clamp(8px, 2vw, 24px);
+}
+.hg-header-bar > :last-child { justify-self: end; }
+
+/* 좁은 화면에서는 내비게이션이 자기 칸 안에서 가로로 스크롤된다. 줄을
+   나누면 다시 헤더가 둘이 되므로, 한 줄을 유지하고 넘치는 쪽을 흘린다. */
+.hg-header-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.hg-header-nav::-webkit-scrollbar { display: none; }
+
+/* 자리가 모자라면 가운데 칸만 줄어들어야 한다.
+   1fr auto 1fr 의 가운데는 auto — 내용만큼 벌어지므로, 폰에서는 내비가
+   자기 칸을 넘어 오른쪽 버튼 위로 흘러넘쳤다(가로 스크롤이 걸리지 않았다).
+   좁은 화면에서는 양옆을 auto 로 두고 가운데를 minmax(0,1fr) 로 바꿔
+   가운데가 줄어들며 스크롤되게 한다. 완벽한 중앙 정렬은 넓은 화면에서만
+   지키고, 좁은 화면에서는 겹치지 않는 쪽을 택한다. */
+@media (max-width: 900px) {
+  .hg-header-bar { grid-template-columns: auto minmax(0, 1fr) auto; }
+}
+
+/* 아주 좁은 화면(폰)에서는 로고 글자를 접고 韓 표식만 남겨서 가운데
+   내비게이션에 자리를 내준다. */
+@media (max-width: 560px) {
+  .hg-logo-word { display: none; }
+  .hg-header-bar { gap: 8px; }
+  .hg-header-nav { justify-content: flex-start; }
+}

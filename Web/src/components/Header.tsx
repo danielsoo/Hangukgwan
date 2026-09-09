@@ -14,6 +14,11 @@ const NAV: { href: string; key: 'home' | 'menu' | 'about' | 'loc' | 'group' }[] 
   { href: '/group/', key: 'group' },
 ]
 
+// 헤더 안의 글자는 전부 이 크기다 — 사장님: "글자 크기는 헤더들 다 같게."
+// 예전에는 로고 19px, 내비 12.5px, 버튼 12.5px, 전화 14px 로 제각각이라
+// 두 줄이 서로 다른 화면처럼 보였다. 한 줄로 합치면서 하나로 맞춘다.
+const TEXT = 'clamp(11.5px, 3vw, 13px)'
+
 export default function Header() {
   const { tr, cycleLang, langLabel, langTitle } = useLanguage()
   const { theme, toggleTheme } = useTheme()
@@ -39,26 +44,24 @@ export default function Header() {
       }}
     >
       <div
+        className="hg-header-bar"
         style={{
           maxWidth: 1320,
           margin: '0 auto',
-          padding: '0 clamp(14px, 3vw, 48px)',
-          minHeight: 60,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 'clamp(10px, 2vw, 32px)',
+          padding: '0 clamp(12px, 3vw, 48px)',
+          minHeight: 62,
         }}
       >
+        {/* 왼쪽 — 로고 */}
         <Link
           href="/"
           className="hg-logo"
           style={{
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
-            gap: 'clamp(8px, 2vw, 12px)',
+            gap: 10,
             padding: '11px 0',
-            flexShrink: 0,
+            justifySelf: 'start',
             minWidth: 0,
           }}
         >
@@ -67,12 +70,12 @@ export default function Header() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 'clamp(28px, 8vw, 34px)',
-              height: 'clamp(28px, 8vw, 34px)',
+              width: 28,
+              height: 28,
               border: '1px solid var(--gold-a55)',
               color: 'var(--gold)',
               fontFamily: "'Noto Serif TC', serif",
-              fontSize: 'clamp(14px, 4vw, 17px)',
+              fontSize: TEXT,
               lineHeight: 1,
               flexShrink: 0,
             }}
@@ -80,11 +83,12 @@ export default function Header() {
             韓
           </span>
           <span
+            className="hg-logo-word"
             style={{
               fontFamily: "'Noto Serif TC', serif",
               fontWeight: 400,
-              fontSize: 'clamp(15px, 4.4vw, 19px)',
-              letterSpacing: '0.12em',
+              fontSize: TEXT,
+              letterSpacing: '0.14em',
               color: 'var(--ink2)',
               whiteSpace: 'nowrap',
             }}
@@ -93,119 +97,8 @@ export default function Header() {
           </span>
         </Link>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(5px, 1.4vw, 16px)', flexShrink: 1, minWidth: 0 }}>
-          <button
-            onClick={cycleLang}
-            title={langTitle}
-            className="hg-pill"
-            style={{ padding: '7px clamp(6px, 2vw, 10px)', flexShrink: 0, background: 'none' }}
-          >
-            <span style={{ fontSize: 'clamp(10.5px, 2.8vw, 12px)', letterSpacing: '0.06em', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>
-              {langLabel}
-            </span>
-            <span style={{ fontSize: 8, color: 'var(--muted)' }}>▾</span>
-          </button>
-
-          {/* 계정 — 로그인 상태를 아직 모르는 동안(첫 /api/account/me 응답 전)
-              에는 아무것도 그리지 않는다. "로그인"이 잠깐 떴다가 이름으로
-              바뀌는 깜빡임을 막기 위해서다. 예전에는 이 자리가 주문 화면으로
-              나가는 바깥 링크였는데, 이제 회원 기능이 이 사이트 안에 있으므로
-              내 계정(또는 로그인)으로 보낸다. */}
-          {!loading ? (
-            <>
-              {isAdmin ? (
-                <Link
-                  href="/account/"
-                  className="hg-cta-outline-gold"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    padding: '7px clamp(8px, 2.6vw, 13px)',
-                    fontSize: 'clamp(10.5px, 2.8vw, 12.5px)',
-                    letterSpacing: '0.04em',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    textDecoration: 'none',
-                  }}
-                >
-                  {tr.auth.adminPage}
-                </Link>
-              ) : null}
-              <Link
-                href={user ? '/account/' : '/login/'}
-                className="hg-member-btn"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 7,
-                  padding: '7px clamp(8px, 2.6vw, 14px)',
-                  fontSize: 'clamp(10.5px, 2.8vw, 12.5px)',
-                  letterSpacing: '0.04em',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                  maxWidth: 150,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  textDecoration: 'none',
-                }}
-              >
-                <span style={{ display: 'block', width: 6, height: 6, border: '1px solid var(--accent)', borderRadius: '50%', flexShrink: 0 }} />
-                {user ? user.name || tr.member.nav : tr.auth.login}
-              </Link>
-            </>
-          ) : null}
-
-          <button
-            onClick={toggleTheme}
-            title={themeTitle}
-            className="hg-theme-btn"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 'clamp(28px, 7.5vw, 32px)',
-              height: 'clamp(28px, 7.5vw, 32px)',
-              fontSize: 13,
-              lineHeight: 1,
-              flexShrink: 0,
-              background: 'none',
-            }}
-          >
-            {theme === 'light' ? '☾' : '☀'}
-          </button>
-
-          <a
-            href="tel:0366567994"
-            className="hg-phone-btn"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '8px clamp(9px, 2.6vw, 16px)',
-              fontFamily: "'Newsreader', serif",
-              fontSize: 'clamp(12px, 3.2vw, 14px)',
-              letterSpacing: '0.04em',
-              whiteSpace: 'nowrap',
-              flexShrink: 0,
-            }}
-          >
-            03 656 7994
-          </a>
-        </div>
-      </div>
-
-      <div style={{ borderTop: '1px solid var(--gold-a12)' }}>
-        <nav
-          style={{
-            maxWidth: 1320,
-            margin: '0 auto',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexWrap: 'nowrap',
-            overflowX: 'auto',
-            padding: '0 clamp(6px, 2vw, 20px)',
-          }}
-        >
+        {/* 가운데 — 내비게이션 */}
+        <nav className="hg-header-nav">
           {NAV.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href)
             return (
@@ -215,8 +108,8 @@ export default function Header() {
                 className="hg-nav-item"
                 style={{
                   position: 'relative',
-                  padding: '10px clamp(9px, 2.6vw, 15px)',
-                  fontSize: 'clamp(11.5px, 3vw, 12.5px)',
+                  padding: '10px clamp(8px, 2.2vw, 15px)',
+                  fontSize: TEXT,
                   fontWeight: 300,
                   letterSpacing: '0.06em',
                   whiteSpace: 'nowrap',
@@ -229,8 +122,8 @@ export default function Header() {
                   <span
                     style={{
                       position: 'absolute',
-                      left: 'clamp(9px, 2.6vw, 15px)',
-                      right: 'clamp(9px, 2.6vw, 15px)',
+                      left: 'clamp(8px, 2.2vw, 15px)',
+                      right: 'clamp(8px, 2.2vw, 15px)',
                       bottom: 3,
                       height: 1,
                       background: 'var(--gold)',
@@ -241,6 +134,89 @@ export default function Header() {
             )
           })}
         </nav>
+
+        {/* 오른쪽 — 사장님 지정 순서: 가장 오른쪽부터 프로필, 밝기, 언어.
+            관리자 버튼은 관리자에게만 보이는 추가 항목이라, 그 셋의 자리를
+            건드리지 않도록 묶음의 맨 앞(가장 왼쪽)에 둔다. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(4px, 1.2vw, 10px)', minWidth: 0 }}>
+          {!loading && isAdmin ? (
+            <Link
+              href="/account/"
+              className="hg-cta-outline-gold"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '7px clamp(8px, 2.4vw, 13px)',
+                fontSize: TEXT,
+                letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
+                flexShrink: 0,
+                textDecoration: 'none',
+              }}
+            >
+              {tr.auth.adminPage}
+            </Link>
+          ) : null}
+
+          <button
+            onClick={cycleLang}
+            title={langTitle}
+            className="hg-pill"
+            style={{ padding: '7px clamp(6px, 2vw, 10px)', flexShrink: 0, background: 'none' }}
+          >
+            <span style={{ fontSize: TEXT, letterSpacing: '0.06em', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>
+              {langLabel}
+            </span>
+            <span style={{ fontSize: 8, color: 'var(--muted)' }}>▾</span>
+          </button>
+
+          <button
+            onClick={toggleTheme}
+            title={themeTitle}
+            className="hg-theme-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 30,
+              height: 30,
+              fontSize: TEXT,
+              lineHeight: 1,
+              flexShrink: 0,
+              background: 'none',
+            }}
+          >
+            {theme === 'light' ? '☾' : '☀'}
+          </button>
+
+          {/* 프로필 — 로그인 상태를 아직 모르는 동안(첫 /api/account/me 응답
+              전)에는 아무것도 그리지 않는다. "로그인"이 잠깐 떴다가 이름으로
+              바뀌는 깜빡임을 막기 위해서다. */}
+          {!loading ? (
+            <Link
+              href={user ? '/account/' : '/login/'}
+              className="hg-member-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+                padding: '7px clamp(8px, 2.4vw, 14px)',
+                fontSize: TEXT,
+                letterSpacing: '0.04em',
+                whiteSpace: 'nowrap',
+                flexShrink: 1,
+                minWidth: 0,
+                maxWidth: 150,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                textDecoration: 'none',
+              }}
+            >
+              <span style={{ display: 'block', width: 6, height: 6, border: '1px solid var(--accent)', borderRadius: '50%', flexShrink: 0 }} />
+              {user ? user.name || tr.member.nav : tr.auth.login}
+            </Link>
+          ) : null}
+        </div>
       </div>
     </header>
   )
