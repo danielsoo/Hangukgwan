@@ -8,7 +8,7 @@ export default function AboutPage() {
 
   return (
     <main>
-      <section style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) clamp(20px, 3.5vw, 48px) clamp(50px, 6vw, 84px)' }}>
+      <section style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) var(--shell-pad) clamp(50px, 6vw, 84px)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(44px, 6vw, 92px)', alignItems: 'center' }}>
           <div>
             <p
@@ -32,7 +32,7 @@ export default function AboutPage() {
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
                 margin: '0 0 30px',
-                maxWidth: '19ch',
+                maxWidth: 'min(19ch, 100%)',
               }}
             >
               {tr.about.title}
@@ -49,7 +49,7 @@ export default function AboutPage() {
       </section>
 
       <section style={{ background: 'var(--bg-alt)', borderTop: '1px solid var(--gold-a14)', borderBottom: '1px solid var(--gold-a14)' }}>
-        <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(64px, 8vw, 110px) clamp(20px, 3.5vw, 48px)' }}>
+        <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(64px, 8vw, 110px) var(--shell-pad)' }}>
           <p
             style={{
               fontFamily: "'Newsreader', serif",
@@ -71,7 +71,7 @@ export default function AboutPage() {
               letterSpacing: '0.05em',
               color: 'var(--ink)',
               margin: '0 0 clamp(44px, 6vw, 68px)',
-              maxWidth: '24ch',
+              maxWidth: 'min(24ch, 100%)',
             }}
           >
             {tr.about.valuesTitle}
@@ -90,7 +90,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(60px, 8vw, 100px) clamp(20px, 3.5vw, 48px)' }}>
+      <section style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 100px) var(--shell-pad)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'clamp(14px, 2vw, 24px)' }}>
           <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
             <ImagePlaceholder label="小菜 · Banchan" />

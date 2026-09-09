@@ -17,7 +17,7 @@ export default function MenuPage() {
   const { tr } = useLanguage()
 
   return (
-    <main style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) clamp(20px, 3.5vw, 48px) clamp(70px, 9vw, 120px)' }}>
+    <main style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) var(--shell-pad) clamp(70px, 9vw, 120px)' }}>
       <p
         style={{
           fontFamily: "'Newsreader', serif",
@@ -39,12 +39,12 @@ export default function MenuPage() {
           letterSpacing: '0.06em',
           color: 'var(--ink)',
           margin: '0 0 26px',
-          maxWidth: '22ch',
+          maxWidth: 'min(22ch, 100%)',
         }}
       >
         {tr.menuPage.title}
       </h1>
-      <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 clamp(48px, 6vw, 76px)', maxWidth: '52ch' }}>
+      <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 clamp(48px, 6vw, 76px)', maxWidth: 'min(52ch, 100%)' }}>
         {tr.menuPage.intro}
       </p>
 
@@ -86,7 +86,7 @@ export default function MenuPage() {
         <h2 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-title)', letterSpacing: '0.06em', color: 'var(--ink)', margin: '0 0 14px' }}>
           {tr.menuPage.catsTitle}
         </h2>
-        <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a5)', margin: '0 0 44px', maxWidth: '50ch' }}>{tr.menuPage.catsNote}</p>
+        <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a5)', margin: '0 0 44px', maxWidth: 'min(50ch, 100%)' }}>{tr.menuPage.catsNote}</p>
         <div style={{ display: 'grid', gap: 0, borderTop: '1px solid var(--gold-a16)' }}>
           {tr.menuPage.cats.map((cat) => (
             <div

@@ -240,6 +240,134 @@ function check(name, cond, extra = "") {
   check("호버 시 배경이 실제로 칠해진다", !/rgba\(0, 0, 0, 0\)|transparent/.test(hov.bg), JSON.stringify(hov));
   await hoverCtx.close();
 
+  out.push("\n[톱니바퀴와 햄버거가 자기 네모의 정중앙에 있다]");
+  // 사장님: "톱니바퀴가 정중앙이 아니야."
+  // 버튼에 alignItems/justifyContent 만 style 로 넣고 display 를 안 줘서
+  // 두 줄 다 무효였다. 아이콘이 글자 밑선에 앉아 아래로 치우쳤다.
+  // 눈으로 보면 1~2px 은 놓치므로 실제로 잰다.
+  for (const [w, sel, label] of [
+    [1440, ".hg-settings-btn", "톱니바퀴"],
+    [700, ".hg-hamburger", "햄버거"],
+    [700, ".hg-settings-btn", "톱니바퀴(좁은 화면)"],
+  ]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const pg = await ctx.newPage();
+    await pg.goto(`${base}/`, { waitUntil: "load" });
+    await pg.waitForTimeout(700);
+    const el = pg.locator(sel).first();
+    if (await el.isVisible()) {
+      const inner = el.locator("svg").first();
+      if ((await inner.count()) > 0) {
+        const b = await el.boundingBox();
+        const i = await inner.boundingBox();
+        const dx = i.x + i.width / 2 - (b.x + b.width / 2);
+        const dy = i.y + i.height / 2 - (b.y + b.height / 2);
+        check(`${label} 아이콘이 가로 가운데`, Math.abs(dx) <= 0.6, `${dx.toFixed(2)}px`);
+        check(`${label} 아이콘이 세로 가운데`, Math.abs(dy) <= 0.6, `${dy.toFixed(2)}px`);
+      }
+      const disp = await el.evaluate((e) => getComputedStyle(e).display);
+      check(`${label} 가 flex 로 안쪽을 잡는다`, /flex/.test(disp), disp);
+    }
+    await ctx.close();
+  }
+
+  // 톱니바퀴와 로그인은 나란히 서 있다 — 높이와 세로 중심이 어긋나면
+  // 둘 중 하나가 떠 보인다.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const pg = await ctx.newPage();
+    await pg.goto(`${base}/`, { waitUntil: "load" });
+    await pg.waitForTimeout(700);
+    const gear = await pg.locator(".hg-settings-btn").boundingBox();
+    const login = await pg.locator(".hg-account-wide a, .hg-account-wide button").first().boundingBox();
+    if (login) {
+      const dy = gear.y + gear.height / 2 - (login.y + login.height / 2);
+      check("톱니바퀴와 로그인의 세로 중심이 같다", Math.abs(dy) <= 1, `${dy.toFixed(2)}px`);
+      check("둘의 높이가 비슷하다", Math.abs(gear.height - login.height) <= 4,
+        `${Math.round(gear.height)} vs ${Math.round(login.height)}`);
+    }
+    await ctx.close();
+  }
+
+  out.push("\n[양 끝 공백이 화면을 따라간다]");
+  // 사장님: "헤더랑 전체적인 웹사이트 양 끝 공백이 너무 놀고 있어서."
+  // 예전에는 어디서나 1320px 로 고정이라 2000px 모니터에서 양옆이 각각
+  // 340px 씩 비었다. 이제 넓어지면 같이 넓어져야 한다.
+  const barWidths = {};
+  for (const w of [1280, 2000]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const pg = await ctx.newPage();
+    await pg.goto(`${base}/`, { waitUntil: "load" });
+    await pg.waitForTimeout(700);
+    const bar = await pg.locator(".hg-header-bar").boundingBox();
+    barWidths[w] = bar.width;
+    check(`${w}px 에서 남는 여백이 화면의 1/8 을 넘지 않는다`, bar.x <= w / 8, `왼쪽 ${Math.round(bar.x)}px`);
+
+    // 헤더와 본문 섹션의 왼쪽 끝이 같아야 한다 — 다르면 계단처럼 보인다.
+    const edges = await pg.evaluate(() => {
+      const want = getComputedStyle(document.querySelector(".hg-header-bar")).maxWidth;
+      const xs = [];
+      document.querySelectorAll("div, section, main, footer").forEach((el) => {
+        const cs = getComputedStyle(el);
+        if (cs.maxWidth === want && cs.marginLeft === cs.marginRight && el.getBoundingClientRect().width > 0) {
+          xs.push(Math.round(el.getBoundingClientRect().x));
+        }
+      });
+      return { count: xs.length, distinct: [...new Set(xs)] };
+    });
+    check(`${w}px 에서 헤더와 본문이 같은 왼쪽 끝을 쓴다`, edges.distinct.length <= 1, JSON.stringify(edges));
+    check(`${w}px 에서 껍데기를 쓰는 곳이 여럿이다`, edges.count >= 2, String(edges.count));
+    await ctx.close();
+  }
+  check("화면이 넓어지면 내용도 같이 넓어진다", barWidths[2000] > barWidths[1280] + 200,
+    `${Math.round(barWidths[1280])} → ${Math.round(barWidths[2000])}`);
+
+  out.push("\n[설정 판이 톱니바퀴 아래에 붙는다]");
+  // 전에는 헤더 폭을 가득 채우는 띠였고 내용이 왼쪽 끝에서 시작했다.
+  // 2000px 모니터에서는 누른 톱니바퀴와 열린 판이 1600px 넘게 떨어져 있었다.
+  // 그리고 흐름 안에 있어서 판을 열 때마다 본문이 아래로 밀렸다.
+  for (const w of [2000, 1440, 900, 700, 390]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const pg = await ctx.newPage();
+    await pg.goto(`${base}/`, { waitUntil: "load" });
+    await pg.waitForTimeout(700);
+    if (!(await pg.locator(".hg-settings-btn").isVisible())) { await ctx.close(); continue; }
+    const before = await pg.evaluate(() => document.querySelector("main").getBoundingClientRect().top);
+    await pg.locator(".hg-settings-btn").click();
+    await pg.waitForTimeout(350);
+    const after = await pg.evaluate(() => document.querySelector("main").getBoundingClientRect().top);
+    check(`${w}px: 판을 열어도 본문이 밀리지 않는다`, Math.abs(after - before) < 1, `${Math.round(before)} → ${Math.round(after)}`);
+
+    const pop = await pg.locator(".hg-settings-pop").boundingBox();
+    const gear = await pg.locator(".hg-settings-btn").boundingBox();
+    const login = await pg.locator(".hg-account-wide a, .hg-account-wide button").first().boundingBox();
+    const rightRef = login ? Math.max(gear.x + gear.width, login.x + login.width) : gear.x + gear.width;
+    check(`${w}px: 판이 화면 안에 들어온다`, pop.x >= -0.5 && pop.x + pop.width <= w + 0.5,
+      `${Math.round(pop.x)}~${Math.round(pop.x + pop.width)}`);
+    check(`${w}px: 판 오른쪽 끝이 버튼과 맞는다`, Math.abs(pop.x + pop.width - rightRef) <= 2,
+      `${Math.round(pop.x + pop.width)} vs ${Math.round(rightRef)}`);
+    check(`${w}px: 판이 톱니바퀴 아래에 뜬다`, pop.y >= gear.y + gear.height - 2, `${Math.round(pop.y)} vs ${Math.round(gear.y + gear.height)}`);
+    const ov = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(`${w}px: 판을 열어도 가로 스크롤 없음`, ov <= 1, `${ov}px`);
+    await ctx.close();
+  }
+
+  out.push("\n[어느 폭에서도 가로 스크롤이 생기지 않는다]");
+  // 중국어에 word-break: keep-all 이 걸려 있어서 800px 에서 인용구가
+  // 줄바꿈 없이 화면 밖으로 12px 흘러넘쳤다.
+  for (const lang of ["zh-TW", "ko", "en"]) {
+    for (const w of [390, 700, 800, 1024, 1440, 2000]) {
+      const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
+      await ctx.addInitScript((l) => { try { localStorage.setItem("hgw-lang", l); } catch {} }, lang);
+      const pg = await ctx.newPage();
+      await pg.goto(`${base}/`, { waitUntil: "load" });
+      await pg.waitForTimeout(600);
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      check(`${lang} ${w}px 가로 스크롤 없음`, over <= 1, `${over}px 초과`);
+      await ctx.close();
+    }
+  }
+
   await browser.close();
   server.close();
   console.log(out.join("\n"));

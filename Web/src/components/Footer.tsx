@@ -8,7 +8,7 @@ export default function Footer() {
 
   return (
     <footer style={{ background: 'var(--bg)', borderTop: '1px solid var(--gold-a18)' }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(54px, 7vw, 84px) clamp(20px, 3.5vw, 48px) 40px' }}>
+      <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(54px, 7vw, 84px) var(--shell-pad) 40px' }}>
         <div
           style={{
             display: 'grid',
@@ -42,7 +42,7 @@ export default function Footer() {
                 </span>
               </span>
             </div>
-            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a45)', margin: 0, maxWidth: '26ch' }}>{tr.footer.tag}</p>
+            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a45)', margin: 0, maxWidth: 'min(26ch, 100%)' }}>{tr.footer.tag}</p>
           </div>
 
           <div>

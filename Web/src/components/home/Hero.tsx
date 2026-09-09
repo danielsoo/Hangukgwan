@@ -86,7 +86,7 @@ export default function Hero() {
           </span>
           <span style={{ display: 'block', width: 'clamp(36px, 8vw, 86px)', height: 1, background: 'linear-gradient(to left, var(--gold-a0) 0%, var(--gold-a7) 100%)' }} />
         </div>
-        <p style={{ maxWidth: '32ch', fontSize: 'var(--fs-md)', fontWeight: 300, lineHeight: 1.95, color: 'var(--ink-a78)', margin: '0 0 clamp(34px, 5vw, 50px)' }}>
+        <p style={{ maxWidth: 'min(32ch, 100%)', fontSize: 'var(--fs-md)', fontWeight: 300, lineHeight: 1.95, color: 'var(--ink-a78)', margin: '0 0 clamp(34px, 5vw, 50px)' }}>
           {tr.hero.tag}
         </p>
 

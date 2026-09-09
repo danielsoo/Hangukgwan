@@ -8,7 +8,7 @@ export default function AboutTeaser() {
   const { tr } = useLanguage()
   return (
     <section style={{ background: 'var(--bg)' }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) clamp(20px, 3.5vw, 48px)' }}>
+      <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) var(--shell-pad)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(44px, 6vw, 96px)', alignItems: 'center' }}>
           <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
             <ImagePlaceholder label="廚房或老闆夫妻 · Kitchen or owners" />
@@ -35,7 +35,7 @@ export default function AboutTeaser() {
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
                 margin: '0 0 30px',
-                maxWidth: '19ch',
+                maxWidth: 'min(19ch, 100%)',
               }}
             >
               {tr.about.title}

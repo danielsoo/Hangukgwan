@@ -11,10 +11,13 @@ export default function PullQuoteBand() {
         <div style={{ position: 'relative', minHeight: 'clamp(240px, 34vw, 420px)' }}>
           <ImagePlaceholder label="全幅照片 · A room or table photograph" />
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', padding: 'clamp(48px, 7vw, 90px) clamp(28px, 5vw, 72px)' }}>
+        {/* minWidth: 0 이 없으면 안의 글이 자기 칸보다 넓어져도 줄어들지
+            않는다(flex 항목의 기본 최소폭은 내용 크기다). 800px 폭에서
+            인용구가 오른쪽으로 12px 삐져나와 가로 스크롤이 걸렸다. */}
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, padding: 'clamp(48px, 7vw, 90px) clamp(28px, 5vw, 72px)' }}>
           <p
             style={{
-              maxWidth: '24ch',
+              maxWidth: 'min(24ch, 100%)',
               margin: 0,
               fontFamily: "'Newsreader', serif",
               fontStyle: 'italic',

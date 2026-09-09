@@ -9,7 +9,7 @@ export default function VisitPage() {
   const { mainMapUrl, branchMapUrl } = useTranslatedInfo()
 
   return (
-    <main style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) clamp(20px, 3.5vw, 48px) clamp(70px, 9vw, 120px)' }}>
+    <main style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) var(--shell-pad) clamp(70px, 9vw, 120px)' }}>
       <p
         style={{
           fontFamily: "'Newsreader', serif",
@@ -31,12 +31,12 @@ export default function VisitPage() {
           letterSpacing: '0.06em',
           color: 'var(--ink)',
           margin: '0 0 26px',
-          maxWidth: '20ch',
+          maxWidth: 'min(20ch, 100%)',
         }}
       >
         {tr.loc.title}
       </h1>
-      <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 clamp(48px, 6vw, 76px)', maxWidth: '52ch' }}>{tr.loc.intro}</p>
+      <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 clamp(48px, 6vw, 76px)', maxWidth: 'min(52ch, 100%)' }}>{tr.loc.intro}</p>
 
       <div style={{ display: 'grid', gap: 'clamp(48px, 6vw, 80px)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'start', paddingTop: 34, borderTop: '1px solid var(--gold-a28)' }}>

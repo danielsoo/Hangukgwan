@@ -26,6 +26,13 @@ const langTitles: Record<Language, string> = {
 
 const STORAGE_KEY = 'hgw-lang'
 
+/* <html lang> 에 넣을 표준 언어 태그 */
+const HTML_LANG: Record<Language, string> = {
+  'zh-TW': 'zh-Hant',
+  ko: 'ko',
+  en: 'en',
+}
+
 interface LanguageContextValue {
   lang: Language
   setLang: (lang: Language) => void
@@ -49,6 +56,15 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       // localStorage unavailable — keep default
     }
   }, [])
+
+  /* <html lang> 을 실제로 보고 있는 언어에 맞춘다.
+     layout.tsx 는 lang="zh-Hant" 를 박아 두고 한 번도 바꾸지 않았다. 그래서
+     한국어로 보고 있어도 브라우저·읽어주는 프로그램·CSS 의 :lang() 은 전부
+     중국어로 알고 있었다. 줄바꿈 규칙(word-break)이 언어마다 다르기 때문에
+     이게 그대로 화면 문제로 나왔다. */
+  useEffect(() => {
+    if (typeof document !== 'undefined') document.documentElement.lang = HTML_LANG[lang]
+  }, [lang])
 
   const setLang = (next: Language) => {
     setLangState(next)

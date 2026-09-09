@@ -10,7 +10,7 @@ export default function LocationsTeaser() {
 
   return (
     <section style={{ background: 'var(--bg)' }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(70px, 10vw, 130px) clamp(20px, 3.5vw, 48px)' }}>
+      <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 130px) var(--shell-pad)' }}>
         <div style={{ textAlign: 'center', marginBottom: 'clamp(44px, 6vw, 72px)' }}>
           <p
             style={{

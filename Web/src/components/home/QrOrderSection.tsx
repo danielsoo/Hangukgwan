@@ -9,9 +9,9 @@ export default function QrOrderSection() {
     <section style={{ background: 'var(--bg-alt)', borderTop: '1px solid var(--gold-a14)', borderBottom: '1px solid var(--gold-a14)' }}>
       <div
         style={{
-          maxWidth: 1320,
+          maxWidth: 'var(--shell-max)',
           margin: '0 auto',
-          padding: 'clamp(64px, 8vw, 116px) clamp(20px, 3.5vw, 48px)',
+          padding: 'clamp(64px, 8vw, 116px) var(--shell-pad)',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
           gap: 'clamp(40px, 6vw, 88px)',
@@ -40,12 +40,12 @@ export default function QrOrderSection() {
               letterSpacing: '0.05em',
               color: 'var(--ink)',
               margin: '0 0 24px',
-              maxWidth: '18ch',
+              maxWidth: 'min(18ch, 100%)',
             }}
           >
             {tr.qr.title}
           </h2>
-          <p style={{ fontSize: 'var(--fs-base)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 36px', maxWidth: '40ch' }}>{tr.qr.body}</p>
+          <p style={{ fontSize: 'var(--fs-base)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 36px', maxWidth: 'min(40ch, 100%)' }}>{tr.qr.body}</p>
           <a
             href={ORDER_URL}
             target="_blank"

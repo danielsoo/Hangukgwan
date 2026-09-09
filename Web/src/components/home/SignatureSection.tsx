@@ -18,7 +18,7 @@ export default function SignatureSection() {
   const { tr } = useLanguage()
   return (
     <section style={{ background: 'var(--bg-alt)' }}>
-      <div style={{ maxWidth: 1320, margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) clamp(20px, 3.5vw, 48px)' }}>
+      <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) var(--shell-pad)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(44px, 6vw, 96px)', alignItems: 'start' }}>
           <div>
             <p
@@ -42,13 +42,13 @@ export default function SignatureSection() {
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
                 margin: '0 0 30px',
-                maxWidth: '18ch',
+                maxWidth: 'min(18ch, 100%)',
               }}
             >
               {tr.sig.title}
             </h2>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 30 }} />
-            <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: '40ch' }}>{tr.sig.note}</p>
+            <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: 'min(40ch, 100%)' }}>{tr.sig.note}</p>
             <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
               <ImagePlaceholder label="招牌菜特寫 · A signature dish, close up" />
             </div>

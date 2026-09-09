@@ -61,7 +61,8 @@ export default function Header() {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 7,
-        padding: '7px clamp(8px, 2.4vw, 14px)',
+        height: 'var(--hdr-btn-h)',
+        padding: '0 clamp(10px, 2.4vw, 16px)',
         fontSize: TEXT,
         letterSpacing: '0.04em',
         whiteSpace: 'nowrap',
@@ -93,9 +94,9 @@ export default function Header() {
       <div
         className="hg-header-bar"
         style={{
-          maxWidth: 1320,
+          maxWidth: 'var(--shell-max)',
           margin: '0 auto',
-          padding: '0 clamp(12px, 3vw, 48px)',
+          padding: '0 var(--shell-pad)',
           minHeight: 62,
         }}
       >
@@ -106,7 +107,7 @@ export default function Header() {
             onClick={() => setOpen((v) => (v === 'menu' ? null : 'menu'))}
             aria-expanded={open === 'menu'}
             aria-label={open === 'menu' ? '메뉴 닫기' : '메뉴 열기'}
-            style={{ alignItems: 'center', justifyContent: 'center', width: 34, height: 34, flexShrink: 0, lineHeight: 1 }}
+            style={{ width: 'var(--hdr-btn-h)', height: 'var(--hdr-btn-h)', flexShrink: 0 }}
           >
             {/* 글자(☰ / ✕) 대신 직접 그린다 — 본문 서체(Noto Sans KR/TC)에
                 ✕(U+2715) 자형이 없어서 열었을 때 빈 네모로 나왔다. */}
@@ -229,7 +230,7 @@ export default function Header() {
             aria-expanded={open === 'settings'}
             aria-label={tr.settings.title}
             title={tr.settings.title}
-            style={{ alignItems: 'center', justifyContent: 'center', width: 34, height: 34, flexShrink: 0, lineHeight: 1 }}
+            style={{ width: 'var(--hdr-btn-h)', height: 'var(--hdr-btn-h)', flexShrink: 0 }}
           >
             {/* 톱니 — 글자 ⚙ 는 서체에 따라 컬러 이모지로 튀거나 빈 네모가 된다. */}
             <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -245,11 +246,15 @@ export default function Header() {
         </div>
       </div>
 
-      {/* 설정 — 언어와 밝기 */}
+      {/* 설정 — 언어와 밝기.
+          전에는 헤더 폭을 가득 채우는 띠였고, 내용이 껍데기 왼쪽 끝에서
+          시작했다. 톱니바퀴는 오른쪽 끝에 있으니 2000px 모니터에서는 누른
+          자리와 열린 자리가 1600px 넘게 떨어져 있었다 — 무엇이 열린 건지
+          알 수 없다. 톱니바퀴 바로 아래에 붙는 작은 판으로 바꾼다. */}
       {open === 'settings' ? (
-        <div className="hg-panel">
-          <div style={{ maxWidth: 1320, margin: '0 auto', padding: '4px 0 10px' }}>
-            <SettingsControls inset="clamp(12px, 3vw, 48px)" />
+        <div className="hg-settings-anchor">
+          <div className="hg-panel hg-settings-pop">
+            <SettingsControls inset="16px" />
           </div>
         </div>
       ) : null}

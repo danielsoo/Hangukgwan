@@ -28,9 +28,9 @@ export default function InfoStrip() {
     <section style={{ background: 'var(--bg)', borderBottom: '1px solid var(--gold-a14)' }}>
       <div
         style={{
-          maxWidth: 1320,
+          maxWidth: 'var(--shell-max)',
           margin: '0 auto',
-          padding: '0 clamp(20px, 3.5vw, 48px)',
+          padding: '0 var(--shell-pad)',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
         }}
