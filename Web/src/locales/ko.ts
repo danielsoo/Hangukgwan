@@ -196,6 +196,8 @@ const ko: TranslationsType = {
       card_already_claimed: '이미 다른 계정에 등록된 카드입니다.',
       already_registered: '이미 이 계정에 등록된 카드가 있습니다.',
       server_error: '문제가 발생했습니다. 잠시 후 다시 시도해 주세요.',
+      network_error: '서버에 연결하지 못했습니다. 인터넷 연결을 확인해 주세요.',
+      api_not_found: '서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.',
     },
   },
 }

@@ -47,12 +47,28 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 /** 서버가 돌려주는 error 코드를 그대로 Error.message 로 던진다 — 화면에서
  *  언어별 문구로 바꾼다(locales 의 auth.errors). */
 async function postJson(url: string, body?: unknown) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let res: Response
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  } catch {
+    // 서버에 아예 닿지 못한 경우(네트워크가 끊겼거나, 로컬에서 홈페이지만
+    // 띄워 API 주소가 안 맞거나). 이걸 그냥 server_error 로 뭉뚱그리면
+    // 화면에는 "문제가 발생했습니다" 만 뜨고, 손님은 비밀번호를 다시
+    // 치면서 몇 번이고 같은 화면을 보게 된다.
+    throw new Error('network_error')
+  }
+  // API 자체가 없는 주소(로컬에서 홈페이지 포트로 보낸 경우)는 404 와
+  // 함께 HTML 이 온다 — JSON 이 아니므로 아래 파싱이 비게 되고, 그러면
+  // 원인이 화면에서 사라진다. 그 경우를 따로 알려준다.
+  const contentType = res.headers.get('content-type') || ''
+  if (!res.ok && !contentType.includes('application/json')) {
+    throw new Error(res.status === 404 ? 'api_not_found' : 'network_error')
+  }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'server_error')
   return data

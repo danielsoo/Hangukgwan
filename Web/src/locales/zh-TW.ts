@@ -196,6 +196,8 @@ const zhTW: TranslationsType = {
       card_already_claimed: '這張卡已經被其他帳號註冊過了。',
       already_registered: '您的帳號已經註冊過一張卡了。',
       server_error: '發生問題，請稍後再試。',
+      network_error: '無法連線到伺服器，請檢查網路連線。',
+      api_not_found: '無法連線到伺服器，請稍後再試。',
     },
   },
 }

@@ -196,6 +196,8 @@ const en: TranslationsType = {
       card_already_claimed: 'That card is already registered to another account.',
       already_registered: 'This account already has a card registered.',
       server_error: 'Something went wrong. Please try again.',
+      network_error: "Couldn't reach the server. Please check your connection.",
+      api_not_found: "Couldn't reach the server. Please try again shortly.",
     },
   },
 }

@@ -204,6 +204,8 @@ export interface TranslationsType {
       card_already_claimed: string
       already_registered: string
       server_error: string
+      network_error: string
+      api_not_found: string
     }
   }
 }

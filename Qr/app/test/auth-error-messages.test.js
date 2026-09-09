@@ -62,6 +62,31 @@ for (const key of Object.values(NEEDED)) {
   check(`types: ${key}`, new RegExp(`${key}:\\s*string`).test(types));
 }
 
+out.push("\n[서버에 닿지 못한 것과 비밀번호가 틀린 것은 다르다]");
+// 2026-09-10 사장님이 로컬에서 겪은 일 — 홈페이지만 따로 띄우면 그 포트에는
+// API 가 없어서 404 가 오는데, 화면에는 "문제가 발생했습니다" 만 떴다.
+// 원인(주소가 안 맞는다)이 어디에도 안 나오니 비밀번호를 몇 번이고 다시
+// 치게 된다. 닿지 못한 것과 서버가 거절한 것은 해야 할 일이 다르다.
+{
+  const authCtx = fs.readFileSync(path.join(WEB, "context", "AuthContext.tsx"), "utf8");
+  check("fetch 가 실패하면 network_error 로 구분한다",
+    /catch \{[\s\S]*?throw new Error\('network_error'\)/.test(authCtx), "구분이 없다");
+  check("JSON 이 아닌 404 는 api_not_found 로 구분한다",
+    /res\.status === 404 \? 'api_not_found'/.test(authCtx), "구분이 없다");
+  check("그래도 서버가 준 오류 코드는 그대로 쓴다",
+    /throw new Error\(data\.error \|\| 'server_error'\)/.test(authCtx));
+  for (const lang of ["ko", "en", "zh-TW"]) {
+    const src = fs.readFileSync(path.join(WEB, "locales", `${lang}.ts`), "utf8");
+    check(`${lang}: network_error 문구가 있다`, /network_error:/.test(src));
+    check(`${lang}: api_not_found 문구가 있다`, /api_not_found:/.test(src));
+  }
+  const ko = fs.readFileSync(path.join(WEB, "locales", "ko.ts"), "utf8");
+  const line = (/network_error: '([^']*)'/.exec(ko) || [, ""])[1];
+  check("연결 실패 문구가 비밀번호 탓을 하지 않는다",
+    !/비밀번호|이메일/.test(line), line);
+  check("연결 실패 문구가 무엇을 확인할지 말해준다", /연결/.test(line), line);
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);
