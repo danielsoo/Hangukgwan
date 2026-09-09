@@ -15,7 +15,7 @@ export default function LocationsTeaser() {
           <p
             style={{
               fontFamily: "'Newsreader', serif",
-              fontSize: 11.5,
+              fontSize: 'var(--fs-xs)',
               letterSpacing: '0.34em',
               textTransform: 'uppercase',
               color: 'var(--accent)',
@@ -28,7 +28,7 @@ export default function LocationsTeaser() {
             style={{
               fontFamily: "'Noto Serif TC', serif",
               fontWeight: 400,
-              fontSize: 'clamp(1.85rem, 3.8vw, 2.8rem)',
+              fontSize: 'var(--fs-display)',
               lineHeight: 1.5,
               letterSpacing: '0.06em',
               color: 'var(--ink)',
@@ -45,25 +45,25 @@ export default function LocationsTeaser() {
               <ImagePlaceholder label="本店 · Main restaurant" />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>
-              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 12.5, letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 01</span>
-              <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 23, letterSpacing: '0.08em', color: 'var(--ink)', margin: 0 }}>
+              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 01</span>
+              <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-lg)', letterSpacing: '0.08em', color: 'var(--ink)', margin: 0 }}>
                 {tr.loc.mainLabel}
               </h3>
             </div>
-            <p style={{ fontSize: 16, color: 'var(--ink-a8)', margin: '0 0 4px' }}>新竹縣竹北市縣政九路135巷32號</p>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 13.5, color: 'var(--ink-a38)', margin: '0 0 26px' }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--ink-a8)', margin: '0 0 4px' }}>新竹縣竹北市縣政九路135巷32號</p>
+            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', color: 'var(--ink-a38)', margin: '0 0 26px' }}>
               No. 32, Ln. 135, Xianzhengjiu Rd., Zhubei City
             </p>
             <div style={{ display: 'grid', gap: 11, paddingTop: 24, borderTop: '1px solid var(--gold-a16)', marginBottom: 28 }}>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14.5 }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-base)' }}>
                 <span style={{ color: 'var(--muted)', minWidth: '6em' }}>{tr.info.hours}</span>
                 <span style={{ color: 'var(--ink-a8)' }}>11.00–14.00 · 17.00–21.00</span>
               </div>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14.5 }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-base)' }}>
                 <span style={{ color: 'var(--muted)', minWidth: '6em' }}>{tr.info.closed}</span>
                 <span style={{ color: 'var(--ink-a8)' }}>{tr.info.closedVal}</span>
               </div>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14.5 }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-base)' }}>
                 <span style={{ color: 'var(--muted)', minWidth: '6em' }}>{tr.info.phoneLabel}</span>
                 <a href="tel:0366567994">03-656-7994</a>
               </div>
@@ -72,7 +72,7 @@ export default function LocationsTeaser() {
               href={mainMapUrl}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 13.5, letterSpacing: '0.22em', textTransform: 'uppercase' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.22em', textTransform: 'uppercase' }}
             >
               {tr.loc.mapCta} <span>→</span>
             </a>
@@ -83,33 +83,33 @@ export default function LocationsTeaser() {
               <ImagePlaceholder label="直營店 · Corporate branch" />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>
-              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 12.5, letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 02</span>
-              <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 23, letterSpacing: '0.08em', color: 'var(--ink)', margin: 0 }}>
+              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 02</span>
+              <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-lg)', letterSpacing: '0.08em', color: 'var(--ink)', margin: 0 }}>
                 {tr.loc.branchLabel}
               </h3>
             </div>
-            <p style={{ fontSize: 16, color: 'var(--ink-a8)', margin: '0 0 4px' }}>新竹縣竹北市太元一街7號</p>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 13.5, color: 'var(--ink-a38)', margin: '0 0 26px' }}>
+            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--ink-a8)', margin: '0 0 4px' }}>新竹縣竹北市太元一街7號</p>
+            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', color: 'var(--ink-a38)', margin: '0 0 26px' }}>
               No. 7, Taiyuan 1st St., Zhubei City
             </p>
             <div style={{ display: 'grid', gap: 11, paddingTop: 24, borderTop: '1px solid var(--gold-a16)', marginBottom: 22 }}>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14.5 }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-base)' }}>
                 <span style={{ color: 'var(--muted)', minWidth: '6em' }}>{tr.loc.accessLabel}</span>
                 <span style={{ color: 'var(--ink-a8)' }}>{tr.loc.branchAccess}</span>
               </div>
-              <div style={{ display: 'flex', gap: 20, fontSize: 14.5 }}>
+              <div style={{ display: 'flex', gap: 20, fontSize: 'var(--fs-base)' }}>
                 <span style={{ color: 'var(--muted)', minWidth: '6em' }}>{tr.loc.nearby}</span>
                 <span style={{ color: 'var(--ink-a8)' }}>Samsung · TSMC</span>
               </div>
             </div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.9, color: 'var(--ink-a4)', margin: '0 0 28px', paddingLeft: 20, borderLeft: '1px solid var(--gold-a3)' }}>
+            <p style={{ fontSize: 'var(--fs-sm)', lineHeight: 1.9, color: 'var(--ink-a4)', margin: '0 0 28px', paddingLeft: 20, borderLeft: '1px solid var(--gold-a3)' }}>
               {tr.loc.branchNote}
             </p>
             <a
               href={branchMapUrl}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 13.5, letterSpacing: '0.22em', textTransform: 'uppercase' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.22em', textTransform: 'uppercase' }}
             >
               {tr.loc.mapCta} <span>→</span>
             </a>

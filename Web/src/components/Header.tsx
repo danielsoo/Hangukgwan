@@ -16,8 +16,9 @@ const NAV: { href: string; key: 'home' | 'menu' | 'about' | 'loc' | 'group' }[] 
 
 // 헤더 안의 글자는 전부 이 크기다 — 사장님: "글자 크기는 헤더들 다 같게."
 // 예전에는 로고 19px, 내비 12.5px, 버튼 12.5px, 전화 14px 로 제각각이라
-// 두 줄이 서로 다른 화면처럼 보였다. 한 줄로 합치면서 하나로 맞춘다.
-const TEXT = 'clamp(11.5px, 3vw, 13px)'
+// 두 줄이 서로 다른 화면처럼 보였다. 사이트 전체 글자 단계(globals.css 의
+// --fs-*)에서 같은 값을 가져다 쓴다.
+const TEXT = 'var(--fs-sm)'
 
 export default function Header() {
   const { tr, cycleLang, langLabel, langTitle } = useLanguage()
@@ -167,7 +168,7 @@ export default function Header() {
             <span style={{ fontSize: TEXT, letterSpacing: '0.06em', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>
               {langLabel}
             </span>
-            <span style={{ fontSize: 8, color: 'var(--muted)' }}>▾</span>
+            <span style={{ fontSize: 10, color: 'var(--muted)' }}>▾</span>
           </button>
 
           <button

@@ -17,7 +17,7 @@ export default function AboutTeaser() {
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.34em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -30,7 +30,7 @@ export default function AboutTeaser() {
               style={{
                 fontFamily: "'Noto Serif TC', serif",
                 fontWeight: 400,
-                fontSize: 'clamp(1.85rem, 3.6vw, 2.75rem)',
+                fontSize: 'var(--fs-display)',
                 lineHeight: 1.55,
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
@@ -41,12 +41,12 @@ export default function AboutTeaser() {
               {tr.about.title}
             </h2>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 30 }} />
-            <p style={{ fontSize: 16, lineHeight: 2.05, color: 'var(--ink-a72)', margin: '0 0 22px' }}>{tr.about.p1}</p>
-            <p style={{ fontSize: 16, lineHeight: 2.05, color: 'var(--ink-a72)', margin: '0 0 36px' }}>{tr.about.p2}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.05, color: 'var(--ink-a72)', margin: '0 0 22px' }}>{tr.about.p1}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.05, color: 'var(--ink-a72)', margin: '0 0 36px' }}>{tr.about.p2}</p>
             <Link
               href="/about/"
               className="hg-link-arrow"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 14, letterSpacing: '0.22em', textTransform: 'uppercase' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-base)', letterSpacing: '0.22em', textTransform: 'uppercase' }}
             >
               {tr.about.more} <span>→</span>
             </Link>

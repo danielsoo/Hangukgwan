@@ -19,7 +19,7 @@ export default function PullQuoteBand() {
               fontFamily: "'Newsreader', serif",
               fontStyle: 'italic',
               fontWeight: 300,
-              fontSize: 'clamp(1.3rem, 3vw, 2.1rem)',
+              fontSize: 'var(--fs-title)',
               lineHeight: 1.65,
               color: 'var(--ink)',
             }}

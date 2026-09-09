@@ -64,7 +64,7 @@ export default function SignupPage() {
         </>
       ) : null}
 
-      <p style={{ marginTop: 22, textAlign: 'center', fontSize: 12.5, color: 'var(--ink-a6)' }}>
+      <p style={{ marginTop: 22, textAlign: 'center', fontSize: 'var(--fs-sm)', color: 'var(--ink-a6)' }}>
         {tr.auth.haveAccount}{' '}
         <Link href="/login/" className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.login}</Link>
       </p>

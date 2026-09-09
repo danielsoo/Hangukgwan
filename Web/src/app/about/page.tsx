@@ -14,7 +14,7 @@ export default function AboutPage() {
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.34em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -27,7 +27,7 @@ export default function AboutPage() {
               style={{
                 fontFamily: "'Noto Serif TC', serif",
                 fontWeight: 400,
-                fontSize: 'clamp(2rem, 4.2vw, 3rem)',
+                fontSize: 'var(--fs-display)',
                 lineHeight: 1.5,
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
@@ -38,9 +38,9 @@ export default function AboutPage() {
               {tr.about.title}
             </h1>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 32 }} />
-            <p style={{ fontSize: 16.5, lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.about.p1}</p>
-            <p style={{ fontSize: 16.5, lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.about.p2}</p>
-            <p style={{ fontSize: 16.5, lineHeight: 2.1, color: 'var(--ink-a75)', margin: 0 }}>{tr.about.p3}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.about.p1}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.about.p2}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: 0 }}>{tr.about.p3}</p>
           </div>
           <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
             <ImagePlaceholder label="店內 · The room" />
@@ -53,7 +53,7 @@ export default function AboutPage() {
           <p
             style={{
               fontFamily: "'Newsreader', serif",
-              fontSize: 11.5,
+              fontSize: 'var(--fs-xs)',
               letterSpacing: '0.34em',
               textTransform: 'uppercase',
               color: 'var(--accent)',
@@ -66,7 +66,7 @@ export default function AboutPage() {
             style={{
               fontFamily: "'Noto Serif TC', serif",
               fontWeight: 400,
-              fontSize: 'clamp(1.7rem, 3.4vw, 2.4rem)',
+              fontSize: 'var(--fs-title)',
               lineHeight: 1.55,
               letterSpacing: '0.05em',
               color: 'var(--ink)',
@@ -79,11 +79,11 @@ export default function AboutPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 'clamp(32px, 4vw, 64px)' }}>
             {tr.about.values.map((v) => (
               <div key={v.n} style={{ paddingTop: 26, borderTop: '1px solid var(--gold-a28)' }}>
-                <p style={{ fontFamily: "'Newsreader', serif", fontSize: 13, letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 24px' }}>Nº 0{v.n}</p>
-                <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 21, letterSpacing: '0.08em', color: 'var(--ink)', margin: '0 0 18px' }}>
+                <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 24px' }}>Nº 0{v.n}</p>
+                <h3 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-lg)', letterSpacing: '0.08em', color: 'var(--ink)', margin: '0 0 18px' }}>
                   {v.t}
                 </h3>
-                <p style={{ fontSize: 14.5, lineHeight: 2, color: 'var(--ink-a55)', margin: 0 }}>{v.d}</p>
+                <p style={{ fontSize: 'var(--fs-base)', lineHeight: 2, color: 'var(--ink-a55)', margin: 0 }}>{v.d}</p>
               </div>
             ))}
           </div>

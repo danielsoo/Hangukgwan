@@ -24,7 +24,7 @@ export default function SignatureSection() {
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.34em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -37,7 +37,7 @@ export default function SignatureSection() {
               style={{
                 fontFamily: "'Noto Serif TC', serif",
                 fontWeight: 400,
-                fontSize: 'clamp(1.9rem, 3.8vw, 2.9rem)',
+                fontSize: 'var(--fs-display)',
                 lineHeight: 1.5,
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
@@ -48,7 +48,7 @@ export default function SignatureSection() {
               {tr.sig.title}
             </h2>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 30 }} />
-            <p style={{ fontSize: 15, lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: '40ch' }}>{tr.sig.note}</p>
+            <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: '40ch' }}>{tr.sig.note}</p>
             <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
               <ImagePlaceholder label="招牌菜特寫 · A signature dish, close up" />
             </div>
@@ -59,28 +59,28 @@ export default function SignatureSection() {
               {DISHES.map((d) => (
                 <div key={d.n} className="hg-row-hover" style={{ padding: '26px 0', borderBottom: '1px solid var(--gold-a16)' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 18, flexWrap: 'wrap' }}>
-                    <span style={{ fontFamily: "'Newsreader', serif", fontSize: 12.5, letterSpacing: '0.2em', color: 'var(--muted)', minWidth: '3.4em' }}>
+                    <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.2em', color: 'var(--muted)', minWidth: '3.4em' }}>
                       Nº {d.n}
                     </span>
-                    <h3 lang="ko" style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 500, fontSize: 'clamp(1.3rem, 2.4vw, 1.7rem)', color: 'var(--ink)', margin: 0 }}>
+                    <h3 lang="ko" style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 500, fontSize: 'var(--fs-xl)', color: 'var(--ink)', margin: 0 }}>
                       {d.ko}
                     </h3>
                     {d.badge && (
-                      <span style={{ padding: '3px 9px', border: '1px solid var(--gold-a3)', fontSize: 10.5, letterSpacing: '0.16em', color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 9px', border: '1px solid var(--gold-a3)', fontSize: 'var(--fs-xs)', letterSpacing: '0.16em', color: 'var(--accent)', whiteSpace: 'nowrap' }}>
                         {tr.sig.badge}
                       </span>
                     )}
                     <span style={{ flex: 1, minWidth: 24, height: 1, background: 'var(--gold-a22)' }} />
-                    <span style={{ fontFamily: "'Newsreader', serif", fontSize: 22, letterSpacing: '0.04em', color: 'var(--gold)' }}>{d.price}</span>
+                    <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-lg)', letterSpacing: '0.04em', color: 'var(--gold)' }}>{d.price}</span>
                   </div>
-                  <p style={{ fontSize: 14.5, color: 'var(--ink-a55)', margin: '9px 0 0', paddingLeft: 'calc(3.4em + 18px)' }}>{d.zh}</p>
+                  <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a55)', margin: '9px 0 0', paddingLeft: 'calc(3.4em + 18px)' }}>{d.zh}</p>
                 </div>
               ))}
             </div>
             <Link
               href="/menu/"
               className="hg-link-arrow"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, marginTop: 38, fontFamily: "'Newsreader', serif", fontSize: 14, letterSpacing: '0.22em', textTransform: 'uppercase' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 12, marginTop: 38, fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-base)', letterSpacing: '0.22em', textTransform: 'uppercase' }}
             >
               {tr.sig.all} <span>→</span>
             </Link>

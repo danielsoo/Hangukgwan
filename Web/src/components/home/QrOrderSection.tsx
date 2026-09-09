@@ -22,7 +22,7 @@ export default function QrOrderSection() {
           <p
             style={{
               fontFamily: "'Newsreader', serif",
-              fontSize: 11.5,
+              fontSize: 'var(--fs-xs)',
               letterSpacing: '0.34em',
               textTransform: 'uppercase',
               color: 'var(--accent)',
@@ -35,7 +35,7 @@ export default function QrOrderSection() {
             style={{
               fontFamily: "'Noto Serif TC', serif",
               fontWeight: 400,
-              fontSize: 'clamp(1.7rem, 3.2vw, 2.4rem)',
+              fontSize: 'var(--fs-title)',
               lineHeight: 1.55,
               letterSpacing: '0.05em',
               color: 'var(--ink)',
@@ -45,13 +45,13 @@ export default function QrOrderSection() {
           >
             {tr.qr.title}
           </h2>
-          <p style={{ fontSize: 15.5, lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 36px', maxWidth: '40ch' }}>{tr.qr.body}</p>
+          <p style={{ fontSize: 'var(--fs-base)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 36px', maxWidth: '40ch' }}>{tr.qr.body}</p>
           <a
             href={ORDER_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="hg-cta-solid"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '16px 34px', fontSize: 13, fontWeight: 500, letterSpacing: '0.18em' }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '16px 34px', fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.18em' }}
           >
             {tr.qr.cta} <span>→</span>
           </a>
@@ -59,10 +59,10 @@ export default function QrOrderSection() {
         <div style={{ display: 'grid', gap: 0, borderTop: '1px solid var(--gold-a16)' }}>
           {tr.qr.steps.map((step) => (
             <div key={step.n} style={{ display: 'flex', alignItems: 'baseline', gap: 24, padding: '26px 4px', borderBottom: '1px solid var(--gold-a16)' }}>
-              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 15, letterSpacing: '0.16em', color: 'var(--gold)', minWidth: '2.4em' }}>
+              <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-base)', letterSpacing: '0.16em', color: 'var(--gold)', minWidth: '2.4em' }}>
                 0{step.n}
               </span>
-              <span style={{ fontSize: 15.5, color: 'var(--ink-a82)' }}>{step.text}</span>
+              <span style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a82)' }}>{step.text}</span>
             </div>
           ))}
         </div>

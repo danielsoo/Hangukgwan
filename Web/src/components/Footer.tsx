@@ -29,27 +29,27 @@ export default function Footer() {
                   border: '1px solid var(--gold-a5)',
                   color: 'var(--gold)',
                   fontFamily: "'Noto Serif TC', serif",
-                  fontSize: 17,
+                  fontSize: 'var(--fs-md)',
                   lineHeight: 1,
                 }}
               >
                 韓
               </span>
               <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.3 }}>
-                <span style={{ fontFamily: "'Noto Serif TC', serif", fontSize: 18, letterSpacing: '0.16em', color: 'var(--ink2)' }}>韓國館</span>
-                <span style={{ fontFamily: "'Newsreader', serif", fontSize: 10, letterSpacing: '0.34em', color: 'var(--muted)' }}>
+                <span style={{ fontFamily: "'Noto Serif TC', serif", fontSize: 'var(--fs-md)', letterSpacing: '0.16em', color: 'var(--ink2)' }}>韓國館</span>
+                <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-xs)', letterSpacing: '0.34em', color: 'var(--muted)' }}>
                   HANGUKGWAN
                 </span>
               </span>
             </div>
-            <p style={{ fontSize: 14, color: 'var(--ink-a45)', margin: 0, maxWidth: '26ch' }}>{tr.footer.tag}</p>
+            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a45)', margin: 0, maxWidth: '26ch' }}>{tr.footer.tag}</p>
           </div>
 
           <div>
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.3em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -58,15 +58,15 @@ export default function Footer() {
             >
               {tr.footer.storesLabel}
             </p>
-            <p style={{ fontSize: 14, color: 'var(--ink-a75)', margin: '0 0 8px' }}>新竹縣竹北市縣政九路135巷32號</p>
-            <p style={{ fontSize: 14, color: 'var(--ink-a45)', margin: 0 }}>新竹縣竹北市太元一街7號</p>
+            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a75)', margin: '0 0 8px' }}>新竹縣竹北市縣政九路135巷32號</p>
+            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a45)', margin: 0 }}>新竹縣竹北市太元一街7號</p>
           </div>
 
           <div>
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.3em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -75,17 +75,17 @@ export default function Footer() {
             >
               {tr.info.hours}
             </p>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 15, color: 'var(--ink-a75)', margin: '0 0 8px' }}>
+            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-base)', color: 'var(--ink-a75)', margin: '0 0 8px' }}>
               11.00–14.00 · 17.00–21.00
             </p>
-            <p style={{ fontSize: 14, color: 'var(--ink-a45)', margin: 0 }}>{tr.info.closedVal}</p>
+            <p style={{ fontSize: 'var(--fs-base)', color: 'var(--ink-a45)', margin: 0 }}>{tr.info.closedVal}</p>
           </div>
 
           <div>
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.3em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -94,11 +94,11 @@ export default function Footer() {
             >
               {tr.info.phoneLabel}
             </p>
-            <a href="tel:0366567994" style={{ fontFamily: "'Newsreader', serif", fontSize: 17, letterSpacing: '0.08em' }}>
+            <a href="tel:0366567994" style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-md)', letterSpacing: '0.08em' }}>
               03 656 7994
             </a>
             <p style={{ margin: '12px 0 0' }}>
-              <a href={ORDER_URL} target="_blank" rel="noopener noreferrer" style={{ fontSize: 14 }}>
+              <a href={ORDER_URL} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--fs-base)' }}>
                 {tr.footer.orderLink} →
               </a>
             </p>
@@ -116,15 +116,15 @@ export default function Footer() {
             gap: '12px 24px',
           }}
         >
-          <p style={{ fontFamily: "'Newsreader', serif", fontSize: 12.5, letterSpacing: '0.06em', color: 'var(--ink-a35)', margin: 0 }}>
+          <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.06em', color: 'var(--ink-a35)', margin: 0 }}>
             © 2026 韓國館 Hangukgwan · Zhubei, Hsinchu
           </p>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-a35)', margin: 0 }}>{tr.footer.rights}</p>
+          <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-a35)', margin: 0 }}>{tr.footer.rights}</p>
           <a
             href={ADMIN_URL}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ fontSize: 11.5, color: 'var(--ink-a35)', letterSpacing: '0.04em' }}
+            style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-a35)', letterSpacing: '0.04em' }}
           >
             관리자
           </a>

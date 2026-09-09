@@ -65,7 +65,7 @@ export default function LoginPage() {
         </>
       ) : null}
 
-      <p style={{ marginTop: 22, textAlign: 'center', fontSize: 12.5, color: 'var(--ink-a6)' }}>
+      <p style={{ marginTop: 22, textAlign: 'center', fontSize: 'var(--fs-sm)', color: 'var(--ink-a6)' }}>
         {tr.auth.noAccount}{' '}
         <Link href="/signup/" className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.signup}</Link>
       </p>

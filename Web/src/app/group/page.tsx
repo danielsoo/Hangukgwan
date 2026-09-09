@@ -19,7 +19,7 @@ export default function GroupPage() {
             <p
               style={{
                 fontFamily: "'Newsreader', serif",
-                fontSize: 11.5,
+                fontSize: 'var(--fs-xs)',
                 letterSpacing: '0.34em',
                 textTransform: 'uppercase',
                 color: 'var(--accent)',
@@ -32,7 +32,7 @@ export default function GroupPage() {
               style={{
                 fontFamily: "'Noto Serif TC', serif",
                 fontWeight: 400,
-                fontSize: 'clamp(2rem, 4.2vw, 3rem)',
+                fontSize: 'var(--fs-display)',
                 lineHeight: 1.5,
                 letterSpacing: '0.05em',
                 color: 'var(--ink)',
@@ -43,16 +43,16 @@ export default function GroupPage() {
               {tr.group.title}
             </h1>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 32 }} />
-            <p style={{ fontSize: 16.5, lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.group.p1}</p>
-            <p style={{ fontSize: 16.5, lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 38px' }}>{tr.group.p2}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.group.p1}</p>
+            <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 38px' }}>{tr.group.p2}</p>
             <a
               href="tel:0366567994"
               className="hg-cta-solid"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '18px 34px', fontSize: 13.5, fontWeight: 500, letterSpacing: '0.14em' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '18px 34px', fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.14em' }}
             >
               {tr.group.cta} · 03 656 7994
             </a>
-            <p style={{ fontSize: 13.5, color: 'var(--ink-a45)', margin: '18px 0 0' }}>{tr.group.ctaNote}</p>
+            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-a45)', margin: '18px 0 0' }}>{tr.group.ctaNote}</p>
           </div>
           <div style={{ display: 'grid', gap: 0, borderTop: '1px solid var(--gold-a28)' }}>
             {tr.group.rows.map((row) => (
@@ -60,7 +60,7 @@ export default function GroupPage() {
                 <p
                   style={{
                     fontFamily: "'Newsreader', serif",
-                    fontSize: 11,
+                    fontSize: 'var(--fs-xs)',
                     letterSpacing: '0.26em',
                     textTransform: 'uppercase',
                     color: 'var(--accent)',
@@ -69,7 +69,7 @@ export default function GroupPage() {
                 >
                   {row.k}
                 </p>
-                <p style={{ fontSize: 15.5, lineHeight: 1.85, color: 'var(--ink-a82)', margin: 0 }}>{row.v}</p>
+                <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.85, color: 'var(--ink-a82)', margin: 0 }}>{row.v}</p>
               </div>
             ))}
           </div>
@@ -81,7 +81,7 @@ export default function GroupPage() {
           <p
             style={{
               fontFamily: "'Newsreader', serif",
-              fontSize: 11.5,
+              fontSize: 'var(--fs-xs)',
               letterSpacing: '0.34em',
               textTransform: 'uppercase',
               color: 'var(--accent)',
@@ -94,7 +94,7 @@ export default function GroupPage() {
             style={{
               fontFamily: "'Noto Serif TC', serif",
               fontWeight: 400,
-              fontSize: 'clamp(1.7rem, 3.4vw, 2.4rem)',
+              fontSize: 'var(--fs-title)',
               lineHeight: 1.55,
               letterSpacing: '0.05em',
               color: 'var(--ink)',
@@ -111,13 +111,13 @@ export default function GroupPage() {
                   <ImagePlaceholder label={d.label} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-                  <h3 lang="ko" style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 500, fontSize: 20, color: 'var(--ink)', margin: 0 }}>
+                  <h3 lang="ko" style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 500, fontSize: 'var(--fs-lg)', color: 'var(--ink)', margin: 0 }}>
                     {d.ko}
                   </h3>
                   <span style={{ flex: 1, height: 1, background: 'var(--gold-a22)' }} />
-                  <span style={{ fontFamily: "'Newsreader', serif", fontSize: 19, color: 'var(--gold)' }}>{d.price}</span>
+                  <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-lg)', color: 'var(--gold)' }}>{d.price}</span>
                 </div>
-                <p style={{ fontSize: 14, lineHeight: 1.9, color: 'var(--ink-a5)', margin: '12px 0 0' }}>{d.note}</p>
+                <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.9, color: 'var(--ink-a5)', margin: '12px 0 0' }}>{d.note}</p>
               </div>
             ))}
           </div>

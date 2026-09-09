@@ -24,7 +24,7 @@ export function AuthShell({
         <h1
           style={{
             fontFamily: "'Newsreader', serif",
-            fontSize: 'clamp(24px, 6vw, 32px)',
+            fontSize: 'var(--fs-title)',
             color: 'var(--ink)',
             margin: 0,
             letterSpacing: '0.01em',
@@ -33,7 +33,7 @@ export function AuthShell({
           {title}
         </h1>
         {subtitle ? (
-          <p style={{ color: 'var(--ink-a6)', fontSize: 13.5, margin: '10px 0 0', lineHeight: 1.6 }}>{subtitle}</p>
+          <p style={{ color: 'var(--ink-a6)', fontSize: 'var(--fs-sm)', margin: '10px 0 0', lineHeight: 1.6 }}>{subtitle}</p>
         ) : null}
         <div
           style={{
@@ -45,7 +45,7 @@ export function AuthShell({
         >
           {children}
         </div>
-        <p style={{ marginTop: 22, fontSize: 12.5 }}>
+        <p style={{ marginTop: 22, fontSize: 'var(--fs-sm)' }}>
           <Link href="/" className="hg-link-arrow" style={{ textDecoration: 'none' }}>
             ← {tr.auth.backHome}
           </Link>
@@ -65,7 +65,7 @@ export function Field({
       <span
         style={{
           display: 'block',
-          fontSize: 11,
+          fontSize: 'var(--fs-xs)',
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           color: 'var(--muted)',
@@ -82,12 +82,12 @@ export function Field({
           background: 'var(--field)',
           border: '1px solid var(--gold-a22)',
           color: 'var(--ink)',
-          fontSize: 14,
+          fontSize: 'var(--fs-base)',
           fontFamily: 'inherit',
           outline: 'none',
         }}
       />
-      {hint ? <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 6 }}>{hint}</span> : null}
+      {hint ? <span style={{ display: 'block', fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginTop: 6 }}>{hint}</span> : null}
     </label>
   )
 }
@@ -106,7 +106,7 @@ export function SubmitButton({
         width: '100%',
         padding: '12px 0',
         border: 'none',
-        fontSize: 13.5,
+        fontSize: 'var(--fs-sm)',
         letterSpacing: '0.04em',
         fontFamily: 'inherit',
         opacity: busy || props.disabled ? 0.6 : 1,
@@ -129,7 +129,7 @@ export function Notice({ kind = 'error', children }: { kind?: 'error' | 'ok' | '
         borderLeft: `2px solid ${border}`,
         background: 'var(--scrim-20)',
         color: 'var(--ink2)',
-        fontSize: 12.5,
+        fontSize: 'var(--fs-sm)',
         lineHeight: 1.6,
       }}
     >
@@ -153,7 +153,7 @@ export function GoogleButton({ onClick, busy, label }: { onClick: () => void; bu
         gap: 9,
         padding: '11px 0',
         background: 'none',
-        fontSize: 13,
+        fontSize: 'var(--fs-sm)',
         fontFamily: 'inherit',
         cursor: 'pointer',
         opacity: busy ? 0.6 : 1,
@@ -174,7 +174,7 @@ export function Divider({ label }: { label: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
       <span style={{ flex: 1, height: 1, background: 'var(--gold-a18)' }} />
-      <span style={{ fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>{label}</span>
+      <span style={{ fontSize: 'var(--fs-xs)', letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--muted)' }}>{label}</span>
       <span style={{ flex: 1, height: 1, background: 'var(--gold-a18)' }} />
     </div>
   )
@@ -184,7 +184,7 @@ export function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2
       style={{
-        fontSize: 11,
+        fontSize: 'var(--fs-xs)',
         letterSpacing: '0.12em',
         textTransform: 'uppercase',
         color: 'var(--muted)',

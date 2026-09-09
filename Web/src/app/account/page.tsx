@@ -174,7 +174,7 @@ export default function AccountPage() {
   if (loading || !user) {
     return (
       <AuthShell title={tr.auth.accountTitle}>
-        <p style={{ color: 'var(--ink-a6)', fontSize: 13, margin: 0, textAlign: 'center' }}>{tr.auth.loading}</p>
+        <p style={{ color: 'var(--ink-a6)', fontSize: 'var(--fs-sm)', margin: 0, textAlign: 'center' }}>{tr.auth.loading}</p>
       </AuthShell>
     )
   }
@@ -184,7 +184,7 @@ export default function AccountPage() {
       {/* 관리자에게만 — 손님 계정에는 아예 렌더링되지 않는다 */}
       {user.isAdmin ? (
         <div style={{ marginBottom: 28, padding: '16px 18px', border: '1px solid var(--gold-a3)', background: 'var(--scrim-20)' }}>
-          <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink2)', lineHeight: 1.6 }}>{tr.auth.adminHint}</p>
+          <p style={{ margin: 0, fontSize: 'var(--fs-sm)', color: 'var(--ink2)', lineHeight: 1.6 }}>{tr.auth.adminHint}</p>
           <a
             href={ADMIN_URL}
             className="hg-cta-outline-gold"
@@ -192,7 +192,7 @@ export default function AccountPage() {
               display: 'inline-block',
               marginTop: 14,
               padding: '9px 18px',
-              fontSize: 12.5,
+              fontSize: 'var(--fs-sm)',
               letterSpacing: '0.05em',
               textDecoration: 'none',
             }}
@@ -202,7 +202,7 @@ export default function AccountPage() {
         </div>
       ) : null}
 
-      <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, margin: '0 0 30px', fontSize: 12.5 }}>
+      <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, margin: '0 0 30px', fontSize: 'var(--fs-sm)' }}>
         <dt style={{ color: 'var(--muted)' }}>{tr.auth.roleLabel}</dt>
         <dd style={{ margin: 0, textAlign: 'right', color: 'var(--ink2)' }}>{roleLabel(user.role)}</dd>
         <dt style={{ color: 'var(--muted)' }}>{tr.auth.loginMethods}</dt>
@@ -215,7 +215,7 @@ export default function AccountPage() {
       <section style={{ borderTop: '1px solid var(--gold-a18)', paddingTop: 26, marginBottom: 30 }}>
         <SectionTitle>{tr.auth.vipTitle}</SectionTitle>
         {membership ? (
-          <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, margin: 0, fontSize: 12.5 }}>
+          <dl style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, margin: 0, fontSize: 'var(--fs-sm)' }}>
             <dt style={{ color: 'var(--muted)' }}>{tr.member.cardLabel}</dt>
             <dd style={{ margin: 0, textAlign: 'right', color: 'var(--ink2)' }}>
               {membership.card_number}{' '}
@@ -230,7 +230,7 @@ export default function AccountPage() {
           </dl>
         ) : (
           <form onSubmit={registerCard}>
-            <p style={{ color: 'var(--ink-a6)', fontSize: 12.5, lineHeight: 1.6, margin: '0 0 14px' }}>{tr.member.cardHint}</p>
+            <p style={{ color: 'var(--ink-a6)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, margin: '0 0 14px' }}>{tr.member.cardHint}</p>
             {/* 등록은 되돌릴 수 없는 동작이라 누르기 전에 알려준다.
                 되돌리는 건 사장님만 할 수 있다(Admin > 회원(VIP) > 등록해제). */}
             <Notice kind="info">{tr.auth.vipOneTimeNotice}</Notice>
@@ -254,12 +254,12 @@ export default function AccountPage() {
       <section style={{ borderTop: '1px solid var(--gold-a18)', paddingTop: 26, marginBottom: 30 }}>
         <SectionTitle>{tr.auth.ordersTitle}</SectionTitle>
         {orders.length === 0 ? (
-          <p style={{ color: 'var(--ink-a6)', fontSize: 12.5, margin: 0 }}>{tr.auth.ordersEmpty}</p>
+          <p style={{ color: 'var(--ink-a6)', fontSize: 'var(--fs-sm)', margin: 0 }}>{tr.auth.ordersEmpty}</p>
         ) : (
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
             {orders.map((o) => (
               <li key={o.id} style={{ borderBottom: '1px solid var(--gold-a12)', paddingBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 12.5, color: 'var(--ink2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 'var(--fs-sm)', color: 'var(--ink2)' }}>
                   <span>
                     {o.pickup_number ? `${tr.auth.ordersTakeout} ${o.pickup_number}` : `${tr.auth.ordersTable} ${o.table_number}`}
                     <span style={{ color: 'var(--muted)' }}> · {o.created_at}</span>
@@ -269,7 +269,7 @@ export default function AccountPage() {
                     {o.vip_discount_percent ? <span style={{ color: 'var(--status-open)' }}> · -{o.vip_discount_percent}%</span> : null}
                   </span>
                 </div>
-                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 5 }}>
+                <div style={{ fontSize: 'var(--fs-xs)', color: 'var(--muted)', marginTop: 5 }}>
                   {o.items.map((it) => `${itemName(it)} ×${it.qty}`).join(', ')}
                 </div>
               </li>
@@ -337,7 +337,7 @@ export default function AccountPage() {
           marginTop: 30,
           padding: '11px 0',
           background: 'none',
-          fontSize: 12.5,
+          fontSize: 'var(--fs-sm)',
           fontFamily: 'inherit',
           cursor: 'pointer',
         }}
