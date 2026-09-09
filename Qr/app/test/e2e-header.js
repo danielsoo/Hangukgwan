@@ -109,24 +109,95 @@ function check(name, cond, extra = "") {
   const footerHtml = await page.locator("footer").innerHTML().catch(() => "");
   check("푸터에는 전화번호가 남아 있다", /href="tel:/.test(footerHtml), footerHtml.slice(0, 120));
 
-  out.push("\n[좁은 화면에서 겹치지 않는다]");
+  out.push("\n[글자가 화면 크기를 따라간다]");
+  // 고정 px 로 잡아두면 27인치 모니터에서 본문이 잡지 글씨만 해진다.
+  const scale = {};
+  for (const w of [390, 1280, 2560]) {
+    const c = await browser.newContext({ viewport: { width: w, height: 900 } });
+    const sp = await c.newPage();
+    await sp.goto(`${base}/`, { waitUntil: "load" });
+    await sp.waitForTimeout(700);
+    scale[w] = await sp.evaluate(() => {
+      const d = document.createElement("div");
+      d.style.fontSize = getComputedStyle(document.documentElement).getPropertyValue("--fs-base");
+      document.body.appendChild(d);
+      const px = parseFloat(getComputedStyle(d).fontSize);
+      d.remove();
+      return Math.round(px * 10) / 10;
+    });
+    await c.close();
+  }
+  check("폰에서 최소 15px", scale[390] >= 15, JSON.stringify(scale));
+  check("화면이 커지면 글자도 커진다", scale[2560] > scale[1280] && scale[1280] > scale[390], JSON.stringify(scale));
+  check("큰 모니터에서 본문이 18px 이상", scale[2560] >= 18, JSON.stringify(scale));
+
+  out.push("\n[좁은 화면 — 햄버거]");
+  // 다섯 항목이 폰 폭에 물리적으로 안 들어간다. 예전에는 가로 스크롤로
+  // 흘렸는데 "홈 메뉴 소개 오시…" 처럼 잘려 보여서 고장난 것 같았다.
   for (const [name, w] of [["태블릿", 834], ["폰", 390]]) {
     const small = await browser.newContext({ viewport: { width: w, height: 700 } });
     await small.addInitScript(() => { try { localStorage.setItem("hgw-lang", "ko"); } catch (e) {} });
     const sp = await small.newPage();
     await sp.goto(`${base}/`, { waitUntil: "load" });
     await sp.waitForTimeout(900);
-    const overlap = await sp.evaluate(() => {
-      const nav = document.querySelector(".hg-header-nav").getBoundingClientRect();
-      const right = document.querySelector(".hg-header-bar > :last-child").getBoundingClientRect();
-      return { navRight: Math.round(nav.right), rightLeft: Math.round(right.left), overflowX: Math.round(document.documentElement.scrollWidth - window.innerWidth) };
+
+    const vis = await sp.evaluate(() => ({
+      nav: getComputedStyle(document.querySelector(".hg-header-nav")).display,
+      burger: getComputedStyle(document.querySelector(".hg-hamburger")).display,
+      overflowX: Math.round(document.documentElement.scrollWidth - window.innerWidth),
+    }));
+    check(`${name}: 가운데 내비는 감춘다`, vis.nav === "none", JSON.stringify(vis));
+    check(`${name}: 햄버거가 보인다`, vis.burger !== "none", JSON.stringify(vis));
+    check(`${name}: 가로 스크롤바가 생기지 않는다`, vis.overflowX <= 1, JSON.stringify(vis));
+
+    check(`${name}: 처음엔 메뉴가 닫혀 있다`, (await sp.locator(".hg-menu-panel").count()) === 0);
+    await sp.click(".hg-hamburger");
+    await sp.waitForTimeout(350);
+    const panel = sp.locator(".hg-menu-panel");
+    check(`${name}: 눌러서 열린다`, (await panel.count()) === 1);
+    const panelText = await panel.innerText().catch(() => "");
+    for (const label of ["홈", "메뉴", "소개", "오시는 길", "단체 예약"]) {
+      check(`${name}: 메뉴에 "${label}"`, panelText.includes(label), panelText.replace(/\n/g, " "));
+    }
+    // 닫기 아이콘이 실제로 그려지는지 — 예전에 ✕(U+2715) 글자를 썼는데
+    // 본문 서체에 그 자형이 없어 빈 네모로 나왔다.
+    const icon = await sp.evaluate(() => {
+      const btn = document.querySelector(".hg-hamburger");
+      const lines = btn.querySelectorAll("svg line");
+      return {
+        lines: lines.length,
+        stroke: lines.length ? getComputedStyle(lines[0]).stroke : null,
+        // 버튼 자신의 배경과 비교해야 한다. 누른 직후에는 마우스가 버튼 위에
+        // 있어서 :hover 가 걸리고, 그때는 금색 배경에 어두운 아이콘이 맞다.
+        btnBg: getComputedStyle(btn).backgroundColor,
+      };
     });
-    check(`${name}: 내비가 오른쪽 버튼을 덮지 않는다`, overlap.navRight <= overlap.rightLeft + 1, JSON.stringify(overlap));
-    check(`${name}: 가로 스크롤바가 생기지 않는다`, overlap.overflowX <= 1, JSON.stringify(overlap));
-    check(`${name}: 여전히 한 줄`, (await sp.locator("header nav").count()) === 1);
-    await sp.locator("header").screenshot({ path: path.join(shots, `31-header-${w}.png`) });
+    check(`${name}: 닫기 아이콘이 그려진다`, icon.lines === 2, JSON.stringify(icon));
+    check(`${name}: 아이콘이 버튼 배경에 묻히지 않는다`, icon.stroke !== icon.btnBg, JSON.stringify(icon));
+
+    await sp.locator("header").screenshot({ path: path.join(shots, `31-header-${w}-open.png`) });
+    await sp.click(".hg-hamburger");
+    await sp.waitForTimeout(300);
+    check(`${name}: 다시 눌러서 닫힌다`, (await sp.locator(".hg-menu-panel").count()) === 0);
     await small.close();
   }
+
+  out.push("\n[아이콘 버튼에 마우스를 올려도 사라지지 않는다]");
+  // 인라인 background:'none' 이 클래스의 :hover 배경을 이기는 바람에,
+  // 글자색만 어두운 색으로 바뀌어 아이콘이 배경에 묻혔다.
+  const hoverCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const hp = await hoverCtx.newPage();
+  await hp.goto(`${base}/`, { waitUntil: "load" });
+  await hp.waitForTimeout(800);
+  await hp.hover(".hg-theme-btn");
+  await hp.waitForTimeout(300);
+  const hov = await hp.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector(".hg-theme-btn"));
+    return { color: cs.color, bg: cs.backgroundColor };
+  });
+  check("호버 시 글자색과 배경색이 다르다", hov.color !== hov.bg, JSON.stringify(hov));
+  check("호버 시 배경이 실제로 칠해진다", !/rgba\(0, 0, 0, 0\)|transparent/.test(hov.bg), JSON.stringify(hov));
+  await hoverCtx.close();
 
   await browser.close();
   server.close();

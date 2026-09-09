@@ -38,9 +38,23 @@ const TOKENS = ["--fs-xs", "--fs-sm", "--fs-base", "--fs-md", "--fs-lg", "--fs-x
 for (const t of TOKENS) check(`${t} 정의됨`, new RegExp(`${t}:\\s*[^;]+;`).test(css));
 
 out.push("\n[손님이 읽는 글자는 12px 아래로 안 내려간다]");
-// 단계 자체가 12 미만이면 안 된다.
-const xs = (css.match(/--fs-xs:\s*([0-9.]+)px/) || [, "0"])[1];
-check(`--fs-xs 가 12px 이상 (${xs}px)`, parseFloat(xs) >= 12, xs);
+// 단계는 clamp(최소, 기울기, 최대) 형태다. 첫 값이 어떤 화면에서도 내려가지
+// 않는 바닥이므로 그걸 본다.
+const xsClamp = (css.match(/--fs-xs:\s*clamp\(\s*([0-9.]+)px/) || [, "0"])[1];
+check(`--fs-xs 의 최소값이 12px 이상 (${xsClamp}px)`, parseFloat(xsClamp) >= 12, xsClamp);
+
+out.push("\n[화면 크기를 따라간다]");
+// 고정 px 로 잡아두면 27인치 모니터에서 본문이 잡지 글씨만 해진다.
+// 사장님: "현재 내 모니터에 비해 사이트 글자나 로고 크기나 터무니없이 작아."
+for (const t of ["--fs-xs", "--fs-sm", "--fs-base", "--fs-md", "--fs-lg"]) {
+  const line = (css.match(new RegExp(`${t}:\\s*([^;]+);`)) || [, ""])[1];
+  check(`${t} 가 화면 폭을 쓴다`, /clamp\(/.test(line) && /vw/.test(line), line);
+}
+// 최대값이 최소값보다 실제로 커야 한다(clamp 만 씌우고 같은 값이면 의미 없다)
+for (const t of ["--fs-base", "--fs-lg"]) {
+  const m = css.match(new RegExp(`${t}:\\s*clamp\\(\\s*([0-9.]+)px[^,]*,[^,]*,\\s*([0-9.]+)px`));
+  check(`${t} 최대값 > 최소값`, m && parseFloat(m[2]) > parseFloat(m[1]), m ? `${m[1]} → ${m[2]}` : "형식 불일치");
+}
 
 out.push("\n[크기를 직접 적은 곳이 남아 있지 않다]");
 // 예외는 두 개뿐: 드롭다운 화살표(장식)와 큰 장식 숫자.

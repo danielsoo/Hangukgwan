@@ -156,6 +156,7 @@ a:hover {
 .hg-logo:hover { opacity: 0.7; }
 
 .hg-pill {
+  background: transparent;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -173,13 +174,22 @@ a:hover {
 }
 .hg-member-btn:hover { border-color: var(--accent); color: var(--accent); }
 
-.hg-theme-btn {
+/* background 를 여기서 잡아둔다 — 예전에는 각 버튼이 인라인으로
+   background:'none' 을 들고 있었다. 인라인이 클래스보다 세서, 아래 :hover 의
+   금색 배경이 적용되지 않은 채 글자색만 어두운 색(--on-accent)으로 바뀌었다.
+   결과: 마우스를 올리면 아이콘이 배경과 같은 색이 되어 사라졌다. */
+/* 헤더의 정사각 아이콘 버튼 — 밝기 토글과 햄버거가 같이 쓴다.
+   .hg-theme-btn / .hg-hamburger 는 "어느 버튼이냐"를 가리키는 표시로만 쓰고
+   생김새는 여기 하나로 둔다. 둘이 같은 스타일 클래스를 공유하면 "밝기 버튼"
+   을 가리키는 선택자가 햄버거까지 집어서 엉뚱한 걸 재게 된다. */
+.hg-icon-btn {
   border: 1px solid var(--gold-a28);
+  background: transparent;
   color: var(--gold);
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
 }
-.hg-theme-btn:hover { border-color: var(--gold); background: var(--accent); color: var(--on-accent); }
+.hg-icon-btn:hover { border-color: var(--gold); background: var(--accent); color: var(--on-accent); }
 
 .hg-phone-btn {
   background: var(--accent);
@@ -242,17 +252,44 @@ a:hover {
 }
 .hg-header-bar > :last-child { justify-self: end; }
 
-/* 좁은 화면에서는 내비게이션이 자기 칸 안에서 가로로 스크롤된다. 줄을
-   나누면 다시 헤더가 둘이 되므로, 한 줄을 유지하고 넘치는 쪽을 흘린다. */
 .hg-header-nav {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.hg-header-nav::-webkit-scrollbar { display: none; }
+
+/* ── 좁은 화면: 햄버거 ──────────────────────────────────────────────
+   사장님: "폰처럼 가로가 짧아지면 햄버거 기능이 있어야 하고."
+
+   예전에는 좁아지면 내비가 자기 칸 안에서 가로 스크롤됐는데, 화면에는
+   "홈 메뉴 소개 오시…" 처럼 잘려 보여서 고장난 것 같았다. 다섯 항목이
+   폰 폭에 물리적으로 안 들어간다 — 접는 게 맞다. */
+.hg-hamburger { display: none; }
+
+@media (max-width: 860px) {
+  .hg-header-nav { display: none; }
+  .hg-hamburger { display: inline-flex; }
+  /* 가운데 칸이 비므로 로고를 왼쪽에, 버튼을 오른쪽에 붙인다 */
+  .hg-header-bar { grid-template-columns: auto 1fr auto; }
+}
+
+.hg-menu-panel {
+  border-top: 1px solid var(--gold-a12);
+  background: var(--bg-a86);
+  backdrop-filter: blur(14px);
+}
+.hg-menu-panel a {
+  display: block;
+  padding: 15px clamp(14px, 5vw, 28px);
+  border-bottom: 1px solid var(--gold-a12);
+  color: var(--ink3);
+  text-decoration: none;
+  letter-spacing: 0.06em;
+}
+.hg-menu-panel a:last-child { border-bottom: none; }
+.hg-menu-panel a:hover { color: var(--gold); }
+.hg-menu-panel a[data-active='true'] { color: var(--gold); }
 
 /* 자리가 모자라면 가운데 칸만 줄어들어야 한다.
    1fr auto 1fr 의 가운데는 auto — 내용만큼 벌어지므로, 폰에서는 내비가
@@ -260,25 +297,11 @@ a:hover {
    좁은 화면에서는 양옆을 auto 로 두고 가운데를 minmax(0,1fr) 로 바꿔
    가운데가 줄어들며 스크롤되게 한다. 완벽한 중앙 정렬은 넓은 화면에서만
    지키고, 좁은 화면에서는 겹치지 않는 쪽을 택한다. */
-@media (max-width: 900px) {
-  .hg-header-bar { grid-template-columns: auto minmax(0, 1fr) auto; }
-}
-
 /* 아주 좁은 화면(폰)에서는 로고 글자를 접고 韓 표식만 남겨서 가운데
    내비게이션에 자리를 내준다. */
 @media (max-width: 560px) {
   .hg-logo-word { display: none; }
   .hg-header-bar { gap: 8px; }
-  .hg-header-nav { justify-content: flex-start; }
-  /* 항목 사이를 좁혀 한 칸이라도 더 보이게 */
-  .hg-header-nav > a { padding-left: 7px !important; padding-right: 7px !important; }
-  /* 오른쪽 끝을 흐리게 — 폰에서는 다섯 항목이 다 들어갈 수 없어서 마지막
-     글자가 "오시…" 처럼 잘려 보였다. 고장난 것처럼 보이지 않게, 옆으로
-     밀 수 있다는 신호로 읽히게 한다. */
-  .hg-header-nav {
-    -webkit-mask-image: linear-gradient(to right, #000 82%, transparent 100%);
-    mask-image: linear-gradient(to right, #000 82%, transparent 100%);
-  }
 }
 
 /* ── 글자 크기 단계 (2026-09-09) ────────────────────────────────────
@@ -290,17 +313,35 @@ a:hover {
 
    여섯 단계로 줄인다. 새 값을 쓰지 말고 여기서 고를 것.
 
-   그리고 손님이 읽는 글자는 12px 아래로 내려가지 않는다. 예전에는 섹션
-   라벨 11px, 배지 10.5px, 푸터 로고 10px 이었다 — 가게 홈페이지는 중장년
-   손님도 보신다. */
+   ── 화면 크기를 따라간다 (2026-09-09 2차) ──
+   처음에는 12/13/15/17/21px 고정으로 잡았는데, 사장님: "현재 내 모니터에
+   비해 사이트 글자나 로고 크기나 터무니없이 작아." 맞다 — 고정 px 는 화면이
+   커져도 그대로다. 27인치 모니터에서 본문 15px 는 잡지 글씨만 하다.
+
+   그래서 폰(390px)의 최소값과 큰 모니터(2560px)의 최대값 사이를 직선으로
+   잇는다. clamp(최소, 기울기, 최대) 형태이고, vw 계수는
+   (최대-최소)/(2560-390) 으로 계산했다. 1440px 에서는 중간값이 나온다.
+
+   손님이 읽는 글자는 어떤 화면에서도 12px 아래로 내려가지 않는다. 예전에는
+   섹션 라벨 11px, 배지 10.5px, 푸터 로고 10px 이었다 — 가게 홈페이지는
+   중장년 손님도 보신다. */
 :root {
-  --fs-xs: 12px;      /* 배지, 사진 캡션 */
-  --fs-sm: 13px;      /* 섹션 라벨, 보조 설명 */
-  --fs-base: 15px;    /* 본문 */
-  --fs-md: 17px;      /* 강조 본문, 카드 안 제목 */
-  --fs-lg: 21px;      /* 카드 제목 */
-  --fs-xl: clamp(1.35rem, 2.6vw, 1.7rem);   /* 작은 섹션 제목 */
-  --fs-title: clamp(1.7rem, 3.3vw, 2.4rem); /* 소제목 */
-  --fs-display: clamp(2rem, 4.2vw, 3rem);   /* 섹션 대제목 */
-  --fs-hero: clamp(3.3rem, 11.5vw, 8rem);   /* 히어로 워드마크 */
+  /* 배지, 사진 캡션            12 → 15 */
+  --fs-xs: clamp(12px, 11.46px + 0.138vw, 15px);
+  /* 섹션 라벨, 보조 설명       13 → 16.5 */
+  --fs-sm: clamp(13px, 12.37px + 0.161vw, 16.5px);
+  /* 본문                       15 → 19 */
+  --fs-base: clamp(15px, 14.28px + 0.184vw, 19px);
+  /* 강조 본문, 카드 안 제목    17 → 22 */
+  --fs-md: clamp(17px, 16.10px + 0.230vw, 22px);
+  /* 카드 제목                  21 → 28 */
+  --fs-lg: clamp(21px, 19.74px + 0.322vw, 28px);
+  /* 작은 섹션 제목             26 → 35 */
+  --fs-xl: clamp(26px, 24.38px + 0.415vw, 35px);
+  /* 소제목                     27 → 48 */
+  --fs-title: clamp(27px, 23.23px + 0.968vw, 48px);
+  /* 섹션 대제목                32 → 61 */
+  --fs-display: clamp(32px, 26.79px + 1.336vw, 61px);
+  /* 히어로 워드마크 — 여기만 비율(vw)이 그대로 커지는 게 맞다 */
+  --fs-hero: clamp(3.3rem, 11.5vw, 9rem);
 }

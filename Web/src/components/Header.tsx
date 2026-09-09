@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/context/LanguageContext'
@@ -25,6 +26,19 @@ export default function Header() {
   const { theme, toggleTheme } = useTheme()
   const { user, loading, legacyAdmin } = useAuth()
   const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // 페이지를 옮기면 닫는다. 열어둔 채로 넘어가면 새 페이지 위에 메뉴가
+  // 덮여 있어서 "눌렀는데 아무 일이 없다" 처럼 보인다.
+  useEffect(() => { setMenuOpen(false) }, [pathname])
+
+  // Esc 로 닫기 — 열어놓고 빠져나올 길이 하나는 있어야 한다.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   // 관리자 버튼은 owner/staff 계정에만. 기존 비밀번호 로그인으로 관리자
   // 화면에 들어가 있는 세션(legacyAdmin)도 같은 취급 — 계정 정보는 없지만
@@ -53,7 +67,39 @@ export default function Header() {
           minHeight: 62,
         }}
       >
-        {/* 왼쪽 — 로고 */}
+        {/* 왼쪽 — 좁은 화면에서는 햄버거, 그리고 로고 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'start', minWidth: 0 }}>
+        <button
+          className="hg-icon-btn hg-hamburger"
+          onClick={() => setMenuOpen((v) => !v)}
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? '메뉴 닫기' : '메뉴 열기'}
+          style={{
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 34,
+            height: 34,
+                        flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          {/* 글자(☰ / ✕) 대신 직접 그린다 — 본문 서체(Noto Sans KR/TC)에
+              ✕(U+2715) 자형이 없어서 열었을 때 빈 네모로 나왔다. */}
+          <svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+            {menuOpen ? (
+              <>
+                <line x1="3.5" y1="3.5" x2="13.5" y2="13.5" />
+                <line x1="13.5" y1="3.5" x2="3.5" y2="13.5" />
+              </>
+            ) : (
+              <>
+                <line x1="2.5" y1="4.5" x2="14.5" y2="4.5" />
+                <line x1="2.5" y1="8.5" x2="14.5" y2="8.5" />
+                <line x1="2.5" y1="12.5" x2="14.5" y2="12.5" />
+              </>
+            )}
+          </svg>
+        </button>
         <Link
           href="/"
           className="hg-logo"
@@ -62,7 +108,6 @@ export default function Header() {
             alignItems: 'center',
             gap: 10,
             padding: '11px 0',
-            justifySelf: 'start',
             minWidth: 0,
           }}
         >
@@ -71,8 +116,8 @@ export default function Header() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              width: 28,
-              height: 28,
+              width: 'calc(var(--fs-sm) * 2.15)',
+              height: 'calc(var(--fs-sm) * 2.15)',
               border: '1px solid var(--gold-a55)',
               color: 'var(--gold)',
               fontFamily: "'Noto Serif TC', serif",
@@ -97,8 +142,9 @@ export default function Header() {
             韓國館
           </span>
         </Link>
+        </div>
 
-        {/* 가운데 — 내비게이션 */}
+        {/* 가운데 — 내비게이션 (좁은 화면에서는 감추고 햄버거로) */}
         <nav className="hg-header-nav">
           {NAV.map((item) => {
             const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href)
@@ -163,7 +209,7 @@ export default function Header() {
             onClick={cycleLang}
             title={langTitle}
             className="hg-pill"
-            style={{ padding: '7px clamp(6px, 2vw, 10px)', flexShrink: 0, background: 'none' }}
+            style={{ padding: '7px clamp(6px, 2vw, 10px)', flexShrink: 0 }}
           >
             <span style={{ fontSize: TEXT, letterSpacing: '0.06em', color: 'var(--ink2)', whiteSpace: 'nowrap' }}>
               {langLabel}
@@ -174,7 +220,7 @@ export default function Header() {
           <button
             onClick={toggleTheme}
             title={themeTitle}
-            className="hg-theme-btn"
+            className="hg-icon-btn hg-theme-btn"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -184,8 +230,7 @@ export default function Header() {
               fontSize: TEXT,
               lineHeight: 1,
               flexShrink: 0,
-              background: 'none',
-            }}
+                          }}
           >
             {theme === 'light' ? '☾' : '☀'}
           </button>
@@ -219,6 +264,26 @@ export default function Header() {
           ) : null}
         </div>
       </div>
+
+      {/* 좁은 화면에서 펼쳐지는 메뉴 */}
+      {menuOpen ? (
+        <nav className="hg-menu-panel">
+          {NAV.map((item) => {
+            const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.href)
+            return (
+              <Link
+                key={item.key}
+                href={item.href}
+                data-active={active ? 'true' : 'false'}
+                style={{ fontSize: 'var(--fs-base)' }}
+                onClick={() => setMenuOpen(false)}
+              >
+                {tr.nav[item.key]}
+              </Link>
+            )
+          })}
+        </nav>
+      ) : null}
     </header>
   )
 }
