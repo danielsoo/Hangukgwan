@@ -12,6 +12,8 @@ const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
 const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-takeout-options");
 const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-orders-collection");
+const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
+const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
 
 const app = express();
 
@@ -133,6 +135,10 @@ app.use(async (req, res, next) => {
       await applyTakeoutOptions20260907(store, { save });
       // 주문을 store 문서 밖으로 — 이 앱이 느렸던 가장 큰 이유다(src/db.js).
       await applyOrdersCollection20260910(store, { save, getDb, connectDB });
+      // 9/8 저녁 이전은 테스트 — 결산과 주문 목록에서 뺀다(src/serviceStart.js).
+      await applyServiceStart20260910(store, { save });
+      // 결제기록·정산·예약도 밖으로 — 지금은 옮길 게 몇 줄뿐이라 가장 싸다.
+      await applySplitCollections20260910(store, { save, getDb, connectDB });
       migratedOnce = true;
     }
     next();

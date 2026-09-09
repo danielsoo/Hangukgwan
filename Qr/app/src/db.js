@@ -135,10 +135,14 @@ async function loadRecentOrders() {
   const cutoff = recentCutoff();
   // 안 끝난 주문은 아무리 오래돼도 들고 있어야 한다 — 화면에서 사라지면
   // 받을 돈이 사라진다.
-  const rows = await db
-    .collection(ORDERS_COLLECTION)
-    .find({ $or: [{ status: { $nin: ["paid", "cancelled"] } }, { created_at: { $gte: cutoff } }] })
-    .toArray();
+  const window = { $or: [{ status: { $nin: ["paid", "cancelled"] } }, { created_at: { $gte: cutoff } }] };
+  // 영업 시작 전(=테스트) 주문은 빼고 본다. 그게 없으면, 결제하지 않은
+  // 테스트 주문이 "안 끝난 주문"으로 잡혀서 실시간 주문 목록에 영원히
+  //남는다(src/serviceStart.js).
+  const { createdAtFilter } = require("./serviceStart");
+  const started = createdAtFilter(store);
+  const filter = started ? { $and: [window, started] } : window;
+  const rows = await db.collection(ORDERS_COLLECTION).find(filter).toArray();
   return rows.map(stripMongoId).sort((a, b) => a.id - b.id);
 }
 
@@ -183,7 +187,55 @@ async function saveOrders(orders) {
 
 // store 문서에 더 이상 넣지 않는 키. 예전 데이터에는 남아 있을 수 있어서
 // 읽을 때도 쓸 때도 여기서 걸러낸다.
-const OUT_OF_DOCUMENT = ["orders"];
+// 2026-09-10 (2차): 사장님 — "지금 미리 준비하면 안되는거야?"
+//
+// 맞는 말이다. 주문만큼 급하지는 않지만(결제기록·정산·예약을 다 합쳐 연
+// 3~4MB), 옮기는 비용은 지금이 가장 싸다. 실제 영업은 9월 8일 저녁에
+// 시작했으니 옮길 기록이 아직 몇 줄뿐이고, 3년 뒤에 하면 수만 건의 돈
+// 기록을 옮겨야 한다. 위험은 데이터가 쌓일수록 커지지 줄지 않는다.
+//
+// 이 셋은 주문과 달리 요청마다 필요하지 않다 — 결제 콜백, 결산 화면,
+// 예약 탭에서만 쓴다. 그래서 메모리에 들고 있지 않고 쓸 때 질의한다.
+// vipCards 는 남긴다: 물리 카드 수만큼만 늘어나 사실상 고정이고(200장에
+// 0.03MB), 주문마다 VIP 할인을 보느라 매번 읽어야 해서 메모리에 있는
+// 편이 맞다.
+const OUT_OF_DOCUMENT = ["orders", "payments", "daily_settlements", "reservations"];
+
+// 이름 그대로의 컬렉션에 한 건씩 저장한다. 셋 다 id 로 찾고, id 로 지운다.
+const DOC_COLLECTIONS = {
+  payments: "payments",
+  daily_settlements: "daily_settlements",
+  reservations: "reservations",
+};
+
+/** 컬렉션 전체(또는 조건에 맞는 것)를 배열로. 셋 다 크기가 작아 통째로 읽어도 된다. */
+async function findDocs(kind, filter = {}, opts = {}) {
+  await connectDB();
+  const name = DOC_COLLECTIONS[kind];
+  if (!name) throw new Error(`findDocs: 모르는 종류 ${kind}`);
+  let cur = db.collection(name).find(filter);
+  if (opts.sort) cur = cur.sort(opts.sort);
+  if (opts.limit) cur = cur.limit(opts.limit);
+  return (await cur.toArray()).map(stripMongoId);
+}
+
+/** 한 건 저장(있으면 덮어쓰기). */
+async function saveDoc(kind, doc) {
+  await connectDB();
+  const name = DOC_COLLECTIONS[kind];
+  if (!name) throw new Error(`saveDoc: 모르는 종류 ${kind}`);
+  await db.collection(name).replaceOne({ _id: doc.id }, { ...doc, _id: doc.id }, { upsert: true });
+  return doc;
+}
+
+/** 한 건 지우기. */
+async function deleteDoc(kind, id) {
+  await connectDB();
+  const name = DOC_COLLECTIONS[kind];
+  if (!name) throw new Error(`deleteDoc: 모르는 종류 ${kind}`);
+  const r = await db.collection(name).deleteOne({ _id: id });
+  return r.deletedCount > 0;
+}
 
 async function refreshStore() {
   await connectDB();
@@ -322,4 +374,5 @@ module.exports = {
   connectDB, getDb, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
   savePhoto, getPhoto, deletePhoto,
   findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
+  findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,
 };

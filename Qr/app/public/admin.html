@@ -430,6 +430,10 @@
           <label>Address (EN, optional)<input id="s_store_address_en" placeholder="Leave blank to show the Chinese address" /></label>
           <label><span data-i18n="labelHours">영업시간</span><input id="s_store_hours" /></label>
           <label><span data-i18n="labelMinSpend">1인당 최소 주문 금액 (NT$)</span><input id="s_store_min_spend" type="number" /></label>
+          <label class="owner-only"><span data-i18n="labelServiceStart">영업 시작 시각 (이 시각 전 주문은 테스트로 보고 결산·주문 목록에서 제외돼요)</span>
+            <input id="s_service_started_at" type="datetime-local" />
+            <span class="field-hint" data-i18n="serviceStartHint">비워두면 예전처럼 전부 다시 보여요. 지워지는 건 없어요.</span>
+          </label>
           <button id="saveSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="settingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>

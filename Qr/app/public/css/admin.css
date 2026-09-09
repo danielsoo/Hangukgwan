@@ -1046,3 +1046,6 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .storage-banner.warn { background: #fff7e6; border-color: #d08700; color: #7a4f00; }
 .storage-banner.urgent { background: #fdecea; border-color: var(--red); color: var(--red); font-weight: 700; }
 .storage-banner-sub { font-weight: 400; font-size: 13.5px; margin-top: 4px; opacity: 0.85; }
+
+/* 설정 칸 아래의 설명 한 줄 — 무엇이 달라지는지 미리 알려주는 자리다. */
+.field-hint { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); font-weight: 400; }

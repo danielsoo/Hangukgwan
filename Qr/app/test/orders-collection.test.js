@@ -95,6 +95,17 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   PORT = server.address().port;
   await req("GET", "/api/menu"); // 워밍업 (시드 + 마이그레이션)
 
+  // 이 파일이 재는 건 "주문이 store 문서 밖으로 나갔는가"이지 영업 시작
+  // 경계가 아니다. 마이그레이션이 기본으로 잡아둔 영업 시작(2026-09-08)이
+  // 있으면 여기서 만드는 옛 주문들이 그 규칙에 걸려 빠지므로, 이 테스트
+  // 안에서만 비워둔다(그 규칙 자체는 test/e2e-service-start.js 가 잰다).
+  {
+    const { save } = require("../src/db");
+    const { SETTING_KEY } = require("../src/serviceStart");
+    delete store.settings[SETTING_KEY];
+    await save();
+  }
+
   const login = await req("POST", "/api/auth/login", { password: "ownerpass123" });
   const ck = login.cookie;
   await req("PUT", "/api/tables/7/party-size", { partySize: 2 });
@@ -204,6 +215,89 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   check("save() 뒤에도 store 문서에 주문이 없다", !afterSave.orders, JSON.stringify(Object.keys(afterSave)));
   const survived = await getDb().collection("orders").countDocuments({ id: { $gte: 500000, $lte: 500119 } });
   check("save() 뒤에도 옛 주문이 살아 있다", survived === 120, `${survived}건`);
+
+  out.push("\n[결제기록·정산·예약도 밖으로 나갔다]");
+  // 사장님(2026-09-10): "지금 미리 준비하면 안되는거야?" — 셋을 다 합쳐
+  // 연 3~4MB 늘어난다. 지금 옮기면 몇 줄, 3년 뒤에 옮기면 수만 건이다.
+  // vipCards 는 일부러 남겨뒀다(물리 카드 수만큼만 늘어나고, 주문마다
+  // VIP 할인을 보느라 매번 읽어야 한다).
+  {
+    const { OUT_OF_DOCUMENT } = require("../src/db");
+    check("문서 밖으로 뺀 목록에 셋이 다 있다",
+      ["orders", "payments", "daily_settlements", "reservations"].every((k) => OUT_OF_DOCUMENT.includes(k)),
+      OUT_OF_DOCUMENT.join(","));
+    check("vipCards 는 일부러 남긴다", !OUT_OF_DOCUMENT.includes("vipCards"));
+  }
+
+  // 예약 — 만들고, 고치고, 지운다. 전부 컬렉션에서만 벌어져야 한다.
+  io.length = 0;
+  const madeRes = await req("POST", "/api/reservations", {
+    customer_name: "박윤수", phone: "0912345678", date: "2026-09-20", time: "18:30", party_size: 6,
+  }, ck);
+  check("예약이 만들어진다", madeRes.status === 201, `${madeRes.status} ${JSON.stringify(madeRes.body)}`);
+  check("예약이 자기 컬렉션에 쓰인다",
+    io.some((c) => c.col === "reservations" && c.op === "replaceOne"),
+    io.map((c) => `${c.col}.${c.op}`).join(","));
+  const listRes = await req("GET", "/api/reservations", null, ck);
+  check("목록에 나온다", listRes.body.some((r) => r.id === madeRes.body.id), JSON.stringify(listRes.body));
+  const patched = await req("PATCH", `/api/reservations/${madeRes.body.id}`, { party_size: 8 }, ck);
+  check("고칠 수 있다", patched.status === 200 && patched.body.party_size === 8, JSON.stringify(patched.body));
+  const delRes = await req("DELETE", `/api/reservations/${madeRes.body.id}`, null, ck);
+  check("지울 수 있다", delRes.status === 200);
+  const afterDel = await req("GET", "/api/reservations", null, ck);
+  check("지운 예약은 목록에서 사라진다", !afterDel.body.some((r) => r.id === madeRes.body.id));
+
+  // 마감 스냅샷 — 같은 날짜를 두 번 닫아도 한 줄이어야 한다.
+  const closeDate = "2026-09-09";
+  await req("POST", "/api/settlements/close", { date: closeDate }, ck);
+  await req("POST", "/api/settlements/close", { date: closeDate }, ck);
+  const history = await req("GET", "/api/settlements/history", null, ck);
+  check("마감 기록이 남는다", history.body.some((r) => r.date === closeDate), JSON.stringify(history.body.map((r) => r.date)));
+  check("같은 날을 두 번 닫아도 한 줄이다",
+    history.body.filter((r) => r.date === closeDate).length === 1,
+    JSON.stringify(history.body.map((r) => r.date)));
+
+  // 셋 다 store 문서에는 없어야 한다.
+  const docNow = await getDb().collection("store").findOne({ _id: "main" });
+  check("store 문서에 결제기록·정산·예약이 없다",
+    !docNow.payments && !docNow.daily_settlements && !docNow.reservations,
+    JSON.stringify(Object.keys(docNow)));
+  check("vipCards 는 문서에 그대로 있다", Array.isArray(docNow.vipCards), JSON.stringify(Object.keys(docNow)));
+
+  out.push("\n[2차 이관도 아무것도 잃지 않는다]");
+  {
+    const { applySplitCollections20260910, MIGRATION_FLAG: FLAG2 } = require("../src/migrations/2026-09-10-split-collections");
+    const { save } = require("../src/db");
+    const legacyPayments = Array.from({ length: 40 }, (_, i) => ({
+      id: 800000 + i, merchant_trade_no: `HG${800000 + i}`, table_number: "3",
+      order_ids: [1], amount: 500, status: "paid", created_at: "2026-06-01 12:00:00",
+    }));
+    const legacyRes = Array.from({ length: 15 }, (_, i) => ({
+      id: 810000 + i, customer_name: "손님", phone: "09", date: "2026-06-01", time: "18:00",
+      party_size: 2, status: "confirmed", created_at: "2026-06-01T00:00:00Z",
+    }));
+    await getDb().collection("store").updateOne({ _id: "main" },
+      { $set: { payments: legacyPayments, reservations: legacyRes, daily_settlements: [] } });
+    delete store.settings[FLAG2];
+    await applySplitCollections20260910(store, { save, getDb, connectDB });
+
+    const pc = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
+    const rc = await getDb().collection("reservations").countDocuments({ id: { $gte: 810000, $lte: 810014 } });
+    check("옛 결제기록 40건이 옮겨졌다", pc === 40, `${pc}건`);
+    check("옛 예약 15건이 옮겨졌다", rc === 15, `${rc}건`);
+    const cleaned = await getDb().collection("store").findOne({ _id: "main" });
+    check("옮긴 뒤 문서에서 사라진다", !cleaned.payments && !cleaned.reservations);
+    // 두 번 돌려도 늘거나 줄지 않아야 한다.
+    await applySplitCollections20260910(store, { save, getDb, connectDB });
+    const pc2 = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
+    check("다시 돌려도 그대로다", pc2 === 40, `${pc2}건`);
+    // save() 가 도로 집어넣지 않는지 — 1차 이관에서와 같은 위험이다.
+    await save();
+    const afterSave2 = await getDb().collection("store").findOne({ _id: "main" });
+    check("save() 뒤에도 문서에 안 들어간다", !afterSave2.payments && !afterSave2.reservations);
+    const survived2 = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
+    check("save() 뒤에도 옛 결제기록이 살아 있다", survived2 === 40, `${survived2}건`);
+  }
 
   server.close();
   console.log(out.join("\n"));

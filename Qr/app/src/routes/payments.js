@@ -7,7 +7,7 @@
 // (Admin > 설정 > 온라인 결제), none of this is reachable from the customer
 // page and nothing here changes existing behavior.
 const express = require("express");
-const { store, save, nextId, saveOrders } = require("../db");
+const { store, save, nextId, saveOrders, findDocs, saveDoc } = require("../db");
 const { clearPartySizeIfSettled } = require("../partySize");
 const { nowLocal } = require("../time");
 const ecpay = require("../ecpay");
@@ -47,8 +47,9 @@ router.get("/checkout", async (req, res) => {
   const merchantTradeNo = ecpay.generateMerchantTradeNo();
   const baseUrl = `${req.protocol}://${req.get("host")}`;
 
-  store.payments = store.payments || [];
-  store.payments.push({
+  // 결제 기록도 자기 컬렉션에 산다(src/db.js). 결제 콜백에서만 찾으므로
+  // 메모리에 들고 있을 이유가 없다.
+  const paymentRow = {
     id: nextId("payments"),
     merchant_trade_no: merchantTradeNo,
     table_number: tableNumber,
@@ -58,8 +59,9 @@ router.get("/checkout", async (req, res) => {
     created_at: nowLocal(),
     paid_at: null,
     ecpay_trade_no: null,
-  });
-  await save();
+  };
+  // 결제 기록 한 건 + 번호 카운터가 든 store 문서.
+  await Promise.all([saveDoc("payments", paymentRow), save()]);
 
   const params = ecpay.buildAioCheckoutParams({
     merchantTradeNo,
@@ -90,8 +92,7 @@ router.post("/callback", async (req, res) => {
     return res.send("0|CheckMacValueError");
   }
 
-  store.payments = store.payments || [];
-  const payment = store.payments.find((p) => p.merchant_trade_no === body.MerchantTradeNo);
+  const [payment] = await findDocs("payments", { merchant_trade_no: body.MerchantTradeNo });
   if (!payment) {
     console.error("ECPay callback: unknown MerchantTradeNo", body.MerchantTradeNo);
     return res.send("1|OK"); // acknowledge anyway so ECPay stops retrying
@@ -128,11 +129,11 @@ router.post("/callback", async (req, res) => {
     clearPartySizeIfSettled(store, payment.table_number);
     // 결제된 주문들은 자기 컬렉션으로, store 문서는 결제 기록(payments)과
     // 인원수 때문에 한 번. 둘 다 작아서 나란히 보낸다.
-    await Promise.all([saveOrders(paidNow), save()]);
+    await Promise.all([saveOrders(paidNow), saveDoc("payments", payment), save()]);
   } else if (!success && payment.status === "pending") {
     payment.status = "failed";
     payment.failure_msg = body.RtnMsg || null;
-    await save();
+    await saveDoc("payments", payment);
   }
 
   res.send("1|OK");

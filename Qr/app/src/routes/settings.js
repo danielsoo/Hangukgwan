@@ -3,6 +3,7 @@ const multer = require("multer");
 const { store, save, savePhoto, deletePhoto, getPhoto, getDb, connectDB } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
 const { SETTING_BYTES, SETTING_CHECKED_AT, LIMIT_BYTES, levelFor, recordStoreSize } = require("../storeSize");
+const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, serviceStartedAt } = require("../serviceStart");
 const { nowLocal } = require("../time");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const canEditSettings = requirePermission("settingsEdit");
@@ -134,6 +135,29 @@ router.get("/logo-preview", requireAdmin, async (req, res) => {
   res.set("Content-Type", "image/svg+xml");
   res.set("Cache-Control", "no-store");
   res.send(svg);
+});
+
+// 영업 시작 시각 — 이 시각 전 주문은 테스트로 보고 결산·통계·주문 목록에서
+// 뺀다(지우지는 않는다, src/serviceStart.js). 매출 숫자가 달라지는 설정이라
+// 사장님만 바꿀 수 있다.
+router.get("/service-start", requireOwner, (req, res) => {
+  res.json({ service_started_at: serviceStartedAt(store) });
+});
+
+router.put("/service-start", requireOwner, async (req, res) => {
+  const raw = (req.body || {}).service_started_at;
+  // 빈 값으로 저장하면 "설정 안 함"이 되어 예전처럼 전부 다시 보인다 —
+  // 잘못 잡았을 때 되돌리는 길이다.
+  if (raw == null || String(raw).trim() === "") {
+    delete store.settings[SERVICE_START_KEY];
+    await save();
+    return res.json({ service_started_at: null });
+  }
+  const normalized = normalizeServiceStart(raw);
+  if (!normalized) return res.status(400).json({ error: "invalid_datetime" });
+  store.settings[SERVICE_START_KEY] = normalized;
+  await save();
+  res.json({ service_started_at: normalized });
 });
 
 // 데이터 저장 공간 상태 — 관리자 화면 맨 위의 띠가 읽는다.

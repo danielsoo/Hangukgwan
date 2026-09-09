@@ -1,20 +1,24 @@
 const express = require("express");
-const { store, save, nextId, findOrders, getDb, connectDB } = require("../db");
+const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc } = require("../db");
 const { requireOwner } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
+const { serviceStartedAt } = require("../serviceStart");
 const { nowLocal } = require("../time");
 const { sendLineMessage, formatSettlementSummary } = require("../line");
 
 const router = express.Router();
 
-function saveSettlementSnapshot(snapshot) {
-  const existing = store.daily_settlements.find((s) => s.date === snapshot.date);
-  if (existing) {
-    Object.assign(existing, snapshot);
-  } else {
-    store.daily_settlements.push({ id: nextId("daily_settlements"), ...snapshot });
-  }
+// 마감 스냅샷도 자기 컬렉션에 산다(src/db.js) — 하루에 한 줄씩 영원히
+// 쌓이는 것이라 store 문서에 두면 계속 커진다. 같은 날짜를 다시 닫으면
+// 새로 만들지 않고 덮어쓴다.
+async function saveSettlementSnapshot(snapshot) {
+  const [existing] = await findDocs("daily_settlements", { date: snapshot.date });
+  const row = existing
+    ? { ...existing, ...snapshot }
+    : { id: nextId("daily_settlements"), ...snapshot };
+  await saveDoc("daily_settlements", row);
+  return row;
 }
 
 // Settlement shows real revenue numbers, so — like 주문 취소 — it's treated
@@ -40,16 +44,24 @@ router.get("/", requireOwner, async (req, res) => {
 // 결산이 볼 주문을 날짜 범위로 가져온다. 인덱스는 created_at 에 걸려 있다
 // (src/migrations/2026-09-10-orders-collection.js).
 function ordersInRange(start, end) {
-  return findOrders({ created_at: { $gte: `${start} 00:00:00`, $lte: `${end} 23:59:59` } });
+  // 영업 시작 전(=테스트) 주문은 매출에 넣지 않는다. 사장님(2026-09-10):
+  // "9월 8일 저녁부터 실제로 시행... 그 전까지는 전부 테스트였고."
+  // 시작 시각이 범위 안에 걸치면 그 시각부터 센다(그날 낮의 테스트와 그날
+  // 저녁의 첫 손님을 갈라야 한다).
+  const from = `${start} 00:00:00`;
+  const started = serviceStartedAt(store);
+  return findOrders({
+    created_at: { $gte: started && started > from ? started : from, $lte: `${end} 23:59:59` },
+  });
 }
 
 // Permanent nightly snapshots (written by the cron job below, or manually
 // via POST /close) — kept in case orders are later edited/pruned and the
 // live numbers for an old date would otherwise drift from what actually
 // closed that night.
-router.get("/history", requireOwner, (req, res) => {
-  const list = [...store.daily_settlements].sort((a, b) => b.date.localeCompare(a.date));
-  res.json(list.slice(0, 90));
+router.get("/history", requireOwner, async (req, res) => {
+  const list = await findDocs("daily_settlements", {}, { sort: { date: -1 }, limit: 90 });
+  res.json(list);
 });
 
 // Manually snapshot a given date (defaults to today) into permanent history.
@@ -58,8 +70,8 @@ router.get("/history", requireOwner, (req, res) => {
 router.post("/close", requireOwner, async (req, res) => {
   const date = (req.body && req.body.date) || taipeiDateString();
   const snapshot = computeSettlement(await ordersInRange(date, date), date);
-  saveSettlementSnapshot(snapshot);
-  await save();
+  // 스냅샷은 자기 컬렉션으로, store 문서는 번호 카운터 때문에 한 번.
+  await Promise.all([saveSettlementSnapshot(snapshot), save()]);
   res.json(snapshot);
 });
 
@@ -87,7 +99,7 @@ router.get("/cron-close", async (req, res) => {
   }
   const date = taipeiDateString();
   const snapshot = computeSettlement(await ordersInRange(date, date), date);
-  saveSettlementSnapshot(snapshot);
+  await saveSettlementSnapshot(snapshot);
 
   // 사장님(2026-09-10): "3-4년 후에 내가 잊으면 큰일이잖아."
   // 매일 밤 여기서 store 문서 크기를 재둔다. 기준을 넘으면 관리자 화면에

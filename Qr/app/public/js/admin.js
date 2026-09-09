@@ -369,6 +369,8 @@
       moveItemDownTitle: "아래로 이동",
       photoMissing: "사진<br>없음",
       photoMissingTitle: "사진을 추가해주세요",
+      labelServiceStart: "영업 시작 시각 (이 시각 전 주문은 테스트로 보고 결산·주문 목록에서 제외돼요)",
+      serviceStartHint: "비워두면 예전처럼 전부 다시 보여요. 지워지는 건 없어요.",
       storageWarnTitle: "데이터 저장 공간이 %s / 16MB 까지 찼어요.",
       storageWarnSub: "아직 여유는 있지만, 개발자에게 \"store 문서 분리\"를 이야기해 두세요. 한도에 닿으면 주문 저장이 안 됩니다.",
       storageUrgentTitle: "데이터 저장 공간이 %s / 16MB 입니다. 곧 한도예요.",
@@ -822,6 +824,8 @@
       moveItemDownTitle: "下移",
       photoMissing: "尚無<br>照片",
       photoMissingTitle: "請新增照片",
+      labelServiceStart: "開始營業時間（此時間之前的訂單視為測試，不列入結帳與訂單列表）",
+      serviceStartHint: "留空即恢復顯示全部。不會刪除任何資料。",
       storageWarnTitle: "資料儲存空間已用 %s / 16MB。",
       storageWarnSub: "目前還有餘裕，但請先跟開發者提「store 文件拆分」。到達上限後訂單將無法儲存。",
       storageUrgentTitle: "資料儲存空間已用 %s / 16MB，即將到達上限。",
@@ -6127,6 +6131,31 @@
     }
   }
 
+  // 영업 시작 시각 — 이 시각 전 주문은 테스트로 보고 결산·주문 목록에서
+  // 뺀다. 사장님(2026-09-10): "9월 8일 저녁부터 실제로 시행... 그 전까지는
+  // 전부 테스트였고." 지우는 게 아니라 빼는 것이라, 비우면 다시 다 보인다.
+  async function loadServiceStart() {
+    try {
+      const res = await fetch("/api/settings/service-start");
+      if (!res.ok) return;
+      const { service_started_at: v } = await res.json();
+      // datetime-local 은 "YYYY-MM-DDTHH:MM" 을 원한다.
+      $("#s_service_started_at").value = v ? v.slice(0, 16).replace(" ", "T") : "";
+    } catch (e) {
+      /* 이 칸 하나 때문에 설정 화면 전체가 막히면 안 된다 */
+    }
+  }
+  async function saveServiceStart() {
+    if (currentRole !== "owner") return;
+    const el = $("#s_service_started_at");
+    if (!el) return;
+    await fetch("/api/settings/service-start", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_started_at: el.value || null }),
+    });
+  }
+
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
@@ -6148,6 +6177,9 @@
     renderLocationStatus();
     renderMiniHeroPreview(s);
     $("#s_taegeuk_season_mode").value = s.taegeuk_season_mode || "auto";
+    // 영업 시작 시각은 매출 숫자를 바꾸는 설정이라 사장님만 볼 수 있는
+    // 별도 라우트에서 온다(직원은 403 — 그때는 조용히 넘어간다).
+    if (currentRole === "owner") loadServiceStart();
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(s.taegeuk_season_mode || "auto");
     refreshLogoPreview();
     renderNoticePreview($("#s_store_notice").value);
@@ -6523,6 +6555,9 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    // 영업 시작 시각은 사장님 전용 라우트라 따로 보낸다 — 매출 숫자가
+    // 달라지는 설정이라 직원이 바꾸면 안 된다.
+    await saveServiceStart();
     if (window.applyTaegeukSeason) window.applyTaegeukSeason(payload.taegeuk_season_mode);
     const msg = $("#settingsMsg");
     msg.hidden = false;
