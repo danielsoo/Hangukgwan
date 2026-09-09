@@ -96,6 +96,80 @@ const onlySaturday = {
 check("토요일만 적어두면 토요일엔 받는다", oh.isOpenNow(onlySaturday, "2026-09-12 12:00:00"));
 check("토요일만 적어두면 다른 날은 안 받는다", !oh.isOpenNow(onlySaturday, "2026-09-10 12:00:00"));
 
+out.push("\n[태풍처럼 그 날 하루만 쉬는 경우]");
+// 2026-09-10 사장님: "특정 요일을 쉴수도 있잖아 예를 들어 태풍이 불거나
+// 휴무를 해야 하거나 뭐 다양한 이유들."
+// 요일 규칙으로는 못 적는 일회성 사정이다. 날짜가 가장 세다 — 평소 규칙을
+// 고치는 게 아니라 하루만 덮는 것이라, 다음 날은 저절로 평소대로 돌아온다.
+const typhoon = {
+  order_hours: {
+    enabled: 1,
+    ranges: [{ start: "11:00", end: "21:00" }],
+    closed_days: [],
+    day_ranges: {},
+    date_rules: { "2026-09-11": { closed: 1, note: "태풍" } },
+  },
+};
+check("그 날은 낮에도 안 받는다", !oh.isOpenNow(typhoon, "2026-09-11 12:00:00"));
+check("전날은 평소대로 받는다", oh.isOpenNow(typhoon, "2026-09-10 12:00:00"));
+check("다음날은 저절로 돌아온다", oh.isOpenNow(typhoon, "2026-09-12 12:00:00"));
+{
+  const st = oh.orderingState(typhoon, "2026-09-11 12:00:00");
+  check("오늘 휴무라고 알려준다", st.today_closed === true);
+  check("이유도 같이 알려준다", st.today_note === "태풍", st.today_note);
+  check("다음 영업은 다음날 11:00", st.next_open_at === "2026-09-12 11:00", st.next_open_at);
+}
+
+// 그 날만 시간을 줄이는 경우 — 태풍이 지나간 오후에만 연다.
+const halfDay = {
+  order_hours: {
+    enabled: 1,
+    ranges: [{ start: "11:00", end: "21:00" }],
+    closed_days: [],
+    day_ranges: {},
+    date_rules: { "2026-09-11": { ranges: [{ start: "17:00", end: "21:00" }] } },
+  },
+};
+check("그 날 오전은 안 받는다", !oh.isOpenNow(halfDay, "2026-09-11 12:00:00"));
+check("그 날 저녁은 받는다", oh.isOpenNow(halfDay, "2026-09-11 18:00:00"));
+check("손님에게 그 날 시간을 보여준다",
+  oh.orderingState(halfDay, "2026-09-11 09:00:00").ranges_text === "17:00~21:00",
+  oh.orderingState(halfDay, "2026-09-11 09:00:00").ranges_text);
+
+// 날짜가 요일보다 세다 — 정기 휴무일인데 그 날만 특별히 여는 경우.
+const openOnHoliday = {
+  order_hours: {
+    enabled: 1,
+    ranges: [{ start: "11:00", end: "21:00" }],
+    closed_days: [1],
+    day_ranges: {},
+    date_rules: { "2026-09-14": { ranges: [{ start: "11:00", end: "21:00" }] } },
+  },
+};
+check("정기 휴무일이어도 그 날만 열 수 있다", oh.isOpenNow(openOnHoliday, "2026-09-14 12:00:00"));
+check("다음 주 같은 요일은 그대로 휴무", !oh.isOpenNow(openOnHoliday, "2026-09-21 12:00:00"));
+
+out.push("\n[날짜 규칙 다듬기]");
+check("날짜 형식이 아니면 버린다",
+  Object.keys(oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "내일": { closed: 1 }, "2026-13-99": { closed: 1 } } }).date_rules).length === 0);
+// 「닫지도 않고 시간도 없는 날」은 평소대로라는 뜻이라, 적어두지 않는 것과 같다.
+check("빈 규칙은 저장하지 않는다",
+  Object.keys(oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": {} } }).date_rules).length === 0);
+check("이유는 40자까지",
+  oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": { closed: 1, note: "가".repeat(80) } } }).date_rules["2099-01-01"].note.length === 40);
+// 태풍 한 번 지날 때마다 한 줄씩 영원히 쌓이면 달력이 지저분해지고 설정
+// 문서도 계속 커진다. 지나간 휴무일을 다시 볼 일은 없다 — 그건 결산이
+// 답할 질문이다.
+check("한참 지난 날짜는 버린다",
+  !oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2020-01-01": { closed: 1 } } }).date_rules["2020-01-01"]);
+check("앞날은 그대로 둔다",
+  !!oh.normalize({ enabled: 1, ranges: [{ start: "11:00", end: "21:00" }],
+    date_rules: { "2099-01-01": { closed: 1 } } }).date_rules["2099-01-01"]);
+
 out.push("\n[손님에게는 「오늘」 시간을 보여준다]");
 // 기본 시간을 보여주면, 요일마다 다른 가게에서 손님은 오늘 안 하는 시간을
 // 읽고 그때 다시 온다.

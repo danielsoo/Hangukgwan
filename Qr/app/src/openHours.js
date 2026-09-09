@@ -17,10 +17,16 @@
 //   day_ranges   { "6": [{...}] } — 그 요일만 기본과 다를 때. 적어둔 요일만
 //                넣는다(없는 요일은 기본을 쓴다). 2026-09-10 사장님:
 //                "요일마다 다를 수 있는데 그것도 넣었어?"
+//   date_rules   { "2026-09-15": { closed: 1, note: "태풍" } } 또는
+//                { "2026-09-15": { ranges: [{...}] } } — 그 날 하루만.
+//                2026-09-10 사장님: "태풍이 불거나 휴무를 해야 하거나 뭐
+//                다양한 이유들." 요일 규칙으로는 못 적는 일회성 사정이다.
 //
-// 세 가지가 겹칠 때의 순서는 하나뿐이다: 휴무 > 요일별 > 기본.
-// 휴무가 가장 세다 — 문 닫은 날에 시간을 적어둔 채로 두는 일은 흔한데,
-// 그때 시간이 이기면 휴무일에 주문이 들어온다.
+// 겹칠 때의 순서는 하나뿐이다: 그 날짜 > 요일 휴무 > 요일별 시간 > 기본.
+// 날짜가 가장 세다 — 태풍으로 하루 닫는 건 평소 규칙을 잠깐 덮는 일이지
+// 평소 규칙을 고치는 일이 아니다. 그리고 휴무가 시간보다 세다 — 문 닫은
+// 날에 시간을 적어둔 채로 두는 일은 흔한데, 그때 시간이 이기면 휴무일에
+// 주문이 들어온다.
 //
 // 안전한 쪽은 언제나 "받는다" 쪽이다. 설정이 없거나, 비었거나, 이상하면
 // 막지 않는다 — 못 막아서 생기는 손해보다 잘못 막아서 생기는 손해가 크다.
@@ -29,7 +35,7 @@
 // 품절(src/availability.js)과 같은 방식으로 "규칙만 저장하고 물어볼 때마다
 // 계산" 한다. 정해진 시각에 무언가를 켜고 끄는 예약 작업이 없어야 서버가
 // 자다 깨거나 배포 중이어도 어긋나지 않는다.
-const { nowLocal } = require("./time");
+const { nowLocal, taipeiDateString } = require("./time");
 
 const DEFAULT_RANGES = [{ start: "11:00", end: "21:00" }];
 const MAX_RANGES = 6;
@@ -142,6 +148,48 @@ function normalizeDayRanges(input) {
   return out;
 }
 
+const DATE_RULE_KEEP_DAYS = 60;
+const MAX_DATE_RULES = 400;
+
+function isDateStr(v) {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  // 모양만 맞고 실제로는 없는 날짜("2026-13-99")를 걸러낸다. Date 가
+  // 알아서 넘겨버리기 때문에 다시 문자열로 만들어 같은지 본다.
+  const [y, m, d] = v.split("-").map((n) => parseInt(n, 10));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * 날짜 하나짜리 규칙을 다듬는다.
+ *
+ * 지난 날짜는 버린다(기본 60일). 안 그러면 태풍 한 번 지날 때마다 한 줄씩
+ * 영원히 쌓여서, 달력은 지저분해지고 설정 문서는 계속 커진다. 지나간
+ * 휴무일을 다시 볼 일은 없다 — 그건 결산이 답할 질문이다.
+ */
+function normalizeDateRules(input, today) {
+  if (!input || typeof input !== "object") return {};
+  const cutoff = today ? shiftDate(today, -DATE_RULE_KEEP_DAYS) : null;
+  const out = {};
+  for (const key of Object.keys(input).sort()) {
+    if (!isDateStr(key)) continue;
+    if (cutoff && key < cutoff) continue;
+    const raw = input[key] || {};
+    const note = typeof raw.note === "string" ? raw.note.trim().slice(0, 40) : "";
+    if (raw.closed) {
+      out[key] = note ? { closed: 1, note } : { closed: 1 };
+    } else {
+      const ranges = normalizeRanges(raw.ranges);
+      // 「닫지도 않고 시간도 없는 날」은 아무 뜻이 없다 — 평소대로라는 뜻이고,
+      // 그건 적어두지 않는 것과 같다.
+      if (!ranges.length) continue;
+      out[key] = note ? { ranges, note } : { ranges };
+    }
+    if (Object.keys(out).length >= MAX_DATE_RULES) break;
+  }
+  return out;
+}
+
 /** 저장할 형태로 다듬는다. 사장님이 화면에서 보낸 값이 그대로 들어온다. */
 function normalize(input, fallbackText) {
   const src = input && typeof input === "object" ? input : {};
@@ -153,6 +201,7 @@ function normalize(input, fallbackText) {
     ranges,
     closed_days: normalizeClosedDays(src.closed_days),
     day_ranges: normalizeDayRanges(src.day_ranges),
+    date_rules: normalizeDateRules(src.date_rules, taipeiDateString()),
   };
 }
 
@@ -174,6 +223,9 @@ function orderHours(settings) {
   }
   const ranges = normalizeRanges(raw.ranges);
   const dayRanges = normalizeDayRanges(raw.day_ranges);
+  // 여기서는 지난 날짜를 버리지 않는다. 버리는 건 저장할 때 할 일이고,
+  // 읽을 때마다 버리면 어제 날짜를 물어보는 계산(자정을 넘는 구간)이 어긋난다.
+  const dateRules = normalizeDateRules(raw.date_rules, null);
   // 기본이 비어 있어도 요일별로만 적어둔 경우가 있을 수 있다 — 그때까지
   // 「읽을 게 없다」로 보고 열어버리면 사장님이 적어둔 규칙이 통째로 무시된다.
   const hasAnyRanges = ranges.length > 0 || Object.keys(dayRanges).length > 0;
@@ -182,14 +234,22 @@ function orderHours(settings) {
     ranges,
     closed_days: normalizeClosedDays(raw.closed_days),
     day_ranges: dayRanges,
+    date_rules: dateRules,
   };
 }
 
+/** 그 날짜에만 걸어둔 규칙(태풍 휴무 등). 없으면 null. */
+function dateRuleFor(cfg, dateStr) {
+  return (cfg.date_rules && cfg.date_rules[dateStr]) || null;
+}
+
 /**
- * 그 날짜에 적용되는 구간. 순서는 휴무 > 요일별 > 기본.
+ * 그 날짜에 적용되는 구간. 순서는 그 날짜 > 요일 휴무 > 요일별 > 기본.
  * 휴무면 빈 배열이고, 빈 배열은 "그날은 아무것도 안 받는다" 는 뜻이다.
  */
 function rangesForDate(cfg, dateStr) {
+  const rule = dateRuleFor(cfg, dateStr);
+  if (rule) return rule.closed ? [] : rule.ranges || [];
   const day = weekdayOf(dateStr);
   if (cfg.closed_days.includes(day)) return [];
   const own = cfg.day_ranges && cfg.day_ranges[String(day)];
@@ -268,6 +328,10 @@ function orderingState(settings, now = nowLocal()) {
     ranges: cfg.ranges,
     closed_days: cfg.closed_days,
     day_ranges: cfg.day_ranges,
+    date_rules: cfg.date_rules,
+    // 오늘 하루짜리 사정이 있으면 손님에게도 그 이유를 보여준다 — "오늘은
+    // 휴무입니다" 만 있으면 손님은 다시 올지 말지를 정할 수 없다.
+    today_note: (dateRuleFor(cfg, String(now).slice(0, 10)) || {}).note || "",
     // 손님에게 보여줄 문구는 "오늘" 의 시간이어야 한다. 요일마다 시간이
     // 다른 가게에서 기본 시간을 보여주면, 손님은 오늘 안 하는 시간을 읽고
     // 그때 다시 온다.
@@ -284,7 +348,9 @@ function orderingState(settings, now = nowLocal()) {
 
 module.exports = {
   DEFAULT_RANGES,
+  DATE_RULE_KEEP_DAYS,
   rangesForDate,
+  dateRuleFor,
   MAX_RANGES,
   parseHoursText,
   normalize,

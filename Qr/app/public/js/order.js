@@ -224,6 +224,14 @@
     toastTimer = setTimeout(() => el.classList.remove("show"), 3500);
   }
 
+  // 사장님이 적은 글을 innerHTML 에 그대로 넣지 않는다. 지금은 관리자만
+  // 적을 수 있는 칸이지만, 화면에 그리는 자리에서 막아두는 편이 낫다.
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
+    );
+  }
+
   function orderingClosed() {
     return !!(ordering && ordering.enabled && !ordering.open);
   }
@@ -240,6 +248,7 @@
   /** 알림창 한 줄로 쓸 문구 — 주문을 눌렀는데 그 사이 영업이 끝난 경우. */
   function closedMessage() {
     const parts = [t("closedTitle")];
+    if (ordering && ordering.today_note) parts.push(ordering.today_note);
     if (ordering && ordering.today_closed) parts.push(t("closedTodayHoliday"));
     const when = nextOpenLabel();
     if (when) parts.push(`${t("closedNextOpenLabel")} ${when}`);
@@ -265,6 +274,10 @@
       // 요일마다 시간이 다를 수 있으니 여기 적히는 건 "오늘" 의 시간이다
       // (서버가 오늘 것으로 골라서 보낸다). 오늘이 휴무면 시간 대신 그렇게
       // 적는다 — 빈 줄을 두면 손님은 시간을 못 봤다고 생각한다.
+      // 사장님이 그 날에 적어둔 이유(예: 태풍 휴무). 번역하지 않고 적힌
+      // 그대로 보여준다 — 우리가 옮기면 뜻이 달라질 수 있고, 사장님은
+      // 손님이 읽을 말로 적으면 된다.
+      if (ordering.today_note) lines.push(escapeHtml(ordering.today_note));
       if (ordering.today_closed) lines.push(t("closedTodayHoliday"));
       else if (ordering.ranges_text) lines.push(`${t("closedHoursLabel")} ${ordering.ranges_text}`);
       const when = nextOpenLabel();

@@ -188,32 +188,82 @@ function hm(offsetMinutes) {
   }
   check("시간대 칸이 그려진다", (await adminPage.locator("#ohRanges .oh-range").count()) >= 1,
     `count=${await adminPage.locator("#ohRanges .oh-range").count()}`);
-  check("요일 7줄이 그려진다", (await adminPage.locator("#ohDayRules .oh-day-rule").count()) === 7,
-    `count=${await adminPage.locator("#ohDayRules .oh-day-rule").count()}`);
+  check("요일 7칸이 그려진다", (await adminPage.locator("#ohWeekRow .oh-week-day").count()) === 7,
+    `count=${await adminPage.locator("#ohWeekRow .oh-week-day").count()}`);
   // 요일별로 다르게 잡을 수 있어야 한다 (2026-09-10 사장님: "요일마다 다를
   // 수 있는데 그것도 넣었어?"). 「직접 지정」을 고르면 그 요일만 시간
   // 편집기가 열리고, 기본 시간을 복사해서 시작한다 — 빈 칸부터 채우게 하지 않는다.
   {
-    const sat = adminPage.locator('#ohDayRules select[data-oh-mode="6"]');
-    await sat.selectOption("custom");
-    await adminPage.waitForTimeout(300);
-    const rows = await adminPage.locator('#ohDayRules [data-oh-dayranges="6"] .oh-range').count();
-    check("토요일만 시간 편집기가 열린다", rows >= 1, `rows=${rows}`);
-    check("다른 요일은 안 열린다",
-      (await adminPage.locator('#ohDayRules [data-oh-dayranges="3"] .oh-range').count()) === 0);
-    await adminPage.locator('#ohDayRules select[data-oh-mode="1"]').selectOption("closed");
+    check("요일이 가로 한 줄이다", (await adminPage.locator("#ohWeekRow .oh-week-day").count()) === 7);
+    check("월요일부터 시작한다",
+      (await adminPage.locator("#ohWeekRow .oh-week-day").first().getAttribute("data-oh-day")) === "1");
+    check("고르기 전에는 편집기가 닫혀 있다", await adminPage.locator("#ohDayPanel").isHidden());
+
+    await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="6"]').click();
+    await adminPage.waitForTimeout(250);
+    check("누른 요일의 편집기가 열린다", await adminPage.locator("#ohDayPanel").isVisible());
+    await adminPage.locator("#ohDayPanel select[data-oh-mode]").selectOption("custom");
+    await adminPage.waitForTimeout(250);
+    check("직접 지정하면 시간 칸이 나온다",
+      (await adminPage.locator("#ohDayPanel .oh-range").count()) >= 1);
+    // 요일 칸에 지금 상태가 적혀 있어야 한다 — 하나씩 눌러보게 하면
+    // 가로 한 줄로 만든 뜻이 없다.
+    check("요일 칸에 시간이 요약된다",
+      /\d{2}:\d{2}~\d{2}:\d{2}/.test(await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="6"]').innerText()),
+      await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="6"]').innerText());
+
+    await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="1"]').click();
+    await adminPage.waitForTimeout(200);
+    await adminPage.locator("#ohDayPanel select[data-oh-mode]").selectOption("closed");
     await adminPage.waitForTimeout(200);
     check("휴무로 고른 요일은 표시가 난다",
-      await adminPage.locator('#ohDayRules .oh-day-rule.is-closed').first().isVisible());
+      (await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="1"]').getAttribute("class")).includes("mode-closed"));
+
+    out.push("\n[태풍 같은 하루짜리 휴무는 달력에서]");
+    // 2026-09-10 사장님: "태풍이 불거나 휴무를 해야 하거나 뭐 다양한 이유들."
+    check("달력이 그려진다", (await adminPage.locator("#ohCalGrid .oh-cal-day").count()) >= 28);
+    check("요일 머리글도 월요일부터",
+      (await adminPage.locator("#ohCalWeekdays span").first().innerText()).trim().length > 0);
+    const someDay = adminPage.locator("#ohCalGrid .oh-cal-day").nth(15);
+    const someDate = await someDay.getAttribute("data-oh-date");
+    await someDay.click();
+    await adminPage.waitForTimeout(250);
+    check("날짜를 누르면 편집기가 열린다", await adminPage.locator("#ohDatePanel").isVisible());
+    await adminPage.locator("#ohDatePanel select[data-oh-datemode]").selectOption("closed");
+    await adminPage.waitForTimeout(250);
+    check("그 날에 표시가 붙는다",
+      (await adminPage.locator(`#ohCalGrid .oh-cal-day[data-oh-date="${someDate}"]`).getAttribute("class")).includes("mode-closed"));
+    await adminPage.locator("#ohDatePanel input[data-oh-note]").fill("태풍");
+
     // 저장하면 서버가 다듬은 결과가 그대로 다시 그려져야 한다 — 화면과
     // 실제로 저장된 것이 다르면 사장님은 자기가 적은 대로 막히고 있다고 믿는다.
     await adminPage.locator("#saveOrderHoursBtn").click();
-    await adminPage.waitForTimeout(700);
+    await adminPage.waitForTimeout(800);
     const saved = await adminPage.evaluate(async () => (await fetch("/api/settings/order-hours")).json());
     check("토요일 시간이 저장된다", !!(saved.day_ranges && saved.day_ranges["6"]), JSON.stringify(saved.day_ranges));
     check("월요일 휴무가 저장된다", (saved.closed_days || []).includes(1), JSON.stringify(saved.closed_days));
-    check("저장 뒤에도 토요일 편집기가 열려 있다",
-      (await adminPage.locator('#ohDayRules [data-oh-dayranges="6"] .oh-range').count()) >= 1);
+    check("그 날 휴무가 저장된다", !!(saved.date_rules && saved.date_rules[someDate] && saved.date_rules[someDate].closed),
+      JSON.stringify(saved.date_rules));
+    check("이유도 같이 저장된다", (saved.date_rules[someDate] || {}).note === "태풍", JSON.stringify(saved.date_rules));
+    check("저장 뒤에도 달력에 남아 있다",
+      (await adminPage.locator(`#ohCalGrid .oh-cal-day[data-oh-date="${someDate}"]`).getAttribute("class")).includes("mode-closed"));
+
+    // 다음 달로 넘어갔다 돌아와도 그대로여야 한다.
+    await adminPage.locator("#ohCalNext").click();
+    await adminPage.waitForTimeout(200);
+    check("다음 달로 넘어간다",
+      (await adminPage.locator("#ohCalGrid .oh-cal-day").first().getAttribute("data-oh-date")).slice(0, 7) !== someDate.slice(0, 7));
+    await adminPage.locator("#ohCalPrev").click();
+    await adminPage.waitForTimeout(200);
+    check("돌아오면 표시가 그대로 있다",
+      (await adminPage.locator(`#ohCalGrid .oh-cal-day[data-oh-date="${someDate}"]`).getAttribute("class")).includes("mode-closed"));
+
+    {
+      const shots = path.join(__dirname, "..", "..", "..", "_screens");
+      fs.mkdirSync(shots, { recursive: true });
+      await adminPage.locator("#orderHoursState").locator("xpath=..")
+        .screenshot({ path: path.join(shots, "order-hours-calendar.png") });
+    }
   }
 
   out.push("\n[언어를 바꾸면 이 카드도 같이 바뀐다]");
@@ -223,20 +273,20 @@ function hm(offsetMinutes) {
   // 언어로 남는다. 중국어로 쓰는 직원이 열어봐야만 드러나는 종류의 문제다.
   {
     const koState = await adminPage.locator("#orderHoursState").innerText();
-    const koDay = await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText();
-    const koMode = await adminPage.locator('#ohDayRules select[data-oh-mode="0"] option').first().innerText();
+    const koDay = await adminPage.locator("#ohWeekRow .oh-week-day .oh-week-name").first().innerText();
+    const koMonth = await adminPage.locator("#ohCalTitle").innerText();
     const koRemove = await adminPage.locator("#ohRanges .oh-range button").first().innerText();
 
     await adminPage.locator('.admin-lang-btn[data-admin-lang="zh"]').click();
     await adminPage.waitForTimeout(500);
     const zhState = await adminPage.locator("#orderHoursState").innerText();
-    const zhDay = await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText();
-    const zhMode = await adminPage.locator('#ohDayRules select[data-oh-mode="0"] option').first().innerText();
+    const zhDay = await adminPage.locator("#ohWeekRow .oh-week-day .oh-week-name").first().innerText();
+    const zhMonth = await adminPage.locator("#ohCalTitle").innerText();
     const zhRemove = await adminPage.locator("#ohRanges .oh-range button").first().innerText();
 
     check("상태 줄이 중국어로 바뀐다", zhState !== koState && /停止接單|開放點餐|沒有任何限制/.test(zhState), `${koState} → ${zhState}`);
     check("요일 이름이 중국어로 바뀐다", zhDay !== koDay, `${koDay} → ${zhDay}`);
-    check("드롭다운 항목이 중국어로 바뀐다", zhMode !== koMode, `${koMode} → ${zhMode}`);
+    check("달력 제목도 중국어로 바뀐다", zhMonth !== koMonth && zhMonth.includes("年"), `${koMonth} → ${zhMonth}`);
     check("「삭제」 버튼도 바뀐다", zhRemove !== koRemove, `${koRemove} → ${zhRemove}`);
     check("설정 분류 이름도 바뀐다",
       (await adminPage.locator('.settings-nav-btn[data-category="order"] .nav-name').innerText()).includes("點餐"),
@@ -245,7 +295,7 @@ function hm(offsetMinutes) {
     await adminPage.locator('.admin-lang-btn[data-admin-lang="ko"]').click();
     await adminPage.waitForTimeout(400);
     check("한국어로 되돌아온다",
-      (await adminPage.locator("#ohDayRules .oh-day-rule .oh-day-name").first().innerText()) === koDay);
+      (await adminPage.locator("#ohWeekRow .oh-week-day .oh-week-name").first().innerText()) === koDay);
   }
   {
     const shots = path.join(__dirname, "..", "..", "..", "_screens");
@@ -253,10 +303,9 @@ function hm(offsetMinutes) {
     // 요소로 직접 찍는다 — clip 은 화면 밖으로 나가 있으면 조용히 실패한다.
     await adminPage.locator("#orderHoursState").locator("xpath=..")
       .screenshot({ path: path.join(shots, "closed-admin.png") });
-    // 요일별을 하나 펼친 모습도 같이 남긴다 — 접혀 있으면 이 기능이 있는지
+    // 요일을 하나 펼친 모습도 같이 남긴다 — 접혀 있으면 이 기능이 있는지
     // 화면만 보고는 알 수 없다.
-    await adminPage.locator('#ohDayRules select[data-oh-mode="6"]').selectOption("custom");
-    await adminPage.locator('#ohDayRules select[data-oh-mode="1"]').selectOption("closed");
+    await adminPage.locator('#ohWeekRow .oh-week-day[data-oh-day="6"]').click();
     await adminPage.waitForTimeout(300);
     await adminPage.locator("#orderHoursState").locator("xpath=..")
       .screenshot({ path: path.join(shots, "closed-admin-byday.png") });
@@ -273,6 +322,28 @@ function hm(offsetMinutes) {
   {
     const r = await guestOrder();
     check("손님 주문이 다시 들어간다", r.status === 201, JSON.stringify(r));
+  }
+
+  out.push("\n[오늘 태풍 휴무면 손님에게 이유까지 알려준다]");
+  // "오늘은 휴무입니다" 만 있으면 손님은 다시 올지 말지를 정할 수 없다.
+  {
+    const today = await adminPage.evaluate(async () => {
+      const r = await (await fetch("/api/settings/ordering")).json();
+      return r; // 서버가 보는 오늘로 맞춘다 — 브라우저 시계로 하면 어긋난다.
+    });
+    const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    await setHours({
+      enabled: 1,
+      ranges: [{ start: hm(-60), end: hm(60) }],
+      closed_days: [],
+      date_rules: { [todayStr]: { closed: 1, note: "태풍 휴무" } },
+    });
+    await guestPage.goto(`${base}/t/${table.number}`, { waitUntil: "networkidle" });
+    await guestPage.waitForTimeout(400);
+    const text = await guestPage.locator("#closedBanner").innerText();
+    check("영업시간 안이어도 그 날은 막힌다", (await guestOrder()).error === "closed_now", text);
+    check("이유가 손님 화면에 뜬다", text.includes("태풍 휴무"), text);
+    void today;
   }
 
   out.push("\n[오늘이 휴무면 하루 종일 안 받는다]");

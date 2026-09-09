@@ -598,6 +598,14 @@
       orderHoursRemoveRange: "삭제",
       orderHoursBaseLabel: "기본 시간 (요일별로 따로 정하지 않은 날)",
       orderHoursByDayLabel: "요일별",
+      orderHoursByDateLabel: "특정 날짜 (태풍 · 임시 휴무 등)",
+      orderHoursDateDefault: "평소대로",
+      orderHoursDateClosed: "이 날 휴무",
+      orderHoursDateCustom: "이 날만 시간 지정",
+      orderHoursMarkClosed: "휴",
+      orderHoursMarkCustom: "시",
+      orderHoursNoteLabel: "이유 (손님에게도 보여요)",
+      orderHoursNotePlaceholder: "예: 태풍 휴무",
       orderHoursDayDefault: "기본과 같음",
       orderHoursDayCustom: "직접 지정",
       orderHoursDayClosed: "휴무",
@@ -1136,6 +1144,14 @@
       orderHoursRemoveRange: "刪除",
       orderHoursBaseLabel: "預設時間（未另外設定的星期）",
       orderHoursByDayLabel: "各星期設定",
+      orderHoursByDateLabel: "特定日期（颱風 · 臨時公休等）",
+      orderHoursDateDefault: "照常",
+      orderHoursDateClosed: "當日公休",
+      orderHoursDateCustom: "當日另訂時間",
+      orderHoursMarkClosed: "休",
+      orderHoursMarkCustom: "時",
+      orderHoursNoteLabel: "原因（顧客也看得到）",
+      orderHoursNotePlaceholder: "例：颱風公休",
       orderHoursDayDefault: "同預設",
       orderHoursDayCustom: "自訂",
       orderHoursDayClosed: "公休",
@@ -1664,6 +1680,7 @@
     adminLang === "zh" ? `確定要將桌號 ${n} 移出此區域嗎？（桌號本身不會被刪除）` : `테이블 ${n}을(를) 이 구역에서 뺄까요? (테이블 자체는 삭제되지 않습니다)`;
   const fmtConfirmDeleteZone = (name) =>
     adminLang === "zh" ? `確定要刪除「${name}」這個區域嗎？（區域內的桌號不會被刪除，只會取消配置）` : `"${name}" 구역을 삭제하시겠습니까? (구역 안 테이블은 삭제되지 않고 배치만 풀립니다)`;
+  const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
   const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
   const fmtLocationSetStatus = (lat, lng) =>
@@ -6485,36 +6502,68 @@
       if (ranges.length >= 6) return;
       ranges.push({ start: "11:00", end: "21:00" });
       renderRangeEditor(container, ranges, opts);
+      if (opts && opts.onChange) opts.onChange();
     };
     container.appendChild(add);
 
+    const changed = () => opts && opts.onChange && opts.onChange();
     container.querySelectorAll("input[data-oh]").forEach((el) => {
       el.onchange = () => {
         const r = ranges[parseInt(el.dataset.i, 10)];
         if (r) r[el.dataset.oh] = el.value;
+        // 요일 줄과 달력에 적히는 요약이 편집기와 어긋나면, 사장님은 자기가
+        // 적은 것과 다른 게 저장돼 있다고 믿게 된다.
+        changed();
       };
     });
     container.querySelectorAll("button[data-oh-remove]").forEach((el) => {
       el.onclick = () => {
         ranges.splice(parseInt(el.dataset.ohRemove, 10), 1);
         renderRangeEditor(container, ranges, opts);
+        changed();
       };
     });
   }
 
   function renderOrderHoursRanges() {
     const wrap = $("#ohRanges");
-    if (wrap) renderRangeEditor(wrap, orderHoursCfg.ranges);
+    if (!wrap) return;
+    // 기본 시간을 고치면 「기본과 같음」인 요일과 달력 칸의 요약도 같이 바뀐다.
+    renderRangeEditor(wrap, orderHoursCfg.ranges, {
+      onChange: () => {
+        renderOrderHoursDayRules();
+        renderOhCalendar();
+      },
+    });
   }
 
   // 요일마다 세 가지 중 하나다: 기본과 같음 / 직접 지정 / 휴무.
   // 「휴무」를 「구간이 하나도 없는 요일」로 표현하지 않는 이유는
   // src/openHours.js 의 normalizeDayRanges 주석에 있다 — 시간을 다 지운
   // 요일이 조용히 휴무가 되면 안 된다.
+  //
+  // 화면은 가로 한 줄이다(2026-09-10 사장님: "월부터 일까지 가로로 한 줄로").
+  // 고른 요일의 편집기만 그 밑에 연다.
+  const OH_WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // 월요일부터
+  let ohSelectedDay = null;
+  let ohSelectedDate = null;
+  let ohCalMonth = null; // "YYYY-MM"
+
   function ohDayMode(day) {
     if (orderHoursCfg.closed_days.includes(day)) return "closed";
     if (orderHoursCfg.day_ranges[String(day)]) return "custom";
     return "default";
+  }
+
+  function ohDaySummary(day) {
+    const mode = ohDayMode(day);
+    if (mode === "closed") return T("orderHoursDayClosed");
+    if (mode === "custom") return ohRangesText(orderHoursCfg.day_ranges[String(day)]);
+    return T("orderHoursDayDefault");
+  }
+
+  function ohRangesText(ranges) {
+    return (ranges || []).map((r) => `${r.start}~${r.end}`).join(", ");
   }
 
   function ohSetDayMode(day, mode) {
@@ -6533,31 +6582,222 @@
   }
 
   function renderOrderHoursDayRules() {
-    const wrap = $("#ohDayRules");
-    if (!wrap) return;
-    wrap.innerHTML = "";
-    OH_DAY_KEYS.forEach((key, day) => {
+    const row = $("#ohWeekRow");
+    if (!row) return;
+    row.innerHTML = "";
+    OH_WEEK_ORDER.forEach((day) => {
       const mode = ohDayMode(day);
-      const row = document.createElement("div");
-      row.className = "oh-day-rule" + (mode === "closed" ? " is-closed" : "");
-      const opt = (v, label) => `<option value="${v}"${mode === v ? " selected" : ""}>${label}</option>`;
-      row.innerHTML = `
-        <span class="oh-day-name">${T(key)}</span>
-        <select data-oh-mode="${day}">
-          ${opt("default", T("orderHoursDayDefault"))}
-          ${opt("custom", T("orderHoursDayCustom"))}
-          ${opt("closed", T("orderHoursDayClosed"))}
-        </select>
-        <div class="oh-day-ranges" data-oh-dayranges="${day}"></div>`;
-      wrap.appendChild(row);
-      if (mode === "custom") {
-        renderRangeEditor(row.querySelector(`[data-oh-dayranges="${day}"]`), orderHoursCfg.day_ranges[String(day)]);
-      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `oh-week-day mode-${mode}` + (ohSelectedDay === day ? " selected" : "");
+      btn.dataset.ohDay = String(day);
+      btn.innerHTML = `<span class="oh-week-name"></span><span class="oh-week-sub"></span>`;
+      btn.querySelector(".oh-week-name").textContent = T(OH_DAY_KEYS[day]);
+      btn.querySelector(".oh-week-sub").textContent = ohDaySummary(day);
+      btn.onclick = () => {
+        ohSelectedDay = ohSelectedDay === day ? null : day;
+        renderOrderHoursDayRules();
+      };
+      row.appendChild(btn);
     });
-    wrap.querySelectorAll("select[data-oh-mode]").forEach((el) => {
-      el.onchange = () => ohSetDayMode(parseInt(el.dataset.ohMode, 10), el.value);
-    });
+    renderOhDayPanel();
   }
+
+  function renderOhDayPanel() {
+    const panel = $("#ohDayPanel");
+    if (!panel) return;
+    if (ohSelectedDay === null) {
+      panel.hidden = true;
+      panel.innerHTML = "";
+      return;
+    }
+    const day = ohSelectedDay;
+    const mode = ohDayMode(day);
+    panel.hidden = false;
+    panel.innerHTML = `
+      <div class="oh-panel-head"><b></b><select data-oh-mode></select></div>
+      <div class="oh-panel-ranges"></div>`;
+    panel.querySelector("b").textContent = T(OH_DAY_KEYS[day]);
+    const sel = panel.querySelector("select[data-oh-mode]");
+    [["default", T("orderHoursDayDefault")], ["custom", T("orderHoursDayCustom")], ["closed", T("orderHoursDayClosed")]]
+      .forEach(([v, label]) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = label;
+        if (v === mode) o.selected = true;
+        sel.appendChild(o);
+      });
+    sel.onchange = () => ohSetDayMode(day, sel.value);
+    if (mode === "custom") {
+      renderRangeEditor(panel.querySelector(".oh-panel-ranges"), orderHoursCfg.day_ranges[String(day)], {
+        onChange: () => renderOrderHoursDayRules(),
+      });
+    }
+  }
+
+  // ---------- 특정 날짜 (달력) ----------
+  // 태풍으로 하루 닫는 건 평소 규칙을 잠깐 덮는 일이지 평소 규칙을 고치는
+  // 일이 아니다. 그래서 요일과 따로, 달력에서 그 날을 직접 찍는다.
+  function ohToday() {
+    // 대만 시각 기준 오늘. 관리자 태블릿이 한국 시간으로 맞춰져 있어도
+    // 달력이 하루 어긋나면 안 된다.
+    const p = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    return p; // en-CA 는 YYYY-MM-DD
+  }
+
+  function ohDateRule(date) {
+    return orderHoursCfg.date_rules[date] || null;
+  }
+
+  function ohDateMode(date) {
+    const rule = ohDateRule(date);
+    if (!rule) return "default";
+    return rule.closed ? "closed" : "custom";
+  }
+
+  function ohSetDateMode(date, mode) {
+    if (mode === "default") delete orderHoursCfg.date_rules[date];
+    else if (mode === "closed") {
+      const note = (orderHoursCfg.date_rules[date] || {}).note || "";
+      orderHoursCfg.date_rules[date] = note ? { closed: 1, note } : { closed: 1 };
+    } else {
+      const prev = orderHoursCfg.date_rules[date] || {};
+      const ranges = (prev.ranges && prev.ranges.length)
+        ? prev.ranges
+        : ohRangesForDatePreview(date).map((r) => ({ start: r.start, end: r.end }));
+      orderHoursCfg.date_rules[date] = prev.note ? { ranges, note: prev.note } : { ranges };
+    }
+    renderOhCalendar();
+  }
+
+  // 그 날 평소 같으면 어떤 시간인지 — 날짜 규칙을 새로 만들 때의 출발점이자
+  // 달력 칸에 회색으로 적어주는 값. 서버의 rangesForDate 와 같은 순서다
+  // (날짜 > 요일 휴무 > 요일별 > 기본); 날짜 규칙은 여기서 빼고 본다.
+  function ohRangesForDatePreview(date) {
+    const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+    if (orderHoursCfg.closed_days.includes(day)) return [];
+    const own = orderHoursCfg.day_ranges[String(day)];
+    if (own && own.length) return own;
+    return orderHoursCfg.ranges;
+  }
+
+  function ohMonthShift(ym, n) {
+    const [y, m] = ym.split("-").map((v) => parseInt(v, 10));
+    const d = new Date(Date.UTC(y, m - 1 + n, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function renderOhCalendar() {
+    const grid = $("#ohCalGrid");
+    if (!grid) return;
+    if (!ohCalMonth) ohCalMonth = ohToday().slice(0, 7);
+    const [y, m] = ohCalMonth.split("-").map((v) => parseInt(v, 10));
+    $("#ohCalTitle").textContent = fmtOhCalTitle(y, m);
+
+    const head = $("#ohCalWeekdays");
+    head.innerHTML = "";
+    OH_WEEK_ORDER.forEach((day) => {
+      const el = document.createElement("span");
+      el.textContent = T(OH_DAY_KEYS[day]);
+      head.appendChild(el);
+    });
+
+    grid.innerHTML = "";
+    const first = new Date(Date.UTC(y, m - 1, 1));
+    // 월요일 시작이라 일요일(0)은 맨 뒤로 보낸다.
+    const lead = (first.getUTCDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) grid.appendChild(document.createElement("span"));
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const today = ohToday();
+    for (let d = 1; d <= days; d++) {
+      const date = `${ohCalMonth}-${String(d).padStart(2, "0")}`;
+      const mode = ohDateMode(date);
+      const weekdayClosed = mode === "default" && ohRangesForDatePreview(date).length === 0;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = [
+        "oh-cal-day",
+        `mode-${mode}`,
+        weekdayClosed ? "weekday-closed" : "",
+        date === today ? "is-today" : "",
+        date === ohSelectedDate ? "selected" : "",
+        date < today ? "is-past" : "",
+      ].filter(Boolean).join(" ");
+      btn.dataset.ohDate = date;
+      const mark = mode === "closed" ? "휴" : mode === "custom" ? "시" : weekdayClosed ? "·" : "";
+      btn.innerHTML = `<span class="oh-cal-num">${d}</span><span class="oh-cal-mark"></span>`;
+      btn.querySelector(".oh-cal-mark").textContent =
+        mode === "closed" ? T("orderHoursMarkClosed")
+        : mode === "custom" ? T("orderHoursMarkCustom")
+        : weekdayClosed ? "·" : "";
+      btn.onclick = () => {
+        ohSelectedDate = ohSelectedDate === date ? null : date;
+        renderOhCalendar();
+      };
+      grid.appendChild(btn);
+    }
+    renderOhDatePanel();
+  }
+
+  function renderOhDatePanel() {
+    const panel = $("#ohDatePanel");
+    if (!panel) return;
+    if (!ohSelectedDate) {
+      panel.hidden = true;
+      panel.innerHTML = "";
+      return;
+    }
+    const date = ohSelectedDate;
+    const mode = ohDateMode(date);
+    const rule = ohDateRule(date) || {};
+    panel.hidden = false;
+    panel.innerHTML = `
+      <div class="oh-panel-head"><b></b><select data-oh-datemode></select></div>
+      <label class="oh-note"><span></span><input type="text" maxlength="40" data-oh-note /></label>
+      <div class="oh-panel-ranges"></div>`;
+    panel.querySelector("b").textContent = date;
+    const sel = panel.querySelector("select[data-oh-datemode]");
+    [["default", T("orderHoursDateDefault")], ["closed", T("orderHoursDateClosed")], ["custom", T("orderHoursDateCustom")]]
+      .forEach(([v, label]) => {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = label;
+        if (v === mode) o.selected = true;
+        sel.appendChild(o);
+      });
+    sel.onchange = () => ohSetDateMode(date, sel.value);
+
+    const noteWrap = panel.querySelector(".oh-note");
+    noteWrap.querySelector("span").textContent = T("orderHoursNoteLabel");
+    const noteInput = noteWrap.querySelector("input");
+    noteInput.value = rule.note || "";
+    noteInput.placeholder = T("orderHoursNotePlaceholder");
+    noteWrap.hidden = mode === "default";
+    noteInput.oninput = () => {
+      const r = orderHoursCfg.date_rules[date];
+      if (!r) return;
+      const v = noteInput.value.trim();
+      if (v) r.note = v;
+      else delete r.note;
+    };
+
+    if (mode === "custom") {
+      renderRangeEditor(panel.querySelector(".oh-panel-ranges"), orderHoursCfg.date_rules[date].ranges, {
+        onChange: () => renderOhCalendar(),
+      });
+    }
+  }
+
+  $("#ohCalPrev") && ($("#ohCalPrev").onclick = () => {
+    ohCalMonth = ohMonthShift(ohCalMonth || ohToday().slice(0, 7), -1);
+    renderOhCalendar();
+  });
+  $("#ohCalNext") && ($("#ohCalNext").onclick = () => {
+    ohCalMonth = ohMonthShift(ohCalMonth || ohToday().slice(0, 7), 1);
+    renderOhCalendar();
+  });
 
   // 지금 실제로 받고 있는지를 맨 위에 적어준다. 규칙만 보여주면 사장님이
   // 머리로 시계를 맞춰봐야 하고, 그러다 "왜 손님이 주문을 못 하지" 가 된다.
@@ -6608,10 +6848,21 @@
       day_ranges: Object.fromEntries(
         Object.entries(cfg.day_ranges || {}).map(([d, rs]) => [d, rs.map((r) => ({ start: r.start, end: r.end }))])
       ),
+      date_rules: Object.fromEntries(
+        Object.entries(cfg.date_rules || {}).map(([d, r]) => [
+          d,
+          r.closed
+            ? (r.note ? { closed: 1, note: r.note } : { closed: 1 })
+            : (r.note
+                ? { ranges: (r.ranges || []).map((x) => ({ start: x.start, end: x.end })), note: r.note }
+                : { ranges: (r.ranges || []).map((x) => ({ start: x.start, end: x.end })) }),
+        ])
+      ),
     };
     $("#oh_enabled").checked = !!orderHoursCfg.enabled;
     renderOrderHoursRanges();
     renderOrderHoursDayRules();
+    renderOhCalendar();
   }
 
   // 못 불러오면 카드가 통째로 빈 채로 남는다 — 제목과 안내문만 있고 그
@@ -6632,6 +6883,7 @@
   function refreshOrderHoursI18n() {
     renderOrderHoursRanges();
     renderOrderHoursDayRules();
+    renderOhCalendar();
     renderOrderHoursState(lastOrderingState);
   }
 
@@ -7068,6 +7320,7 @@
         ranges: orderHoursCfg.ranges,
         closed_days: orderHoursCfg.closed_days,
         day_ranges: orderHoursCfg.day_ranges,
+        date_rules: orderHoursCfg.date_rules,
       }),
     });
     if (res.ok) {

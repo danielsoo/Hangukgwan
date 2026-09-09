@@ -541,7 +541,26 @@
           <span class="oh-label" data-i18n="orderHoursBaseLabel">기본 시간 (요일별로 따로 정하지 않은 날)</span>
           <div id="ohRanges" class="oh-ranges"></div>
           <span class="oh-label" data-i18n="orderHoursByDayLabel">요일별</span>
-          <div id="ohDayRules" class="oh-day-rules"></div>
+          <!-- 요일 일곱 개를 가로 한 줄로 놓고, 고른 요일의 편집기만 그 밑에
+               연다. 일곱 줄이 전부 펼쳐져 있으면 어느 요일이 기본과 다른지
+               한눈에 안 보이는데, 그게 이 자리에서 제일 알고 싶은 것이다. -->
+          <div id="ohWeekRow" class="oh-week-row"></div>
+          <div id="ohDayPanel" class="oh-panel" hidden></div>
+
+          <!-- 특정 날짜 — 2026-09-10 사장님: "태풍이 불거나 휴무를 해야 하거나
+               뭐 다양한 이유들." 요일 규칙으로는 못 적는 일회성 사정이라
+               달력에서 그 날을 직접 찍는다. -->
+          <span class="oh-label" data-i18n="orderHoursByDateLabel">특정 날짜 (태풍 · 임시 휴무 등)</span>
+          <div class="oh-cal">
+            <div class="oh-cal-head">
+              <button type="button" id="ohCalPrev" class="oh-cal-nav" aria-label="prev">‹</button>
+              <span id="ohCalTitle" class="oh-cal-title"></span>
+              <button type="button" id="ohCalNext" class="oh-cal-nav" aria-label="next">›</button>
+            </div>
+            <div id="ohCalWeekdays" class="oh-cal-weekdays"></div>
+            <div id="ohCalGrid" class="oh-cal-grid"></div>
+          </div>
+          <div id="ohDatePanel" class="oh-panel" hidden></div>
           <button id="saveOrderHoursBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="orderHoursMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
