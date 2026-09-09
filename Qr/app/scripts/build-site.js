@@ -124,6 +124,27 @@ for (const required of ["login", "signup", "account"]) {
   }
 }
 
+// 홈페이지 안에 다른 주소가 박혀 있지 않은지 확인한다.
+//
+// 2026-09-10: 로컬에서 홈페이지만 따로 띄우는 줄 알고 Web/.env.local 에
+// NEXT_PUBLIC_QR_APP_URL=http://localhost:3000 을 넣었다가, 실제 로컬
+// 확인 방법은 dev:local 로 한 포트에 같이 띄우는 것이라 링크만 3000 을
+// 가리키게 될 뻔했다. 빌드 시점에 박히는 값이라 나중에 화면에서야 드러난다.
+//
+// 여기(그리고 배포)는 홈페이지와 주문/관리자가 같은 주소에서 나가므로,
+// 그 값은 비어 있어야 한다. localhost 가 박힌 채로 배포되면 손님이 「온라인
+// 주문」을 눌렀을 때 자기 컴퓨터를 열려고 한다.
+{
+  const homepage = fs.readFileSync(path.join(DEST, "index.html"), "utf8");
+  const baked = homepage.match(/https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/);
+  if (baked) {
+    console.error(`[build-site] 홈페이지에 ${baked[0]} 이 박혀 있습니다 — 배포 중단.`);
+    console.error("[build-site] Web/.env.local 의 NEXT_PUBLIC_QR_APP_URL 을 비우고 다시 빌드하세요.");
+    console.error("[build-site] 홈페이지와 주문/관리자는 같은 주소에서 나가므로 그 값은 비어 있어야 합니다.");
+    process.exit(1);
+  }
+}
+
 const pages = fs
   .readdirSync(DEST, { withFileTypes: true })
   .filter((e) => e.isDirectory() && fs.existsSync(path.join(DEST, e.name, "index.html")))

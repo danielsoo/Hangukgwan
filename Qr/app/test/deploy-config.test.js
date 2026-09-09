@@ -13,6 +13,7 @@ const fs = require("fs");
 const path = require("path");
 
 const APP = path.join(__dirname, "..");
+const WEB_ROOT = path.join(__dirname, "..", "..", "..", "Web");
 const vercel = JSON.parse(fs.readFileSync(path.join(APP, "vercel.json"), "utf8"));
 const buildScript = fs.readFileSync(path.join(APP, "scripts", "build-site.js"), "utf8");
 
@@ -119,6 +120,30 @@ check("소스가 그대로면 재빌드를 건너뛴다", /재빌드 생략/.tes
 
 out.push("\n[크론은 그대로]");
 check("정산 마감 크론 유지", Array.isArray(vercel.crons) && vercel.crons[0].path === "/api/settlements/cron-close");
+
+out.push("\n[홈페이지에 다른 주소가 박히지 않는가]");
+// 2026-09-10: 로컬에서 홈페이지만 따로 띄우는 줄 알고 Web/.env.local 에
+// NEXT_PUBLIC_QR_APP_URL=http://localhost:3000 을 넣었다가, 실제 로컬 확인
+// 방법은 dev:local 로 한 포트에 같이 띄우는 것이라 링크만 3000 을 가리키게
+// 될 뻔했다. 빌드 시점에 박히는 값이라 화면에서야 드러난다 — 손님이
+// 「온라인 주문」을 누르면 자기 컴퓨터를 열려고 한다.
+{
+  const buildSite = fs.readFileSync(path.join(APP, "scripts", "build-site.js"), "utf8");
+  check("빌드가 localhost 가 박혔는지 확인한다",
+    /localhost\|127\\\.0\\\.0\\\.1/.test(buildSite) || buildSite.includes("localhost|127"), "확인이 없다");
+  check("박혀 있으면 배포를 멈춘다",
+    /박혀 있습니다[\s\S]{0,400}process\.exit\(1\)/.test(buildSite), "멈추지 않는다");
+  check("무엇을 고쳐야 하는지 알려준다", buildSite.includes("NEXT_PUBLIC_QR_APP_URL"), "안내가 없다");
+
+  // 예시 파일이 잘못된 기본값을 권하면 같은 일이 반복된다.
+  const example = path.join(WEB_ROOT, ".env.local.example");
+  if (fs.existsSync(example)) {
+    const ex = fs.readFileSync(example, "utf8");
+    const active = ex.split("\n").filter((l) => l.trim() && !l.trim().startsWith("#"));
+    check("예시 파일이 값을 켜둔 채로 두지 않는다", active.length === 0, active.join(" | "));
+    check("예시 파일이 dev:local 을 권한다", ex.includes("dev:local"), "안내가 없다");
+  }
+}
 
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed\n`);
