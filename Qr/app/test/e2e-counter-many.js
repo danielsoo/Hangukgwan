@@ -64,8 +64,10 @@ function check(name, cond, extra = "") {
     };
     const H = { "Content-Type": "application/json" };
     // 메뉴는 서버가 이미 기본값으로 심어둔다 — 그중 아무거나 하나 쓴다.
+    // /api/menu/admin 은 카테고리 배열이고 각 카테고리 안에 items 가 있다.
+    // 예전엔 배열의 [0](=카테고리)을 메뉴로 착각해서 가격이 undefined 였다.
     const menu = await j("/api/menu/admin");
-    const item = (menu.body && (menu.body.items || menu.body))[0];
+    const item = (menu.body || []).flatMap((c) => c.items || [])[0];
     const counter = await j("/api/tables/counter", { method: "POST", headers: H, body: "{}" });
     const zones = await j("/api/zones");
     const zid = zones.body && zones.body[0] && zones.body[0].id;

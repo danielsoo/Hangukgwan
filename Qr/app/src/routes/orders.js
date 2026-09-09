@@ -23,6 +23,8 @@ function resolveSelectedAddons(mi, requestedNames) {
   return chosen;
 }
 
+const { clearIfStale } = require("../partySize");
+
 const router = express.Router();
 
 // 사장님 요청(2026-09-06): "vip 카드를 소지중이면 세일을 해주거든. 1. 特約
@@ -193,6 +195,11 @@ router.post("/", async (req, res) => {
   // exception: there's no headcount to ask a takeout customer for, and
   // public/js/order.js's initPartySize() already skips that modal for it.
   const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
+  // 손님 화면이 보는 것과 똑같은 기준으로 판단해야 한다 — GET
+  // /api/tables/:n/party-size 는 오래된 숫자를 만료시키는데 여기만 그걸
+  // 그대로 인정하면, 화면은 "이미 답했다"고 넘어가는데 주문만 거절되는
+  // 어긋남이 생긴다(src/partySize.js 참고).
+  if (orderingTable) clearIfStale(store, orderingTable);
   if (!orderingTable || (!orderingTable.is_counter && !orderingTable.party_size)) {
     return res.status(400).json({ error: "party_size_required" });
   }

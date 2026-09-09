@@ -38,7 +38,11 @@ function resetStore() {
     { id: 1, code: "11", name_zh: "石鍋拌飯", name_ko: "돌솥비빔밥", price: 230, available: true, category_key: "rice" },
     { id: 2, code: "90", name_zh: "可樂", name_ko: "콜라", price: 60, available: true, category_key: "drink" },
   ];
-  store.tables = [{ id: 1, number: "7", party_size: 2 }];
+  // party_size_updated_at 까지 같이 넣는다 — 실제로 인원수를 쓰는 유일한
+// 경로(PUT /api/tables/:n/party-size)가 항상 둘을 같이 쓰고, 시각이 없는
+// 인원수는 "언제 찍힌 건지 모르는 옛 데이터"로 취급돼 만료된다
+// (src/partySize.js).
+store.tables = [{ id: 1, number: "7", party_size: 2, party_size_updated_at: new Date().toISOString() }];
   store.orders = [];
   store.vipCards = [
     // 사장님이 발급해둔, 아직 아무도 안 가져간 카드

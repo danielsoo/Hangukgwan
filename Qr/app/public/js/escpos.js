@@ -417,22 +417,46 @@
     const widthBytes = canvas.width / 8; // 576/8 = 72 exactly, no row padding needed
     const bytes = [];
     bytes.push(0x1b, 0x40); // ESC @ - init, same as CMD.INIT above
-    bytes.push(0x1d, 0x76, 0x30, 0x00); // GS v 0, m=0 (normal size)
-    bytes.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
-    bytes.push(canvas.height & 0xff, (canvas.height >> 8) & 0xff);
-    for (let py = 0; py < canvas.height; py++) {
-      const rowStart = py * canvas.width * 4;
-      for (let bx = 0; bx < widthBytes; bx++) {
-        let b = 0;
-        for (let bit = 0; bit < 8; bit++) {
-          const idx = rowStart + (bx * 8 + bit) * 4;
-          // Luminance threshold — canvas only ever draws solid black on
-          // solid white here, so this really just tests "was this pixel
-          // touched by fillText/stroke", with a little anti-aliasing slop.
-          const lum = img.data[idx] * 0.3 + img.data[idx + 1] * 0.59 + img.data[idx + 2] * 0.11;
-          if (lum < 128) b |= 0x80 >> bit;
+
+    // 비트맵을 통째로 GS v 0 한 번에 보내지 않고 가로로 잘라서 여러 번
+    // 보낸다.
+    //
+    // 2026-09-09 사장님: "주문서 출력이 어떤 테이블은 고객, 주방용 2가지로,
+    // 어쩔때는 주방만 나옴."
+    //
+    // 재보니 결제용 사본은 품목마다 금액 줄이 하나씩 더 붙어서 주방용보다
+    // 항상 크다 — 품목 5개면 40KB 대 55KB, 10개면 59KB 대 87KB, 20개면
+    // 96KB 대 149KB. 그런데 이걸 GS v 0 명령 하나에 전부 실어 보내고
+    // 있었다. 이 프린터(XP-N160II)를 포함해 이 값싼 영수증 프린터들은
+    // 입력 버퍼가 대개 64KB 안팎이라, 한 명령이 그보다 크면 프린터가
+    // 그 이미지를 통째로 버린다. 주방용은 들어가고 결제용만 넘치는
+    // 크기대라서, 정확히 "주방용만 나오는" 증상이 된다. 그리고 주문을
+    // 많이 한 테이블일수록 잘 터지니 "어떤 테이블은" 처럼 보인다.
+    //
+    // 밴드 하나는 128줄(=128 × 72 = 9216바이트)이라 버퍼가 아무리 작아도
+    // 안전하고, GS v 0 는 부를 때마다 그 높이만큼 종이를 밀기 때문에
+    // 여러 번 나눠 보내도 이어 붙어 한 장으로 나온다 — 성숙한 ESC/POS
+    // 라이브러리들이 전부 쓰는 방식이다.
+    const BAND_ROWS = 128;
+    for (let bandTop = 0; bandTop < canvas.height; bandTop += BAND_ROWS) {
+      const bandRows = Math.min(BAND_ROWS, canvas.height - bandTop);
+      bytes.push(0x1d, 0x76, 0x30, 0x00); // GS v 0, m=0 (normal size)
+      bytes.push(widthBytes & 0xff, (widthBytes >> 8) & 0xff);
+      bytes.push(bandRows & 0xff, (bandRows >> 8) & 0xff);
+      for (let py = bandTop; py < bandTop + bandRows; py++) {
+        const rowStart = py * canvas.width * 4;
+        for (let bx = 0; bx < widthBytes; bx++) {
+          let b = 0;
+          for (let bit = 0; bit < 8; bit++) {
+            const idx = rowStart + (bx * 8 + bit) * 4;
+            // Luminance threshold — canvas only ever draws solid black on
+            // solid white here, so this really just tests "was this pixel
+            // touched by fillText/stroke", with a little anti-aliasing slop.
+            const lum = img.data[idx] * 0.3 + img.data[idx + 1] * 0.59 + img.data[idx + 2] * 0.11;
+            if (lum < 128) b |= 0x80 >> bit;
+          }
+          bytes.push(b);
         }
-        bytes.push(b);
       }
     }
     bytes.push(0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x42, 0x00); // feed + partial cut, same as CMD.FEED_AND_CUT above

@@ -123,7 +123,11 @@ function check(name, cond, extra = "") {
   // 주문 API 는 테이블 인원수가 먼저 정해져 있어야 받는다(실제 화면에서는
   // "몇 분이세요?" 를 먼저 묻는다). 테스트에서는 직접 채운다.
   const t7 = store.tables.find((t) => String(t.number) === "7");
-  if (t7) t7.party_size = 2;
+  if (t7) {
+    t7.party_size = 2;
+    // 시각도 같이 — 없으면 옛 데이터로 보고 만료시킨다(src/partySize.js).
+    t7.party_size_updated_at = new Date().toISOString();
+  }
   const placed = await page.evaluate(async () => {
     const res = await fetch("/api/orders", {
       method: "POST",

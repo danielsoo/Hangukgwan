@@ -2,6 +2,7 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
+const { clearIfStale } = require("../partySize");
 const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
@@ -163,9 +164,12 @@ router.put("/:tableNumber/party-size", async (req, res) => {
 // party size registered — so a page refresh (or re-scanning the QR code
 // mid-visit) doesn't ask again for the same party. Only exposes the one
 // field (not the rest of the table record).
-router.get("/:tableNumber/party-size", (req, res) => {
+router.get("/:tableNumber/party-size", async (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
+  // 주문 없이 오래 남아 있던 숫자면 여기서 지운다 — 이 라우트가 손님 화면이
+  // "물어볼까 말까"를 정하는 유일한 자리다(public/js/order.js initPartySize).
+  if (clearIfStale(store, table)) await save();
   // is_counter tells the customer page (see initPartySize in public/js/order.js)
   // this QR is the 포장 카운터, not a real table — it skips the headcount
   // prompt entirely rather than treating a missing party_size as "not asked yet".
