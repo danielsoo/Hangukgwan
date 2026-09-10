@@ -31,6 +31,26 @@ const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 // 봐야 하므로 여기서 store 를 뒤지면 조용히 적게 나온다 — 돈 숫자가 조용히
 // 틀리는 건 최악이다. 그래서 이 함수는 계산만 하고, 어떤 주문을 볼지는
 // 부르는 쪽이 질의해서 넘긴다(src/routes/settlements.js).
+/**
+ * 주문 하나에 찍힌 인원을 어른·아이로 가른다.
+ *
+ * 어른/아이 구분이 생기기 전(2026-09-10 이전)에 앉은 손님은 party_adults 가
+ * 아예 없다. 그 손님들은 **전부 어른으로 센다** — 손님 화면도 같은 규칙으로
+ * 내려보낸다(src/routes/tables.js). 0 으로 두면 그날 어른 수가 통째로
+ * 사라져서, 옛 날짜를 열어본 결산이 텅 빈 것처럼 보인다.
+ *
+ * 어른+아이가 인원과 안 맞는 값이 저장돼 있으면 **인원 쪽을 믿는다.**
+ * 결산의 「손님 N명」과 「어른 A·아이 C」가 어긋나면 어느 쪽도 못 믿게 된다.
+ */
+function splitParty(o) {
+  const size = o.party_size;
+  const children = Number.isFinite(o.party_children) ? Math.max(0, Math.min(size, o.party_children)) : 0;
+  const adults = Number.isFinite(o.party_adults) && o.party_adults + children === size
+    ? o.party_adults
+    : size - children;
+  return { size, adults, children };
+}
+
 function computeSettlement(orders, startDate, endDate = startDate) {
   const rangeOrders = (orders || []).filter((o) => {
     const d = o.created_at.slice(0, 10);
@@ -210,14 +230,28 @@ function computeSettlement(orders, startDate, endDate = startDate) {
   // 주문할 때 그 주문에 함께 찍힌다. 같은 테이블이 여러 번 주문하면 같은
   // 인원이 여러 번 세어지므로, (테이블, 날짜)마다 한 번만 센다 — 아래
   // 회전 시간 계산이 쓰는 것과 같은 묶음 기준이다.
+  //
+  // 어른과 아이를 따로 센다 (2026-09-10 사장님: "결산에 들어가는 인원 성인
+  // 아이 따로 구분해서 집계해줘").
+  //
+  // 어른·아이를 각각 최대값으로 따로 뽑으면 안 된다. 「어른 2·아이 0」과
+  // 「어른 1·아이 2」가 같은 자리에 있었다면 각각의 최대는 2 와 2 라서
+  // 합이 4 가 되는데, 실제로 센 인원(최대 3)과 어긋난다. 그래서 **가장 큰
+  // 한 번을 통째로** 고르고 그 안의 어른·아이를 쓴다 — 합이 언제나 인원과
+  // 같아진다.
   const partyByTableDay = new Map();
   for (const o of paidOrders) {
     if (!o.party_size) continue;
     const key = `${o.table_number}|${o.created_at.slice(0, 10)}`;
     // 한 자리에서 인원이 달라졌다면 큰 쪽을 쓴다(중간에 일행이 합류한 경우).
-    partyByTableDay.set(key, Math.max(partyByTableDay.get(key) || 0, o.party_size));
+    const prev = partyByTableDay.get(key);
+    if (prev && prev.size >= o.party_size) continue;
+    partyByTableDay.set(key, splitParty(o));
   }
-  const guestCount = [...partyByTableDay.values()].reduce((a, b) => a + b, 0);
+  const parties = [...partyByTableDay.values()];
+  const guestCount = parties.reduce((a, p) => a + p.size, 0);
+  const adultCount = parties.reduce((a, p) => a + p.adults, 0);
+  const childCount = parties.reduce((a, p) => a + p.children, 0);
   const avgPerOrder = paidOrders.length ? Math.round(totalRevenue / paidOrders.length) : 0;
   const avgPerGuest = guestCount ? Math.round(totalRevenue / guestCount) : 0;
 
@@ -346,6 +380,9 @@ function computeSettlement(orders, startDate, endDate = startDate) {
     // 할인 전 금액 — 매출 + 깎아준 돈. "원래 얼마짜리를 팔았나".
     gross_revenue: totalRevenue + discountTotal,
     guest_count: guestCount,
+    // 어른·아이. 둘의 합은 언제나 guest_count 와 같다(splitParty 주석).
+    adult_count: adultCount,
+    child_count: childCount,
     avg_per_order: avgPerOrder,
     avg_per_guest: avgPerGuest,
     cancelled_amount: cancelledAmount,

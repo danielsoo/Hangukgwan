@@ -167,7 +167,13 @@ function formatShiftSummary(snapshot, opts = {}) {
     lines.push(`  오후 ${nt(opts.pmPart.revenue)} (${opts.pmPart.count}건)`);
   }
 
-  const guests = snapshot.guest_count ? ` · 손님 ${snapshot.guest_count}명` : "";
+  // 어른·아이를 같이 적는다 (2026-09-10 사장님 요청). 문자는 한 줄이
+  // 길어지면 폰에서 잘리므로 괄호 안에 짧게만 붙인다.
+  const split =
+    snapshot.adult_count != null && snapshot.child_count != null && snapshot.child_count > 0
+      ? `(어른 ${snapshot.adult_count}·아이 ${snapshot.child_count})`
+      : "";
+  const guests = snapshot.guest_count ? ` · 손님 ${snapshot.guest_count}명${split}` : "";
   lines.push(`결제: ${snapshot.paid_order_count}건${guests}`);
 
   const methods = snapshot.payment_method_breakdown || [];

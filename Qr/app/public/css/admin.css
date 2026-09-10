@@ -1558,3 +1558,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-weight: 600;
 }
 .settings-switch input { width: 18px; height: 18px; }
+
+/* 손님 수 아래 어른·아이 한 줄. 값보다 작고 흐리게 — 설명이지 주인공이
+   아니다(사장님: "결산 탭 보는 게 너무 복잡해"). */
+.stl-stat-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted, #777);
+  font-weight: 600;
+}

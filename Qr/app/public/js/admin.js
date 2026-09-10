@@ -2105,6 +2105,8 @@
       ? `\n\n＋ VIP卡 NT$${cardAmount}（一律現金）\n= 向客人收 NT$${sum}\n下面選的付款方式只套用在餐點 NT$${foodPayable}`
       : `\n\n＋ VIP 카드 NT$${cardAmount} (무조건 현금)\n= 손님께 받을 돈 NT$${sum}\n아래에서 고르는 결제수단은 밥값 NT$${foodPayable}에만 적용됩니다`;
   }
+  const fmtGuestSplit = (adults, children) =>
+    adminLang === "zh" ? `大人 ${adults} · 小孩 ${children}` : `어른 ${adults} · 아이 ${children}`;
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
     adminLang === "zh"
@@ -10794,6 +10796,16 @@
     $("#settlementRevenue").textContent = nt(data.total_revenue);
     $("#settlementHeroSub").textContent = fmtSettlementHeroSub(data);
     $("#settlementGuests").textContent = Number(data.guest_count || 0).toLocaleString();
+    // 어른·아이 (2026-09-10 사장님: "결산에 들어가는 인원 성인 아이 따로
+    // 구분해서 집계해줘"). 손님 수 아래에 한 줄로 붙인다 — 칸을 따로 만들면
+    // 「결산 탭 보는 게 너무 복잡해」로 되돌아간다.
+    const guestSplit = $("#settlementGuestSplit");
+    if (guestSplit) {
+      const a = Number(data.adult_count || 0);
+      const c = Number(data.child_count || 0);
+      guestSplit.textContent = a + c > 0 ? fmtGuestSplit(a, c) : "";
+      guestSplit.hidden = a + c === 0;
+    }
     $("#settlementAvgPerGuest").textContent = nt(data.avg_per_guest);
     $("#settlementAvgPerOrder").textContent = nt(data.avg_per_order);
     $("#settlementTurnover").textContent =
@@ -11327,6 +11339,8 @@
     rows.push(["취소 금액", data.cancelled_amount ?? 0]);
     rows.push(["미결제 금액", data.problem_amount ?? 0]);
     rows.push(["손님 수", data.guest_count ?? 0]);
+    rows.push(["  어른", data.adult_count ?? 0]);
+    rows.push(["  아이", data.child_count ?? 0]);
     rows.push(["1인당 평균", data.avg_per_guest ?? 0]);
     rows.push(["주문당 평균", data.avg_per_order ?? 0]);
     rows.push([]);
