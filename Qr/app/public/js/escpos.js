@@ -101,6 +101,22 @@
     return "-".repeat(width || LINE_WIDTH);
   }
 
+  /**
+   * 좌석번호 옆 인원 — 「(3-2)」 는 어른 3, 아이 2.
+   *
+   * 2026-09-10 사장님: "주문서 및 화면의 좌석번호 옆에 괄호넣고 인원수 나오게".
+   * 관리자 화면(admin.js partyTag)과 같은 규칙이어야 한다 — 종이와 화면이
+   * 다르게 적히면 주방과 홀이 서로 다른 숫자를 부른다.
+   *
+   * 아이가 0명이어도 (3-0). 자리가 늘 두 칸이어야 앞의 숫자를 어른으로 읽는다.
+   * 어른/아이를 물어본 적 없는 손님은 총원만 (4).
+   */
+  function partyTag(o) {
+    if (!o || !o.party_size) return "";
+    if (o.party_adults == null) return ` (${o.party_size})`;
+    return ` (${o.party_adults}-${o.party_children || 0})`;
+  }
+
   function orderTypeLabel(o) {
     if (o.order_type === "mixed") return "混合";
     if (o.order_type === "takeout") return "外帶";
@@ -151,7 +167,7 @@
 
     out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳單" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
-    out += padLine(`桌號 ${o.table_number}`, orderTypeLabel(o)) + "\n";
+    out += padLine(`桌號 ${o.table_number}${partyTag(o)}`, orderTypeLabel(o)) + "\n";
     out += time + "\n";
     out += divider() + "\n";
 
@@ -342,7 +358,7 @@
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
-    const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}`;
+    const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}${partyTag(o)}`;
     const priceCopy = !!(opts && opts.priceCopy);
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과. 이
     // 비트맵도 흑백 1비트 인쇄라 화면의 회색 취소선을 그대로 재현하기

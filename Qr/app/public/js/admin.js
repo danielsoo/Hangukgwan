@@ -1505,6 +1505,26 @@
     if (!b.children) return fmtPartyCount(b.total);
     return `${fmtPartyCount(b.total)} (大${b.adults}·小${b.children})`;
   }
+  /**
+   * 좌석번호 옆에 붙는 인원 — 「(3-2)」 는 어른 3, 아이 2 라는 뜻이다.
+   *
+   * 2026-09-10 사장님: "주문서 및 화면의 좌석번호 옆에 괄호넣고 인원수 나오게;
+   * 좌석번호 (3-2) 3명어른2명아이 뜻임".
+   *
+   * 아이가 0명이어도 (3-0) 으로 적는다. 자리가 늘 두 칸이어야 앞의 숫자를
+   * 어른으로 읽는다 — 어떤 표는 (3), 어떤 표는 (3-2) 이면 3이 총원인지
+   * 어른인지 볼 때마다 헷갈리고, 그 헷갈림은 주방에서 밥 공기 수로 나온다.
+   *
+   * 어른/아이를 물어본 적이 없는 손님(party_adults 가 없음 — 구분이 생기기
+   * 전에 앉은 손님)은 총원만 「(4)」. 그때 「(4-0)」 이라고 적으면 아이가 없다고
+   * 말하는 셈인데, 우리는 물어본 적이 없다.
+   */
+  function partyTag(o) {
+    if (!o || !o.party_size) return "";
+    if (o.party_adults == null) return ` (${o.party_size})`;
+    return ` (${o.party_adults}-${o.party_children || 0})`;
+  }
+
   /** 자리 배지처럼 좁은 자리용 — 「👥3+1」. */
   function fmtPartyShort(o) {
     const b = partyBreakdown(o);
@@ -2985,7 +3005,7 @@
       : "";
     // 포장 카운터 orders aren't a real table — "테이블 COUNTER" would be
     // meaningless to staff, so show its pickup number + name instead.
-    const tableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}`;
+    const tableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}${partyTag(o)}`;
     // 자리를 옮긴 주문 — 주방에는 이미 옛 번호가 찍힌 티켓이 나가 있다.
     // 이 표시가 없으면 "5번 것이 왜 8번에 있지" 가 된다.
     const movedTag = o.moved_from ? `<span class="order-card-moved">${fmtMovedFrom(o.moved_from)}</span>` : "";
@@ -3275,7 +3295,7 @@
         ? o.pickup_number && o.customer_name
           ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
           : "外帶櫃檯"
-        : `桌號 ${o.table_number}`
+        : `桌號 ${o.table_number}${partyTag(o)}`
     }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
     ${isCounterOrder(o) && o.customer_phone ? `<div class="meta-row"><span class="order-time">☎ ${o.customer_phone}</span></div>` : ""}
     <div class="meta-row"><span class="order-time">${time}</span></div>
@@ -3579,6 +3599,11 @@
       // like at whatever font sizes the owner is trying out.
       order_type: "mixed",
       created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
+      // 좌석번호 옆 「(3-2)」 도 미리보기에 나와야 한다(2026-09-10) — 실제
+      // 종이에 찍히는데 미리보기에만 없으면, 글자 크기를 그것 없이 맞추게 된다.
+      party_size: 5,
+      party_adults: 3,
+      party_children: 2,
       total: 670,
       // unit_price/category_key 추가(2026-09-08, tfsItemPrice 미리보기 위해) —
       // 결제용(금액) 사본은 lineTotalOf(unit_price 기반)로 금액을 계산하므로
@@ -3767,7 +3792,7 @@
           </div>`
       )
       .join("");
-    const detailTableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}`;
+    const detailTableTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}${partyTag(o)}`;
     $("#orderDetailBody").innerHTML = `
       <h2>${detailTableTag}</h2>
       <p style="color:#999;font-size:15px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
@@ -4133,7 +4158,7 @@
       if (mi) openAddPicker(mi, (line) => { draftItems.push(line); renderDraft(); });
     };
 
-    const editTableTag = isCounterOrder(order) ? fmtCounterOrderTag(order) : `${T("tableLabel")} ${order.table_number}`;
+    const editTableTag = isCounterOrder(order) ? fmtCounterOrderTag(order) : `${T("tableLabel")} ${order.table_number}${partyTag(order)}`;
     $("#orderEditTitle").textContent = `${T("orderEditModalTitle")} — ${editTableTag}`;
     $("#orderEditMsg").hidden = true;
     $("#orderEditPickerModal").hidden = true;
@@ -4619,7 +4644,10 @@
     // 그냥 나가버린 테이블은 직원이 직접 비워야 한다. 그러려면 그 숫자가
     // 화면에 보여야 한다 — 안 보이면 무엇을 비우는지 알 수 없고, 애초에
     // 비워야 한다는 것도 모른다.
-    const partyText = table && table.party_size ? ` · ${fmtPartyDetail(table)}` : "";
+    // 제목 옆 인원 — 좌석번호 바로 뒤에 「(3-2)」 로 붙는다. 예전에는
+    // 여기에 「· 👥5인 (大3·小1)」 이 따로 있었는데, 좌석번호 옆에도 같은 걸
+    // 적으면 한 줄에 같은 말이 두 번 나온다.
+    const partyText = partyTag(table);
     // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
     // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
     // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 헤더/footer에 각각
@@ -8774,7 +8802,7 @@
         ? o.pickup_number && o.customer_name
           ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
           : "外帶櫃檯"
-        : `桌號 ${o.table_number}`;
+        : `桌號 ${o.table_number}${partyTag(o)}`;
       const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
       const labelInfo = { tableLabel, phoneLine };
 

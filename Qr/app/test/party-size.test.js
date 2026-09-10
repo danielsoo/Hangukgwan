@@ -110,8 +110,12 @@ check("안 받은 돈이 있으면 버튼을 내놓지 않는다",
 check("포장 카운터에는 안 나온다(인원수를 안 쓴다)", /!table\.is_counter && table\.party_size/.test(adminSrc));
 // 직원이 비워야 하는 숫자는 화면에 보여야 한다 — 안 보이면 비울 생각을
 // 할 수가 없다. 주문이 없어도 배지와 제목에 인원수가 나온다.
+// 2026-09-10: 제목 옆 표기가 「· 👥5인 (大3·小1)」 에서 좌석번호 바로 뒤
+// 「(3-2)」 로 바뀌었다(사장님: "좌석번호 옆에 괄호넣고 인원수 나오게").
+// 규칙은 partyTag() 한 곳에 있고, 인원수가 없으면 빈 문자열을 돌려주므로
+// 「인원수가 있으면 제목에 보인다」 는 뜻은 그대로다.
 check("주문이 없어도 제목에 인원수를 보여준다",
-  /const partyText = table && table\.party_size \? /.test(adminSrc));
+  /const partyText = partyTag\(table\);/.test(adminSrc));
 check("배치도 타일도 주문 없이 인원수만 있어도 배지를 보여준다",
   !/party_size && unpaid\.length > 0/.test(adminSrc) && !/party_size && bundledOrders\.length > 0/.test(adminSrc),
   "아직 \"주문이 있을 때만\" 조건이 남아 있다");
