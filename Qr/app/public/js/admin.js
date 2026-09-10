@@ -1017,8 +1017,13 @@
       alarmStopBtn: "🔕 알림 끄기",
       alarmPreviewStopBtn: "■ 정지",
       alarmToneShortLabel: "짧은 알림음",
+      alarmRepeatLabel: "짧은 알림음을 몇 번 울릴까요?",
+      alarmRepeat1: "한 번",
+      alarmRepeat2: "두 번",
+      alarmRepeat3: "세 번",
+      alarmRepeat5: "다섯 번",
       alarmToneLongLabel: "긴 벨소리",
-      alarmToneLongHint: "알림은 어떤 소리를 골라도 한 번만 울려요. 긴 벨소리는 그 곡 자체가 길어서, 같은 소리가 여러 번 울리는 것처럼 들리지 않아요. 울리는 동안 「실시간 주문」 화면 위쪽의 「🔕 알림 끄기」로 바로 멈출 수 있어요.",
+      alarmToneLongHint: "긴 벨소리는 그 곡 자체가 3~4초라서 반복하지 않고 한 번만 울려요. 그래서 같은 소리가 여러 번 울리는 것처럼 들리지 않아요. 울리는 동안 「실시간 주문」 화면 위쪽의 「🔕 알림 끄기」로 바로 멈출 수 있어요.",
       alarmToneMusicbox: "오르골",
       alarmToneChimeLong: "차임벨",
       alarmToneMarimba: "마림바",
@@ -1649,8 +1654,13 @@
       alarmStopBtn: "🔕 停止提示音",
       alarmPreviewStopBtn: "■ 停止",
       alarmToneShortLabel: "短提示音",
+      alarmRepeatLabel: "短提示音要響幾次？",
+      alarmRepeat1: "1 次",
+      alarmRepeat2: "2 次",
+      alarmRepeat3: "3 次",
+      alarmRepeat5: "5 次",
       alarmToneLongLabel: "長鈴聲",
-      alarmToneLongHint: "不論選哪一種，提示音都只會響一次。長鈴聲本身就是一段 5~8 秒的旋律，不會像同一個聲音重複響那樣被誤認成多筆訂單。響鈴期間可用「即時訂單」畫面上方的「🔕 停止提示音」立即停止。",
+      alarmToneLongHint: "長鈴聲本身就是一段 3~4 秒的旋律，不會重複，只響一次，所以不會像同一個聲音重複響那樣被誤認成多筆訂單。響鈴期間可用「即時訂單」畫面上方的「🔕 停止提示音」立即停止。",
       alarmToneMusicbox: "音樂盒",
       alarmToneChimeLong: "門鈴鐘聲",
       alarmToneMarimba: "馬林巴",
@@ -2509,14 +2519,22 @@
   // 무슨 짓을 해도 한계가 있어서, 설정 화면에 그 안내를 같이 적어뒀다.
   const ALARM_SOUND_KEY = "hg_admin_alarmSound";
   const ALARM_VOLUME_KEY = "hg_admin_alarmVolume";
-  // 「알림 길이」 설정은 없앴다 — 2026-09-10 사장님: "알림을 특정 시간동안
-  // 반복해달라는 게 아니야. 알림음이 길었으면 좋겠다고. 알림을 반복하면
-  // 여러 주문 들어온 것 같잖아."
+  // 「알림 길이」로 시간을 정해 반복하던 설정은 없앴다 — 2026-09-10 사장님:
+  // "알림을 특정 시간동안 반복해달라는 게 아니야. 알림음이 길었으면
+  // 좋겠다고. 알림을 반복하면 여러 주문 들어온 것 같잖아."
   //
-  // 맞는 지적이다. 짧은 소리를 사이를 두고 다시 울리면, 귀는 그걸 한 번
-  // 길게 울린 알림이 아니라 여러 번 들어온 알림으로 듣는다. 그래서 반복을
-  // 걷어내고, 아래 ALARM_SOUNDS 에 처음부터 길이가 긴 벨소리(멜로디)를
-  // 넣었다. 무엇을 고르든 알림은 딱 한 번 울린다.
+  // 그래서 길이는 벨소리 자체가 갖는다. 아래 ALARM_SOUNDS 의 「긴 벨소리」는
+  // 처음부터 3~4초짜리 곡이고, 반복 없이 한 번 울린다.
+  //
+  // 반복은 「짧은 알림음」에만 남긴다 — 사장님: "짧은 알림음은 몇 번 반복할
+  // 건지 물어봐줘". 0.5초짜리 "삐" 는 한 번이면 정말 놓치는데, 이건 사장님이
+  // 몇 번으로 할지 고르는 것이므로 여러 번 들리는 것이 뜻과 맞다. 사이를
+  // 짧게(0.18초) 붙여서 "삐 삐 삐" 한 덩어리로 들리게 한다 — 여기를 넓히면
+  // 다시 "주문이 세 건 들어왔나" 가 된다.
+  const ALARM_REPEAT_KEY = "hg_admin_alarmRepeat";
+  const ALARM_REPEAT_CHOICES = [1, 2, 3, 5];
+  const ALARM_DEFAULT_REPEAT = 2;
+  const ALARM_REPEAT_GAP = 0.18;
   const ALARM_VOLUME_MAX = 1000; // %
   const ALARM_DEFAULT_SOUND = "beep";
   const ALARM_DEFAULT_VOLUME = 100;
@@ -2671,7 +2689,8 @@
 
     // ── 긴 벨소리 (2026-09-10) ──────────────────────────────────────────
     // 위의 여덟은 "삐" 하고 마는 신호음이라, 홀이 시끄러우면 그 순간을
-    // 놓친다. 아래는 처음부터 5~8초짜리 곡이다. 음이 계속 바뀌고 서로
+    // 놓친다. 아래는 처음부터 3~4초짜리 곡이다 (2026-09-10 사장님:
+    // "긴소리 알림을 3~4초로 해주고"). 음이 계속 바뀌고 서로
     // 겹쳐서 쉼이 없으므로, 같은 소리를 여러 번 울리는 것과 달리 "한 번
     // 길게 울렸다"로 들린다 — 사장님: "알림을 반복하면 여러 주문 들어온
     // 것 같잖아."
@@ -2683,11 +2702,10 @@
     // 오르골 — 성글고 부드럽다. 홀이 조용한 시간대(점심 전, 마감 무렵)에.
     musicbox: (c, d) => {
       const N = [
-        ["G5", 0, 1.3], ["E5", 0.45, 1.3], ["C5", 0.9, 1.5],
-        ["D5", 1.55, 1.1], ["E5", 1.9, 1.1], ["G5", 2.3, 1.7],
-        ["A5", 3.0, 1.1], ["G5", 3.4, 1.1], ["E5", 3.8, 1.7],
-        ["D5", 4.5, 1.1], ["C5", 4.9, 1.3], ["D5", 5.35, 1.1],
-        ["E5", 5.75, 1.3], ["C5", 6.25, 2.0],
+        ["G5", 0, 0.95], ["E5", 0.3, 0.95], ["C5", 0.6, 1.05],
+        ["D5", 1.0, 0.85], ["E5", 1.25, 0.85], ["G5", 1.5, 1.1],
+        ["A5", 1.95, 0.85], ["G5", 2.2, 0.85], ["E5", 2.45, 1.0],
+        ["C5", 2.8, 1.25],
       ];
       alarmPhrase(c, d, N, { type: "sine", gain: 0.26, attack: 0.005 });
       // 한 옥타브 위를 아주 작게 겹쳐 얹으면 오르골 특유의 반짝임이 난다.
@@ -2697,18 +2715,18 @@
     // 차임 — 크고 낮게 울리는 종. 주방까지 닿아야 할 때.
     chimelong: (c, d) => {
       alarmPhrase(c, d, [
-        ["C5", 0, 1.8], ["G5", 0.5, 1.8], ["E5", 1.0, 2.0],
-        ["A5", 1.95, 1.8], ["E5", 2.45, 1.8], ["C5", 2.95, 2.0],
-        ["G5", 3.9, 1.6], ["C6", 4.4, 2.2],
+        ["C5", 0, 1.2], ["G5", 0.32, 1.2], ["E5", 0.64, 1.3],
+        ["A5", 1.2, 1.2], ["E5", 1.52, 1.2], ["C5", 1.84, 1.3],
+        ["G5", 2.4, 1.1], ["C6", 2.72, 1.5],
       ], { type: "triangle", gain: 0.24, attack: 0.01 });
     },
 
     // 마림바 — 통통 튀는 나무 소리. 짧은 음이 촘촘해서 시끄러운 홀에서 잘 뚫는다.
     marimba: (c, d) => {
-      const seq = ["C5","E5","G5","E5","D5","F5","A5","F5","E5","G5","C6","G5","A5","F5","E5","C5","G4","C5"];
+      const seq = ["C5","E5","G5","E5","D5","F5","A5","F5","E5","G5","C6","G5","E5","C5"];
       alarmPhrase(
         c, d,
-        seq.map((n, i) => [n, i * 0.24, i === seq.length - 1 ? 1.4 : 0.42]),
+        seq.map((n, i) => [n, i * 0.185, i === seq.length - 1 ? 1.1 : 0.36]),
         { type: "sine", gain: 0.28, attack: 0.004, filter: ["lowpass", 2600] }
       );
     },
@@ -2716,37 +2734,36 @@
     // 가야금 — 5음계(도레파솔라)로 지은 우리 가락. 가게 얼굴에 맞는 소리 하나.
     gayageum: (c, d) => {
       alarmPhrase(c, d, [
-        ["A4", 0, 1.2], ["G4", 0.5, 1.1], ["F4", 1.0, 1.4],
-        ["D4", 1.85, 1.2], ["F4", 2.35, 1.1], ["G4", 2.85, 1.5],
-        ["A4", 3.65, 1.2], ["C5", 4.15, 1.4], ["A4", 4.85, 1.2],
-        ["G4", 5.35, 1.1], ["F4", 5.85, 2.2],
+        ["A4", 0, 0.85], ["G4", 0.28, 0.8], ["F4", 0.56, 1.0],
+        ["D4", 1.0, 0.85], ["F4", 1.28, 0.8], ["G4", 1.56, 1.0],
+        ["A4", 2.0, 0.85], ["C5", 2.28, 1.0], ["A4", 2.66, 0.85],
+        ["F4", 2.95, 1.35],
       ], { type: "triangle", gain: 0.3, attack: 0.006, filter: ["lowpass", 2000] });
     },
 
-    // 디지털 — 요즘 휴대폰 벨소리 같은 오름 아르페지오. 네 번 올라가고 내려앉는다.
+    // 디지털 — 요즘 휴대폰 벨소리 같은 오름 아르페지오. 세 번 올라가고 내려앉는다.
     digital: (c, d) => {
       const chords = [
         ["E5", "G#5", "B5", "E6"],
         ["D#5", "G5", "B5", "D#6"],
         ["C#5", "F5", "G#5", "C#6"],
-        ["B4", "D#5", "F#5", "B5"],
       ];
       const notes = [];
       chords.forEach((ch, k) =>
-        ch.forEach((n, i) => notes.push([n, k * 0.9 + i * 0.18, i === 3 ? 0.55 : 0.26]))
+        ch.forEach((n, i) => notes.push([n, k * 0.68 + i * 0.13, i === 3 ? 0.45 : 0.2]))
       );
-      notes.push(["E5", 3.75, 1.5], ["B5", 3.75, 1.5]);
+      notes.push(["E5", 2.12, 1.5], ["B5", 2.12, 1.5]);
       alarmPhrase(c, d, notes, { type: "square", gain: 0.16, attack: 0.005, filter: ["lowpass", 3200] });
     },
 
-    // 긴 사이렌 — 오실레이터 하나가 6초 동안 오르내린다. 끊기는 데가 없어서
-    // 아무리 길어도 "여러 번"으로 들릴 수가 없는 소리다.
+    // 긴 사이렌 — 오실레이터 하나가 처음부터 끝까지 오르내린다. 끊기는 데가
+    // 없어서 "여러 번"으로 들릴 수가 없는 소리다.
     sirenlong: (c, d) => {
       const steps = [];
-      for (let i = 0; i <= 8; i++) steps.push([i * 0.7, i % 2 ? 1240 : 620]);
+      for (let i = 0; i <= 7; i++) steps.push([i * 0.5, i % 2 ? 1240 : 620]);
       alarmTone(c, d, {
-        steps, glide: true, dur: 5.9, type: "sawtooth", gain: 0.22,
-        hold: true, release: 0.5, attack: 0.05, filter: ["lowpass", 2200],
+        steps, glide: true, dur: 3.5, type: "sawtooth", gain: 0.22,
+        hold: true, release: 0.4, attack: 0.05, filter: ["lowpass", 2200],
       });
     },
   };
@@ -2764,15 +2781,19 @@
     alarm: 1.18,
     siren: 2.1,
     arcade: 0.43,
-    musicbox: 7.5,
-    chimelong: 5.7,
-    marimba: 5.0,
-    gayageum: 7.2,
-    digital: 4.85,
-    sirenlong: 5.9,
+    musicbox: 3.6,
+    chimelong: 3.65,
+    marimba: 3.15,
+    gayageum: 3.85,
+    digital: 3.3,
+    sirenlong: 3.5,
   };
-  // 이 길이부터는 「긴 벨소리」로 친다 — 설정 화면에서 초를 적어준다.
-  const ALARM_LONG_FROM = 4;
+  // 이 길이부터는 「긴 벨소리」로 친다. 긴 벨소리는 곡 자체가 길어서 반복하지
+  // 않으므로, 설정 화면에서 반복 칸을 숨기는 기준도 이것이다.
+  const ALARM_LONG_FROM = 2.5;
+  function isLongAlarmSound(id) {
+    return (ALARM_SOUND_LEN[id] || 0) >= ALARM_LONG_FROM;
+  }
 
   function readStoredNumber(key, fallback, min, max) {
     let v;
@@ -2799,6 +2820,15 @@
     if (p <= 50) return Math.round(p * 2);
     const v = 100 * Math.pow(ALARM_VOLUME_MAX / 100, (p - 50) / 50);
     return Math.min(ALARM_VOLUME_MAX, Math.round(v / 10) * 10);
+  }
+  function getAlarmRepeat() {
+    let v;
+    try {
+      v = parseInt(localStorage.getItem(ALARM_REPEAT_KEY), 10);
+    } catch (e) {
+      v = NaN;
+    }
+    return ALARM_REPEAT_CHOICES.indexOf(v) >= 0 ? v : ALARM_DEFAULT_REPEAT;
   }
   function getAlarmSound() {
     let v = null;
@@ -2876,7 +2906,11 @@
   }
 
   /**
-   * 알림을 울린다 — 딱 한 번. 길이는 고른 벨소리 자체의 길이다.
+   * 알림을 울린다.
+   *
+   * 긴 벨소리는 곡 자체가 3~4초이므로 한 번. 짧은 알림음은 설정에서 고른
+   * 횟수만큼(기본 2번) 바로 이어서 울린다 — 0.5초짜리 "삐" 는 한 번이면
+   * 정말 놓친다. 사이가 0.18초뿐이라 "삐 삐" 한 덩어리로 들린다.
    *
    * 이미 울리고 있으면 멈추고 새로 시작한다. 주문이 연달아 들어올 때 소리가
    * 겹쳐서 뭉치면 몇 건인지도 모르고 그냥 시끄럽기만 하다.
@@ -2887,11 +2921,18 @@
     const id = ALARM_SOUNDS[opt.sound] ? opt.sound : getAlarmSound();
     const vol = opt.volume === undefined ? getAlarmVolume() : opt.volume;
     if (vol <= 0) return;
+    const len = ALARM_SOUND_LEN[id] || 1;
+    const times = isLongAlarmSound(id) ? 1 : opt.repeat === undefined ? getAlarmRepeat() : opt.repeat;
     alarmActive = true;
     updateAlarmUiState();
-    playAlarm(id, vol);
-    // 소리가 끝나면 「알림 끄기」 버튼도 같이 내린다.
-    alarmTimer = setTimeout(stopAlarm, (ALARM_SOUND_LEN[id] || 1) * 1000 + 120);
+    let left = times;
+    const tick = () => {
+      playAlarm(id, vol);
+      left -= 1;
+      // 소리가 다 끝나면 「알림 끄기」 버튼도 같이 내린다.
+      alarmTimer = setTimeout(left > 0 ? tick : stopAlarm, len * 1000 + (left > 0 ? ALARM_REPEAT_GAP * 1000 : 120));
+    };
+    tick();
   }
 
   /** 울리는 동안만 「알림 끄기」 버튼을 보여준다. */
@@ -2919,6 +2960,15 @@
   }
   function applyAlarmUi() {
     updateAlarmUiState();
+    const rep = getAlarmRepeat();
+    $$("input[name='alarmRepeat']").forEach((r) => {
+      r.checked = parseInt(r.value, 10) === rep;
+      if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
+    });
+    // 긴 벨소리를 고르면 반복 칸을 숨긴다. 곡 자체가 3~4초라 반복하지 않으므로,
+    // 그대로 두면 아무 일도 하지 않는 설정이 켜져 있는 것처럼 보인다.
+    const repRow = $("#alarmRepeatRow");
+    if (repRow) repRow.hidden = isLongAlarmSound(getAlarmSound());
     const vol = getAlarmVolume();
     const slider = $("#alarmVolume");
     // 손잡이를 끌고 있는 중이라면 위치를 다시 써넣지 않는다 — 반올림 때문에
@@ -2949,12 +2999,26 @@
     $("#alarmVolume").addEventListener("change", () => {
       alarmSliding = false;
       flashAlarmSaved();
-      startAlarm({ sound: "beep" });
+      startAlarm({ sound: "beep", repeat: 1 });
     });
+    // 횟수를 고를 때는 그 횟수로 실제 소리를 들려준다 — 고르는 게 횟수니까.
+    // 긴 벨소리가 골라져 있으면 반복이 없으니 짧은 「기본 삐」로 들려준다.
+    $$("input[name='alarmRepeat']").forEach((r) =>
+      r.addEventListener("change", () => {
+        if (!r.checked) return;
+        const times = parseInt(r.value, 10);
+        storeAlarmPref(ALARM_REPEAT_KEY, times);
+        applyAlarmUi();
+        flashAlarmSaved();
+        const cur = getAlarmSound();
+        startAlarm({ sound: isLongAlarmSound(cur) ? "beep" : cur, repeat: times });
+      })
+    );
     if ($("#alarmResetBtn"))
       $("#alarmResetBtn").onclick = () => {
         storeAlarmPref(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME);
         storeAlarmPref(ALARM_SOUND_KEY, ALARM_DEFAULT_SOUND);
+        storeAlarmPref(ALARM_REPEAT_KEY, ALARM_DEFAULT_REPEAT);
         applyAlarmUi();
         flashAlarmSaved();
         startAlarm();

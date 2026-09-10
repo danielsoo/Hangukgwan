@@ -727,7 +727,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .alarm-tone.is-on {
   background: var(--red); border-color: var(--red); color: #fff;
 }
-.alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
+/* ▶ 는 벨소리 알약에만 붙인다. 횟수 알약에 붙으면 "▶세 번" 이 되어
+   "세 번을 재생" 처럼 읽힌다 — 고른 값이라는 뜻이 흐려진다. */
+.alarm-tone-grid:not(.alarm-repeat-grid) .alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
 /* 긴 벨소리는 곡 길이를 알약 안에 같이 적는다 — 고르기 전에 "이게 몇 초짜리
    인가" 를 알아야 한다. 미리듣기로 하나씩 재보게 만들 일이 아니다. */
 .alarm-tone-len {
@@ -735,6 +737,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
   opacity: 0.6;
 }
 .alarm-tone.is-on .alarm-tone-len { opacity: 0.85; }
+/* 반복 횟수 줄. 긴 벨소리를 고르면 통째로 숨는다(hidden). */
+.alarm-repeat-row { margin: 0; }
 
 .alarm-volume-row { display: flex; align-items: center; gap: 14px; }
 .alarm-volume-row input[type="range"] {
