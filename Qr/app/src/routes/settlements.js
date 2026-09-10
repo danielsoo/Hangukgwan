@@ -6,6 +6,7 @@ const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSiz
 const { serviceStartedAt } = require("../serviceStart");
 const { nowLocal } = require("../time");
 const { sendLineMessage, formatSettlementSummary } = require("../line");
+const testMode = require("../testMode");
 
 const router = express.Router();
 
@@ -51,6 +52,10 @@ function ordersInRange(start, end) {
   const from = `${start} 00:00:00`;
   const started = serviceStartedAt(store);
   return findOrders({
+    // 테스터 모드로 넣은 주문은 매출이 아니다(src/testMode.js). 테스트
+    // 기기에서 결산을 열더라도 여기서는 뺀다 — 장부는 한 가지 숫자만
+    // 말해야 하고, 그 숫자가 보는 기기에 따라 달라지면 그건 장부가 아니다.
+    test_session: { $exists: false },
     created_at: { $gte: started && started > from ? started : from, $lte: `${end} 23:59:59` },
   });
 }
@@ -68,6 +73,17 @@ router.get("/history", requireOwner, async (req, res) => {
 // Safe to call more than once for the same date — replaces any existing
 // snapshot for that date rather than duplicating it.
 router.post("/close", requireOwner, async (req, res) => {
+  // 테스터 모드에서는 마감을 하지 않는다(src/testMode.js).
+  //
+  // 마감은 테스트로 눌러볼 수 있는 종류의 버튼이 아니다. 그날 장부를 확정해
+  // 영구 기록으로 박고, 직원들 LINE 으로 마감 알림까지 나간다. 영업 중에
+  // 눌리면 장부가 어긋나고 직원들이 마감인 줄 안다.
+  //
+  // 결산 **화면**은 테스트 기기에서도 그대로 볼 수 있다 — 막는 것은
+  // 확정하는 이 한 번뿐이다.
+  if (testMode.isTest(req, store)) {
+    return res.status(403).json({ error: "test_mode_no_close" });
+  }
   const date = (req.body && req.body.date) || taipeiDateString();
   const snapshot = computeSettlement(await ordersInRange(date, date), date);
   // 스냅샷은 자기 컬렉션으로, store 문서는 번호 카운터 때문에 한 번.

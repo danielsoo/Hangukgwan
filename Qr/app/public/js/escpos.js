@@ -154,6 +154,14 @@
   // 화면 없이 이 종이만 보고 계산해도 헷갈리지 않게 한다. admin.js의
   // buildTicketHtml()과 같은 설계 — 결제 시점 할인 자체는 미리 계산해
   // 찍지 않고 참고용 문구만 남긴다.
+  // 테스터 모드로 넣은 주문인가(src/testMode.js). 빌지에 크게 찍어야 한다 —
+  // 주방은 종이만 보고 움직이므로, 표시가 없으면 없는 손님의 음식을 만든다.
+  // 인쇄 자체는 막지 않는다(사장님 선택): 프린터가 잘 도는지도 같이
+  // 시험할 수 있어야 하니까.
+  function isTestOrder(o) {
+    return !!(o && o.test_session);
+  }
+
   function buildEscPosTicket(o, storeName, opts) {
     const priceCopy = !!(opts && opts.priceCopy);
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과를 그대로
@@ -164,6 +172,13 @@
     let hasDrinkItem = false;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
+
+    if (isTestOrder(o)) {
+      out += CMD.ALIGN_CENTER + CMD.BOLD_ON + "*** 테스트 / 測試 ***" + CMD.BOLD_OFF + "\n";
+      out += CMD.ALIGN_CENTER + "이 주문은 만들지 마세요\n";
+      out += CMD.ALIGN_CENTER + "請勿製作此訂單\n";
+      out += CMD.ALIGN_LEFT + divider() + "\n";
+    }
 
     out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳單" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
     out += CMD.ALIGN_LEFT + divider() + "\n";
@@ -397,6 +412,15 @@
     function divider() {
       ops.push({ type: "divider", y });
       y += 20;
+    }
+
+    // 테스터 모드 주문은 가게 이름보다 먼저, 제일 크게. 주방은 종이만 보고
+    // 움직인다(isTestOrder 위 주석).
+    if (isTestOrder(o)) {
+      line("*** 테스트 / 測試 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+      line("이 주문은 만들지 마세요", sz("tableNo", 13), 700, { align: "center" });
+      line("請勿製作此訂單", sz("tableNo", 13), 700, { align: "center" });
+      divider();
     }
 
     line(`${storeName} ${priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });

@@ -206,6 +206,8 @@ app.use("/api/menu", require("./src/routes/menu"));
 app.use("/api/tables", require("./src/routes/tables"));
 app.use("/api/zones", require("./src/routes/zones"));
 app.use("/api/orders", require("./src/routes/orders"));
+// 테스터 모드 — 진짜 가게를 건드리지 않고 뭐든 해보는 자리(src/testMode.js).
+app.use("/api/test-mode", require("./src/routes/testMode"));
 app.use("/api/settings", require("./src/routes/settings"));
 app.use("/api/settlements", require("./src/routes/settlements"));
 app.use("/api/reservations", require("./src/routes/reservations"));

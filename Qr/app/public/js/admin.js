@@ -3358,6 +3358,19 @@
   // 따로 뽑아뒀다 — buildTicketHtml(한 장짜리 문서)과 아래
   // buildDualTicketHtml(주방용+결제용 두 장을 한 인쇄 작업에 담는 문서)이
   // 이 함수 하나를 그대로 재사용한다.
+  // 브라우저로 인쇄하는 빌지에도 같은 표시. ESC/POS 두 갈래(escpos.js)와
+  // 문구를 맞춘다 — 어느 경로로 나오든 주방이 보는 종이는 같아야 한다.
+  function testTicketBannerHtml(o) {
+    if (!o || !o.test_session) return "";
+    return (
+      '<div style="text-align:center;border:3px solid #000;padding:6px;margin-bottom:8px;">' +
+      '<div style="font-size:1.4em;font-weight:900;">*** 테스트 / 測試 ***</div>' +
+      '<div style="font-weight:700;">이 주문은 만들지 마세요</div>' +
+      '<div style="font-weight:700;">請勿製作此訂單</div>' +
+      "</div>"
+    );
+  }
+
   function buildReceiptBodyHtml(o, priceCopy) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
@@ -3441,6 +3454,7 @@
       .join("");
 
     return `<div class="receipt">
+    ${testTicketBannerHtml(o)}
     <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳單" : "廚房出單"}</div></div>
     <div class="divider"></div>
     <div class="meta-row"><span class="table-no">${

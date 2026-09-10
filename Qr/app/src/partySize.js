@@ -17,10 +17,21 @@
 // 하나도 없으면" 지웠는데, 그 규칙에서는 마지막 주문을 취소하는 순간
 // 손님이 나간 것으로 처리됐다.
 
-/** 이 테이블에 아직 안 받은 돈이 있는가(취소된 건 셈에서 뺀다). */
+/**
+ * 이 테이블에 아직 안 받은 돈이 있는가(취소된 건 셈에서 뺀다).
+ *
+ * 테스터 모드로 넣은 주문은 세지 않는다(src/testMode.js). 안 그러면 사장님이
+ * 테스트로 7번 테이블에 주문을 하나 넣어둔 것 때문에, 그 자리의 진짜 손님이
+ * 결제하고 나가도 인원수가 안 지워진다 — 테스트가 진짜 자리를 붙잡는 셈이다.
+ * 테스트 주문은 종료할 때 통째로 사라질 것이므로 받을 돈으로 칠 수도 없다.
+ */
 function hasUnpaidOrder(store, tableNumber) {
   return store.orders.some(
-    (o) => String(o.table_number) === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
+    (o) =>
+      !o.test_session &&
+      String(o.table_number) === String(tableNumber) &&
+      o.status !== "paid" &&
+      o.status !== "cancelled"
   );
 }
 

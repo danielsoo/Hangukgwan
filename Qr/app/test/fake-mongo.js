@@ -249,6 +249,13 @@ class Collection {
     if (idx >= 0) this.docs.splice(idx, 1);
     return { deletedCount: idx >= 0 ? 1 : 0 };
   }
+  // 조건에 맞는 것을 전부 지운다. 테스터 모드 종료(src/testMode.js)가 쓴다 —
+  // 지우는 코드는 반드시 테스트로 돌려봐야 하는 종류라 가짜에도 넣는다.
+  async deleteMany(filter = {}) {
+    const before = this.docs.length;
+    this.docs = this.docs.filter((d) => !matches(d, filter));
+    return { deletedCount: before - this.docs.length };
+  }
   // 여러 건을 한 번에 쓴다. src/db.js 의 saveOrders() 와 주문 이관
   // 마이그레이션이 쓴다. 예전에는 이 메서드가 없어서, 그 경로를 지나는
   // 테스트가 있었다면 그냥 터졌을 것이다 — 없어서 안 터졌을 뿐이고,

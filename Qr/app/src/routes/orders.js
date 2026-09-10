@@ -7,6 +7,7 @@ const { resolveCustomer } = require("../customer");
 const { isActive: isVipActive, cardBelongsTo } = require("../vip");
 const { parseAddons } = require("../addons");
 const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
+const testMode = require("../testMode");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -146,6 +147,13 @@ function checkLocation(lat, lng) {
 // Customer: place a new order
 router.post("/", async (req, res) => {
   const { tableNumber, items, note, lat, lng } = req.body || {};
+  // 테스터 모드로 참여한 기기인가(src/testMode.js). 아래에서 "주문을 막는"
+  // 규칙들을 건너뛰는 데만 쓴다. **금액 계산은 건드리지 않는다** — 테스트로
+  // 넣어본 주문의 값이 진짜와 다르면 시험해 본 의미가 없다.
+  //
+  // 이 기기에서만이다. 같은 시각 벽의 QR 을 찍은 진짜 손님에게는 아래 규칙이
+  // 그대로 적용되고, 그 주문에는 태그가 안 붙어 종료할 때도 안 지워진다.
+  const isTestDevice = testMode.isTest(req, store);
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
   }
@@ -161,7 +169,7 @@ router.post("/", async (req, res) => {
   // 화면에서도 잠그지만(public/js/order.js) 여기서 한 번 더 막는다. 주소를
   // 아는 사람이 그냥 POST 하면 화면 잠금은 아무 의미가 없고, QR 주소는
   // 테이블마다 종이에 인쇄돼 벽에 붙어 있다.
-  if (!(req.session && req.session.isAdmin) && !isOpenNow(store.settings)) {
+  if (!isTestDevice && !(req.session && req.session.isAdmin) && !isOpenNow(store.settings)) {
     return res.status(403).json({ error: "closed_now", ordering: orderingState(store.settings) });
   }
 
@@ -172,7 +180,10 @@ router.post("/", async (req, res) => {
   // exception: there's no headcount to ask a takeout customer for, and
   // public/js/order.js's initPartySize() already skips that modal for it.
   const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
-  if (!orderingTable || (!orderingTable.is_counter && !orderingTable.party_size)) {
+  if (!orderingTable) return res.status(400).json({ error: "party_size_required" });
+  // 테스트 기기는 인원수를 안 물어도 넣을 수 있다. 없는 자리에 넣는 것은
+  // 여전히 막는다 — 그건 우회할 규칙이 아니라 그냥 잘못된 주문이다.
+  if (!isTestDevice && !orderingTable.is_counter && !orderingTable.party_size) {
     return res.status(400).json({ error: "party_size_required" });
   }
 
@@ -193,7 +204,7 @@ router.post("/", async (req, res) => {
     if (!customerPhone) return res.status(400).json({ error: "customer_phone_required" });
   }
 
-  const locationError = checkLocation(lat, lng);
+  const locationError = isTestDevice ? null : checkLocation(lat, lng);
   if (locationError) return res.status(403).json({ error: locationError });
 
   // VIP membership discount — a customer signed in with Google (see the
@@ -218,8 +229,12 @@ router.post("/", async (req, res) => {
   for (const it of items) {
     // 품절 기간까지 따져서 "지금" 팔리는 것만 받는다(src/availability.js) —
     // 화면에서 사라진 메뉴가 주소만 알면 주문되는 일이 없어야 한다.
+    // 테스트 기기는 예외다: 품절 표시가 붙은 메뉴로 주문이 어떻게 흘러가는지
+    // 봐야 할 때가 있다.
     const mi = store.menuItems.find(
-      (m) => m.id === parseInt(it.itemId, 10) && isAvailableNow(m, store.settings)
+      (m) =>
+        m.id === parseInt(it.itemId, 10) &&
+        (testMode.isTest(req, store) || isAvailableNow(m, store.settings))
     );
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
@@ -270,7 +285,7 @@ router.post("/", async (req, res) => {
   const priorOrders = store.orders.filter(
     (o) => o.table_number === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
   );
-  if (priorOrders.length === 0) {
+  if (!isTestDevice && priorOrders.length === 0) {
     const qtyByItem = {};
     for (const v of validated) qtyByItem[v.item_id] = (qtyByItem[v.item_id] || 0) + v.qty;
     for (const mi of store.menuItems) {
@@ -349,6 +364,9 @@ router.post("/", async (req, res) => {
     // 로그인 안 한 손님은 null 이고, 그 경우 주문 내역은 예전처럼 그 브라우저
     // 안에만(localStorage) 남는다.
     account_id: customer && customer.accountId ? customer.accountId : null,
+    // 테스트 기기가 넣은 것이면 표를 남긴다. 이 한 칸이 있는 주문만
+    // 「테스터 모드 종료」때 지워진다 — 없으면 진짜 주문이다.
+    ...testMode.tag(req, store),
   };
   store.orders.push(order);
   // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
@@ -387,6 +405,9 @@ router.get("/history", requireOwner, async (req, res) => {
   const start = /^\d{4}-\d{2}-\d{2}$/.test(q.start || "") ? q.start : null;
   const end = /^\d{4}-\d{2}-\d{2}$/.test(q.end || "") ? q.end : start;
   const filter = {};
+  // 지난 기록에는 테스트가 섞이면 안 된다. 여기는 사장님이 매출을 되짚는
+  // 자리라 테스트 기기에서 보더라도 진짜만 보여준다.
+  filter.test_session = { $exists: false };
   if (start) {
     filter.created_at = { $gte: `${start} 00:00:00`, $lte: `${end} 23:59:59` };
   }
@@ -454,6 +475,7 @@ router.get("/table/:tableNumber", (req, res) => {
   const table = store.tables.find((t) => String(t.number) === num);
   const seatingStart = seatingStartOf(table);
   const list = store.orders
+    .filter(testMode.visibleTo(req, store))
     .filter((o) => String(o.table_number) === num && o.status !== "cancelled")
     .filter((o) => (seatingStart ? String(o.created_at || "") >= seatingStart : o.status !== "paid"))
     .sort((a, b) => a.id - b.id);
@@ -465,13 +487,18 @@ router.get("/table/:tableNumber", (req, res) => {
 router.get("/:id", (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = store.orders.find((o) => o.id === id);
-  if (!order) return res.status(404).json({ error: "not_found" });
+  if (!order || !testMode.visibleTo(req, store)(order)) return res.status(404).json({ error: "not_found" });
   res.json(order);
 });
 
 // Admin: list orders, optional ?status= and ?date=YYYY-MM-DD
 router.get("/", requireAdmin, (req, res) => {
-  let list = [...store.orders];
+  // 테스터 모드(src/testMode.js): 평소 기기에는 테스트 주문을 아예 안 보낸다.
+  // 실시간 주문판에 섞이면 직원이 없는 손님의 음식을 만든다.
+  //
+  // 테스트 기기에는 둘 다 보낸다. 테스트하는 동안에도 진짜 손님은 오고,
+  // 그 주문이 안 보이면 장사를 못 한다. 화면에서는 테스트 것에 표가 난다.
+  let list = store.orders.filter(testMode.visibleTo(req, store));
   if (req.query.status) list = list.filter((o) => o.status === req.query.status);
   if (req.query.date) list = list.filter((o) => o.created_at.slice(0, 10) === req.query.date);
   // Within any one status (the admin board groups by status client-side,
@@ -758,8 +785,12 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   for (const it of items) {
     // 품절 기간까지 따져서 "지금" 팔리는 것만 받는다(src/availability.js) —
     // 화면에서 사라진 메뉴가 주소만 알면 주문되는 일이 없어야 한다.
+    // 테스트 기기는 예외다: 품절 표시가 붙은 메뉴로 주문이 어떻게 흘러가는지
+    // 봐야 할 때가 있다.
     const mi = store.menuItems.find(
-      (m) => m.id === parseInt(it.itemId, 10) && isAvailableNow(m, store.settings)
+      (m) =>
+        m.id === parseInt(it.itemId, 10) &&
+        (testMode.isTest(req, store) || isAvailableNow(m, store.settings))
     );
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
