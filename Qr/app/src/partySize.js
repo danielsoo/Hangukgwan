@@ -230,8 +230,53 @@ async function savePartySize(store, tableNumber) {
   return true;
 }
 
+/**
+ * 장사가 끝났다 — 남은 인원수를 전부 비운다.
+ *
+ * 사장님(2026-09-10, 정산 후 테이블 목록 스크린샷과 함께):
+ *   "보면 여전히 메뉴는 없는데 사람 인원수는 있어 이건 뭐야"
+ *
+ * 손님이 QR 을 찍고 인원수만 답한 뒤 폰으로는 주문을 안 하는 일이 흔하다
+ * (카운터에서 말로 주문했거나 그냥 나갔거나). 인원수는 주문보다 먼저
+ * 찍히는데, 지워지는 건 결제가 끝나는 순간 하나뿐이라 — 주문이 아예 없으면
+ * 지울 계기가 영영 오지 않는다. 취소만 된 자리도 같다(취소로는 일부러 안
+ * 지운다. 재료가 떨어져 한 접시를 취소했다고 앉아 계신 손님을 내보내면
+ * 안 되니까). 그렇게 매일 찌꺼기가 쌓여, 다음 장사 때 빈 자리가 손님 있는
+ * 자리로 보인다.
+ *
+ * 비우는 자리는 정산 버튼이다. 그 버튼은 남은 주문을 전부 결제 완료로
+ * 밀어버리는 「판을 비우는」 버튼이고, 사장님이 정하신 규칙("인원과 메뉴는
+ * 하나의 세트야. 삭제되던 결제가 완료되던 같이 움직이는 하나야")대로라면
+ * 인원수도 같이 움직여야 한다.
+ *
+ * 두 가지는 건드리지 않는다.
+ *   · 포장 카운터 — 「이 자리에 몇 명」이 성립하지 않는 자리다.
+ *   · 아직 못 받은 돈이 있는 자리 — 정산이 밀지 못한 무언가가 남았다는
+ *     뜻이다. 인원수까지 지워버리면 그 자리에 무슨 일이 있었는지 알 길이
+ *     하나 더 사라진다.
+ *
+ * 자리마다 인원수 네 칸만 쓴다 — store 문서를 통째로 쓰면 같은 순간 들어온
+ * 주문이 지워진다(src/db.js 의 saveFields).
+ */
+async function clearIdleSeats(store) {
+  const cleared = [];
+  for (const table of store.tables || []) {
+    if (table.is_counter) continue;
+    if (!table.party_size) continue;
+    if (hasUnpaidOrder(store, table.number)) continue;
+    table.party_size = null;
+    table.party_size_updated_at = null;
+    table.party_adults = null;
+    table.party_children = null;
+    await savePartySize(store, table.number);
+    cleared.push(String(table.number));
+  }
+  return cleared;
+}
+
 module.exports = {
   PARTY_KEYS,
+  clearIdleSeats,
   liveOrdersOf,
   partyOfTable,
   partyPatchOf,

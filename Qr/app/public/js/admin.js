@@ -3287,6 +3287,16 @@
     const count = summary ? summary.paid_order_count : computeHalfDaySettlement(0, 23).count;
     const total = summary ? summary.total_revenue : computeHalfDaySettlement(0, 23).total;
 
+    // 주문 없이 인원수만 남아 있던 자리를 몇 개 비웠는지 알려준다. 조용히
+    // 지우면 "내가 뭘 잘못 눌렀나" 가 되고, 안 알려주면 그 자리들이 왜
+    // 갑자기 비었는지 모른다(src/partySize.js clearIdleSeats).
+    const seatNote =
+      summary && summary.cleared_seats
+        ? adminLang === "zh"
+          ? `\n${summary.cleared_seats} 桌只有人數、沒有點餐，已一併清空。`
+          : `\n주문 없이 인원수만 남아 있던 ${summary.cleared_seats}자리도 같이 비웠어요.`
+        : "";
+
     // LINE 마감 문자가 왜 안 갔는지는 그 자리에서 알려준다 — 조용히 안 가면
     // 사장님은 갔다고 믿는다. 설정은 Admin > 설정 > 알림.
     let lineNote = "";
@@ -3322,13 +3332,13 @@
       showAlert(
         (adminLang === "zh"
           ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + lineNote
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + seatNote + lineNote
       );
     } else {
       showAlert(
         (adminLang === "zh"
           ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + lineNote
+          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + seatNote + lineNote
       );
     }
   }

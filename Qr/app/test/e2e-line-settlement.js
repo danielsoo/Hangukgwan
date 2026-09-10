@@ -102,6 +102,13 @@ function check(name, cond, extra = "") {
   await api(`/api/orders/${lunch.body.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status: "paid", paymentMethod: "cash", vipDiscountType: "te95" }) });
 
+  // 인원수만 답하고 주문은 안 한 자리 — 사장님이 "메뉴는 없는데 인원수는
+  // 있어" 라고 하신 그 상태를 만들어 둔다. 정산이 이걸 같이 비워야 한다.
+  const IDLE = store.tables.filter((t) => !t.is_counter)[2].number;
+  await put(`/api/tables/${IDLE}/party-size`, { adults: 2, children: 0 });
+  const idleBefore = await api(`/api/tables/${IDLE}/party-size`);
+  check("주문 없이 인원수만 있는 자리를 만들었다", idleBefore.body.party_size === 2, JSON.stringify(idleBefore.body));
+
   out.push("[🌅 오전 정산 — 버튼 하나로 문자까지]");
   await page.locator("#settleAmBtn").click();
   await page.waitForTimeout(400);
@@ -117,6 +124,15 @@ function check(name, cond, extra = "") {
     amText.includes(`매출: NT$${lunchPaid.toLocaleString()}`), amText);
   check("결제수단이 한글로 적힌다", /현금 NT\$/.test(amText), amText);
   check("VIP 카드 할인이 이름으로 적힌다", amText.includes("特約95折 -NT$"), amText);
+  {
+    // 여기가 이번에 더한 것이다. 주문이 없어서 결제할 것도 없던 자리는
+    // 스스로 비워지지 않는다 — 정산이 비워줘야 한다.
+    const idleAfter = await api(`/api/tables/${IDLE}/party-size`);
+    check("주문 없이 인원수만 있던 자리가 정산으로 비워진다",
+      !idleAfter.body.party_size, JSON.stringify(idleAfter.body));
+    const popup = await page.locator("#appDialogBackdrop").innerText();
+    check("몇 자리를 비웠는지 팝업이 알려준다", /인원수만|자리도 같이 비웠/.test(popup), popup);
+  }
   check("화면 팝업에도 LINE 을 보냈다고 알려준다",
     /LINE/.test(await page.locator("#appDialogBackdrop").innerText()),
     await page.locator("#appDialogBackdrop").innerText());

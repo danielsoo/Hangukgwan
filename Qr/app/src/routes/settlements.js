@@ -4,6 +4,7 @@ const { requireOwner, requireAdmin } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
+const { clearIdleSeats } = require("../partySize");
 const { nowLocal } = require("../time");
 const { sendLineMessage, formatSettlementSummary, formatShiftSummary } = require("../line");
 const testMode = require("../testMode");
@@ -158,6 +159,13 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   );
   await save();
 
+  // 장사가 끝났으니 남은 인원수를 비운다(src/partySize.js clearIdleSeats).
+  // 주문 없이 인원수만 찍힌 자리는 결제할 것이 없어서 스스로 비워지지
+  // 않는다 — 매일 쌓여서 다음 장사 때 빈 자리가 손님 있는 자리로 보인다.
+  // 테스터 모드에서는 하지 않는다. 진짜 자리의 인원수를 시험으로 지울 수는
+  // 없다(LINE 문자를 안 보내는 것과 같은 이유).
+  const clearedSeats = testId ? [] : await clearIdleSeats(store);
+
   // 하루 정산이면 오전 몫과 오후 몫을 갈라 한 줄씩 보여준다. 오전 정산을
   // 누른 적 없는 날은 가를 기준이 없으므로 통짜로 둔다.
   let amPart = null;
@@ -195,6 +203,8 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     problem_order_count: snapshot.problem_order_count,
     am_part: amPart,
     pm_part: pmPart,
+    // 몇 자리의 인원수를 비웠는가 — 화면이 그 자리에서 알려준다.
+    cleared_seats: clearedSeats.length,
     line,
   });
 });
