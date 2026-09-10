@@ -15,6 +15,8 @@ const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-o
 const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
 const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
 const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-hours");
+// 배포한 것이 화면에 안 닿던 문제 — 자세한 배경은 그 파일 맨 위 주석.
+const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
 
 const app = express();
@@ -70,15 +72,14 @@ app.use(
 // Doesn't touch `store`, just serves the same static HTML shell for every
 // table, so (like the static assets above) it doesn't need to wait on
 // refreshStore()/seed()/migrations below.
-app.get("/t/:tableNumber", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "order.html"));
-});
+// sendStamped: /js /css 주소에 배포 지문을 박아 보낸다(src/assetVersion.js).
+// 안 그러면 한 시간 캐시와 "열어둔 탭은 js 를 다시 안 받는다" 가 겹쳐서,
+// 배포한 고침이 가게 화면에 며칠씩 안 닿는다.
+app.get("/t/:tableNumber", sendStamped("order.html"));
 
 // Owner dashboard — same reasoning: the real auth/data checks happen
 // client-side via the /api/* calls admin.js makes afterward, not here.
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"));
-});
+app.get("/admin", sendStamped("admin.html"));
 
 // 홈페이지(Web/) — 자세한 배경은 src/site.js 주석. 여기 순서가 중요하다:
 // 위의 /t/:tableNumber 와 /admin 이 먼저 잡히고, 그 다음 홈페이지가 "/",

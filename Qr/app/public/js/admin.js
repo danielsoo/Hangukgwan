@@ -500,6 +500,11 @@
       settlementDiscountHint: "매출에서 이미 빠진 금액이에요. 얼마를 깎아드렸는지 보여줍니다.",
       settlementDiscountKind: "종류",
       settlementDiscountAmount: "할인액",
+      settlementVipCardTitle: "VIP 카드 손익",
+      settlementVipCardSales: "카드 판매",
+      settlementVipCardDiscount: "카드 할인",
+      settlementVipCardNet: "차액",
+      settlementVipCardNote: "오늘 판 카드값과 오늘 나간 카드 할인입니다. 같은 카드가 아니고 카드는 1년을 쓰니, 진짜 손익은 기간을 넓혀서 보세요.",
       settlementDiscountManual: "직접 입력",
       settlementTableTitle: "테이블별 매출",
       settlementTableName: "테이블",
@@ -823,7 +828,7 @@
       cancelReservationBtn: "예약 취소 처리",
       reservationDeleteConfirm: "이 예약을 삭제하시겠습니까?",
       lineSettingsTitle: "마감 자동 알림 (LINE)",
-      lineSettingsHint: "매일 밤 마감 시간 이후 그날 매출/미결제 요약을, 아래 등록된 사람에게만 개별로 전송해요 (친구 추가한 모두에게 보내는 게 아니에요).",
+      lineSettingsHint: "직원이 「🌅 오전 정산」/「🌙 오후 정산」을 누를 때, 그 시점의 매출·결제수단별 금액·미결제를 아래 등록된 사람에게만 개별로 보내요 (친구 추가한 모두에게 보내는 게 아니에요). 하루에 두 통. 정산 버튼을 아무도 안 누른 날은 밤 마감 시각에 한 번 보내요.",
       lineEnableLabel: "마감 알림 사용",
       lineTokenLabel: "채널 액세스 토큰",
       lineTokenPlaceholder: "저장된 토큰이 있으면 비워두면 유지됩니다",
@@ -1110,6 +1115,11 @@
       settlementDiscountHint: "已從營收中扣除的金額，顯示總共折讓了多少。",
       settlementDiscountKind: "類型",
       settlementDiscountAmount: "折扣額",
+      settlementVipCardTitle: "VIP卡損益",
+      settlementVipCardSales: "卡片販售",
+      settlementVipCardDiscount: "卡片折扣",
+      settlementVipCardNet: "差額",
+      settlementVipCardNote: "這是今天賣出的卡片金額，與今天使用卡片折抵的金額。兩者不是同一張卡，且卡片可用一年，真正的損益請把期間拉長來看。",
       settlementDiscountManual: "自行輸入",
       settlementTableTitle: "各桌營收",
       settlementTableName: "桌號",
@@ -1433,7 +1443,7 @@
       cancelReservationBtn: "標記為取消",
       reservationDeleteConfirm: "確定要刪除這筆訂位嗎？",
       lineSettingsTitle: "打烊自動通知（LINE）",
-      lineSettingsHint: "每天打烊時間後，只會把當天營業額/未結帳摘要傳送給下方已註冊的人（不是傳送給所有加好友的人）。",
+      lineSettingsHint: "當店員按下「🌅 上午結算」/「🌙 下午結算」時，會把當下的營業額、各付款方式金額與未結帳摘要，只個別傳送給下方已註冊的人（不是傳送給所有加好友的人）。一天兩則。若當天沒有人按結算按鈕，則會在打烊時間傳送一次。",
       lineEnableLabel: "啟用打烊通知",
       lineTokenLabel: "頻道存取權杖",
       lineTokenPlaceholder: "若已儲存權杖，留空即可保留原本設定",
@@ -2930,13 +2940,17 @@
   //      결제수단은 지정하지 않으므로 정산의 결제수단별 집계에는
   //      "미지정"으로 잡힌다(실제로 어떻게 결제됐는지 모르는 채로 강제
   //      마감된 것이므로 정직하게 미지정 처리).
-  //   2) 그 다음 오늘 날짜로 결산 마감 스냅샷(POST /api/settlements/close,
-  //      결산 탭의 "마감" 버튼과 동일)을 찍어서 결산 탭의 영구 기록에도
-  //      반영되게 한다 — 오전에 한 번, 오후에 한 번 더 찍으면 오후 것이
-  //      그날 스냅샷을 하루 전체 합계로 덮어써서 자연스럽게 "오전 정산 =
-  //      점심 전까지 마감", "오후 정산 = 하루 마감"이 된다. 소유자 권한이
-  //      없어 이 호출이 실패해도(403) 치명적이지 않다 — 결산 탭은 항상
-  //      살아있는 주문에서 다시 계산해서 보여주므로.
+  //   2) 그 다음 오늘 날짜로 결산 마감 스냅샷을 찍는다(POST
+  //      /api/settlements/shift-close) — 오전에 한 번, 오후에 한 번 더
+  //      찍으면 오후 것이 그날 스냅샷을 하루 전체 합계로 덮어써서 자연스럽게
+  //      "오전 정산 = 점심 전까지 마감", "오후 정산 = 하루 마감"이 된다.
+  //   3) 그 자리에서 LINE 마감 문자가 나간다(2026-09-10 사장님 요청,
+  //      src/routes/settlements.js 의 shift-close 주석 참고). 숫자는 서버가
+  //      계산해 돌려준 것을 아래 팝업에도 그대로 쓴다 — 화면과 문자와 장부가
+  //      다른 숫자를 말하면 안 된다.
+  //      예전에는 owner 전용인 POST /close 를 불러서, 직원이 이 버튼을
+  //      누르면 스냅샷이 조용히 실패했다(403). shift-close 는 직원도 부를 수
+  //      있다.
   // 오래된 날짜에 걸린(예: 며칠 전부터 안 닫힌) 주문까지 휩쓸리지 않도록
   // 오늘 생성된 주문만 대상으로 한다 — 그보다 오래된 미결제 주문은 결산
   // 탭의 "⚠️ 결제되지 않은 주문" 목록에 계속 남아 사장님이 따로 확인하게
@@ -2980,30 +2994,71 @@
       await loadTables();
     }
 
-    // 결산 탭 영구 기록에 오늘자 마감 스냅샷 반영 — 소유자가 아니라 실패해도
-    // (403) 조용히 넘어간다(위 주석 참고).
+    // 마감 스냅샷 + LINE 마감 문자. 숫자는 서버가 계산해서 돌려준 것을
+    // 그대로 쓴다 — 예전에는 여기서 computeHalfDaySettlement 로 따로 셌는데,
+    // 그 함수가 "오전 = 0시~11시"라 점심 영업(11:00~14:00) 중 12시 이후에
+    // 받은 돈이 오전 정산 금액에서 통째로 빠졌다. 화면과 문자와 장부가
+    // 같은 숫자를 말해야 한다.
+    let summary = null;
     try {
-      await fetch("/api/settlements/close", {
+      const res = await fetch("/api/settlements/shift-close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ shift: isFullDay ? "day" : "am" }),
       });
+      if (res.ok) summary = await res.json();
     } catch (e) {
-      // network error 등 — 결산 탭은 어차피 실시간 재계산되므로 무시.
+      // network error 등 — 아래에서 예전처럼 화면 계산으로 넘어간다.
     }
 
-    const { count, total } = computeHalfDaySettlement(0, isFullDay ? 23 : 11);
+    // 서버에 못 닿았을 때만 화면에 있는 주문으로 어림한다. 이때는 오늘
+    // 결제된 것 전부(0~23시)를 센다 — 시간대를 좁혀 세다 조용히 적게
+    // 나오는 것보다 낫다.
+    const count = summary ? summary.paid_order_count : computeHalfDaySettlement(0, 23).count;
+    const total = summary ? summary.total_revenue : computeHalfDaySettlement(0, 23).total;
+
+    // LINE 마감 문자가 왜 안 갔는지는 그 자리에서 알려준다 — 조용히 안 가면
+    // 사장님은 갔다고 믿는다. 설정은 Admin > 설정 > 알림.
+    let lineNote = "";
+    if (summary && summary.line) {
+      if (summary.line.sent) {
+        lineNote = adminLang === "zh" ? "\n\n📩 已傳送 LINE 結算通知。" : "\n\n📩 LINE 정산 알림을 보냈어요.";
+      } else if (summary.line.error === "disabled") {
+        lineNote =
+          adminLang === "zh"
+            ? "\n\n(LINE 結算通知目前關閉中 — 設定 > 通知)"
+            : "\n\n(LINE 정산 알림이 꺼져 있어요 — 설정 > 알림)";
+      } else if (summary.line.error === "no_targets") {
+        lineNote =
+          adminLang === "zh"
+            ? "\n\n(還沒有已核准的 LINE 收件人 — 設定 > 通知)"
+            : "\n\n(LINE 알림 받을 사람이 아직 없어요 — 설정 > 알림)";
+      } else {
+        lineNote =
+          adminLang === "zh"
+            ? `\n\n⚠️ LINE 通知傳送失敗 (${summary.line.error})`
+            : `\n\n⚠️ LINE 알림을 보내지 못했어요 (${summary.line.error})`;
+      }
+    }
+
     if (isFullDay) {
+      // 오전 정산을 누른 날이면 오전/오후를 갈라 보여준다.
+      const split =
+        summary && summary.am_part && summary.pm_part
+          ? adminLang === "zh"
+            ? `\n(上午 NT$${summary.am_part.revenue} · 下午 NT$${summary.pm_part.revenue})`
+            : `\n(오전 NT$${summary.am_part.revenue} · 오후 NT$${summary.pm_part.revenue})`
+          : "";
       showAlert(
-        adminLang === "zh"
+        (adminLang === "zh"
           ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + lineNote
       );
     } else {
       showAlert(
-        adminLang === "zh"
-          ? `🌅 今日上午（至午休前）結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌅 오늘 오전(점심 쉬는 시간 전까지) 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`
+        (adminLang === "zh"
+          ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${total}`
+          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + lineNote
       );
     }
   }
@@ -9866,6 +9921,21 @@
     renderBars("#settlementDiscountBars", discountRows
       .map((e) => ({ name: discountLabel(e.discount_type), value: e.amount, count: e.order_count })));
     $("#settlementGrossRevenue").textContent = nt(data.gross_revenue);
+
+    // VIP 카드 손익 — 카드를 판 돈에서 그 카드들이 깎아준 돈을 뺀다.
+    // 카드를 팔지도 않았고 카드 할인도 없었던 기간에는 통째로 감춘다.
+    const vip = data.vip_card_program || {};
+    const vipHasAnything = !!(vip.cards_sold || vip.card_discount_given);
+    $("#settlementVipCardBlock").hidden = !vipHasAnything;
+    if (vipHasAnything) {
+      const soldSuffix = vip.cards_sold ? ` (${vip.cards_sold}${adminLang === "zh" ? "張" : "장"})` : "";
+      $("#settlementVipCardSales").textContent = nt(vip.card_sales_revenue) + soldSuffix;
+      $("#settlementVipCardDiscount").textContent = `-${nt(vip.card_discount_given)}`;
+      const netEl = $("#settlementVipCardNet");
+      netEl.textContent = `${vip.net >= 0 ? "+" : "-"}${nt(Math.abs(vip.net))}`;
+      // 적자면 빨강. 사장님이 한눈에 보려는 것이 이 한 줄이다.
+      netEl.style.color = vip.net >= 0 ? "var(--ink)" : "var(--red)";
+    }
 
     // ── 3. 무엇이 팔렸나 ─────────────────────────────────────────
     // 분류 이름은 메뉴 관리의 카테고리에서 가져온다 — 결산에만 따로 적어두면

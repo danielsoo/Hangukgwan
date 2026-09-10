@@ -113,4 +113,114 @@ function formatSettlementSummary(snapshot) {
   return lines.join("\n");
 }
 
-module.exports = { sendLineMessage, replyLine, verifyLineSignature, formatSettlementSummary, getLineProfile };
+// 결제수단 이름 — 관리자 화면(public/js/admin.js)이 쓰는 것과 같은 말이어야
+// 한다. 화면에서는 "현금"인데 문자에서는 "cash"로 오면 같은 표를 두 가지
+// 말로 읽게 된다.
+const PAYMENT_METHOD_NAMES = {
+  cash: "현금",
+  linepay: "LinePay",
+  card: "신용카드",
+  other: "기타",
+  online: "온라인결제",
+  unspecified: "미지정",
+};
+
+// 할인 종류 이름 — 결산 화면의 discountLabel 과 같은 말이어야 한다.
+// 키는 src/discounts.js 의 discountTypeKey 가 만든다.
+const DISCOUNT_NAMES = {
+  te95: "特約95折",
+  vip9: "VIP9折",
+  vip95: "特約95折", // 옛 주문에 남아 있는 표기
+  vip10: "VIP9折",
+  manual: "직접 입력",
+  unspecified: "미지정",
+};
+
+const nt = (n) => `NT$${Number(n || 0).toLocaleString()}`;
+// "2026-09-10" → "9/10", "2026-09-10 21:07:31" → "21:07"
+const shortDate = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
+const clockOf = (ts) => (ts && ts.length >= 16 ? ts.slice(11, 16) : "");
+
+// 사장님 요청(2026-09-10): "오전 정산 오후 정산(하루 정산) 총 하루에 2개
+// 있는데 오늘부터 받아볼 수 있나?" — 직원이 관리자 화면에서 「🌅 오전 정산」
+// /「🌙 오후 정산」을 누른 그 자리에서 나가는 요약이다.
+//
+// 위 formatSettlementSummary(밤 크론용, 최소한만)와 달리 결제수단별 금액까지
+// 넣는다. 마감에 서랍의 현금을 맞춰보는 것이 이 문자를 보는 이유라서다.
+//
+// opts:
+//   shift    "am"(오전) | "day"(하루)
+//   closedAt "YYYY-MM-DD HH:MM:SS" — 정산 버튼을 누른 시각
+//   amPart   { revenue, count } — 하루 정산일 때만. 그날 오전 정산까지의 몫.
+//   pmPart   { revenue, count } — 하루 정산일 때만. 그 뒤의 몫.
+function formatShiftSummary(snapshot, opts = {}) {
+  const isAm = opts.shift === "am";
+  const clock = clockOf(opts.closedAt);
+  const head = `${isAm ? "🌅" : "🌙"} ${shortDate(snapshot.date)} ${isAm ? "오전 정산" : "하루 정산"}${clock ? ` (${clock} 마감)` : ""}`;
+  const lines = [head, `매출: ${nt(snapshot.total_revenue)}`];
+
+  // 하루 정산에서는 오전/오후가 각각 얼마였는지 한 줄씩. 오전 정산을 누른
+  // 적이 없는 날은 가를 기준이 없으므로 넣지 않는다 — 없는 경계를 지어내는
+  // 것보다 안 보여주는 쪽이 낫다.
+  if (!isAm && opts.amPart && opts.pmPart) {
+    lines.push(`  오전 ${nt(opts.amPart.revenue)} (${opts.amPart.count}건)`);
+    lines.push(`  오후 ${nt(opts.pmPart.revenue)} (${opts.pmPart.count}건)`);
+  }
+
+  const guests = snapshot.guest_count ? ` · 손님 ${snapshot.guest_count}명` : "";
+  lines.push(`결제: ${snapshot.paid_order_count}건${guests}`);
+
+  const methods = snapshot.payment_method_breakdown || [];
+  if (methods.length) {
+    lines.push("─ 결제수단");
+    for (const m of methods) {
+      lines.push(`  ${PAYMENT_METHOD_NAMES[m.method] || m.method} ${nt(m.revenue)} (${m.order_count}건)`);
+    }
+  }
+
+  // 할인 — 사장님 요청(2026-09-10): "할인한 양이랑 그 중에 vip 카드 중 어떤
+  // 거에서 할인, 그냥 직접 할인 등 그것도 결산 페이지랑 보고에 들어갔으면
+  // 좋겠어." 종류별로 한 줄씩.
+  if (snapshot.discount_total) {
+    lines.push(`─ 할인 -${nt(snapshot.discount_total)}`);
+    for (const d of snapshot.discount_breakdown || []) {
+      lines.push(`  ${DISCOUNT_NAMES[d.discount_type] || d.discount_type} -${nt(d.amount)} (${d.order_count}건)`);
+    }
+  }
+
+  // VIP 카드가 적자인지 흑자인지 — 판 돈에서 그 카드들이 깎아준 돈을 뺀 것.
+  // 카드도 안 팔리고 카드 할인도 없었으면 넣지 않는다.
+  const vip = snapshot.vip_card_program;
+  if (vip && (vip.cards_sold || vip.card_discount_given)) {
+    lines.push("─ VIP 카드");
+    const sold = vip.cards_sold ? `판매 ${nt(vip.card_sales_revenue)} (${vip.cards_sold}장)` : "판매 없음";
+    lines.push(`  ${sold} · 할인 -${nt(vip.card_discount_given)}`);
+    lines.push(`  차액 ${vip.net >= 0 ? "+" : "-"}${nt(Math.abs(vip.net))}`);
+  }
+
+  if (snapshot.cancelled_order_count) lines.push(`취소: ${snapshot.cancelled_order_count}건`);
+
+  // 미결제는 맨 아래. 돈이 빠져나간 자리라 눈에 걸려야 한다.
+  if (snapshot.problem_order_count > 0) {
+    lines.push(`⚠️ 미결제/문제 주문: ${snapshot.problem_order_count}건 (${nt(snapshot.problem_amount)})`);
+    const preview = (snapshot.problem_orders || [])
+      .slice(0, 5)
+      .map((o) => `  - ${o.created_at.slice(11, 16)} ${o.table_number}번 테이블 ${nt(o.total)}`);
+    lines.push(...preview);
+    if ((snapshot.problem_orders || []).length > 5) lines.push(`  ...외 ${snapshot.problem_orders.length - 5}건`);
+  } else {
+    lines.push("✅ 미결제 주문 없음");
+  }
+  return lines.join("\n");
+}
+
+module.exports = {
+  sendLineMessage,
+  replyLine,
+  verifyLineSignature,
+  formatSettlementSummary,
+  formatShiftSummary,
+  getLineProfile,
+  PAYMENT_METHOD_NAMES,
+  DISCOUNT_NAMES,
+};

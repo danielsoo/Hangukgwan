@@ -144,20 +144,67 @@ function computeSettlement(orders, startDate, endDate = startDate) {
   const categoryBreakdown = [...categoryMap.values()].sort((a, b) => b.subtotal - a.subtotal);
 
   // 할인 — 얼마를 깎아줬는지. 매출에서 이미 빠진 돈이라 따로 안 보면
-  // 얼마나 나갔는지 알 길이 없다. 종류별(特約95折 / VIP9折 / 직접 입력)로.
+  // 얼마나 나갔는지 알 길이 없다.
+  //
+  // 사장님 요청(2026-09-10): "할인한 양이랑 그 중에 vip 카드 중 어떤 거에서
+  // 할인, 그냥 직접 할인 등 그것도 결산 페이지랑 보고에 들어갔으면 좋겠어.
+  // 그래서 vip 카드가 적자인지 흑자인지도 쉽게 볼 수 있을 것 같아."
+  //
+  // 그래서 種類를 하나씩 갈라 센다. 두 할인을 같이 건 주문은
+  // discount_type 이 "te95+manual" 이라 그것만 봐서는 어느 쪽이 얼마인지
+  // 모른다 — 주문에 따로 적어둔 discount_vip_amount / discount_manual_amount
+  // 를 쓴다(src/routes/orders.js recordDiscount). 그 필드가 생기기 전에
+  // 저장된 주문은 나눌 근거가 없으므로 합계를 discount_type 키 그대로
+  // 하나의 종류로 센다 — 없는 숫자를 지어내는 것보다 낫다.
   const discountMap = new Map();
   let discountTotal = 0;
-  for (const o of paidOrders) {
-    const amount = o.discount_amount || 0;
-    if (!amount) continue;
-    discountTotal += amount;
-    const key = o.discount_type || "unspecified";
+  let vipCardDiscountTotal = 0; // VIP 카드(特約95折/VIP9折)가 깎아준 돈만
+  const bump = (key, amount) => {
+    if (!amount) return;
     const e = discountMap.get(key) || { discount_type: key, amount: 0, order_count: 0 };
     e.amount += amount;
     e.order_count += 1;
     discountMap.set(key, e);
+  };
+  for (const o of paidOrders) {
+    const amount = o.discount_amount || 0;
+    if (!amount) continue;
+    discountTotal += amount;
+    const vipPart = o.discount_vip_amount;
+    const manualPart = o.discount_manual_amount;
+    const hasSplit = vipPart != null || manualPart != null;
+    if (!hasSplit) {
+      bump(o.discount_type || "unspecified", amount);
+      // 옛 주문이라도 종류 자체는 알 수 있다 — "te95"/"vip9" 만 걸린
+      // 주문이면 그 금액은 전부 VIP 카드 몫이다. 섞인 주문만 가를 수 없다.
+      if (o.discount_type === "te95" || o.discount_type === "vip9") vipCardDiscountTotal += amount;
+      continue;
+    }
+    // 어느 카드였는지는 discount_type 앞부분에 남아 있다("te95+manual" → te95).
+    const vipKey = String(o.discount_type || "").split("+")[0];
+    if (vipPart) {
+      bump(vipKey === "te95" || vipKey === "vip9" ? vipKey : "unspecified", vipPart);
+      vipCardDiscountTotal += vipPart;
+    }
+    if (manualPart) bump("manual", manualPart);
   }
   const discountBreakdown = [...discountMap.values()].sort((a, b) => b.amount - a.amount);
+
+  // VIP 카드가 적자인지 흑자인지. 카드를 판 돈에서 그 카드들이 깎아준 돈을
+  // 뺀 것이다(src/routes/vipCards.js 의 POST /sell 이 카드 판매를
+  // kind:"vip_card_sale" 주문으로 남긴다).
+  //
+  // 주의: 이 둘은 같은 카드의 것이 아니다. 오늘 판 카드와 오늘 할인을 받은
+  // 카드는 서로 다른 손님일 수 있고, 카드는 1년을 쓴다. 그래서 하루치
+  // 숫자는 "오늘 들어온 카드값 vs 오늘 나간 카드 할인"이고, 진짜 손익은
+  // 결산 탭에서 기간을 넓혀 봐야 보인다 — 화면 쪽에 그 말을 적어둔다.
+  const cardSaleOrders = paidOrders.filter((o) => o.kind === "vip_card_sale");
+  const vipCardProgram = {
+    cards_sold: cardSaleOrders.length,
+    card_sales_revenue: cardSaleOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+    card_discount_given: vipCardDiscountTotal,
+    net: cardSaleOrders.reduce((sum, o) => sum + (o.total || 0), 0) - vipCardDiscountTotal,
+  };
 
   // 손님 수와 객단가. party_size 는 테이블에서 손님이 직접 답한 인원수이고,
   // 주문할 때 그 주문에 함께 찍힌다. 같은 테이블이 여러 번 주문하면 같은
@@ -295,6 +342,7 @@ function computeSettlement(orders, startDate, endDate = startDate) {
     category_breakdown: categoryBreakdown,
     discount_breakdown: discountBreakdown,
     discount_total: discountTotal,
+    vip_card_program: vipCardProgram,
     // 할인 전 금액 — 매출 + 깎아준 돈. "원래 얼마짜리를 팔았나".
     gross_revenue: totalRevenue + discountTotal,
     guest_count: guestCount,

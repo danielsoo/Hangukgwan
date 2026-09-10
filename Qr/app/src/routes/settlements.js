@@ -1,11 +1,11 @@
 const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc } = require("../db");
-const { requireOwner } = require("../auth");
+const { requireOwner, requireAdmin } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
 const { nowLocal } = require("../time");
-const { sendLineMessage, formatSettlementSummary } = require("../line");
+const { sendLineMessage, formatSettlementSummary, formatShiftSummary } = require("../line");
 const testMode = require("../testMode");
 
 const router = express.Router();
@@ -91,6 +91,86 @@ router.post("/close", requireOwner, async (req, res) => {
   res.json(snapshot);
 });
 
+// 한 주문이 실제로 결제된 시각. 부분 결제(품목별)로 나눠 낸 라운드는
+// 마지막 품목이 결제된 때를 그 주문의 결제 시각으로 본다 — 그 전에는 아직
+// 받을 돈이 남아 있었다. 옛 주문이나 한 번에 결제된 주문은 updated_at.
+function paidAtOf(order) {
+  const stamps = (order.items || []).map((it) => it.paid_at).filter(Boolean);
+  if (stamps.length) return stamps.sort().pop();
+  return order.updated_at || order.created_at;
+}
+
+// 사장님 요청(2026-09-10): "현재 line 으로 결산 보내주는 기능이 있기는 한데
+// 한 번도 사용한 적은 없어... 이제 오전 정산 오후 정산(하루 정산) 총 하루에
+// 2개 있는데 오늘부터 받아볼 수 있나?"
+//
+// 관리자 화면 주문판의 「🌅 오전 정산」/「🌙 오후 정산」 버튼이 여기로 온다.
+// 밤 크론(아래 cron-close)과 달리 **직원이 실제로 정산한 그 순간** 나가므로,
+// 문자의 숫자와 그때 서랍에 있는 돈이 같은 시점을 가리킨다.
+//
+// requireOwner 가 아니라 requireAdmin 인 이유: 정산 버튼은 직원도 누른다
+// (public/admin.html 의 settle-quick-btn 은 owner-only 가 아니다). 예전에는
+// 이 버튼이 owner 전용인 POST /close 를 불러서, 직원이 누르면 마감 스냅샷이
+// 조용히 실패했다. 매출 숫자 자체는 응답으로 돌려주되, 그건 이미 그 화면의
+// 결제완료 칼럼에서 직원이 보고 있는 값이라 새로 새는 정보가 없다.
+router.post("/shift-close", requireAdmin, async (req, res) => {
+  // 마감은 테스트로 눌러볼 수 있는 버튼이 아니다 — 위 POST /close 와 같은
+  // 이유. 여기는 LINE 문자까지 나가므로 더더욱.
+  if (testMode.isTest(req, store)) {
+    return res.status(403).json({ error: "test_mode_no_close" });
+  }
+  const shift = req.body && req.body.shift === "am" ? "am" : "day";
+  const date = taipeiDateString();
+  const closedAt = nowLocal();
+  const orders = await ordersInRange(date, date);
+  const snapshot = computeSettlement(orders, date);
+
+  // 오전 정산이 누른 시각을 그날 스냅샷에 남긴다. 하루 정산이 오전/오후를
+  // 가르는 기준이 이것이다 — 영업시간표를 보고 "오전은 14시까지" 라고
+  // 짐작하는 것보다, 실제로 정산을 누른 시각이 정확하다(14시 20분에 눌렀으면
+  // 14시 10분 결제는 오전 몫이다).
+  const [prev] = await findDocs("daily_settlements", { date });
+  const amClosedAt = shift === "am" ? closedAt : (prev && prev.am_closed_at) || null;
+  await saveSettlementSnapshot({ ...snapshot, am_closed_at: amClosedAt, last_shift_closed_at: closedAt });
+  await save();
+
+  // 하루 정산이면 오전 몫과 오후 몫을 갈라 한 줄씩 보여준다. 오전 정산을
+  // 누른 적 없는 날은 가를 기준이 없으므로 통짜로 둔다.
+  let amPart = null;
+  let pmPart = null;
+  if (shift === "day" && amClosedAt) {
+    const paid = orders.filter((o) => o.status === "paid");
+    const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
+    const amRevenue = amPaid.reduce((sum, o) => sum + (o.total || 0), 0);
+    amPart = { revenue: amRevenue, count: amPaid.length };
+    // 오후는 빼서 구한다 — 따로 더하면 반올림이나 경계 판정이 어긋났을 때
+    // 오전+오후가 하루 매출과 안 맞는 문자가 나간다.
+    pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
+  }
+
+  let line = { sent: false, error: "disabled" };
+  if (store.settings.line_notify_enabled) {
+    const lines = [formatShiftSummary(snapshot, { shift, closedAt, amPart, pmPart })];
+    const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
+    if (warn) lines.push("", warn);
+    const result = await sendLineMessage(store, lines.join("\n"));
+    line = result.ok ? { sent: true } : { sent: false, error: result.error };
+  }
+
+  res.json({
+    ok: true,
+    shift,
+    date,
+    closed_at: closedAt,
+    total_revenue: snapshot.total_revenue,
+    paid_order_count: snapshot.paid_order_count,
+    problem_order_count: snapshot.problem_order_count,
+    am_part: amPart,
+    pm_part: pmPart,
+    line,
+  });
+});
+
 // Sends a one-off test message using whatever LINE settings are currently
 // saved, so the owner can confirm the channel access token actually works
 // right after entering it, instead of waiting until the next cron run.
@@ -124,14 +204,20 @@ router.get("/cron-close", async (req, res) => {
   await recordStoreSize(store, { getDb, connectDB, nowLocal });
   await save();
 
-  if (store.settings.line_notify_enabled) {
+  // 2026-09-10부터 마감 문자는 직원이 정산 버튼을 누를 때 나간다(위
+  // shift-close). 이 크론은 예비다 — 그날 정산을 누른 적이 있으면 같은
+  // 내용을 한 번 더 보내지 않는다. 사장님이 받기로 한 건 하루에 두 통
+  // (오전·하루)이지 세 통이 아니다.
+  const [todaySnapshot] = await findDocs("daily_settlements", { date });
+  const alreadyClosedByHand = !!(todaySnapshot && todaySnapshot.last_shift_closed_at);
+  if (store.settings.line_notify_enabled && !alreadyClosedByHand) {
     const lines = [formatSettlementSummary(snapshot)];
     const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
     if (warn) lines.push("", warn);
     await sendLineMessage(store, lines.join("\n"));
   }
 
-  res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count });
+  res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count, line_skipped: alreadyClosedByHand });
 });
 
 module.exports = router;

@@ -108,9 +108,26 @@ function resolvePaymentFields(body) {
 // PATCH /:id, PATCH /:id/split-pay 둘 다 이 함수만 부르면 된다.
 // 特約95折/VIP9折 + 재량 할인의 실제 산수는 src/discounts.js 에 있다 —
 // 여기서는 "음료·주류가 무엇인가"(메뉴 카테고리를 봐야 알 수 있는, 이
-// 라우트만 아는 것)만 넣어주고 총액을 받아온다.
+// 라우트만 아는 것)만 넣어주고 금액을 받아온다.
 function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes) {
-  return computeDiscountAmountPure(vipDiscountType, manualDiscount, items, indexes, isDrinkItem).total;
+  return computeDiscountAmountPure(vipDiscountType, manualDiscount, items, indexes, isDrinkItem);
+}
+
+// 이번 결제의 할인을 주문에 기록한다.
+//
+// 사장님 요청(2026-09-10): "결산에 할인한 양이랑 그 중에 vip 카드 중 어떤
+// 거에서 할인, 그냥 직접 할인 등 그것도 결산 페이지랑 보고에 들어갔으면
+// 좋겠어. 그래서 vip 카드가 적자인지 흑자인지도 쉽게 볼 수 있을 것 같아."
+//
+// 그래서 총액 하나로는 부족하다. VIP 카드가 깎아준 돈과 직원 재량으로
+// 깎아준 돈을 따로 적어둬야, 결산에서 "VIP 카드 때문에 나간 돈"만 골라
+// 카드 판매 수입과 견줄 수 있다. 두 할인을 같이 걸 수 있게 된 뒤로는
+// discount_type("te95+manual") 만 봐서는 어느 쪽이 얼마인지 알 수 없다.
+function recordDiscount(order, vipDiscountType, manualDiscount, breakdown) {
+  order.discount_type = discountTypeKey(vipDiscountType, manualDiscount);
+  order.discount_amount = (order.discount_amount || 0) + breakdown.total;
+  order.discount_vip_amount = (order.discount_vip_amount || 0) + breakdown.vipAmount;
+  order.discount_manual_amount = (order.discount_manual_amount || 0) + breakdown.manualAmount;
 }
 
 // Straight-line distance between two lat/lng points, in meters.
@@ -718,9 +735,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       });
     }
     if (vipDiscountType || manualDiscount) {
-      const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items);
-      order.discount_type = discountTypeKey(vipDiscountType, manualDiscount);
-      order.discount_amount = (order.discount_amount || 0) + discountAmount;
+      recordDiscount(order, vipDiscountType, manualDiscount, computeDiscountAmount(vipDiscountType, manualDiscount, order.items));
     }
   }
 
@@ -897,9 +912,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   });
   if (paymentMethod) order.payment_method = paymentMethod;
   if (vipDiscountType || manualDiscount) {
-    const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items, selectedIdx);
-    order.discount_type = discountTypeKey(vipDiscountType, manualDiscount);
-    order.discount_amount = (order.discount_amount || 0) + discountAmount;
+    recordDiscount(order, vipDiscountType, manualDiscount, computeDiscountAmount(vipDiscountType, manualDiscount, order.items, selectedIdx));
   }
   order.updated_at = paidAt;
 
