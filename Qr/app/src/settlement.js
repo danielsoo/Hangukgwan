@@ -321,6 +321,16 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const unsplitDates = new Set();
   const cuts = new Set();
   for (const o of paidOrders) {
+    // 주문에 박혀 있는 표를 먼저 믿는다 (src/servicePeriod.js).
+    //
+    // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
+    // 같이 저장하면 되는 거 아니야?" — 그 표가 있으면 정산을 눌렀는지,
+    // 그 뒤에 영업시간이 바뀌었는지와 무관하게 언제나 같은 답이 나온다.
+    if (o.service_period === "am" || o.service_period === "pm") {
+      (o.service_period === "am" ? amPaid : pmPaid).push(o);
+      continue;
+    }
+    // 표가 없는 옛 주문은 예전처럼 경계 시각으로 가른다.
     const date = o.created_at.slice(0, 10);
     const boundary = halfBoundaryFor(date, opts);
     if (!boundary) {
@@ -341,7 +351,12 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     // 달랐다면 그 말이 거짓말이 된다.
     boundary_label: cuts.size === 1 ? [...cuts][0] : null,
     unsplit_revenue: paidOrders
-      .filter((o) => unsplitDates.has(o.created_at.slice(0, 10)))
+      .filter(
+        (o) =>
+          o.service_period !== "am" &&
+          o.service_period !== "pm" &&
+          unsplitDates.has(o.created_at.slice(0, 10))
+      )
       .reduce((sum, o) => sum + (o.total || 0), 0),
   };
 

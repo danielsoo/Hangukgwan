@@ -9,6 +9,7 @@ const { parseAddons } = require("../addons");
 const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 const testMode = require("../testMode");
 const seating = require("../seating");
+const { serviceOf } = require("../servicePeriod");
 // 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
 const { maybeAutoCloseAm } = require("./settlements");
 
@@ -397,6 +398,9 @@ router.post("/", async (req, res) => {
   const knownMaxOrderId = store.orders.reduce((m, o) => (o.id > m ? o.id : m), 0);
   const orderId = await reserveId("orders", knownMaxOrderId + 1);
 
+  // 시각을 한 번만 읽는다. created_at 과 아래 service_period 가 서로 다른
+  // 순간을 가리키면, 16:24:59 에 들어온 주문이 「오후」로 찍히는 일이 생긴다.
+  const createdAt = nowLocal();
   const order = {
     id: orderId,
     table_number: String(tableNumber),
@@ -407,8 +411,8 @@ router.post("/", async (req, res) => {
     vip_card_number: vipCard ? vipCard.card_number : null,
     vip_discount_percent: vipCard ? vipCard.discount_percent : null,
     note: (note || "").slice(0, 300),
-    created_at: nowLocal(),
-    updated_at: nowLocal(),
+    created_at: createdAt,
+    updated_at: createdAt,
     items: validated,
     // Snapshot of the table's headcount at the moment this order was
     // placed. table.party_size itself is transient (cleared once the table
@@ -436,6 +440,18 @@ router.post("/", async (req, res) => {
     // 로그인 안 한 손님은 null 이고, 그 경우 주문 내역은 예전처럼 그 브라우저
     // 안에만(localStorage) 남는다.
     account_id: customer && customer.accountId ? customer.accountId : null,
+    // 점심 장사 것인가 저녁 장사 것인가 (src/servicePeriod.js).
+    //
+    // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
+    // 같이 저장하면 되는 거 아니야?"
+    //
+    // 들어오는 순간에 박아 둔다. 정산 버튼을 눌렀는지에 기대지 않으니 안
+    // 누른 날도 가려지고, 나중에 몇 번을 다시 계산해도 같은 답이 나온다.
+    // 영업시간을 바꿔도 옛 주문의 표는 그대로다.
+    //
+    // 한 타임만 하는 날은 가를 기준이 없으므로 칸을 안 만든다 — 없는 것이
+    // 「모른다」이지 「오전」이 아니다.
+    ...(serviceOf(store.settings, createdAt) ? { service_period: serviceOf(store.settings, createdAt) } : {}),
     // 위치 확인이 안 된 주문이라는 표. 「멀리 있다」가 아니라 「확인 못 했다」
     // 이다 — 화면이 이 표를 보고 직원에게 알려주면, 직원은 그 자리에 손님이
     // 앉아 있는지 눈으로 보고 판단한다. 확인된 주문에는 이 칸을 안 만든다

@@ -2,7 +2,7 @@ const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
 const { requireOwner, requireAdmin } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf } = require("../settlement");
-const { rangesForDate, orderHours } = require("../openHours");
+const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
 const { clearIdleSeats } = require("../partySize");
@@ -71,13 +71,11 @@ async function halfOpts(start, end, req) {
 }
 
 /**
- * 저녁 영업이 시작하는 시각 "HH:MM". 두 타임 이상이면 마지막 타임의 시작이다.
- * 한 타임뿐이면 가를 기준이 없으므로 null — 없는 경계를 지어내지 않는다.
+ * 결산이 옛 주문(「오전/오후」 표가 없는 것)을 가를 때 쓸 시각 "HH:MM".
+ * 주문에 표를 박는 것과 같은 기준을 쓴다 — src/servicePeriod.js 한 곳이다.
  */
 function eveningStartHm() {
-  const ranges = rangesForDate(orderHours(store.settings), taipeiDateString()) || [];
-  if (ranges.length < 2) return null;
-  return ranges[ranges.length - 1].start || null;
+  return serviceCutHm(store.settings, taipeiDateString());
 }
 
 // 결산이 볼 주문을 날짜 범위로 가져온다. 인덱스는 created_at 에 걸려 있다
@@ -294,19 +292,18 @@ async function markSettled(date, closedAt, shift, testId) {
 // 눌린 시각은 「지금」이 아니라 **그 5분 전 시각**으로 적는다. 요청이
 // 16:27 에 들어와서 그때 돌았더라도 경계는 16:25 다 — 그래야 같은 날을
 // 몇 번을 다시 계산해도 같은 답이 나온다.
-const AUTO_AM_LEAD_MIN = 5;
 let autoAmCloseDoneFor = null; // "YYYY-MM-DD" — 이 프로세스에서 이미 확인한 날
 
-/** 오늘 자동 정산이 걸리는 시각 "YYYY-MM-DD HH:MM:SS". 가를 수 없으면 null. */
+/**
+ * 오늘 자동 정산이 걸리는 시각 "YYYY-MM-DD HH:MM:SS". 가를 수 없으면 null.
+ *
+ * 주문에 「오전/오후」 표를 박을 때 쓰는 것과 **같은 시각**이다
+ * (src/servicePeriod.js). 따로 정하면 반드시 어긋난다 — 16:24:59 에 들어온
+ * 주문이 「오전」으로 찍혔는데 정산 경계는 16:20 이면, 그 주문은 오전 표를
+ * 달고 오후 서랍에 들어간다.
+ */
 function autoAmCutFor(dateStr) {
-  const hm = eveningStartHm();
-  if (!hm) return null;
-  const [h, m] = hm.split(":").map((x) => parseInt(x, 10));
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-  const total = h * 60 + m - AUTO_AM_LEAD_MIN;
-  if (total < 0) return null;
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${dateStr} ${pad(Math.floor(total / 60))}:${pad(total % 60)}:00`;
+  return serviceCutAt(store.settings, dateStr);
 }
 
 /**
