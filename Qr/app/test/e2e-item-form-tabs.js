@@ -109,6 +109,117 @@ const PANES = ["basic", "price", "options", "display", "soldout"];
   check("사진이 날아가지 않았다", after && (after.photo_url || null) === (before.photo_url || null), after && `${after.photo_url}`);
 
   out.push("");
+  out.push("[옵션을 치고 Enter — 쉼표를 직접 찍지 않는다]");
+  {
+    // 사장님(2026-09-10): "옵션 치고 엔터하면 밑에 글자 등록되어있는 것처럼
+    // 뜨게 해서 보다 더 직관적으로 옵션이 등록되었다는 걸 인지하게 해주고
+    // 싶어."
+    //
+    // 화면만 바뀌고 저장 형태는 그대로여야 한다. 형식이 어긋나면 손님
+    // 화면과 서버 파서(src/addons.js)가 옵션을 못 읽는다.
+    await page.locator("#menuCategories tr").filter({ hasText: target.name_ko }).first().click();
+    await page.waitForTimeout(700);
+    await page.locator('.item-form-nav-btn[data-item-pane="options"]').click();
+    await page.waitForTimeout(300);
+
+    const opt = page.locator('.chip-field[data-chip-for="f_options"]');
+    const startCount = await opt.locator(".chip").count();
+    check("이미 있던 옵션이 조각으로 뜬다", startCount > 0, `${startCount}`);
+
+    await opt.locator(".chip-entry").fill("羊");
+    await opt.locator(".chip-entry").press("Enter");
+    await page.waitForTimeout(250);
+    check("Enter 로 조각이 하나 늘어난다", (await opt.locator(".chip").count()) === startCount + 1);
+    check("입력칸이 비워진다", (await opt.locator(".chip-entry").inputValue()) === "");
+    check("저장될 값은 여전히 쉼표로 이어진다",
+      (await page.locator("#f_options").inputValue()).endsWith(",羊"),
+      await page.locator("#f_options").inputValue());
+
+    // 지금까지 쉼표로 찍어오셨으니 손이 그렇게 간다 — 쉼표도 받아준다.
+    await opt.locator(".chip-entry").fill("鴨");
+    await opt.locator(".chip-entry").press(",");
+    await page.waitForTimeout(250);
+    check("쉼표를 쳐도 조각으로 들어간다", (await opt.locator(".chip").count()) === startCount + 2);
+
+    // 같은 걸 두 번 넣으면 안 된다 — 손님 화면에 같은 버튼이 두 개 뜬다.
+    const beforeDupe = await page.locator("#f_options").inputValue();
+    await opt.locator(".chip-entry").fill("羊");
+    await opt.locator(".chip-entry").press("Enter");
+    await page.waitForTimeout(200);
+    check("같은 값은 두 번 안 들어간다", (await page.locator("#f_options").inputValue()) === beforeDupe);
+
+    await opt.locator(".chip .chip-x").last().click();
+    await page.waitForTimeout(200);
+    check("✕ 로 하나만 뺀다", (await opt.locator(".chip").count()) === startCount + 1);
+
+    // 값이 붙는 「추가 옵션」은 이름과 가격 두 칸이다.
+    const add = page.locator('.chip-field[data-chip-for="f_addons"]');
+    await add.locator(".chip-entry").fill("치즈 추가");
+    await add.locator(".chip-entry-price").fill("30");
+    await add.locator(".chip-add-btn").click();
+    await page.waitForTimeout(250);
+    const addonsValue = await page.locator("#f_addons").inputValue();
+    check("추가 옵션은 「이름:가격」 으로 저장된다", addonsValue.includes("치즈 추가:30"), addonsValue);
+    check("조각에는 값이 보인다",
+      (await add.locator(".chip-text").allTextContents()).some((t) => t.includes("치즈 추가 +NT$30")),
+      JSON.stringify(await add.locator(".chip-text").allTextContents()));
+
+    // 이름에 쉼표나 콜론을 치면 값이 쪼개진다 — 지워서 받는다.
+    await add.locator(".chip-entry").fill("계란:추가,둘");
+    await add.locator(".chip-entry-price").fill("20");
+    await add.locator(".chip-add-btn").click();
+    await page.waitForTimeout(250);
+    const cleaned = await page.locator("#f_addons").inputValue();
+    check("이름 속 쉼표·콜론은 지우고 넣는다", cleaned.includes("계란 추가 둘:20"), cleaned);
+
+    out.push("");
+    out.push("  [저장하면 서버에도 그 형태 그대로 들어간다]");
+    const expectOptions = await page.locator("#f_options").inputValue();
+    const expectAddons = await page.locator("#f_addons").inputValue();
+    await page.locator("#saveItemBtn").click();
+    await page.waitForTimeout(1600);
+    const saved = await page.evaluate(async (id) => {
+      const list = await (await fetch("/api/menu/admin")).json();
+      for (const c of list) {
+        const hit = (c.items || []).find((i) => i.id === id);
+        if (hit) return hit;
+      }
+      return null;
+    }, target.id);
+    check("옵션이 그대로 저장된다", saved && saved.options === expectOptions, saved && `${saved.options}`);
+    check("추가 옵션이 그대로 저장된다", saved && saved.addons === expectAddons, saved && `${saved.addons}`);
+
+    // 다시 열면 저장된 값이 조각으로 돌아와야 한다.
+    await page.locator("#menuCategories tr").filter({ hasText: target.name_ko }).first().click();
+    await page.waitForTimeout(800);
+    await page.locator('.item-form-nav-btn[data-item-pane="options"]').click();
+    await page.waitForTimeout(300);
+    check("다시 열면 조각으로 되살아난다",
+      (await page.locator('.chip-field[data-chip-for="f_options"] .chip').count()) === expectOptions.split(",").length,
+      expectOptions);
+    check("추가 옵션도 되살아난다",
+      (await page.locator('.chip-field[data-chip-for="f_addons"] .chip').count()) === expectAddons.split(",").length,
+      expectAddons);
+    await page.locator("#itemModalClose").click();
+    await page.waitForTimeout(300);
+  }
+
+  out.push("");
+  out.push("[하나만 고르는 것과 여러 개 고르는 것이 갈라 보인다]");
+  {
+    await page.locator("#menuCategories tr").filter({ hasText: target.name_ko }).first().click();
+    await page.waitForTimeout(700);
+    await page.locator('.item-form-nav-btn[data-item-pane="options"]').click();
+    await page.waitForTimeout(300);
+    const titles = await page.locator(".option-group-title").allTextContents();
+    check("제목이 둘로 나뉘어 있다", titles.length === 2, JSON.stringify(titles));
+    check("「하나만」 이 먼저", /하나만/.test(titles[0] || ""), JSON.stringify(titles));
+    check("「여러 개」 가 다음", /여러 개/.test(titles[1] || ""), JSON.stringify(titles));
+    await page.locator("#itemModalClose").click();
+    await page.waitForTimeout(300);
+  }
+
+  out.push("");
   out.push("[다른 메뉴를 열면 「기본」부터 다시 시작한다]");
   {
     // 지난번에 보던 탭이 그대로 열려 있으면, 이름을 고치러 들어왔는데

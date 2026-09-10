@@ -845,6 +845,15 @@
       uploadFailed: "업로드 실패. 다시 시도해주세요",
       logoUpdated: "로고가 업데이트되었습니다",
       coverUpdated: "사진이 업데이트되었습니다",
+      chipEntryPlaceholder: "입력하고 Enter",
+      chipAddonNamePlaceholder: "이름 (예: 볶음밥 추가)",
+      chipAddonPricePlaceholder: "가격",
+      chipAddBtn: "추가",
+      chipFreeAddon: "(무료)",
+      itemOptionsSingleTitle: "하나만 고르는 옵션",
+      itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 가격은 안 바뀌어요.",
+      itemOptionsMultiTitle: "여러 개 고를 수 있는 옵션",
+      itemOptionsMultiHint: "손님이 원하는 만큼 골라요. 고른 만큼 가격이 올라가요. 값이 없으면 0을 넣으세요.",
       itemPaneBasic: "기본",
       itemPaneBasicSub: "분류 · 코드 · 이름",
       itemPanePrice: "가격",
@@ -865,13 +874,13 @@
       itemPriceNoteLabel: "가격 비고",
       itemPriceNotePlaceholder: "예: 2인분",
       itemOriginalPriceLabel: "정가 (할인 전 가격, 없으면 비워두세요)",
-      itemOptionsLabel: "옵션 (쉼표로 구분, 예: 소고기,돼지고기)",
+      itemOptionsLabel: "옵션 (예: 소고기, 돼지고기)",
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
-      itemSpiceOptionsLabel: "맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)",
+      itemSpiceOptionsLabel: "맵기 옵션 (예: 안 맵게, 보통, 맵게)",
       itemSpiceOptionsPlaceholder: "맵기 옵션이 없으면 비워두세요",
-      itemTakeoutOptionsLabel: "포장 전용 옵션 (쉼표로 구분, 예: 不煮外帶,煮熟外帶)",
+      itemTakeoutOptionsLabel: "포장 전용 옵션 (예: 不煮外帶, 煮熟外帶)",
       itemTakeoutOptionsPlaceholder: "포장 전용 옵션이 없으면 비워두세요",
-      itemAddonsLabel: "추가 옵션 (이름:가격, 쉼표로 구분, 예: 볶음밥 추가:80,사리면 추가:50)",
+      itemAddonsLabel: "추가 옵션",
       itemAddonsPlaceholder: "추가 옵션이 없으면 비워두세요",
       itemMinFirstOrderQtyLabel: "최초 주문 최소 수량 (없으면 비워두세요)",
       itemMixOptionsLabel: "옵션별 개별 수량(+/-) 허용",
@@ -1509,6 +1518,15 @@
       uploadFailed: "上傳失敗，請再試一次",
       logoUpdated: "標誌已更新",
       coverUpdated: "照片已更新",
+      chipEntryPlaceholder: "輸入後按 Enter",
+      chipAddonNamePlaceholder: "名稱 (例: 加點炒飯)",
+      chipAddonPricePlaceholder: "價格",
+      chipAddBtn: "新增",
+      chipFreeAddon: "(免費)",
+      itemOptionsSingleTitle: "只能選一個的選項",
+      itemOptionsSingleHint: "顧客只會從中選一個，價格不會變。",
+      itemOptionsMultiTitle: "可以複選的選項",
+      itemOptionsMultiHint: "顧客可以選任意多個，選越多價格越高。免費的話請填 0。",
       itemPaneBasic: "基本",
       itemPaneBasicSub: "分類 · 編號 · 名稱",
       itemPanePrice: "價格",
@@ -5512,6 +5530,126 @@
     btn.onclick = () => showItemPane(btn.dataset.itemPane);
   });
 
+  /**
+   * 쉼표로 나누던 칸을 「치고 Enter」 로 바꾼다.
+   *
+   * 사장님(2026-09-10): "옵션 치고 엔터하면 밑에 글자 등록되어있는 것처럼
+   * 뜨게 해서 보다 더 직관적으로 옵션이 등록되었다는 걸 인지하게 해주고
+   * 싶어."
+   *
+   * 값의 저장 형태는 하나도 바꾸지 않는다. 진짜 값은 여전히 hidden 입력이
+   * 쉼표로 들고 있고, saveItemBtn 은 예전 그대로 그 칸을 읽는다. 손님
+   * 화면·주방 빌지·서버 파서(src/addons.js)도 전부 그대로다. 바뀐 것은
+   * 사장님이 그 쉼표를 직접 찍지 않아도 된다는 것뿐이다.
+   */
+  function chipValuesOf(field) {
+    const raw = ($(`#${field.dataset.chipFor}`).value || "").trim();
+    return raw ? raw.split(",").map((v) => v.trim()).filter(Boolean) : [];
+  }
+  function renderChips(field) {
+    const priced = field.classList.contains("chip-field-priced");
+    const list = field.querySelector(".chip-list");
+    list.innerHTML = "";
+    const values = chipValuesOf(field);
+    list.hidden = values.length === 0;
+    values.forEach((value, idx) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      let text = value;
+      if (priced) {
+        // "볶음밥 추가:80" → "볶음밥 추가 +NT$80". 0 원은 무료 교환이라
+        // (예: 飯換冬粉:0) 값 대신 그렇게 적어준다.
+        const [name, priceStr] = value.split(":");
+        const price = parseInt((priceStr || "0").trim(), 10) || 0;
+        text = `${(name || "").trim()} ${price ? `+NT$${price}` : T("chipFreeAddon")}`;
+      }
+      chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-x" aria-label="remove">✕</button>`;
+      chip.querySelector(".chip-text").textContent = text;
+      chip.querySelector(".chip-x").onclick = () => {
+        const next = chipValuesOf(field).filter((_, i) => i !== idx);
+        $(`#${field.dataset.chipFor}`).value = next.join(",");
+        renderChips(field);
+      };
+      list.appendChild(chip);
+    });
+  }
+  /**
+   * 조각 하나를 넣는다. name 은 사람이 친 이름, price 는 값이 붙는 칸
+   * (추가 옵션)에서만 쓴다.
+   *
+   * 쉼표와 콜론은 이 값들을 나누는 글자다(src/addons.js) — 이름에 들어가면
+   * 옵션 하나가 조용히 둘로 쪼개지거나 가격이 엉뚱하게 읽힌다. 그래서
+   * **이름에서만** 지운다. 콜론을 값 전체에서 지우면 "이름:가격" 의 그
+   * 콜론까지 없어져서 가격이 통째로 날아간다.
+   */
+  function addChip(field, name, price) {
+    const cleanName = String(name || "").replace(/[,:]/g, " ").replace(/\s+/g, " ").trim();
+    if (!cleanName) return false;
+    const priced = field.classList.contains("chip-field-priced");
+    const value = priced ? `${cleanName}:${parseInt(price, 10) || 0}` : cleanName;
+    const values = chipValuesOf(field);
+    const keyOf = (v) => (priced ? v.split(":")[0].trim() : v);
+    if (values.some((v) => keyOf(v) === keyOf(value))) return false; // 같은 걸 두 번 넣지 않는다
+    values.push(value);
+    $(`#${field.dataset.chipFor}`).value = values.join(",");
+    renderChips(field);
+    return true;
+  }
+  function initChipFields() {
+    $$(".chip-field").forEach((field) => {
+      const priced = field.classList.contains("chip-field-priced");
+      const entry = field.querySelector(".chip-entry");
+      const priceEntry = field.querySelector(".chip-entry-price");
+      const commit = () => {
+        const name = entry.value;
+        if (!String(name || "").trim()) return;
+        if (addChip(field, name, priced ? priceEntry.value : null)) {
+          entry.value = "";
+          if (priceEntry) priceEntry.value = "";
+        }
+        entry.focus();
+      };
+      const onKey = (e) => {
+        // 쉼표도 받아준다 — 지금까지 쉼표로 찍어오셨으니 손이 그렇게 간다.
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          commit();
+          return;
+        }
+        // 빈 칸에서 지우기를 누르면 마지막 조각을 뺀다.
+        if (e.key === "Backspace" && !entry.value) {
+          const values = chipValuesOf(field);
+          if (!values.length) return;
+          e.preventDefault();
+          values.pop();
+          $(`#${field.dataset.chipFor}`).value = values.join(",");
+          renderChips(field);
+        }
+      };
+      entry.onkeydown = onKey;
+      if (priceEntry) {
+        priceEntry.onkeydown = (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit();
+          }
+        };
+      }
+      const addBtn = field.querySelector(".chip-add-btn");
+      if (addBtn) addBtn.onclick = commit;
+      // 조각이 쌓이는 자리를 누르면 바로 칠 수 있게.
+      field.onclick = (e) => {
+        if (e.target === field || e.target.classList.contains("chip-list")) entry.focus();
+      };
+    });
+  }
+  initChipFields();
+  /** 창을 열 때 hidden 입력의 값으로 조각들을 다시 그린다. */
+  function renderAllChips() {
+    $$(".chip-field").forEach(renderChips);
+    $$(".chip-field .chip-entry, .chip-field .chip-entry-price").forEach((el) => (el.value = ""));
+  }
+
   function openItemModal(item) {
     // 열 때마다 「기본」부터. 지난번에 보던 탭이 그대로 열려 있으면, 다른
     // 메뉴를 고치러 들어왔는데 이름이 안 보이는 화면에서 시작하게 된다.
@@ -5554,6 +5692,8 @@
       $("#f_photo_preview").hidden = true;
     }
     $("#deleteItemBtn").hidden = !item;
+    // hidden 입력에 값을 다 채운 뒤에 조각을 그린다.
+    renderAllChips();
     $("#itemModalBackdrop").hidden = false;
   }
   // Renders one checkbox per ALLERGENS entry (see public/js/allergens.js)

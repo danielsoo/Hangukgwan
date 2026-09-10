@@ -966,6 +966,57 @@ body:not(.role-staff) .staff-only { display: none !important; }
    개수와 상관없이 왼쪽부터 나란히 붙게 한다. */
 .item-form-pane .form-row.checkboxes { display: flex; flex-wrap: wrap; gap: 10px 20px; }
 
+/* 옵션 칩 입력 — 사장님(2026-09-10): "옵션 치고 엔터하면 밑에 글자
+   등록되어있는 것처럼 뜨게 해서 보다 더 직관적으로 옵션이 등록되었다는 걸
+   인지하게 해주고 싶어." 진짜 값은 옆의 hidden 입력이 쉼표로 들고 있고,
+   여기는 그걸 보여주고 고치는 화면일 뿐이다. */
+.chip-field {
+  border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 4px 0 12px;
+  background: #fff; cursor: text;
+}
+.chip-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chip-list[hidden] { display: none; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--cream); border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 6px 5px 12px; font-size: 16px; color: var(--ink); max-width: 100%;
+}
+.chip-text { overflow-wrap: anywhere; }
+.chip-x {
+  border: none; background: rgba(0,0,0,0.08); color: var(--ink);
+  width: 20px; height: 20px; border-radius: 999px; cursor: pointer; line-height: 1;
+  font-size: 12px; flex-shrink: 0; padding: 0;
+}
+.chip-x:hover { background: var(--red); color: #fff; }
+/* 입력칸은 테두리를 지운다 — 조각들과 같은 상자 안에 있는 것처럼 보이게. */
+.modal-form .chip-field input.chip-entry,
+.modal-form .chip-field input.chip-entry-price {
+  border: none; margin: 0; padding: 6px 4px; font-size: 17px; background: transparent;
+}
+.modal-form .chip-field input.chip-entry:focus,
+.modal-form .chip-field input.chip-entry-price:focus { outline: none; }
+/* 값이 붙는 「추가 옵션」만 이름·가격 두 칸이다. */
+.chip-entry-row { display: flex; align-items: center; gap: 8px; }
+.modal-form .chip-entry-row input.chip-entry { flex: 1; min-width: 0; }
+.modal-form .chip-entry-row input.chip-entry-price { flex: 0 0 90px; text-align: right; }
+.chip-add-btn {
+  flex: 0 0 auto; border: 1px solid var(--line); background: var(--cream); color: var(--ink);
+  border-radius: 8px; padding: 7px 14px; font-size: 16px; font-weight: 700; cursor: pointer;
+  font-family: inherit;
+}
+.chip-add-btn:hover { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* 「하나만 고르는 것」과 「여러 개 고를 수 있는 것」의 경계. 손님 화면에서는
+   실제로 다르게 동작하는데(버튼 하나 vs 체크박스) 폼에서는 넷이 똑같이
+   생겨서 구분할 방법이 없었다. */
+.option-group-title {
+  margin: 4px 0 2px; font-size: 17px; font-weight: 800; color: var(--ink);
+}
+.option-group-title-multi {
+  margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line);
+}
+.option-group-hint { margin: 0 0 14px; font-size: 15px; color: var(--muted); line-height: 1.5; }
+
 /* 태블릿 세로처럼 좁은 화면에서는 왼쪽 탭이 들어갈 자리가 없다 — 설정
    화면과 같이 위쪽 가로 줄로 눕힌다. */
 @media (max-width: 760px) {

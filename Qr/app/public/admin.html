@@ -1075,19 +1075,66 @@
             <label><span data-i18n="itemMinFirstOrderQtyLabel">최초 주문 최소 수량 (없으면 비워두세요)</span><input id="f_min_first_order_qty" type="number" min="0" /></label>
           </section>
 
+          <!-- 사장님(2026-09-10): "옵션 치고 엔터하면 밑에 글자 등록되어있는
+               것처럼 뜨게 해서 보다 더 직관적으로 옵션이 등록되었다는 걸
+               인지하게 해주고 싶어. 그리고 옵션은 중복 선택 가능과 불가능을
+               따로 나눠줘."
+
+               쉼표로 나누는 칸은 전부 칩 입력으로 바꾼다 — 치고 Enter 를
+               누르면 아래에 조각으로 쌓이고, ✕ 로 하나씩 뺀다. 진짜 값은
+               여전히 아래 hidden 입력이 쉼표로 들고 있어서, 저장 코드
+               (saveItemBtn)는 예전 그대로다.
+
+               그리고 「하나만 고르는 것」과 「여러 개 고를 수 있는 것」을
+               제목으로 갈라 놓는다. 손님 화면에서 실제로 그렇게 동작하는데
+               (options/spice/takeout 은 버튼 하나, addons 는 체크박스),
+               폼에서는 넷이 똑같이 생겨서 구분할 방법이 없었다. -->
           <section class="item-form-pane" data-item-pane="options" hidden>
-            <label><span data-i18n="itemOptionsLabel">옵션 (쉼표로 구분, 예: 소고기,돼지고기)</span><input id="f_options" data-i18n-placeholder="itemOptionsPlaceholder" placeholder="옵션이 없으면 비워두세요" /></label>
+            <h4 class="option-group-title" data-i18n="itemOptionsSingleTitle">하나만 고르는 옵션</h4>
+            <p class="option-group-hint" data-i18n="itemOptionsSingleHint">손님이 이 중에서 하나만 골라요. 가격은 안 바뀌어요.</p>
+
+            <label><span data-i18n="itemOptionsLabel">옵션 (예: 소고기, 돼지고기)</span></label>
+            <div class="chip-field" data-chip-for="f_options">
+              <div class="chip-list"></div>
+              <input type="text" class="chip-entry" data-i18n-placeholder="chipEntryPlaceholder" placeholder="입력하고 Enter" />
+            </div>
+            <input type="hidden" id="f_options" />
             <div class="form-row checkboxes">
               <label><input type="checkbox" id="f_mix_options" /> <span data-i18n="itemMixOptionsLabel">옵션별 개별 수량(+/-) 허용</span></label>
             </div>
-            <label><span data-i18n="itemSpiceOptionsLabel">맵기 옵션 (쉼표로 구분, 예: 안 맵게,보통,맵게)</span><input id="f_spice_options" data-i18n-placeholder="itemSpiceOptionsPlaceholder" placeholder="맵기 옵션이 없으면 비워두세요" /></label>
+
+            <label><span data-i18n="itemSpiceOptionsLabel">맵기 옵션 (예: 안 맵게, 보통, 맵게)</span></label>
+            <div class="chip-field" data-chip-for="f_spice_options">
+              <div class="chip-list"></div>
+              <input type="text" class="chip-entry" data-i18n-placeholder="chipEntryPlaceholder" placeholder="입력하고 Enter" />
+            </div>
+            <input type="hidden" id="f_spice_options" />
+
             <!-- 부대찌개(部隊鍋) 같은 품목의 포장 전용 옵션 — 사장님 메모
                  (2026-09-07): "부대찌개 포장주문할때 두가지 옵션이 있대.
                  不煮外帶(조리하지 않은 포장) / 煮熟外帶(조리한 포장)". 매장
                  식사에는 의미가 없어서 손님 화면에서는 포장(外帶) 선택 시에만
                  보인다(order.html의 #itemTakeoutOptions, order.js 참고). -->
-            <label><span data-i18n="itemTakeoutOptionsLabel">포장 전용 옵션 (쉼표로 구분, 예: 不煮外帶,煮熟外帶)</span><input id="f_takeout_options" data-i18n-placeholder="itemTakeoutOptionsPlaceholder" placeholder="포장 전용 옵션이 없으면 비워두세요" /></label>
-            <label><span data-i18n="itemAddonsLabel">추가 옵션 (이름:가격, 쉼표로 구분, 예: 볶음밥 추가:80,사리면 추가:50)</span><input id="f_addons" data-i18n-placeholder="itemAddonsPlaceholder" placeholder="추가 옵션이 없으면 비워두세요" /></label>
+            <label><span data-i18n="itemTakeoutOptionsLabel">포장 전용 옵션 (예: 不煮外帶, 煮熟外帶)</span></label>
+            <div class="chip-field" data-chip-for="f_takeout_options">
+              <div class="chip-list"></div>
+              <input type="text" class="chip-entry" data-i18n-placeholder="chipEntryPlaceholder" placeholder="입력하고 Enter" />
+            </div>
+            <input type="hidden" id="f_takeout_options" />
+
+            <h4 class="option-group-title option-group-title-multi" data-i18n="itemOptionsMultiTitle">여러 개 고를 수 있는 옵션</h4>
+            <p class="option-group-hint" data-i18n="itemOptionsMultiHint">손님이 원하는 만큼 골라요. 고른 만큼 가격이 올라가요. 값이 없으면 0을 넣으세요.</p>
+
+            <label><span data-i18n="itemAddonsLabel">추가 옵션</span></label>
+            <div class="chip-field chip-field-priced" data-chip-for="f_addons">
+              <div class="chip-list"></div>
+              <div class="chip-entry-row">
+                <input type="text" class="chip-entry" data-i18n-placeholder="chipAddonNamePlaceholder" placeholder="이름 (예: 볶음밥 추가)" />
+                <input type="number" class="chip-entry-price" data-i18n-placeholder="chipAddonPricePlaceholder" placeholder="가격" />
+                <button type="button" class="chip-add-btn" data-i18n="chipAddBtn">추가</button>
+              </div>
+            </div>
+            <input type="hidden" id="f_addons" />
           </section>
 
           <section class="item-form-pane" data-item-pane="display" hidden>
