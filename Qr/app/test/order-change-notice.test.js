@@ -72,9 +72,13 @@ out.push("\n[4] 그 값이 종이까지 가는가 (public/js/admin.js)");
 {
   const src = fs.readFileSync(path.join(__dirname, "..", "public", "js", "admin.js"), "utf8");
   check("주문을 새로 읽을 때마다 알림 인쇄를 확인한다", /printPendingNotices\(fresh\)/.test(src), "");
-  check("자리 이동을 잡는다", /o\.moved_at && o\.moved_from/.test(src), "");
   check("품목 변경을 잡는다", /o\.items_changed/.test(src), "");
-  check("★ 같은 변경을 두 번 찍지 않는다 (변경 시각까지 키에 넣는다)", /`m\$\{o\.id\}@\$\{o\.moved_at\}`/.test(src) && /`c\$\{o\.id\}@\$\{ch\.at\}`/.test(src), "");
+  check("★ 같은 변경을 두 번 찍지 않는다 (변경 시각까지 키에 넣는다)", /`c\$\{o\.id\}@\$\{ch\.at\}`/.test(src), "");
+  // 자리 이동은 옮기는 그 자리에서 printMoveSlip 이 이미 한 장 뽑는다.
+  // 여기서 또 찍으면 같은 이동에 종이가 두 장 나간다 — 2026-09-10 에 실제로
+  // 그렇게 만들 뻔했다(다른 세션이 먼저 만들어 둔 것을 못 보고).
+  check("★ 자리 이동은 여기서 또 찍지 않는다", !/kind: "moved"/.test(src), "");
+  check("자리 이동 빌지는 따로 있다", /async function printMoveSlip\(/.test(src) && /await printMoveSlip\(buildMoveSlipInfo/.test(src), "");
   check("★ 찍기 전에 먼저 기록한다", /jobs\.forEach\(\(j\) => printedNoticeKeys\.add\(j\.key\)\);[\s\S]{0,40}writeNoticeKeys\(\);/.test(src), "");
   check("담당 기기가 아니면 안 찍는다", /if \(!autoPrintOn \|\| !printHereAllowed\(\)\) return;/.test(src), "");
   check("★ 알림 인쇄가 주문 상태를 밀지 않는다", !/printNoticeTicket[\s\S]{0,2000}markPrintSucceededAndAdvance/.test(src), "");
@@ -86,8 +90,6 @@ out.push("\n[4] 그 값이 종이까지 가는가 (public/js/admin.js)");
 out.push("\n[5] 종이에 무슨 종이인지 적히는가 (public/js/escpos.js)");
 {
   const src = fs.readFileSync(path.join(__dirname, "..", "public", "js", "escpos.js"), "utf8");
-  check("자리 이동 표제가 있다", /자리 이동 \/ 換桌/.test(src), "");
-  check("어디서 어디로 가는지 적는다", /notice\.from\} → \$\{notice\.to\}/.test(src), "");
   check("주문 변경 표제가 있다", /주문 변경 \/ 訂單異動/.test(src), "");
   check("★ 취소 줄이 품목 이름보다 먼저 읽힌다", /it\.__delta === "-"[\s\S]{0,80}취소 \/ 取消/.test(src), "");
   check("추가 줄도 표시된다", /it\.__delta === "\+"[\s\S]{0,80}추가 \/ 追加/.test(src), "");

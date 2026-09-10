@@ -512,6 +512,11 @@
       orderCardDeliveryBadge: "배달",
       orderCardMixedBadge: "혼합",
       printFailedCardMsg: "⚠️ 인쇄 실패 — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도",
+      printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
+      printFailReasonOff: "자동 인쇄가 꺼져 있어요",
+      printFailReasonElsewhere: "이 기기는 인쇄 담당이 아니에요",
+      printFailReasonNoPrinter: "프린터를 찾지 못했어요",
+      takeoutCounterShort: "포장",
       memoLabel: "메모",
       orderMemoLabel: "주문 메모",
       totalLabel: "합계",
@@ -1141,6 +1146,11 @@
       orderCardDeliveryBadge: "外送",
       orderCardMixedBadge: "混合",
       printFailedCardMsg: "⚠️ 列印失敗 — 請確認廚房是否收到，或用下方列印按鈕重試",
+      printFailReasonApp: "APP 無法連線到出單機",
+      printFailReasonOff: "自動列印已關閉",
+      printFailReasonElsewhere: "這台裝置不是列印裝置",
+      printFailReasonNoPrinter: "找不到出單機",
+      takeoutCounterShort: "外帶",
       memoLabel: "備註",
       orderMemoLabel: "訂單備註",
       totalLabel: "合計",
@@ -1985,11 +1995,18 @@
     if (t && t.is_counter) return fmtCounterOrderTag(o);
     return `📦 ${T("orderCardTakeoutBadge")}`;
   }
-  const fmtPrintFailBanner = (n, tableNumbers) => {
-    const tables = tableNumbers.join(", ");
+  const fmtPrintFailBanner = (n, places, reasons) => {
+    const where = (places || []).join(", ");
+    const why = (reasons || []).length ? (adminLang === "zh" ? `｜原因：${reasons.join(" / ")}` : `｜원인: ${reasons.join(" / ")}`) : "";
     return adminLang === "zh"
-      ? `⚠️ ${n} 張出單可能沒印出來（桌號：${tables}）— 出單機沒紙、沒連線、或彈出視窗被瀏覽器擋下都可能造成這樣，請確認廚房收到，或按該筆訂單的「列印」重新送出。`
-      : `⚠️ 빌지 ${n}건이 제대로 안 나갔을 수 있어요 (테이블: ${tables}) — 프린터 용지 부족, 연결 끊김, 브라우저 팝업 차단 등이 원인일 수 있어요. 주방에 실제로 전달됐는지 확인하거나, 해당 주문의 "인쇄" 버튼으로 다시 보내주세요.`;
+      ? `⚠️ ${n} 張出單沒印出來 — ${where}${why}。請確認廚房收到，或按該筆訂單的「列印」重新送出。`
+      : `⚠️ 빌지 ${n}건이 안 나갔어요 — ${where}${why}. 주방에 전달됐는지 확인하거나, 그 주문의 "인쇄" 버튼으로 다시 보내주세요.`;
+  };
+  const fmtPrintFailCard = (place, id, reason) => {
+    const why = reason ? (adminLang === "zh" ? `（${reason}）` : ` (${reason})`) : "";
+    return adminLang === "zh"
+      ? `⚠️ ${place} #${id} 列印失敗${why} — 請確認廚房是否收到，或用下方列印按鈕重試`
+      : `⚠️ ${place} #${id} 인쇄 실패${why} — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도`;
   };
   const fmtConfirmDeleteTable = (n) => (adminLang === "zh" ? `確定要刪除桌號 ${n} 嗎？` : `테이블 ${n}을(를) 삭제하시겠습니까?`);
   // 사장님 피드백(2026-09-05): "부분 결제를 허용해줘. 체크체크 해서
@@ -3258,15 +3275,12 @@
     const firstEver = printedNoticeKeys === null;
     if (firstEver) printedNoticeKeys = new Set();
 
+    // 자리 이동은 여기서 다루지 않는다. 옮기는 그 자리에서 이미 한 장
+    // 나간다(printMoveSlip, 설정 > 인쇄에 켜고 끄는 스위치까지 있다).
+    // 여기서 또 찍으면 같은 이동에 종이가 두 장 나간다.
     const jobs = [];
     for (const o of fresh) {
       if (o.status === "paid" || o.status === "cancelled") continue;
-      if (o.moved_at && o.moved_from) {
-        const key = `m${o.id}@${o.moved_at}`;
-        if (!printedNoticeKeys.has(key)) {
-          jobs.push({ key, order: o, notice: { kind: "moved", from: o.moved_from, to: o.table_number } });
-        }
-      }
       const ch = o.items_changed;
       if (ch && ch.at && ((ch.added || []).length || (ch.removed || []).length)) {
         const key = `c${o.id}@${ch.at}`;
@@ -3760,10 +3774,12 @@
       banner.hidden = true;
       return;
     }
-    const tableNumbers = orders
-      .filter((o) => printFailedOrderIds.has(o.id))
-      .map((o) => o.table_number);
-    banner.textContent = fmtPrintFailBanner(printFailedOrderIds.size, tableNumbers);
+    const failed = orders.filter((o) => printFailedOrderIds.has(o.id));
+    // 「테이블 13 (#296)」 — 자리 이름만으로는 같은 자리에 두 건이 쌓였을 때
+    // 어느 것인지 가릴 수 없다.
+    const places = failed.map((o) => `${orderPlaceLabel(o)} (#${o.id})`);
+    const reasons = [...new Set(failed.map((o) => (printFailedInfo.get(o.id) || {}).reason).filter(Boolean))];
+    banner.textContent = fmtPrintFailBanner(failed.length, places, reasons);
     banner.hidden = false;
   }
 
@@ -3822,8 +3838,9 @@
           : o.order_type === "delivery"
             ? `<span class="order-card-type-badge delivery">${T("orderCardDeliveryBadge")}</span>`
             : "";
+    const failInfo = printFailedInfo.get(o.id);
     const printFailedNotice = printFailedOrderIds.has(o.id)
-      ? `<div class="order-card-print-fail">${T("printFailedCardMsg")}</div>`
+      ? `<div class="order-card-print-fail">${escapeHtml(fmtPrintFailCard(orderPlaceLabel(o), o.id, failInfo && failInfo.reason))}</div>`
       : "";
     // 포장 카운터 orders aren't a real table — "테이블 COUNTER" would be
     // meaningless to staff, so show its pickup number + name instead.
@@ -4288,11 +4305,38 @@
   // instead (see renderPrintFailureBanner() and the badge in
   // renderOrderCard()), and the existing manual 인쇄 button on each card
   // doubles as the retry — being a real click, it can't be popup-blocked.
-  function markPrintFailed(orderId) {
+  //
+  // 2026-09-10 사장님: "인쇄 실패가 떴어. 그럼 어떤 테이블이 실패했는지도
+  // 알 수 있게 해줘. 13번이 안 나왔거든."
+  //
+  // 띠에는 테이블 번호가 적혀 있었지만 카드 쪽 문구에는 없었다. 신규 주문이
+  // 여러 건 쌓여 있으면 실패한 카드는 아래로 밀려 화면 밖에 있고, 눈에
+  // 들어오는 것은 「인쇄 실패」 네 글자뿐이다. 어느 자리인지는 그 카드를
+  // 찾아내야 알 수 있었다. 찍힌 자리를 찾는 것이 실패를 아는 것보다 오래
+  // 걸리면 안 된다.
+  //
+  // 그래서 실패한 자리와 이유를 같이 들고 있는다. 이유는 사다리의 어느
+  // 칸에서 떨어졌는지다 — 오늘 하루 「조용히 아무 일도 안 일어남」을 네 번
+  // 겪었고, 매번 이유를 아는 데 시간이 다 갔다.
+  const printFailedInfo = new Map(); // orderId -> { table, reason }
+  function markPrintFailed(orderId, info) {
     printFailedOrderIds.add(orderId);
+    if (info) printFailedInfo.set(orderId, info);
   }
   function markPrintSucceeded(orderId) {
     printFailedOrderIds.delete(orderId);
+    printFailedInfo.delete(orderId);
+  }
+  /** 화면에 적을 자리 이름 — 포장은 번호가 아니라 픽업 이름으로 부른다. */
+  function orderPlaceLabel(o) {
+    if (!o) return "";
+    if (isCounterOrder(o)) {
+      return o.pickup_number && o.customer_name
+        ? `📦 ${o.pickup_number}번 · ${o.customer_name}`
+        : T("takeoutCounterShort") || "포장";
+    }
+    const t = (tables || []).find((x) => String(x.number) === String(o.table_number));
+    return tableDisplayName(t || { number: o.table_number });
   }
   // 사장님 요청(2026-09-07): "주문서 인출되면 신규주문에서 조리시작 누르지
   // 않아도 자동으로 조리중으로 주문내용 넘어가도록" — 주방 티켓이 실제로
@@ -4312,6 +4356,15 @@
       updateOrderStatus(o.id, "preparing");
       renderOrders();
     }
+  }
+
+  // 사다리의 어느 칸에서 떨어졌는지. 이 한 줄이 「왜 안 나왔는가」를 찾는
+  // 시간을 없앤다.
+  function printFailReason() {
+    if (appPrintBridge()) return T("printFailReasonApp");
+    if (!autoPrintOn) return T("printFailReasonOff");
+    if (!printHereAllowed()) return T("printFailReasonElsewhere");
+    return T("printFailReasonNoPrinter");
   }
 
   async function printKitchenTicket(o) {
@@ -4349,7 +4402,9 @@
 
     const win = window.open("", "_blank");
     if (!win) {
-      markPrintFailed(o.id);
+      // 사다리 끝까지 왔다는 것은 앞의 칸이 전부 실패했다는 뜻이다.
+      // 그중 무엇이었는지를 같이 남긴다.
+      markPrintFailed(o.id, { reason: printFailReason() });
       return;
     }
     win.document.open();
@@ -10112,15 +10167,12 @@
         : `桌號 ${o.table_number}${partyTag(o)}`;
       const labelInfo = { tableLabel, phoneLine: counter && o.customer_phone ? `☎ ${o.customer_phone}` : null };
 
-      // 찍을 줄을 고른다. 자리 이동은 그 자리로 옮겨 가는 음식 전부(홀이
-      // 무엇을 어디로 옮기는지 알아야 한다), 변경은 바뀐 줄만.
-      const lines =
-        job.notice.kind === "moved"
-          ? o.items || []
-          : [
-              ...(job.change.added || []).map((it) => Object.assign({}, it, { __delta: "+" })),
-              ...(job.change.removed || []).map((it) => Object.assign({}, it, { __delta: "-" })),
-            ];
+      // 바뀐 줄만 찍는다. 전체를 다시 찍으면 이미 만들고 있는 요리를 또
+      // 만들게 된다.
+      const lines = [
+        ...(job.change.added || []).map((it) => Object.assign({}, it, { __delta: "+" })),
+        ...(job.change.removed || []).map((it) => Object.assign({}, it, { __delta: "-" })),
+      ];
       if (!lines.length) return false;
 
       const noticeOrder = Object.assign({}, o, { items: lines });
