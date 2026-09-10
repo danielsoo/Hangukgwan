@@ -338,6 +338,115 @@ function nextId(collection) {
   return store.nextId[collection]++;
 }
 
+/**
+ * store 문서에서 딱 그 필드들만 바꾼다. 통째로 덮어쓰지 않는다.
+ *
+ * 2026-09-10 사장님(장사 중, 스크린샷과 함께): "보면 7이랑 9는 결제완료를
+ * 했는데 인원이 안 사라져있어."
+ *
+ * 인원수를 지우는 코드는 멀쩡했다(test/party-size.test.js, 그리고 실제로
+ * 다시 재봐도 전부 지워진다). 지워진 뒤에 되살아난 것이었다.
+ *
+ * save() 는 store 문서 「전체」를 그 순간 이 인스턴스가 들고 있는 값으로
+ * 갈아끼운다. 그런데 점심 장사에는 주문이 계속 들어오고, 주문 하나가
+ * 들어올 때마다 그 요청도 save() 를 부른다(주문 번호 카운터 때문에).
+ * 그 요청이 「결제로 인원수를 지우기 직전」의 사본을 들고 있었다면, 저장이
+ * 끝나는 순간 지운 인원수가 문서에 되돌아온다. 화면에는 아무 오류도 없고,
+ * 인원수만 조용히 살아난다.
+ *
+ * patchArrayItem 의 주석에 이미 같은 이야기가 적혀 있다 — 배치도에서
+ * "자꾸 바꿨는데 다시 되돌아간다" 던 그 일이다. 그때는 tables 배열의 한
+ * 칸이었고, 이번엔 같은 문서의 다른 칸일 뿐이다.
+ *
+ * 그래서 자주 오가는 길에서는 문서를 통째로 쓰지 않는다. 이 함수는 준
+ * 필드만 $set 한다 — 다른 요청이 같은 문서의 다른 곳을 동시에 고쳐도
+ * 서로를 지우지 않는다.
+ */
+async function saveFields(fields) {
+  await connectDB();
+  const setDoc = {};
+  for (const [k, v] of Object.entries(fields)) setDoc[k] = v;
+  if (!Object.keys(setDoc).length) return;
+  await db.collection("store").updateOne({ _id: "main" }, { $set: setDoc }, { upsert: true });
+}
+
+/**
+ * 겹치지 않는 번호를 하나 받아온다.
+ *
+ * 2026-09-10 사장님(장사 중): "9번 테이블은 주문해도 프린트 자체가 안되고
+ * 있음. 근데 또 웃긴건 7번 테이블은 자동으로 나왔대."
+ *
+ * 한 테이블만 안 찍히는 건 인쇄 문제가 아니었다. 주문 번호가 겹치고 있었다.
+ *
+ * 번호는 store 문서의 nextId.orders 에서 나오는데, 그 문서를 통째로
+ * 덮어쓰는 save() 가 여기저기서 불린다(주문이 들어올 때마다도 불렸다).
+ * 조금 오래된 사본을 들고 있던 요청이 save() 를 하면 카운터가 뒤로 간다.
+ * 그러면 다음 손님의 주문이 「이미 있는 번호」로 만들어지고,
+ *   - saveOrder 는 그 번호로 upsert 하므로 앞 주문을 덮어쓰고,
+ *   - 관리자 화면은 그 번호를 이미 본 것으로 알고 있어서 빌지를 안 찍는다.
+ * 9번 테이블에서 일어난 일이 정확히 이것이다.
+ *
+ * 그래서 번호는 메모리가 아니라 데이터베이스에서 원자적으로 받아온다.
+ * $inc 는 서버 한 곳에서 일어나므로 두 요청이 같은 번호를 받을 수 없다.
+ * floor 는 안전판이다 — 이미 카운터가 뒤로 가 있는 상태로 배포되더라도,
+ * 지금 알고 있는 가장 큰 번호보다는 반드시 위에서 시작한다.
+ */
+async function reserveId(collection, floor) {
+  await connectDB();
+  const key = `nextId.${collection}`;
+  if (floor && Number.isFinite(floor)) {
+    await db.collection("store").updateOne({ _id: "main" }, { $max: { [key]: floor } });
+  }
+  const res = await db
+    .collection("store")
+    .findOneAndUpdate({ _id: "main" }, { $inc: { [key]: 1 } }, { returnDocument: "after", upsert: true });
+  // 드라이버 판마다 모양이 다르다(v4~v5 는 {value}, v6 는 문서 그대로).
+  const doc = res && res.value !== undefined ? res.value : res;
+  const after = doc && doc.nextId ? doc.nextId[collection] : null;
+  if (typeof after === "number" && after > 1) {
+    store.nextId[collection] = after;
+    return after - 1;
+  }
+  // 데이터베이스가 답을 못 준 아주 예외적인 경우에만 메모리로 돌아간다 —
+  // 번호가 없어서 주문을 못 받는 것보다는 낫다.
+  return nextId(collection);
+}
+
+/**
+ * 프로세스가 뜰 때 한 번 — 주문 번호 카운터를 실제 최대 번호 위로 올린다.
+ *
+ * 위(reserveId)에서 설명한 덮어쓰기로 카운터가 이미 뒤로 가 있을 수 있다.
+ * 그 상태로 새 배포가 올라가면, 원자적으로 번호를 받아와도 여전히 이미
+ * 쓰인 번호부터 세기 시작한다 — 겹침이 그대로 이어진다.
+ *
+ * 주문 컬렉션에서 가장 큰 번호를 한 번만 읽어 그 위로 올린다. 요청마다
+ * 하지 않는다(주문 하나에 왕복 하나가 더 붙는다).
+ */
+let orderIdFloorEnsured = false;
+async function ensureOrderIdFloor() {
+  if (orderIdFloorEnsured) return;
+  await connectDB();
+  const rows = await db
+    .collection(ORDERS_COLLECTION)
+    .find({}, { projection: { id: 1 } })
+    .sort({ id: -1 })
+    .limit(1)
+    .toArray();
+  const top = rows && rows[0];
+  if (top && typeof top.id === "number") {
+    await db.collection("store").updateOne({ _id: "main" }, { $max: { "nextId.orders": top.id + 1 } });
+    if (!(store.nextId.orders > top.id)) store.nextId.orders = top.id + 1;
+  }
+  orderIdFloorEnsured = true;
+}
+
+// 주문 번호 카운터 하나만 올린다. 예전에는 이것 때문에 주문이 들어올
+// 때마다 store 문서 전체가 다시 쓰였다 — 그게 위에서 말한 「덮어쓰는 쪽」의
+// 정체다. 카운터는 자기 칸만 올리면 된다.
+async function saveNextId(collection) {
+  await saveFields({ [`nextId.${collection}`]: store.nextId[collection] });
+}
+
 // ---- Photo storage (separate collection, one document per photo) ----
 
 async function savePhoto(buffer, contentType) {
@@ -377,6 +486,7 @@ function getDb() {
 
 module.exports = {
   connectDB, getDb, getClient, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
+  saveFields, saveNextId, reserveId, ensureOrderIdFloor,
   savePhoto, getPhoto, deletePhoto,
   findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,

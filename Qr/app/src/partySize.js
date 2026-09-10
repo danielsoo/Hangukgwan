@@ -127,4 +127,39 @@ function partyBreakdownOf(table) {
   return { adults, children, total: table.party_size };
 }
 
-module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf, partyBreakdownOf };
+// 인원수를 담고 있는 칸들. 저장할 때 이 네 칸만 건드리면 된다 —
+// store 문서를 통째로 쓰면 다른 요청이 같은 순간에 한 일을 지운다
+// (src/db.js 의 saveFields 주석: 2026-09-10 "결제완료를 했는데 인원이
+// 안 사라져있어").
+const PARTY_KEYS = ["party_size", "party_adults", "party_children", "party_size_updated_at"];
+
+function partyPatchOf(table) {
+  const patch = {};
+  for (const k of PARTY_KEYS) patch[k] = table[k] === undefined ? null : table[k];
+  return patch;
+}
+
+/**
+ * 인원수 네 칸만 데이터베이스에 쓴다.
+ *
+ * 이 자리에서 save() 를 부르면 store 문서 전체가 다시 쓰인다. 그러면 그
+ * 사이에 다른 요청이 한 일 — 옆 테이블에 손님이 앉은 것, 새 주문의 번호가
+ * 올라간 것 — 이 같이 지워지고, 반대로 그쪽 저장이 조금 늦으면 방금 지운
+ * 인원수가 되살아난다. 2026-09-10 점심에 7번과 9번에서 일어난 일이다.
+ *
+ * db 를 여기서 미리 부르지 않는 이유: 이 파일은 규칙만 담고 store 를
+ * 인자로 받는다(테스트가 가짜 store 로 그대로 부른다). 실제로 쓸 때만
+ * 데이터베이스를 찾는다.
+ */
+async function savePartySize(store, tableNumber) {
+  const table = (store.tables || []).find((t) => String(t.number) === String(tableNumber));
+  if (!table) return false;
+  const { patchArrayItem } = require("./db");
+  await patchArrayItem("tables", table.id, partyPatchOf(table));
+  return true;
+}
+
+module.exports = {
+  PARTY_KEYS,
+  partyPatchOf,
+  savePartySize, hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf, partyBreakdownOf };

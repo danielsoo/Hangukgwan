@@ -233,10 +233,80 @@ class Collection {
         if (cur) delete cur[parts[parts.length - 1]];
       }
     }
+    // $inc / $max 도 "nextId.orders" 같은 중첩 경로를 받는다. 진짜 MongoDB 가
+    // 그렇고, 주문 번호를 원자적으로 받아오는 길(src/db.js reserveId)이 바로
+    // 그 형태를 쓴다 — 여기가 평평한 키로만 동작하면 그 경로가 테스트에서
+    // 통째로 무의미해진다.
+    const atPath = (obj, key) => {
+      const parts = key.split(".");
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (cur[parts[i]] == null || typeof cur[parts[i]] !== "object") cur[parts[i]] = {};
+        cur = cur[parts[i]];
+      }
+      return { parent: cur, last: parts[parts.length - 1] };
+    };
     if (update.$inc) {
-      for (const [k, v] of Object.entries(update.$inc)) doc[k] = (doc[k] || 0) + v;
+      for (const [k, v] of Object.entries(update.$inc)) {
+        const { parent, last } = atPath(doc, k);
+        parent[last] = (parent[last] || 0) + v;
+      }
+    }
+    if (update.$max) {
+      for (const [k, v] of Object.entries(update.$max)) {
+        const { parent, last } = atPath(doc, k);
+        if (parent[last] == null || cmp(v, parent[last]) > 0) parent[last] = v;
+      }
     }
     return { matchedCount: 1 };
+  }
+
+  // src/db.js 의 reserveId 가 쓴다 — 번호를 올리고 「올린 뒤의 문서」를
+  // 돌려받아야 두 요청이 같은 번호를 못 받는다.
+  //
+  // 읽기와 쓰기 사이에 await 를 두면 안 된다. 진짜 MongoDB 는 이 연산을
+  // 원자적으로 처리하는데, 여기서 중간에 양보하면 스무 개가 같은 번호를
+  // 받아가고 — 그러면 이 가짜는 「겹치지 않는다」를 재지 못한다.
+  findOneAndUpdate(filter, update, opts = {}) {
+    let doc = this.docs.find((d) => matches(d, filter));
+    if (!doc) {
+      if (!opts.upsert) return Promise.resolve({ value: null });
+      doc = { ...filter };
+      this.docs.push(doc);
+    }
+    const before = JSON.parse(JSON.stringify(doc));
+    const atPath = (obj, key) => {
+      const parts = key.split(".");
+      let cur = obj;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (cur[parts[i]] == null || typeof cur[parts[i]] !== "object") cur[parts[i]] = {};
+        cur = cur[parts[i]];
+      }
+      return { parent: cur, last: parts[parts.length - 1] };
+    };
+    if (update.$max) {
+      for (const [k, v] of Object.entries(update.$max)) {
+        const { parent, last } = atPath(doc, k);
+        if (parent[last] == null || cmp(v, parent[last]) > 0) parent[last] = v;
+      }
+    }
+    if (update.$inc) {
+      for (const [k, v] of Object.entries(update.$inc)) {
+        const { parent, last } = atPath(doc, k);
+        parent[last] = (parent[last] || 0) + v;
+      }
+    }
+    if (update.$set) {
+      for (const [k, v] of Object.entries(update.$set)) {
+        const { parent, last } = atPath(doc, k);
+        parent[last] = v;
+      }
+    }
+    // 「그 순간의」 문서를 돌려준다. 살아 있는 객체를 그대로 주면, 부르는
+    // 쪽이 await 뒤에 읽을 때는 이미 다음 요청이 또 올려놓은 값이라
+    // 스무 번을 불러도 전부 같은 번호가 나온다.
+    const after = JSON.parse(JSON.stringify(doc));
+    return Promise.resolve({ value: opts.returnDocument === "before" ? before : after });
   }
   async replaceOne(filter, doc, opts = {}) {
     const idx = this.docs.findIndex((d) => matches(d, filter));

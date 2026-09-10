@@ -238,6 +238,84 @@ const STUB_PRINT = () => {
     await C.ctx.close();
   }
 
+  out.push("\n[POS 앱으로 나갈 때 — 두 장이 한 번에]");
+  // 2026-09-10 사장님(장사 중): "프린트는 잘 되는 거 같은데 여전히 1장만
+  // 나오는 테이블이 있다니까."
+  //
+  // 주방용과 결제용을 따로 두 번 보내고 있었다. 값싼 열전사 프린터는 9100
+  // 포트에 연결을 하나만 받고 버퍼도 작아서, 첫 장이 나오는 동안 두 번째를
+  // 보내면 조용히 사라진다. 품목이 많은 테이블에서만 1장이 나온 이유다.
+  {
+    // 앞 절의 기기들을 정리한다 — 그쪽이 먼저 찍으면 주문이 「조리 중」으로
+    // 넘어가서 여기서는 찍을 것이 없어진다.
+    await A.ctx.close();
+    const P = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await P.addInitScript(() => {
+      // 태블릿의 한국관 POS 앱이 심어주는 것과 같은 모양의 브릿지.
+      window.__jobs = [];
+      window.HangukgwanPrint = {
+        printBase64(b64) { window.__jobs.push(b64); return "queued"; },
+      };
+    });
+    const pp = await P.newPage();
+    pp.on("dialog", (d) => d.dismiss());
+    await pp.goto(`${base}/admin`, { waitUntil: "networkidle" });
+    await pp.evaluate(async () => {
+      await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "ownerpass123" }) });
+    });
+    await pp.reload({ waitUntil: "networkidle" });
+    await pp.waitForTimeout(900);
+    await pp.locator("#autoPrintToggle").check();
+    await pp.waitForTimeout(400);
+    if (await pp.locator("#appDialogBackdrop").isVisible()) {
+      await pp.locator("#appDialogBackdrop .primary-btn").first().click();
+      await pp.waitForTimeout(500);
+    }
+
+    // 앞 절에서 결제가 끝나 인원수가 지워졌다 — 다시 앉히지 않으면 주문
+    // 자체가 안 들어간다.
+    await pp.evaluate(async (n) => {
+      await fetch(`/api/tables/${n}/party-size`, { method: "PUT",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ adults: 2, children: 0 }) });
+    }, table.number);
+
+    // 품목이 많은 주문 — 사장님이 1장만 나왔다고 한 쪽이 바로 이런 것이다.
+    await pp.evaluate(async ([n, ids]) => {
+      await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber: n, items: ids.map((id) => ({ itemId: id, qty: 2 })) }) });
+    }, [table.number, store.menuItems.slice(0, 6).map((m) => m.id)]);
+    await pp.waitForTimeout(4000);
+
+    const jobs = await pp.evaluate(() => window.__jobs.length);
+    check("프린터에 한 번만 보낸다", jobs === 1, `${jobs}번 보냈다`);
+    // 한 줄기 안에 커팅이 두 번 있어야 종이가 두 장으로 나온다.
+    const cuts = await pp.evaluate(() => {
+      const bin = atob(window.__jobs[0] || "");
+      let n = 0;
+      for (let i = 0; i + 3 < bin.length; i++) {
+        if (bin.charCodeAt(i) === 0x1d && bin.charCodeAt(i + 1) === 0x56 &&
+            bin.charCodeAt(i + 2) === 0x42 && bin.charCodeAt(i + 3) === 0x00) n++;
+      }
+      return n;
+    });
+    check("그 한 줄기 안에 두 장이 들어 있다", cuts === 2, `커팅 ${cuts}번`);
+    check("브라우저 인쇄로 새지 않는다", (await printCount(pp)) === 0, String(await printCount(pp)));
+
+    // 주문 두 건이 같이 들어와도 차례로 보낸다 — 한꺼번에 보내면 프린터에
+    // 연결을 두 개 여는 셈이라 한쪽이 사라진다.
+    await pp.evaluate(async ([n, id]) => {
+      const H = { "Content-Type": "application/json" };
+      await fetch("/api/orders", { method: "POST", headers: H, body: JSON.stringify({ tableNumber: n, items: [{ itemId: id, qty: 1 }] }) });
+      await fetch("/api/orders", { method: "POST", headers: H, body: JSON.stringify({ tableNumber: n, items: [{ itemId: id, qty: 1 }] }) });
+    }, [table.number, itemId]);
+    await pp.waitForTimeout(5000);
+    const jobs2 = await pp.evaluate(() => window.__jobs.length);
+    check("두 건이면 두 번, 주문마다 한 번씩", jobs2 === 3, `${jobs2}번 (앞의 1번 포함)`);
+    await P.close();
+  }
+
+
   await browser.close();
   server.close();
   console.log(out.join("\n"));

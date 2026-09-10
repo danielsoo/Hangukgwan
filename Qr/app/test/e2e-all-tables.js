@@ -158,16 +158,29 @@ function check(name, cond, extra = "") {
 
   // ── 2-b) 가게 태블릿이 실제로 쓰는 경로(앱 브릿지 → 비트맵 2장) ────
   // 브라우저 인쇄는 개발용 대비책이고, 가게에서는 안드로이드 POS 앱의
-  // HangukgwanPrint.printBase64 로 나간다. 그 경로는 주방용을 먼저 보내고
-  // 결제용을 이어서 보내는 "두 번의 전송"이라, 두 번째만 실패하면 정확히
-  // 사장님이 본 증상("주방만 나옴")이 된다. 진짜 프린터 대신 브릿지를
-  // 가짜로 심어서 주문마다 몇 장이 나가는지 센다.
+  // HangukgwanPrint.printBase64 로 나간다.
+  //
+  // 2026-09-10 사장님(장사 중): "프린트는 잘 되는 거 같은데 여전히 1장만
+  // 나오는 테이블이 있다니까." 예전에는 주방용을 보내고 결제용을 「또 한 번」
+  // 보냈다. 값싼 열전사 프린터는 9100 포트에 연결을 하나만 받고 버퍼도
+  // 작아서, 첫 장이 나오는 동안 두 번째를 보내면 조용히 사라진다 — 품목이
+  // 많은 테이블에서만 1장이 나온 이유다.
+  //
+  // 그래서 이제 두 장을 한 줄기로 이어붙여 한 번에 보낸다. 세는 것도
+  // 「몇 번 보냈나」가 아니라 「그 안에 커팅이 몇 번 들어 있나」다 — 종이가
+  // 두 장으로 나오는지를 재는 것이니 이쪽이 원래 재려던 것이다.
   out.push("\n[2-b) 태블릿 앱 경로 — 주문마다 비트맵이 2장 나가는가]");
   await page.evaluate(() => {
     window.__sends = [];
     window.HangukgwanPrint = {
       printBase64(b64) {
-        window.__sends.push(b64.length);
+        const bin = atob(b64);
+        let cuts = 0;
+        for (let i = 0; i + 3 < bin.length; i++) {
+          if (bin.charCodeAt(i) === 0x1d && bin.charCodeAt(i + 1) === 0x56 &&
+              bin.charCodeAt(i + 2) === 0x42 && bin.charCodeAt(i + 3) === 0x00) cuts++;
+        }
+        window.__sends.push(cuts);
         return "queued";
       },
     };
@@ -179,13 +192,15 @@ function check(name, cond, extra = "") {
     await btns2.nth(i).click();
     await page.waitForTimeout(140);
     const sends = await page.evaluate(() => window.__sends.slice());
-    if (sends.length !== 2) {
-      check(`앱 경로: ${i + 1}번째 주문이 2장 나간다`, false, `${sends.length}장 (${sends.join(", ")})`);
+    const cuts = sends.reduce((a, b) => a + b, 0);
+    if (sends.length !== 1 || cuts !== 2) {
+      check(`앱 경로: ${i + 1}번째 주문이 한 번에 2장 나간다`, false,
+        `전송 ${sends.length}번 / 커팅 ${cuts}번`);
     } else {
       pass++;
     }
   }
-  out.push(`  ok   앱 경로: 주문 ${n2}건 전부 비트맵 2장씩 나간다`);
+  out.push(`  ok   앱 경로: 주문 ${n2}건 전부 한 번에 2장씩 나간다`);
 
   // ── 3) 결제 후 인원수를 다시 묻는가 ─────────────────────────────────
   out.push("\n[3) 결제하고 나면 다음 손님에게 인원수를 다시 묻는가]");

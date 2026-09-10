@@ -5,7 +5,7 @@ const express = require("express");
 const session = require("express-session");
 const compression = require("compression");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor } = require("./src/db");
 const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
@@ -131,6 +131,9 @@ app.use(async (req, res, next) => {
     // completely empty database). Each migration is internally idempotent
     // (checks its own store.settings flag), so calling it again is always
     // safe even if this per-process guard somehow ran more than once.
+    // 주문 번호가 이미 겹쳐 있을 수 있다 — 실제 최대 번호 위로 한 번 올린다
+    // (src/db.js ensureOrderIdFloor, 2026-09-10 9번 테이블).
+    await ensureOrderIdFloor();
     if (!migratedOnce) {
       await applyFeedback202609(store, { save, nextId, savePhoto });
       await applyFollowup202609(store, { save });

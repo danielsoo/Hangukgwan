@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId, saveOrder, saveOrders, findOrders } = require("../db");
+const { store, save, nextId, saveOrder, saveOrders, findOrders, saveNextId, patchArrayItem, reserveId } = require("../db");
 const { requireAdmin, requireOwner } = require("../auth");
 const { isOpenNow, orderingState } = require("../openHours");
 const { nowLocal, taipeiDateString } = require("../time");
@@ -25,7 +25,7 @@ function resolveSelectedAddons(mi, requestedNames) {
   return chosen;
 }
 
-const { clearPartySizeIfSettled, movePartySize, seatingStartOf } = require("../partySize");
+const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
 
@@ -342,8 +342,15 @@ router.post("/", async (req, res) => {
   const subtotal = total;
   const finalTotal = vipCard ? Math.round((subtotal * (100 - vipCard.discount_percent)) / 100) : subtotal;
 
+  // 번호는 데이터베이스에서 원자적으로 받아온다 — 메모리의 카운터는 store
+  // 문서를 통째로 덮어쓰는 save() 때문에 뒤로 갈 수 있고, 그러면 이미 있는
+  // 번호로 주문이 만들어져 앞 주문을 덮어쓰고 빌지도 안 찍힌다(src/db.js
+  // reserveId, 2026-09-10 9번 테이블).
+  const knownMaxOrderId = store.orders.reduce((m, o) => (o.id > m ? o.id : m), 0);
+  const orderId = await reserveId("orders", knownMaxOrderId + 1);
+
   const order = {
-    id: nextId("orders"),
+    id: orderId,
     table_number: String(tableNumber),
     status: "new",
     order_type: orderTypeSummary,
@@ -389,7 +396,17 @@ router.post("/", async (req, res) => {
   // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
   // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이
   // 싸다 — 예전에는 이 한 줄이 몇 MB를 다시 쓰는 일이었다.
-  await Promise.all([saveOrder(order), save()]);
+  // 주문 한 건과 「주문 번호 카운터 한 칸」만 쓴다.
+  //
+  // 예전에는 여기서 save() 를 불러 store 문서를 통째로 다시 썼다. 카운터
+  // 하나 올리자고 문서 전체를 갈아끼우는 셈인데, 점심처럼 주문이 몰리면
+  // 그 덮어쓰기가 다른 요청이 방금 한 일을 되돌린다 — 2026-09-10 사장님:
+  // "7이랑 9는 결제완료를 했는데 인원이 안 사라져있어." 결제로 지운
+  // 인원수가, 뒤이어 들어온 주문의 save() 에 실려 되살아난 것이었다.
+  // 주문 한 건만 쓴다. 번호는 위에서 데이터베이스가 이미 올려줬으므로
+  // store 문서를 여기서 다시 쓸 일이 없다 — 예전에는 카운터 하나 때문에
+  // 문서 전체를 갈아끼웠고, 그게 다른 요청이 방금 한 일을 되돌렸다.
+  await saveOrder(order);
   broadcastOrdersChanged(req);
 
   res.status(201).json(order);
@@ -672,7 +689,12 @@ router.post("/move", requireAdmin, async (req, res) => {
   delete toTable.moved_to;
 
   await saveOrders(moving);
-  await save();
+  // 옮긴 두 자리만 쓴다. 여기서 문서를 통째로 쓰면 그 사이 다른 자리에
+  // 앉은 손님의 인원수가 지워진다.
+  await Promise.all([
+    patchArrayItem("tables", fromTable.id, Object.assign(partyPatchOf(fromTable), { moved_to: fromTable.moved_to })),
+    patchArrayItem("tables", toTable.id, Object.assign(partyPatchOf(toTable), { moved_to: null })),
+  ]);
   broadcastOrdersChanged(req);
   // 옛 자리 화면에 바로 알린다. 이 한 줄이 안내를 「1분 안에」 에서 「누르는
   // 즉시」 로 바꾼다 — 손님은 그 사이에 옛 자리로 주문을 한 번 더 넣을 수
@@ -759,7 +781,9 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 이 주문 하나만 쓴다. store 문서는 인원수가 실제로 비워졌을 때만 —
   // 사장님이 5~20초를 기다리던 버튼이 바로 이 자리다.
   await saveOrder(order);
-  if (partyCleared) await save();
+  // 인원수는 그 테이블의 네 칸만 쓴다 — 문서를 통째로 쓰면 그 사이 들어온
+  // 주문이 방금 지운 인원수를 되살린다(src/partySize.js savePartySize).
+  if (partyCleared) await savePartySize(store, order.table_number);
   broadcastOrdersChanged(req);
   res.json(order);
 });
@@ -927,7 +951,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   }
 
   await saveOrder(order);
-  if (partyCleared) await save();
+  if (partyCleared) await savePartySize(store, order.table_number);
   broadcastOrdersChanged(req);
   res.json({ updatedOrder: order });
 });

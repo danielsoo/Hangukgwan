@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, refreshAndSave, patchArrayItem, nextId, saveOrder } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId, saveOrder, reserveId } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
 const {
   expiryDate,
@@ -257,8 +257,9 @@ router.post("/sell", requireAdmin, async (req, res) => {
     payment_method: "cash",
     note: number ? `card ${number}` : "",
   };
+  const knownMaxOrderId = store.orders.reduce((m, o) => (o.id > m ? o.id : m), 0);
   const order = {
-    id: nextId("orders"),
+    id: await reserveId("orders", knownMaxOrderId + 1),
     table_number: String(table.number),
     status: "paid",
     order_type: item.order_type,

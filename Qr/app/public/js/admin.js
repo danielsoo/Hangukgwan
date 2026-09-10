@@ -3054,7 +3054,13 @@
         pending.forEach((o) => flashNewOrder(o.id));
         if (soundOn) playBeep();
         if (autoPrintOn && printHereAllowed()) {
-          Promise.all(pending.map((o) => printKitchenTicket(o))).then(renderOrders);
+          // 한 장씩 차례로. 예전에는 Promise.all 로 한꺼번에 보냈는데,
+          // 주문 두 건이 같이 들어오면 프린터에 연결을 두 개 여는 셈이라
+          // 한쪽이 조용히 사라진다(sendRasterTicketParts 주석과 같은 이유).
+          (async () => {
+            for (const o of pending) await printKitchenTicket(o);
+            renderOrders();
+          })();
         }
       }
     }
@@ -9335,9 +9341,43 @@
   // tryPrintViaRawBt()가 주방용/결제용 2장 각각에 대해 이 함수를 순서대로
   // 호출한다. bridge가 이미 확인돼 있으면 그대로 재사용(매 장마다 다시
   // appPrintBridge()를 부를 필요 없음).
-  async function sendRasterTicketBytes(bytes, bridge) {
+  function concatBytes(parts) {
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const all = new Uint8Array(total);
+    let at = 0;
+    for (const p of parts) {
+      all.set(p, at);
+      at += p.length;
+    }
+    return all;
+  }
+
+  /**
+   * 빌지 여러 장을 「한 번에」 내보낸다.
+   *
+   * 2026-09-10 사장님(장사 중): "프린트는 잘 되는 거 같은데 여전히 1장만
+   * 나오는 테이블이 있다니까."
+   *
+   * 주방용과 결제용을 따로 두 번 보내고 있었던 게 원인이다. 값싼 열전사
+   * 프린터는 9100 포트에 연결을 하나만 받고, 버퍼도 몇십 KB뿐이다. 첫 장이
+   * 아직 나오고 있는 동안 두 번째 연결을 열면 거절되거나 버퍼가 넘쳐서
+   * 조용히 사라진다 — 앱은 "queued" 를 돌려줬으니 화면에는 아무 문제도
+   * 안 보인다. 품목이 많은 테이블에서만 1장이 나온 이유가 이것이다.
+   * 짧은 빌지는 두 번째가 도착하기 전에 다 나와버리니까.
+   *
+   * 두 장을 이어붙여 한 줄기로 보내면 그 일이 없어진다. 연결도 하나, 버퍼가
+   * 차면 TCP 가 알아서 기다린다. 각 빌지 끝에 이미 커팅 명령이 들어 있어서
+   * 종이는 그대로 두 장으로 나온다.
+   *
+   * "rawbt:" intent 경로만 예외다 — 주소 길이 제한이 있어서 이어붙이면
+   * 통째로 못 보낸다. 거기서는 예전처럼 나눠 보내되, 사이를 띄운다.
+   */
+  async function sendRasterTicketParts(parts, bridge) {
+    const list = parts.filter((p) => p && p.length);
+    if (!list.length) return false;
+
     if (bridge) {
-      const result = bridge.printBase64(bytesToBase64(bytes));
+      const result = bridge.printBase64(bytesToBase64(concatBytes(list)));
       if (result === "queued") return true;
       // The app shows its own on-screen message for a real failure (no
       // printer address saved, printer unreachable). Returning false here
@@ -9347,14 +9387,32 @@
       return false;
     }
 
-    if (await sendViaRawBtWebSocket(bytes)) return true;
+    if (await sendViaRawBtWebSocket(concatBytes(list))) return true;
 
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.src = "rawbt:base64," + bytesToBase64(bytes);
-    document.body.appendChild(iframe);
-    setTimeout(() => iframe.remove(), 1000);
+    for (let i = 0; i < list.length; i++) {
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = "rawbt:base64," + bytesToBase64(list[i]);
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 1000);
+      // 앞 장이 나올 시간을 준다. 길이에 비례해서 — 긴 빌지일수록 오래 걸리고,
+      // 1장만 나오던 게 바로 그 긴 빌지들이었다.
+      if (i < list.length - 1) await new Promise((r) => setTimeout(r, printDrainMs(list[i])));
+    }
     return true;
+  }
+
+  // 이 빌지가 실제로 종이로 나오는 데 걸릴 대략의 시간.
+  // 폭 576px 래스터는 한 줄에 72바이트다. 203dpi 에서 한 줄은 1/8mm,
+  // 값싼 열전사 프린터가 넉넉잡아 초당 40mm — 한 줄에 약 3.2ms.
+  function printDrainMs(bytes) {
+    const rows = bytes.length / 72;
+    return Math.min(10000, Math.max(800, Math.round(rows * 3.2) + 700));
+  }
+
+  // 한 장짜리(자리 이동 빌지, 시험 인쇄)를 위한 얇은 껍데기.
+  async function sendRasterTicketBytes(bytes, bridge) {
+    return sendRasterTicketParts([bytes], bridge);
   }
 
   // ---------- 자리 이동 빌지 설정 (설정 > 인쇄) ----------
@@ -9624,13 +9682,13 @@
       // printKitchenTicket()의 다음 단계(브라우저 인쇄, 2장 모두 다시
       // 시도)로 넘어가는 편이 반쪽짜리 인쇄보다 낫다.
       const kitchenBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo);
-      if (!(await sendRasterTicketBytes(kitchenBytes, bridge))) return false;
-
       const priceBytes = buildEscPosRasterTicket(o, storeName, ticketFontSizes, labelInfo, {
         priceCopy: true,
         discount: computeTicketDiscountInfo(o),
       });
-      return await sendRasterTicketBytes(priceBytes, bridge);
+      // 두 장을 한 줄기로 보낸다 — 따로 보내면 긴 빌지에서 두 번째가
+      // 조용히 사라진다(sendRasterTicketParts 주석).
+      return await sendRasterTicketParts([kitchenBytes, priceBytes], bridge);
     } catch (e) {
       console.warn("RawBT print failed:", e);
       return false;
