@@ -17,8 +17,8 @@ fetch_tools bundletool
 
 MIN_SDK=21
 TARGET_SDK=36
-VERSION_CODE="${VERSION_CODE:-3}"
-VERSION_NAME="${VERSION_NAME:-1.2}"
+VERSION_CODE="${VERSION_CODE:-4}"
+VERSION_NAME="${VERSION_NAME:-1.3}"
 
 KEYSTORE="$HERE/keystore/hangukgwan.jks"
 KS_PASS="${KS_PASS:-hangukgwan}"

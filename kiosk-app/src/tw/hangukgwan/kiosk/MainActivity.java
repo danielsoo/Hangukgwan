@@ -486,7 +486,7 @@ public class MainActivity extends Activity {
      * 껐다 켜면 다시 나온다.
      */
     private void showSettingsHint() {
-        toast("설정: 화면을 손가락 세 개로 길게 누르세요");
+        toast("설정: 왼쪽 아래 ⚙ 를 누르세요 (사라지면 그 자리를 길게)");
         if (hintButton != null) {
             // 이미 떠 있으면(사라지는 중이어도) 다시 또렷하게 하고 시간을 늘린다.
             hintButton.animate().cancel();
@@ -733,47 +733,105 @@ public class MainActivity extends Activity {
      * 닿는 순간 「0.9초 뒤에 열기」를 걸어두고, 손가락을 떼거나 개수가
      * 줄면 취소한다. 가만히 눌러도 열린다.
      */
+    // 설정을 여는 두 가지 길.
+    //
+    // 원래는 손가락 세 개 길게 누르기 하나였는데, 2026-09-10 가게 태블릿에서
+    // 안 열렸다. 삼성 기기는 손가락 세 개 터치를 시스템이 먼저 가져간다
+    // (화면 캡처 / 영역 선택이 뜬다). 앱까지 이벤트가 오지 않으므로 앱 쪽에서
+    // 할 수 있는 일이 없다.
+    //
+    // 그래서 **왼쪽 아래 모서리 길게 누르기**를 주된 길로 삼는다. 한 손가락
+    // 길게 누르기는 어느 제조사도 시스템 제스처로 쓰지 않는다. 앱을 켤 때
+    // 잠깐 보이는 ⚙ 버튼이 바로 그 자리에 있어서, 안내와 실제 위치가 같다.
+    // 세 손가락도 그대로 둔다 — 안 막힌 기기에서는 계속 된다.
     private class TouchWatchingLayout extends FrameLayout {
-        private static final long HOLD_MS = 900;
+        private static final long HOLD_MS = 900;          // 손가락 세 개
+        private static final long CORNER_HOLD_MS = 1200;  // 모서리 한 손가락
+        private static final int CORNER_DP = 88;
+        private static final int SLOP_DP = 24;
+
         private final Runnable open = new Runnable() {
             @Override
             public void run() {
-                armed = false;
+                pending = false;
+                // 모서리로 연 경우, 손을 뗄 때까지 남은 이벤트를 삼킨다.
+                // 안 그러면 그 UP 이 방금 열린 설정 화면에 그대로 떨어진다.
+                swallow = fromCorner;
                 showSettings(false);
             }
         };
-        private boolean armed = false;
+
+        private boolean pending = false;
+        private boolean fromCorner = false;
+        private boolean swallow = false;
+        private float downX, downY;
 
         TouchWatchingLayout(Context context) {
             super(context);
         }
 
-        private void cancel() {
-            if (armed) {
-                armed = false;
-                ui.removeCallbacks(open);
-            }
+        private void arm(long delay, boolean corner) {
+            if (pending) return;
+            pending = true;
+            fromCorner = corner;
+            ui.postDelayed(open, delay);
+        }
+
+        private void disarm() {
+            if (!pending) return;
+            pending = false;
+            ui.removeCallbacks(open);
+        }
+
+        private boolean inCorner(float x, float y) {
+            return x <= dp(CORNER_DP) && y >= getHeight() - dp(CORNER_DP);
         }
 
         @Override
         public boolean dispatchTouchEvent(MotionEvent ev) {
-            if (settingsOverlay == null) {
-                int fingers = ev.getPointerCount();
-                int action = ev.getActionMasked();
-                boolean lifting = action == MotionEvent.ACTION_UP
-                        || action == MotionEvent.ACTION_CANCEL
-                        || action == MotionEvent.ACTION_POINTER_UP;
-                if (fingers >= 3 && !lifting) {
-                    if (!armed) {
-                        armed = true;
-                        ui.postDelayed(open, HOLD_MS);
-                    }
-                } else {
-                    cancel();
+            int action = ev.getActionMasked();
+
+            if (action == MotionEvent.ACTION_DOWN) {
+                swallow = false;
+            } else if (swallow) {
+                if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                    swallow = false;
                 }
-            } else {
-                cancel();
+                return true;
             }
+
+            if (settingsOverlay != null) {
+                disarm();
+                return super.dispatchTouchEvent(ev);
+            }
+
+            switch (action) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = ev.getX();
+                    downY = ev.getY();
+                    if (inCorner(downX, downY)) arm(CORNER_HOLD_MS, true);
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (pending && fromCorner
+                            && (Math.abs(ev.getX() - downX) > dp(SLOP_DP)
+                                || Math.abs(ev.getY() - downY) > dp(SLOP_DP))) {
+                        disarm();
+                    }
+                    break;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // 두 번째 손가락이 닿으면 모서리 누르기는 아니다.
+                    if (pending && fromCorner) disarm();
+                    if (ev.getPointerCount() >= 3) arm(HOLD_MS, false);
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                case MotionEvent.ACTION_POINTER_UP:
+                    disarm();
+                    break;
+                default:
+                    break;
+            }
+
             return super.dispatchTouchEvent(ev);
         }
     }
