@@ -282,6 +282,47 @@ function check(name, cond, extra = "") {
     check("새 QR 안내가 들어간다", printed.includes("새 자리 QR"));
   }
 
+  out.push("\n[화면을 켜둔 채로 있어도 안내가 뜬다]");
+  // 2026-09-10 사장님: "손님이 보고있는 원래 테이블 qr 화면에서 자리 이동
+  // 메시지랑 리다이렉트용 확인 버튼이 안 떠."
+  //
+  // 안내를 화면을 처음 불러올 때만 확인하고 있었다. 그런데 자리를 옮기는 그
+  // 순간 손님은 이미 그 화면을 켜둔 채 앉아 있다 — 새로고침을 할 이유가 없다.
+  //
+  // 그리고 직원이 대신 넣어준 주문은 이 폰에 주문 번호가 없다. 사장님이
+  // 실제로 그렇게 시험하셨고, 그래서 더 안 떴다.
+  {
+    const P = tabless[11].number;
+    const Q = tabless[12].number;
+    await put(`/api/tables/${P}/party-size`, { adults: 2, children: 1 });
+    // 손님 폰은 이 자리 화면을 켜두기만 한다 — 주문은 직원이 대신 넣는다.
+    const seated = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    const sp = await seated.newPage();
+    sp.on("dialog", (d) => d.dismiss());
+    await sp.goto(`${base}/t/${P}`, { waitUntil: "networkidle" });
+    await sp.waitForTimeout(700);
+    check("앉은 손님에게는 안내가 없다", await sp.locator("#movedBackdrop").isHidden());
+    {
+      const seen = await sp.evaluate((k) => localStorage.getItem(`hgk_seat_${k}`), String(P));
+      check("폰이 「이 자리에 앉은 손님」 표시를 남긴다", !!seen, String(seen));
+    }
+    await post("/api/orders", { tableNumber: P, items: [{ itemId, qty: 1 }] }); // 직원이 대신
+    await post("/api/orders/move", { from: P, to: Q });
+
+    // 새로고침 없이. 1분을 기다릴 수 없으니 폰을 다시 집어드는 쪽으로 부른다 —
+    // 실제로 자리를 옮긴 직후가 딱 그 순간이다.
+    await sp.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await sp.waitForTimeout(800);
+    check("새로고침 없이 안내가 뜬다", await sp.locator("#movedBackdrop").isVisible());
+    check("직원이 대신 넣은 주문이어도 알아본다",
+      (await sp.locator("#movedBackdrop").innerText()).includes(String(Q)),
+      await sp.locator("#movedBackdrop").innerText());
+    await sp.locator("#movedGoBtn").click();
+    await sp.waitForURL(`**/t/${Q}`, { timeout: 5000 });
+    check("확인을 누르면 새 자리로 간다", sp.url().endsWith(`/t/${Q}`), sp.url());
+    await seated.close();
+  }
+
   out.push("\n[옮겨진 손님 폰이 새 자리로 데려다준다]");
   // 2026-09-10 사장님: "이미 손님이 해당 qr 코드로 되어있잖아. 그럼 qr 코드
   // 이미 들어가있다면 이동을 도와드리겠다고 하고 확인 버튼만 있게 해줘."

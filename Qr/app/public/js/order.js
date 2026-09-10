@@ -116,6 +116,11 @@
   // 직원도 같이 묶인다. 사장님(2026-09-10): "직원들이 직접 앱에서 수동
   // 주문을 할 때는 가능할 수 있도록."
   let isStaffSession = false;
+
+  // 자리 이동 안내가 「내 것」인지 가리는 데 쓰는 표시. 1분마다 도는
+  // refreshTableState 가 이 값을 읽으므로 선언이 위에 있어야 한다.
+  const SEAT_KEY = `hgk_seat_${tableNumber}`;
+  let movedNoticeShown = false;
   // True when this QR points at the counter's takeout-only order flow
   // instead of a real dine-in table (see the "포장 카운터" section in Admin >
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
@@ -357,9 +362,41 @@
       // 네트워크가 잠깐 끊긴 것으로 주문을 막지는 않는다. 다음 분에 다시 묻는다.
     }
   }
-  setInterval(refreshOrderingState, 60000);
+  /**
+   * 이 자리에 무슨 일이 생겼는지 다시 물어본다 — 지금은 「자리가 옮겨졌는가」.
+   *
+   * 2026-09-10 사장님: "손님이 보고있는 원래 테이블 qr 화면에서 자리 이동
+   * 메시지랑 리다이렉트용 확인 버튼이 안 떠."
+   *
+   * 원인이 여기였다. 안내를 화면을 처음 불러올 때만 확인하고 있었다. 그런데
+   * 자리를 옮기는 그 순간 손님은 이미 그 화면을 켜둔 채 앉아 있다 — 새로고침을
+   * 할 이유가 없다. 직원이 말로 알려주지 않으면 영영 안 뜬다.
+   *
+   * 영업시간 확인과 같은 박자로 돈다(1분, 화면을 보고 있을 때만). 폰을 다시
+   * 집어들면 그 자리에서 한 번 더 물어본다 — 자리를 옮긴 직후가 딱 그 순간이다.
+   */
+  async function refreshTableState() {
+    if (movedNoticeShown) return;
+    if (document.visibilityState !== "visible") return;
+    try {
+      const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
+      if (!res.ok) return;
+      const data = await res.json();
+      rememberSeating(data.seating_started_at);
+      checkMovedTable(data.moved_to);
+    } catch (e) {
+      /* 다음 분에 다시 묻는다 */
+    }
+  }
+
+  setInterval(() => {
+    refreshOrderingState();
+    refreshTableState();
+  }, 60000);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshOrderingState();
+    if (document.visibilityState !== "visible") return;
+    refreshOrderingState();
+    refreshTableState();
   });
 
   async function loadSettings() {
@@ -1594,16 +1631,39 @@
    * 넣은 주문 번호를 들고 있으니(localStorage), 서버가 알려준 옮긴 주문
    * 번호와 겹치는 게 있을 때만 뜬다.
    */
+  /**
+   * 이 폰이 「지금 이 자리에 앉아 있는 손님의 폰」 이라는 표시를 남긴다.
+   *
+   * 직원이 대신 넣어준 주문은 이 폰에 주문 번호가 없다(2026-09-10 사장님이
+   * 실제로 그렇게 시험하셨다). 그때도 손님은 이 화면을 보고 있으므로,
+   * 「언제 앉은 손님의 화면을 봤는가」 로는 알아볼 수 있다.
+   */
+  function rememberSeating(seatingStartedAt) {
+    if (!seatingStartedAt) return;
+    try {
+      localStorage.setItem(SEAT_KEY, seatingStartedAt);
+    } catch (e) {
+      /* 저장이 막혀 있어도 주문 번호 쪽으로는 여전히 알아본다 */
+    }
+  }
+
   function checkMovedTable(moved) {
+    if (movedNoticeShown) return true;
     if (!moved || !moved.to) return false;
     let myIds = [];
+    let seenSeating = null;
     try {
       myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
+      seenSeating = localStorage.getItem(SEAT_KEY);
     } catch (e) {
       myIds = [];
     }
     const ids = moved.order_ids || [];
-    if (!myIds.some((id) => ids.includes(id))) return false;
+    const mine =
+      myIds.some((id) => ids.includes(id)) ||
+      (!!moved.seating && seenSeating === moved.seating);
+    if (!mine) return false;
+    movedNoticeShown = true;
 
     // 사장님이 정한 문구(2026-09-10): "자리 이동을 요청하신 것 같아요!
     // 주문 링크 이동도 도와드릴께요 / 확인". 버튼은 「확인」 하나뿐이고,
@@ -1623,6 +1683,11 @@
       } catch (e) {
         /* 저장이 안 돼도 이동 자체는 되어야 한다 */
       }
+      // 옛 자리의 표시는 지운다. 남겨두면 나중에 이 폰으로 그 자리를 다시
+      // 열었을 때 지난 안내가 또 뜬다.
+      try {
+        localStorage.removeItem(SEAT_KEY);
+      } catch (e) {}
       location.href = `/t/${encodeURIComponent(moved.to)}`;
     };
     $("#movedBackdrop").hidden = false;
@@ -1687,6 +1752,7 @@
         }
         return;
       }
+      if (res.ok) rememberSeating(data.seating_started_at);
       if (res.ok && data.party_size) {
         partySize = data.party_size;
         // 구분이 생기기 전에 앉은 손님이면 서버가 전부 어른으로 채워 보낸다.

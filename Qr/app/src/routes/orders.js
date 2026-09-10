@@ -590,6 +590,10 @@ router.post("/move", requireAdmin, async (req, res) => {
   // 인원수도 따라간다. 규칙 자체는 src/partySize.js 에 있다 — 인원수를
   // 비우는 코드가 이 파일에 흩어지면 "결제했을 때만 비운다" 는 규칙이
   // 조용히 무너진다.
+  // movePartySize 가 옛 자리의 「앉은 시각」을 지우므로 그 전에 들고 있는다.
+  // 이 값이 아래 moved_to 의 seating 이 된다 — 손님 폰이 "내가 그 손님인가"
+  // 를 가리는 기준이다.
+  const movedSeating = fromTable.party_size_updated_at || null;
   movePartySize(store, from, to);
 
   // 옛 자리에 「어디로 갔는지」를 남긴다.
@@ -601,11 +605,24 @@ router.post("/move", requireAdmin, async (req, res) => {
   // 손님은 그대로 옛 자리에 주문을 넣는다 — 그러면 그 주문만 혼자 떨어져
   // 나가고, 주방은 빈 자리로 음식을 낸다.
   //
-  // order_ids 를 같이 남기는 이유: 이 안내는 「아까 여기서 시킨 그 손님」
-  // 에게만 보여야 한다. 5분 뒤 그 자리에 새로 앉은 손님에게 "자리가
-  // 옮겨졌어요" 가 뜨면 그게 더 큰 혼란이다. 손님 폰은 자기가 넣은 주문
-  // 번호를 들고 있으므로(localStorage), 겹치는 게 있을 때만 안내한다.
-  fromTable.moved_to = { to, at: now, order_ids: moving.map((o) => o.id) };
+  // order_ids 와 seating 을 같이 남기는 이유: 이 안내는 「아까 여기 앉아
+  // 있던 그 손님」에게만 보여야 한다. 5분 뒤 그 자리에 새로 앉은 손님에게
+  // "자리가 옮겨졌어요" 가 뜨면 그게 더 큰 혼란이다.
+  //
+  // 두 가지로 가린다.
+  //   order_ids — 손님이 자기 폰으로 넣은 주문 번호(localStorage)와 겹치는가
+  //   seating   — 그 손님이 앉은 시각. 폰은 이 자리 화면을 열 때마다 지금
+  //               앉아 있는 손님의 앉은 시각을 적어둔다.
+  //
+  // seating 이 필요한 이유: 직원이 대신 넣어준 주문은 손님 폰에 번호가 없다
+  // (2026-09-10 사장님이 실제로 그렇게 시험하셨다). 그때도 그 손님은 이
+  // 자리 화면을 보고 있으므로, 앉은 시각으로는 알아볼 수 있다.
+  fromTable.moved_to = {
+    to,
+    at: now,
+    order_ids: moving.map((o) => o.id),
+    seating: movedSeating,
+  };
   // 옮겨 간 자리에 예전 안내가 남아 있으면 안 된다 — 5번에서 8번으로 갔다가
   // 8번에서 또 옮기는 경우, 8번의 옛 안내가 되살아난다.
   delete toTable.moved_to;

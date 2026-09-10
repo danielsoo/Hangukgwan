@@ -159,7 +159,10 @@ function movedToFor(table) {
   const at = new Date(String(m.at || "").replace(" ", "T") + "+08:00");
   if (Number.isNaN(at.getTime())) return null;
   if (Date.now() - at.getTime() > MOVED_NOTICE_MS) return null;
-  return { to: m.to, at: m.at, order_ids: m.order_ids || [] };
+  // seating — 이 안내가 「내 것」인지 손님 폰이 가리는 두 번째 기준.
+  // 직원이 대신 넣어준 주문은 폰에 주문 번호가 없어서 order_ids 로는 못
+  // 알아본다(src/routes/orders.js 의 POST /move 주석).
+  return { to: m.to, at: m.at, order_ids: m.order_ids || [], seating: m.seating || null };
 }
 
 // 어른(大)/아이(小)를 나눠 받는다 — 2026-09-10 사장님: "인원수 물을 때
@@ -213,6 +216,10 @@ router.get("/:tableNumber/party-size", (req, res) => {
     party_adults: table.party_size ? party.adults : null,
     party_children: table.party_size ? party.children : null,
     is_counter: !!table.is_counter,
+    // 지금 앉아 있는 손님이 언제 앉았는지. 손님 폰이 이걸 적어뒀다가,
+    // 나중에 「자리가 옮겨졌어요」 안내가 자기 것인지 가리는 데 쓴다
+    // (src/routes/orders.js 의 moved_to.seating).
+    seating_started_at: table.party_size ? table.party_size_updated_at || null : null,
     moved_to: moved,
   });
 });
