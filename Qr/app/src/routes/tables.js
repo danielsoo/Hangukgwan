@@ -2,7 +2,7 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { partyBreakdownOf, hasUnpaidOrder } = require("../partySize");
+const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf } = require("../partySize");
 const { channelForTable } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
 
@@ -38,8 +38,44 @@ async function getOrCreateCounterTable() {
   return table;
 }
 
-router.get("/", requireAdmin, (req, res) => {
-  res.json([...store.tables].sort((a, b) => a.sort_order - b.sort_order));
+/**
+ * 직원 화면이 보는 자리 목록.
+ *
+ * 2026-09-10 사장님: "완전 포장(counter qr)를 제외하고 모든 테이블들은
+ * 인원과 메뉴는 하나의 세트야."
+ *
+ * 그날 결제 탭과 테이블 탭에는 인원이 안 보이는데 실시간 주문 탭에는
+ * 보이는 자리가 있었다. 실시간 주문 탭이 없는 숫자를 만들어낸 게 아니다 —
+ * 주문은 만들어질 때 그 순간의 인원을 자기 안에 박아두고(결산의 손님 수가
+ * 쓰는 값이다) 그걸 보여준 것이고, 자리 쪽 숫자가 사라져 있었던 것이다.
+ *
+ * 그래서 내보낼 때 둘을 맞춘다. 그리고 어긋난 자리는 그 자리에서 고쳐
+ * 놓는다 — 안 고치면 그 자리 QR 은 앉아 계신 손님에게 인원을 다시 묻고,
+ * 결제 화면은 빈 자리로 보여준다.
+ */
+router.get("/", requireAdmin, async (req, res) => {
+  const repairs = [];
+  const rows = [...store.tables]
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((t) => {
+      const party = partyOfTable(store, t);
+      if (party.from === "order") {
+        // 자리에 되돌려 놓는다. 「언제 앉았는가」는 그 주문이 들어온 시각으로
+        // 본다 — 자리 이동 안내와 손님 주문 내역이 그 시각을 기준으로 삼는다.
+        const live = liveOrdersOf(store, t.number).filter((o) => o.party_size);
+        const newest = live.length ? live.reduce((a, b) => (b.id > a.id ? b : a)) : null;
+        t.party_size = party.size;
+        t.party_adults = party.adults;
+        t.party_children = party.children;
+        if (!t.party_size_updated_at && newest) {
+          t.party_size_updated_at = new Date(String(newest.created_at).replace(" ", "T") + "+08:00").toISOString();
+        }
+        repairs.push(patchArrayItem("tables", t.id, partyPatchOf(t)));
+      }
+      return t;
+    });
+  if (repairs.length) await Promise.all(repairs);
+  res.json(rows);
 });
 
 router.post("/", canEditTables, async (req, res) => {
@@ -222,17 +258,21 @@ router.get("/:tableNumber/party-size", (req, res) => {
   // 오래된 안내는 내려보내지 않는다. 새 손님이 앉으면 위 PUT 이 지우지만,
   // 아무도 안 앉은 채로 하루가 지나면 그대로 남아 있게 된다.
   const moved = movedToFor(table);
-  const party = partyBreakdownOf(table);
+  // 자리와 주문을 함께 본다. 자리 쪽 숫자가 어떤 이유로 사라졌더라도 살아
+  // 있는 주문이 있으면 그 손님은 앉아 계신 것이고, 그때 인원을 다시 물으면
+  // 앞 손님 밥값이 남은 자리에 새 인원이 찍힌다(2026-09-10 사장님:
+  // "인원과 메뉴는 하나의 세트야").
+  const party = partyOfTable(store, table);
   res.json({
-    party_size: table.party_size || null,
+    party_size: party.size || null,
     // 구분이 생기기 전에 앉은 손님도 같은 모양으로 내려간다(전부 어른).
-    party_adults: table.party_size ? party.adults : null,
-    party_children: table.party_size ? party.children : null,
+    party_adults: party.size ? party.adults : null,
+    party_children: party.size ? party.children : null,
     is_counter: !!table.is_counter,
     // 지금 앉아 있는 손님이 언제 앉았는지. 손님 폰이 이걸 적어뒀다가,
     // 나중에 「자리가 옮겨졌어요」 안내가 자기 것인지 가리는 데 쓴다
     // (src/routes/orders.js 의 moved_to.seating).
-    seating_started_at: table.party_size ? table.party_size_updated_at || null : null,
+    seating_started_at: party.size ? table.party_size_updated_at || null : null,
     moved_to: moved,
     // 이 자리에 무슨 일이 생기면 알려줄 채널. 손님 폰은 이걸 구독해두고
     // 자리 이동을 「1분 안에」 가 아니라 「그 즉시」 받는다. Pusher 가 설정

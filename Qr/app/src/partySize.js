@@ -127,6 +127,77 @@ function partyBreakdownOf(table) {
   return { adults, children, total: table.party_size };
 }
 
+/**
+ * 이 자리에 지금 몇 명이 앉아 있는가 — 자리와 주문을 함께 보고 답한다.
+ *
+ * 2026-09-10 사장님: "다시 한 번 말하지만 이건 늘 기억해. 완전 포장(counter
+ * qr)를 제외하고 모든 테이블들은 인원과 메뉴는 하나의 세트야. 삭제되던
+ * 결제가 완료되던, 자리 이동을 하던 합산을 하던 같이 움직이는 하나야."
+ *
+ * 그날 화면에서 이 규칙이 두 방향으로 다 깨져 있었다.
+ *   9번  — 자리에는 (4-0), 살아 있는 주문에는 (2-0). 앞 손님 숫자가 남아 있었다.
+ *   A11 — 살아 있는 주문이 두 건인데 자리에는 인원이 아예 없었다.
+ * 원인은 store 문서를 통째로 덮어쓰던 것이고 그건 따로 고쳤지만(src/db.js),
+ * 이미 어긋난 자리는 그것만으로 돌아오지 않는다. 그리고 앞으로 무슨 이유로
+ * 또 어긋나더라도, 「살아 있는 주문이 있는데 인원이 없다」는 화면에 보여선
+ * 안 되는 상태다 — 손님은 앉아 계신데 시스템은 빈 자리로 알고 있는 것이고,
+ * 그러면 그 자리 QR 은 새 손님에게 인원을 다시 묻는다.
+ *
+ * 그래서 읽을 때 둘을 맞춰본다. 자리에 적힌 인원이 있으면 그게 답이다.
+ * 없는데 살아 있는 주문이 있으면, 그 주문이 들고 있는 스냅샷이 답이다
+ * (주문은 만들어질 때 그 순간의 인원을 자기 안에 박아둔다 — 결산의 손님
+ * 수가 그 값을 쓴다).
+ *
+ * 포장 카운터는 제외한다. 거기 쌓이는 주문들은 서로 무관한 손님 것이라
+ * 「이 자리에 몇 명」이라는 말 자체가 성립하지 않는다.
+ */
+function liveOrdersOf(store, tableNumber) {
+  return (store.orders || []).filter(
+    (o) =>
+      !o.test_session &&
+      String(o.table_number) === String(tableNumber) &&
+      o.status !== "paid" &&
+      o.status !== "cancelled"
+  );
+}
+
+function partyFromOrder(o) {
+  const children = o.party_children || 0;
+  const adults = o.party_adults == null ? o.party_size : o.party_adults;
+  return { size: o.party_size, adults, children, from: "order" };
+}
+
+function partyOfTable(store, table) {
+  const none = { size: null, adults: null, children: null, from: null };
+  if (!table || table.is_counter) return none;
+
+  const live = liveOrdersOf(store, table.number).filter((o) => o.party_size);
+  const newest = live.length ? live.reduce((a, b) => (b.id > a.id ? b : a)) : null;
+
+  if (!table.party_size) {
+    // 자리에는 없는데 밥은 나가 있다 — 손님은 앉아 계신다.
+    return newest ? partyFromOrder(newest) : none;
+  }
+
+  const b = partyBreakdownOf(table);
+  const fromTable = { size: b.total, adults: b.adults, children: b.children, from: "table" };
+  if (!newest) return fromTable;
+  const same =
+    newest.party_size === fromTable.size &&
+    (newest.party_adults == null ? newest.party_size : newest.party_adults) === fromTable.adults &&
+    (newest.party_children || 0) === fromTable.children;
+  if (same) return fromTable;
+
+  // 둘이 다르다. 어느 쪽이 지금 손님인가는 「언제 적힌 값인가」로 가린다.
+  //   자리 쪽이 더 나중 — 직원이 식사 중에 일행이 늘어 고쳐 넣은 것이다.
+  //   주문 쪽이 더 나중 — 자리 쪽은 앞 손님 숫자가 남아 있는 것이다.
+  //     (2026-09-10 9번 테이블: 자리에는 앞 손님의 4명, 살아 있는 주문에는
+  //      지금 손님이 넣은 2명이 찍혀 있었다.)
+  const seat = seatingStartOf(table); // 자리에 인원이 적힌 시각, 타이베이 시각 문자열
+  if (seat && String(newest.created_at || "") <= seat) return fromTable;
+  return partyFromOrder(newest);
+}
+
 // 인원수를 담고 있는 칸들. 저장할 때 이 네 칸만 건드리면 된다 —
 // store 문서를 통째로 쓰면 다른 요청이 같은 순간에 한 일을 지운다
 // (src/db.js 의 saveFields 주석: 2026-09-10 "결제완료를 했는데 인원이
@@ -161,5 +232,7 @@ async function savePartySize(store, tableNumber) {
 
 module.exports = {
   PARTY_KEYS,
+  liveOrdersOf,
+  partyOfTable,
   partyPatchOf,
   savePartySize, hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf, partyBreakdownOf };
