@@ -242,6 +242,77 @@ const PANES = ["basic", "price", "options", "display", "soldout"];
   }
 
   out.push("");
+  out.push("[★★ 탭을 옮겨도 창 크기가 안 변한다]");
+  // 사장님(2026-09-10): "메뉴 창이 크기에 따라 흰색 창이 번쩍번쩍 바뀌는데
+  // 그거 고정으로 해서 너무 크면 공백 그대로 냅두고 작으면 스크롤 내릴 수
+  // 있게 해줘. 공통 크기로."
+  //
+  // 탭마다 내용의 길이가 달라서 창이 늘었다 줄었다 했다. 눈이 그 움직임을
+  // 따라가느라 정작 고치려던 칸을 놓친다.
+  {
+    await page.locator("#menuCategories tr").filter({ hasText: target.name_ko }).first().click();
+    await page.waitForTimeout(800);
+    const sizes = [];
+    for (const p of PANES) {
+      await page.locator(`.item-form-nav-btn[data-item-pane="${p}"]`).click();
+      await page.waitForTimeout(250);
+      sizes.push(await page.evaluate(() => {
+        const modal = document.querySelector(".modal.modal-wide");
+        const content = document.querySelector(".item-form-content");
+        const save = document.querySelector("#saveItemBtn").getBoundingClientRect();
+        const box = modal.getBoundingClientRect();
+        return {
+          h: Math.round(box.height),
+          // 창 자체는 안 굴러간다 — 굴러가는 것은 오른쪽 내용 한 곳뿐이다.
+          modalScrolls: modal.scrollHeight > modal.clientHeight + 2,
+          contentScrolls: content.scrollHeight > content.clientHeight + 2,
+          // 저장 버튼이 창 안에 있는가. 예전에는 창 전체가 굴러서, 긴 탭에서
+          // 아래로 내리면 저장 버튼이 화면 밖으로 사라졌다.
+          saveInside: save.top >= box.top - 1 && save.bottom <= box.bottom + 1,
+        };
+      }));
+    }
+    const heights = sizes.map((x) => x.h);
+    check("★ 다섯 탭의 창 높이가 모두 같다", new Set(heights).size === 1, JSON.stringify(heights));
+    check("창 높이가 0 이 아니다", heights[0] > 300, String(heights[0]));
+    check("★ 창 자체는 굴러가지 않는다", sizes.every((x) => !x.modalScrolls), JSON.stringify(sizes.map((x) => x.modalScrolls)));
+    check("★ 저장 버튼은 어느 탭에서든 창 안에 있다", sizes.every((x) => x.saveInside), JSON.stringify(sizes.map((x) => x.saveInside)));
+    // 짧은 탭은 아래가 그냥 빈다(굴림 없음), 긴 탭은 오른쪽만 굴러간다.
+    // 둘 다 있어야 「고정 크기 + 넘치면 스크롤」이 실제로 동작하는 것이다.
+    check("★ 넘치는 탭은 안쪽이 굴러간다", sizes.some((x) => x.contentScrolls), JSON.stringify(sizes.map((x) => x.contentScrolls)));
+    check("★ 짧은 탭은 굴림 없이 공백으로 둔다", sizes.some((x) => !x.contentScrolls), JSON.stringify(sizes.map((x) => x.contentScrolls)));
+    await page.locator("#itemModalClose").click();
+    await page.waitForTimeout(300);
+  }
+
+  out.push("");
+  out.push("[좁은 화면에서도 같은 규칙]");
+  {
+    // 가게 태블릿은 세로로 세워 쓰신다. 거기서도 창이 튀면 안 된다.
+    await page.setViewportSize({ width: 720, height: 1000 });
+    await page.waitForTimeout(300);
+    await page.locator("#menuCategories tr").filter({ hasText: target.name_ko }).first().click();
+    await page.waitForTimeout(800);
+    const narrow = [];
+    for (const p of PANES) {
+      await page.locator(`.item-form-nav-btn[data-item-pane="${p}"]`).click();
+      await page.waitForTimeout(250);
+      narrow.push(await page.evaluate(() => {
+        const modal = document.querySelector(".modal.modal-wide");
+        const save = document.querySelector("#saveItemBtn").getBoundingClientRect();
+        const box = modal.getBoundingClientRect();
+        return { h: Math.round(box.height), saveInside: save.bottom <= box.bottom + 1 };
+      }));
+    }
+    check("★ 좁은 화면에서도 높이가 같다", new Set(narrow.map((x) => x.h)).size === 1, JSON.stringify(narrow.map((x) => x.h)));
+    check("저장 버튼도 그대로 보인다", narrow.every((x) => x.saveInside), JSON.stringify(narrow));
+    await page.locator("#itemModalClose").click();
+    await page.waitForTimeout(300);
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await page.waitForTimeout(300);
+  }
+
+  out.push("");
   out.push("[새 메뉴 추가도 같은 창을 쓴다]");
   {
     await page.locator("#addItemBtn").click();

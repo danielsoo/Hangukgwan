@@ -960,6 +960,59 @@ body:not(.role-staff) .staff-only { display: none !important; }
    보는 게 좋을 것 같아". .settings-shell/.settings-nav 와 같은 뼈대다.
    폼이 넓어져야 왼쪽 탭과 오른쪽 입력칸이 같이 들어가므로 이 창만 넓힌다. */
 .modal.modal-wide { max-width: 880px; }
+
+/* 창 크기를 **한 크기로 고정한다.**
+
+   사장님(2026-09-10): "메뉴 창이 크기에 따라 흰색 창이 번쩍번쩍 바뀌는데
+   그거 고정으로 해서 너무 크면 공백 그대로 냅두고 작으면 스크롤 내릴 수
+   있게 해줘. 공통 크기로."
+
+   탭마다 내용의 길이가 달랐다 — 「기본」은 짧고 「옵션」은 길다. 창이
+   내용에 맞춰 늘었다 줄었다 하니, 탭을 옮길 때마다 흰 상자가 튀었다.
+   .item-form-pane 에 min-height 로 바닥을 깔아 뒀었지만 그건 짧은 쪽만
+   막을 뿐, 긴 쪽이 넘칠 때는 여전히 창이 커졌다.
+
+   그래서 창의 키를 아예 못 박는다.
+
+     - 짧은 탭 → 아래가 그냥 빈다. 창은 안 움직인다.
+     - 긴 탭  → 오른쪽 내용만 굴러간다. 창도, 왼쪽 탭도, 저장 버튼도
+                제자리에 있다.
+
+   예전에는 창 전체가 굴렀다. 그래서 「옵션」 탭에서 아래로 내리면 저장
+   버튼이 화면 밖으로 사라졌다 — 저장하려고 다시 올라와야 했다. */
+.modal.modal-wide {
+  height: min(86vh, 780px);
+  max-height: none;   /* 위의 .modal 이 걸어둔 90vh 를 대신한다 */
+  overflow: hidden;   /* 굴리는 것은 아래 .item-form-content 한 곳뿐이다 */
+  display: flex;
+  flex-direction: column;
+}
+/* 제목과 저장 줄은 안 굴러간다. min-height:0 이 있어야 가운데가 줄어든다
+   — flex 자식은 기본적으로 내용보다 작아지지 않아서, 이게 없으면 창이
+   내용만큼 늘어나 고정한 의미가 없어진다. */
+.modal.modal-wide > h2 { flex: 0 0 auto; margin-top: 0; }
+.modal.modal-wide > .modal-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.modal.modal-wide .item-form-shell { flex: 1 1 auto; min-height: 0; }
+.modal.modal-wide .item-form-nav { align-self: stretch; }
+.modal.modal-wide .item-form-content {
+  height: 100%;
+  overflow-y: auto;
+  /* 굴림대가 입력칸 테두리를 덮지 않게 한 뼘 띄운다. */
+  padding-right: 8px;
+}
+/* 굴러가는 내용과 저장 줄 사이에 실선을 하나 둔다. 없으면 내용이 버튼
+   뒤로 잘려 들어가는 것처럼 보여서, 「화면이 깨졌나」로 읽힌다. */
+.modal.modal-wide .modal-actions {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
 .item-form-shell { display: flex; align-items: flex-start; gap: 20px; }
 .item-form-nav { display: flex; flex-direction: column; gap: 4px; flex: 0 0 168px; }
 .item-form-nav-btn {
@@ -975,10 +1028,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .item-form-nav-btn .nav-sub { display: block; font-size: 13px; font-weight: 400; opacity: 0.72; margin-top: 2px; }
 .item-form-nav-btn.active .nav-sub { opacity: 0.78; }
 .item-form-content { flex: 1; min-width: 0; }
-/* 탭마다 내용의 길이가 달라서, 짧은 탭으로 옮기면 창이 확 줄었다가 다시
-   늘어난다. 가장 긴 탭에 맞춰 바닥을 깔아두면 탭을 눌러도 창 크기가
-   그대로라 눈이 따라가기 쉽다. */
-.item-form-pane { min-height: 300px; }
+/* 창 자체가 고정 크기라(위 .modal.modal-wide) 여기에 바닥을 깔 필요가
+   없다. 오히려 깔아두면 짧은 탭에서도 굴림대가 생긴다. */
+.item-form-pane { min-height: 0; }
 /* 체크박스 줄은 원래 3칸 격자였다 — 탭으로 나누면서 한 줄에 한두 개만
    남는 탭이 생겨, 「매운맛」과 「대표 메뉴」가 화면 양끝으로 벌어졌다.
    개수와 상관없이 왼쪽부터 나란히 붙게 한다. */
@@ -1042,7 +1094,10 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .item-form-nav { flex-direction: row; flex-wrap: nowrap; overflow-x: auto; width: 100%; gap: 6px; padding-bottom: 4px; }
   .item-form-nav-btn { flex: 0 0 auto; width: auto; white-space: nowrap; }
   .item-form-nav-btn .nav-sub { display: none; }
-  .item-form-pane { min-height: 0; }
+  /* 가로로 누운 탭 줄은 눌리면 안 된다. 안 그러면 좁은 화면에서 탭이
+     찌그러지고 아래 내용이 그만큼 더 길어진다. */
+  .modal.modal-wide .item-form-nav { flex: 0 0 auto; align-self: auto; }
+  .modal.modal-wide .item-form-content { height: auto; flex: 1 1 auto; min-height: 0; }
 }
 .primary-btn { background: var(--red); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 700; }
 .danger-btn { background: #fff; color: var(--red); border: 1px solid var(--red); padding: 10px 20px; border-radius: 8px; cursor: pointer; }
