@@ -51,6 +51,45 @@
   // 남아서 기존 2초 폴링 그대로 동작한다.
   let realtimeEnabled = false;
   let pusherClient = null;
+
+  // 자기가 일으킨 변경을 자기가 다시 받아오지 않게 한다.
+  //
+  // 버튼 한 번에 이 기기가 요청을 세 번 보내고 있었다 — PATCH 하나, 그
+  // 뒤의 loadOrders() 하나, 그리고 서버가 쏜 Pusher "changed" 를 자기도
+  // 받아서 loadOrders() 를 또 하나. 마지막 것은 방금 가져온 것과 똑같은
+  // 목록을 다시 받는 순수한 낭비다.
+  //
+  // /api 로 나가는 모든 요청에 이 브라우저의 Pusher 소켓 번호를 붙이면,
+  // 서버가 그 소켓만 빼고 알림을 쏜다(src/realtime.js). 다른 기기들은
+  // 지금까지와 똑같이 받는다.
+  //
+  // fetch 호출부가 서른 곳 가까이라 한 곳씩 고치는 대신 여기서 감싼다.
+  // Pusher 가 아직 연결되기 전이거나 미설정 매장이면 소켓 번호가 없고,
+  // 그때는 손대지 않은 fetch 가 그대로 나간다(= 예전 동작).
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = function (input, init) {
+    let sid = null;
+    try {
+      sid = pusherClient && pusherClient.connection && pusherClient.connection.socket_id;
+    } catch (e) {
+      sid = null;
+    }
+    if (!sid) return nativeFetch(input, init);
+    const url = typeof input === "string" ? input : (input && input.url) || "";
+    // 같은 출처의 /api 요청만. Pusher 자신의 통신이나 외부 주소는 건드리지
+    // 않는다.
+    if (!url.startsWith("/api/")) return nativeFetch(input, init);
+    try {
+      const opts = Object.assign({}, init);
+      const headers = new Headers((init && init.headers) || (typeof input === "object" && input && input.headers) || undefined);
+      headers.set("X-Socket-Id", sid);
+      opts.headers = headers;
+      return nativeFetch(input, opts);
+    } catch (e) {
+      // 헤더를 못 붙이는 상황이 있더라도 요청 자체는 나가야 한다.
+      return nativeFetch(input, init);
+    }
+  };
   let knownOrderIds = new Set();
   let openTableNumber = null;
   // 포장 카운터는 서로 무관한 손님 주문이 여러 건 동시에 쌓일 수 있어서,

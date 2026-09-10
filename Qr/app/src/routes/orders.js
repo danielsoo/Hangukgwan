@@ -355,7 +355,7 @@ router.post("/", async (req, res) => {
   // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이
   // 싸다 — 예전에는 이 한 줄이 몇 MB를 다시 쓰는 일이었다.
   await Promise.all([saveOrder(order), save()]);
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
 
   res.status(201).json(order);
 });
@@ -515,7 +515,7 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   });
   // 순서를 바꾼 주문만 쓴다.
   await saveOrders(touched);
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
   res.json({ ok: true });
 });
 
@@ -629,7 +629,7 @@ router.post("/move", requireAdmin, async (req, res) => {
 
   await saveOrders(moving);
   await save();
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
   res.json({
     ok: true,
     moved: moving.length,
@@ -709,7 +709,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 사장님이 5~20초를 기다리던 버튼이 바로 이 자리다.
   await saveOrder(order);
   if (partyCleared) await save();
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
   res.json(order);
 });
 
@@ -790,7 +790,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   order.updated_at = nowLocal();
 
   await saveOrder(order);
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
   res.json(order);
 });
 
@@ -875,7 +875,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
 
   await saveOrder(order);
   if (partyCleared) await save();
-  broadcastOrdersChanged();
+  broadcastOrdersChanged(req);
   res.json({ updatedOrder: order });
 });
 

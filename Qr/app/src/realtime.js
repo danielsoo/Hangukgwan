@@ -31,11 +31,46 @@ if (process.env.PUSHER_APP_ID && process.env.PUSHER_KEY && process.env.PUSHER_SE
 // 장애 등)가 주문 처리 자체를 실패시키면 안 된다. admin.js는 이 알림을
 // 못 받아도 훨씬 느린 폴백 폴링(realtime 미설정 시와 동일한 주기)으로
 // 계속 새 주문을 찾아낸다.
-function broadcastOrdersChanged() {
-  if (!pusher) return;
-  pusher.trigger("orders", "changed", {}).catch((err) => {
-    console.error("[realtime] pusher trigger failed:", err.message);
-  });
+// 이 변경을 일으킨 기기에게는 알림을 되돌려 보내지 않는다.
+//
+// 2026-09-10: 직원이 「조리 시작」을 누르면 그 기기가 요청을 세 번 보내고
+// 있었다 — PATCH 한 번, 그 뒤에 스스로 부르는 loadOrders() 한 번, 그리고
+// 서버가 쏜 이 알림을 자기도 받아서 loadOrders() 를 또 한 번. 세 번째는
+// 두 번째와 같은 것을 가져오는 순수한 낭비다. 직원 태블릿이 세 대 열려
+// 있으면 버튼 한 번에 주문 목록 전체가 네 번 오간다.
+//
+// Pusher 는 이걸 위한 기능을 갖고 있다: trigger 에 socket_id 를 주면 그
+// 소켓 하나만 빼고 나머지 구독자에게 보낸다. 브라우저는 자기 소켓 번호를
+// X-Socket-Id 헤더로 실어 보낸다(public/js/admin.js 의 fetch 감싸기).
+// 다른 기기들은 지금까지와 똑같이 받는다 — 빠지는 건 "내가 방금 눌러서
+// 이미 알고 있는" 기기 하나뿐이다.
+//
+// 소켓 번호가 없으면(Pusher 미연결, 손님 폰에서 들어온 주문, 헤더를 안
+// 붙이는 옛 화면) 예전처럼 전원에게 보낸다.
+const SOCKET_ID_RE = /^\d+\.\d+$/;
+
+function socketIdFrom(req) {
+  if (!req || typeof req.get !== "function") return null;
+  const raw = req.get("x-socket-id");
+  // Pusher 는 형식이 어긋난 socket_id 에 동기적으로 예외를 던진다. 주문
+  // 처리가 헤더 하나 때문에 실패하면 안 되므로 형식을 먼저 본다.
+  return raw && SOCKET_ID_RE.test(raw) ? raw : null;
 }
 
-module.exports = { broadcastOrdersChanged };
+function broadcastOrdersChanged(req) {
+  if (!pusher) return;
+  const socketId = socketIdFrom(req);
+  try {
+    pusher
+      .trigger("orders", "changed", {}, socketId ? { socket_id: socketId } : undefined)
+      .catch((err) => {
+        console.error("[realtime] pusher trigger failed:", err.message);
+      });
+  } catch (e) {
+    // 위 catch 는 비동기 실패용이다. trigger 자체가 동기적으로 던지는
+    // 경우(형식 검사 등)까지 여기서 막아야 주문이 살아남는다.
+    console.error("[realtime] pusher trigger threw:", e.message);
+  }
+}
+
+module.exports = { broadcastOrdersChanged, socketIdFrom };
