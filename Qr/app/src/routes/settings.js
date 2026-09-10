@@ -464,4 +464,67 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
   res.json(ticketFontSizesStatus());
 });
 
+// 자리 이동 빌지 — 2026-09-10 사장님: "이것도 설정 -> 인쇄 에서 수정할 수
+// 있게 해줘."
+//
+// 주문서 글자 크기(위 ticket-print)와 같은 방식이다: 크기와 굵기를 평평한
+// 한 객체 안에 "<항목>" / "<항목>Weight" 로 나란히 저장하고, 같은 범위로
+// 자른다. 두 화면이 다르게 동작하면 사장님이 매번 다시 배워야 한다.
+//
+// 여기만 다른 것: 켜고 끄기와 「옮긴 주문 목록 넣기」. 주문서는 끌 수 있는
+// 물건이 아니지만 이 종이는 매장에 따라 필요 없을 수도 있고, 목록이 길면
+// 종이만 길어진다.
+const MOVE_SLIP_FONT_KEYS = ["storeName", "title", "tables", "info", "orders", "footer"];
+const MOVE_SLIP_WEIGHT_KEYS = MOVE_SLIP_FONT_KEYS.map((k) => `${k}Weight`);
+const DEFAULT_MOVE_SLIP = {
+  storeName: 13,
+  title: 20,
+  // 이 종이의 전부인 한 줄 — 붙여두고 멀리서 읽는 용도라 기본이 크다.
+  tables: 34,
+  info: 13,
+  orders: 13,
+  footer: 14,
+  storeNameWeight: 400,
+  titleWeight: 700,
+  tablesWeight: 700,
+  infoWeight: 400,
+  ordersWeight: 400,
+  footerWeight: 700,
+};
+
+function moveSlipStatus() {
+  const saved = store.settings.move_slip || {};
+  const out = Object.assign({}, DEFAULT_MOVE_SLIP);
+  for (const k of [...MOVE_SLIP_FONT_KEYS, ...MOVE_SLIP_WEIGHT_KEYS]) {
+    if (typeof saved[k] === "number") out[k] = saved[k];
+  }
+  // 정한 적이 없으면 켜져 있다. 자리 이동을 만든 이유가 이 종이이므로,
+  // 설정 화면을 한 번도 안 연 매장에서도 나와야 한다.
+  out.enabled = saved.enabled === undefined ? true : !!saved.enabled;
+  out.showOrders = saved.showOrders === undefined ? true : !!saved.showOrders;
+  return out;
+}
+
+router.get("/move-slip", requireAdmin, (req, res) => {
+  res.json(moveSlipStatus());
+});
+
+router.put("/move-slip", requireOwner, async (req, res) => {
+  const b = req.body || {};
+  const cfg = Object.assign({}, store.settings.move_slip || {});
+  for (const k of MOVE_SLIP_FONT_KEYS) {
+    const v = Number(b[k]);
+    if (Number.isFinite(v)) cfg[k] = Math.max(8, Math.min(40, Math.round(v)));
+  }
+  for (const k of MOVE_SLIP_WEIGHT_KEYS) {
+    const v = Number(b[k]);
+    if (Number.isFinite(v)) cfg[k] = Math.max(100, Math.min(900, Math.round(v / 100) * 100));
+  }
+  if (b.enabled !== undefined) cfg.enabled = !!b.enabled;
+  if (b.showOrders !== undefined) cfg.showOrders = !!b.showOrders;
+  store.settings.move_slip = cfg;
+  await save();
+  res.json(moveSlipStatus());
+});
+
 module.exports = router;

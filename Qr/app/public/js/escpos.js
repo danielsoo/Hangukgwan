@@ -486,9 +486,15 @@
    *
    * info = { from, to, at, partySize, note, orders: [{ id, time, summary }] }
    */
-  function buildEscPosMoveSlip(info, storeName) {
+  function buildEscPosMoveSlip(info, storeName, sizes) {
     info = info || {};
-    const orders = info.orders || [];
+    // 설정 > 인쇄 > 자리 이동 빌지에서 정한 크기·굵기(2026-09-10 사장님:
+    // "이것도 설정 -> 인쇄 에서 수정할 수 있게 해줘"). 안 넘어오면 기본값 —
+    // 이 파일은 서버 설정을 모르는 순수 함수로 남는다(주문서와 같은 규칙).
+    const z = sizes || {};
+    const sz = (k, d) => z[k] || d;
+    const wt = (k, d) => z[k + "Weight"] || d;
+    const orders = info.showOrders === false ? [] : info.orders || [];
 
     const measureCanvas = document.createElement("canvas");
     measureCanvas.width = RASTER_DOTS_WIDE;
@@ -514,26 +520,26 @@
       y += 14;
     };
 
-    text(storeName || "한국관", 13, 400, "center", 10);
-    text("자리 이동 · 換桌", 20, 700, "center", 16);
+    text(storeName || "한국관", sz("storeName", 13), wt("storeName", 400), "center", 10);
+    text("자리 이동 · 換桌", sz("title", 20), wt("title", 700), "center", 16);
     divider();
     // 이 한 줄이 이 종이의 전부다. 멀리서 읽히게 제일 크게.
-    text(`${info.from} → ${info.to}`, 34, 700, "center", 18);
+    text(`${info.from} → ${info.to}`, sz("tables", 34), wt("tables", 700), "center", 18);
     divider();
-    row("시각 / 時間", info.at || "", 13, 400, 8);
-    if (info.partySize) row("인원 / 人數", `${info.partySize}`, 13, 400, 8);
-    if (info.note) row("", info.note, 13, 400, 8);
+    row("시각 / 時間", info.at || "", sz("info", 13), wt("info", 400), 8);
+    if (info.partySize) row("인원 / 人數", `${info.partySize}`, sz("info", 13), wt("info", 400), 8);
+    if (info.note) row("", info.note, sz("info", 13), wt("info", 400), 8);
     if (orders.length) {
       divider();
-      text(`옮긴 주문 / 移動訂單 ${orders.length}`, 13, 700, "left", 10);
+      text(`옮긴 주문 / 移動訂單 ${orders.length}`, sz("orders", 13), 700, "left", 10);
       orders.forEach((o) => {
-        row(`#${o.id} ${o.time || ""}`.trim(), o.summary || "", 13, 400, 6);
+        row(`#${o.id} ${o.time || ""}`.trim(), o.summary || "", sz("orders", 13), wt("orders", 400), 6);
       });
     }
     divider();
     // 손님 폰에는 아직 옛 자리 화면이 떠 있다.
-    text("손님은 새 자리 QR 로 주문", 14, 700, "center", 4);
-    text("請客人改掃新桌號 QR", 13, 400, "center", 10);
+    text("손님은 새 자리 QR 로 주문", sz("footer", 14), wt("footer", 700), "center", 4);
+    text("請客人改掃新桌號 QR", Math.max(8, sz("footer", 14) - 1), 400, "center", 10);
 
     const canvas = document.createElement("canvas");
     canvas.width = RASTER_DOTS_WIDE;

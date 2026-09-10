@@ -745,6 +745,41 @@
           <button id="resetTicketFontSizesBtn" type="button" data-i18n="ticketFontResetBtn">기본값으로</button>
           <div class="save-msg" id="ticketFontSizesMsg" hidden></div>
         </div>
+        <!-- 자리 이동 빌지 — 2026-09-10 사장님: "이것도 설정 -> 인쇄 에서
+             수정할 수 있게 해줘." 위 주문서 카드와 같은 모양·같은 범위로
+             둔다. 두 화면이 다르게 동작하면 매번 다시 배워야 한다. -->
+        <div class="settings-card">
+          <h3 data-i18n="moveSlipTitle">자리 이동 빌지</h3>
+          <p class="settings-hint" data-i18n="moveSlipHint">
+            손님 자리를 옮기면 한 장 나오는 종이예요. 주방과 홀에는 이미 옛 번호가 찍힌 주문서가 나가 있어서,
+            화면에서만 바뀌면 종이를 들고 다니는 사람은 그 사실을 몰라요. 붙여두거나 옛 주문서 위에 얹어두는
+            용도라 「5 → 8」 한 줄이 제일 크게 나갑니다.
+          </p>
+          <label class="perm-toggle-row"><span data-i18n="moveSlipEnableLabel">자리 이동 빌지 인쇄</span><input type="checkbox" id="moveSlipEnabledToggle" /></label>
+          <label class="perm-toggle-row"><span data-i18n="moveSlipShowOrdersLabel">옮긴 주문 목록 넣기</span><input type="checkbox" id="moveSlipShowOrdersToggle" /></label>
+          <div class="ticket-font-editor">
+            <div class="ticket-font-fields">
+              <div class="ticket-font-field ticket-font-field-header">
+                <span></span>
+                <span class="ticket-font-col-label" data-i18n="tfsSizeColLabel">크기</span>
+                <span class="ticket-font-col-label" data-i18n="tfsWeightColLabel">굵기</span>
+              </div>
+              <label class="ticket-font-field"><span data-i18n="msStoreName">상호명 (헤더)</span><input type="number" id="msStoreName" min="8" max="40" /><input type="number" id="msStoreNameWeight" min="100" max="900" step="100" /></label>
+              <label class="ticket-font-field"><span data-i18n="msTitle">제목 (자리 이동)</span><input type="number" id="msTitle" min="8" max="40" /><input type="number" id="msTitleWeight" min="100" max="900" step="100" /></label>
+              <label class="ticket-font-field"><span data-i18n="msTables">자리 번호 (5 → 8)</span><input type="number" id="msTables" min="8" max="40" /><input type="number" id="msTablesWeight" min="100" max="900" step="100" /></label>
+              <label class="ticket-font-field"><span data-i18n="msInfo">시각 · 인원</span><input type="number" id="msInfo" min="8" max="40" /><input type="number" id="msInfoWeight" min="100" max="900" step="100" /></label>
+              <label class="ticket-font-field"><span data-i18n="msOrders">옮긴 주문 목록</span><input type="number" id="msOrders" min="8" max="40" /><input type="number" id="msOrdersWeight" min="100" max="900" step="100" /></label>
+              <label class="ticket-font-field"><span data-i18n="msFooter">하단 안내 (새 자리 QR)</span><input type="number" id="msFooter" min="8" max="40" /><input type="number" id="msFooterWeight" min="100" max="900" step="100" /></label>
+            </div>
+            <div class="ticket-font-preview-wrap">
+              <iframe id="moveSlipPreviewFrame" class="ticket-font-preview-frame" title="move slip preview"></iframe>
+            </div>
+          </div>
+          <button id="saveMoveSlipBtn" data-i18n="saveBtn">저장</button>
+          <button id="resetMoveSlipBtn" type="button" data-i18n="ticketFontResetBtn">기본값으로</button>
+          <button id="testMoveSlipBtn" type="button" data-i18n="moveSlipTestBtn">🖨️ 테스트 인쇄</button>
+          <div class="save-msg" id="moveSlipMsg" hidden></div>
+        </div>
         </div>
         </div>
       </div>

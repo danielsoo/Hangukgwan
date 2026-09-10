@@ -465,6 +465,19 @@
       unpaidTotalLabel: "현재 미결제 합계:",
       clearPartySizeBtn: "👥 손님 나감 (인원수 비우기)",
       moveTableBtn: "🔀 자리 이동",
+      moveSlipTitle: "자리 이동 빌지",
+      moveSlipHint: "손님 자리를 옮기면 한 장 나오는 종이예요. 주방과 홀에는 이미 옛 번호가 찍힌 주문서가 나가 있어서, 화면에서만 바뀌면 종이를 들고 다니는 사람은 그 사실을 몰라요. 붙여두거나 옛 주문서 위에 얹어두는 용도라 「5 → 8」 한 줄이 제일 크게 나갑니다.",
+      moveSlipEnableLabel: "자리 이동 빌지 인쇄",
+      moveSlipShowOrdersLabel: "옮긴 주문 목록 넣기",
+      moveSlipTestBtn: "🖨️ 테스트 인쇄",
+      moveSlipSampleItemA: "돌솥비빔밥",
+      moveSlipSampleItemB: "김치찌개",
+      msStoreName: "상호명 (헤더)",
+      msTitle: "제목 (자리 이동)",
+      msTables: "자리 번호 (5 → 8)",
+      msInfo: "시각 · 인원",
+      msOrders: "옮긴 주문 목록",
+      msFooter: "하단 안내 (새 자리 QR)",
       moveTableModalTitle: "자리 이동 — 옮길 자리 선택",
       moveTableOccupied: "손님 있음",
       moveTableNoTargets: "옮길 수 있는 자리가 없습니다",
@@ -1017,6 +1030,19 @@
       unpaidTotalLabel: "目前未結帳金額：",
       clearPartySizeBtn: "👥 客人已離開（清除人數）",
       moveTableBtn: "🔀 換桌",
+      moveSlipTitle: "換桌單",
+      moveSlipHint: "換桌時會印出一張。廚房與外場已經拿到印著舊桌號的訂單，只改畫面的話拿著紙的人不會知道。這張紙是用來貼著或壓在舊訂單上的，所以「5 → 8」那一行印得最大。",
+      moveSlipEnableLabel: "列印換桌單",
+      moveSlipShowOrdersLabel: "附上移動的訂單清單",
+      moveSlipTestBtn: "🖨️ 測試列印",
+      moveSlipSampleItemA: "石鍋拌飯",
+      moveSlipSampleItemB: "泡菜火鍋",
+      msStoreName: "店名（表頭）",
+      msTitle: "標題（換桌）",
+      msTables: "桌號（5 → 8）",
+      msInfo: "時間 · 人數",
+      msOrders: "移動的訂單清單",
+      msFooter: "下方提醒（新桌號 QR）",
       moveTableModalTitle: "換桌 — 選擇要移到的桌號",
       moveTableOccupied: "有客人",
       moveTableNoTargets: "沒有可以移動的桌號",
@@ -1748,6 +1774,7 @@
       if (!$("#tab-reservations").hidden) renderReservations();
       // 설정 화면 — 「주문 받는 시간」 카드와 찾기 결과도 JS 가 글자를 만든다.
       refreshOrderHoursI18n();
+      updateMoveSlipPreview();
       if ($("#settingsSearch")) renderSettingsSearch($("#settingsSearch").value);
     };
   });
@@ -1805,7 +1832,7 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
-    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings(), loadTicketFontSizes()]);
+    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings(), loadTicketFontSizes(), loadMoveSlipSettings()]);
     // loadOrders() and loadTables() run concurrently above, so the order
     // queue's very first render can land before `tables` is populated —
     // harmless before this feature, but renderOrderCard now looks up
@@ -8179,6 +8206,146 @@
     return true;
   }
 
+  // ---------- 자리 이동 빌지 설정 (설정 > 인쇄) ----------
+  // 2026-09-10 사장님: "이것도 설정 -> 인쇄 에서 수정할 수 있게 해줘."
+  // 주문서 글자 크기 카드와 같은 모양·같은 저장 방식이다(위
+  // loadTicketFontSizes 참고) — 두 화면이 다르게 동작하면 매번 다시 배워야 한다.
+  const DEFAULT_MOVE_SLIP = {
+    storeName: 13, title: 20, tables: 34, info: 13, orders: 13, footer: 14,
+    storeNameWeight: 400, titleWeight: 700, tablesWeight: 700,
+    infoWeight: 400, ordersWeight: 400, footerWeight: 700,
+  };
+  const MOVE_SLIP_KEYS = ["storeName", "title", "tables", "info", "orders", "footer"];
+  // 직원 화면에서도 들고 있어야 한다 — 자리를 옮기는 건 직원이고, 그때
+  // 나가는 종이는 사장님이 정한 크기여야 한다(주문서와 같은 이유).
+  let moveSlipSettings = Object.assign({ enabled: true, showOrders: true }, DEFAULT_MOVE_SLIP);
+
+  function readMoveSlipInputs() {
+    const out = {
+      enabled: !!($("#moveSlipEnabledToggle") || {}).checked,
+      showOrders: !!($("#moveSlipShowOrdersToggle") || {}).checked,
+    };
+    MOVE_SLIP_KEYS.forEach((k) => {
+      const id = `ms${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+      const size = $(`#${id}`);
+      const weight = $(`#${id}Weight`);
+      if (size && size.value !== "") out[k] = Number(size.value);
+      if (weight && weight.value !== "") out[`${k}Weight`] = Number(weight.value);
+    });
+    return out;
+  }
+
+  function setMoveSlipInputs(cfg) {
+    const enabled = $("#moveSlipEnabledToggle");
+    const showOrders = $("#moveSlipShowOrdersToggle");
+    if (enabled) enabled.checked = cfg.enabled !== false;
+    if (showOrders) showOrders.checked = cfg.showOrders !== false;
+    MOVE_SLIP_KEYS.forEach((k) => {
+      const id = `ms${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+      const size = $(`#${id}`);
+      const weight = $(`#${id}Weight`);
+      if (size) size.value = cfg[k] != null ? cfg[k] : DEFAULT_MOVE_SLIP[k];
+      if (weight) weight.value = cfg[`${k}Weight`] != null ? cfg[`${k}Weight`] : DEFAULT_MOVE_SLIP[`${k}Weight`];
+    });
+  }
+
+  // 미리보기는 실제로 인쇄되는 그 HTML 그대로다 — 따로 그린 그림이면
+  // 화면과 종이가 조금씩 달라지고, 그 차이는 종이가 나온 뒤에야 보인다.
+  function sampleMoveSlipInfo() {
+    return {
+      storeName: (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관",
+      from: "5",
+      to: "8",
+      at: new Date().toTimeString().slice(0, 5),
+      partySize: 4,
+      orders: [
+        { id: 128, time: "19:05", summary: `${T("moveSlipSampleItemA")}×2` },
+        { id: 131, time: "19:24", summary: `${T("moveSlipSampleItemB")}×1` },
+      ],
+    };
+  }
+
+  function updateMoveSlipPreview() {
+    const frame = $("#moveSlipPreviewFrame");
+    if (!frame) return;
+    const cfg = readMoveSlipInputs();
+    frame.srcdoc = buildMoveSlipHtml(
+      Object.assign(sampleMoveSlipInfo(), { showOrders: cfg.showOrders }),
+      Object.assign({}, DEFAULT_MOVE_SLIP, cfg)
+    );
+  }
+
+  ["#moveSlipEnabledToggle", "#moveSlipShowOrdersToggle"].forEach((sel) => {
+    const el = $(sel);
+    if (el) el.onchange = updateMoveSlipPreview;
+  });
+  MOVE_SLIP_KEYS.forEach((k) => {
+    const id = `ms${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+    [$(`#${id}`), $(`#${id}Weight`)].forEach((el) => {
+      if (!el) return;
+      el.oninput = updateMoveSlipPreview;
+      el.onchange = updateMoveSlipPreview;
+    });
+  });
+
+  async function loadMoveSlipSettings() {
+    try {
+      const res = await fetch("/api/settings/move-slip");
+      if (res.ok) moveSlipSettings = Object.assign({}, DEFAULT_MOVE_SLIP, await res.json());
+    } catch (e) {
+      /* 못 불러와도 기본값으로 종이는 나와야 한다 */
+    }
+    setMoveSlipInputs(moveSlipSettings);
+    updateMoveSlipPreview();
+  }
+
+  const saveMoveSlipBtn = $("#saveMoveSlipBtn");
+  if (saveMoveSlipBtn) {
+    saveMoveSlipBtn.onclick = async () => {
+      const res = await fetch("/api/settings/move-slip", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(readMoveSlipInputs()),
+      });
+      const msg = $("#moveSlipMsg");
+      if (res.ok) {
+        moveSlipSettings = Object.assign({}, DEFAULT_MOVE_SLIP, await res.json());
+        setMoveSlipInputs(moveSlipSettings);
+        updateMoveSlipPreview();
+        msg.style.color = "#1a8a44";
+        msg.textContent = T("ticketFontSavedMsg");
+      } else {
+        msg.style.color = "#b5232c";
+        msg.textContent = T("staffPasswordFailed");
+      }
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2500);
+    };
+  }
+
+  const resetMoveSlipBtn = $("#resetMoveSlipBtn");
+  if (resetMoveSlipBtn) {
+    resetMoveSlipBtn.onclick = () => {
+      setMoveSlipInputs(Object.assign({ enabled: true, showOrders: true }, DEFAULT_MOVE_SLIP));
+      updateMoveSlipPreview();
+    };
+  }
+
+  const testMoveSlipBtn = $("#testMoveSlipBtn");
+  if (testMoveSlipBtn) {
+    testMoveSlipBtn.onclick = async () => {
+      // 화면에 지금 적혀 있는 값으로 뽑는다 — 저장하기 전에 종이로 확인할
+      // 수 있어야 "저장하고 손님 자리 옮겨보기" 를 안 한다.
+      const saved = moveSlipSettings;
+      moveSlipSettings = Object.assign({}, DEFAULT_MOVE_SLIP, readMoveSlipInputs(), { enabled: true });
+      try {
+        await printMoveSlip(sampleMoveSlipInfo());
+      } finally {
+        moveSlipSettings = saved;
+      }
+    };
+  }
+
   // ---------- 자리 이동 빌지 ----------
   // 2026-09-10 사장님: "자리이동하면 자리이동 빌지도 하나 나왔으면 좋겠어."
   //
@@ -8190,10 +8357,13 @@
   // 새로 정하면 주문서와 어긋난다.
   async function printMoveSlip(info) {
     if (typeof buildEscPosMoveSlip !== "function") return false;
+    // 사장님이 이 종이를 꺼둔 매장에서는 아무것도 하지 않는다.
+    if (moveSlipSettings.enabled === false) return false;
+    info = Object.assign({ showOrders: moveSlipSettings.showOrders !== false }, info);
     let bytes;
     try {
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
-      bytes = buildEscPosMoveSlip(info, storeName);
+      bytes = buildEscPosMoveSlip(info, storeName, moveSlipSettings);
     } catch (e) {
       console.warn("자리 이동 빌지를 만들지 못했습니다:", e);
       return false;
@@ -8225,7 +8395,7 @@
     const win = window.open("", "_blank");
     if (!win) return false;
     win.document.open();
-    win.document.write(buildMoveSlipHtml(info));
+    win.document.write(buildMoveSlipHtml(info, moveSlipSettings));
     win.document.close();
     setTimeout(() => {
       win.focus();
@@ -8234,22 +8404,24 @@
     return true;
   }
 
-  function buildMoveSlipHtml(info) {
+  function buildMoveSlipHtml(info, sizes) {
+    const z = Object.assign({}, DEFAULT_MOVE_SLIP, sizes || {});
     const esc = (v) =>
       String(v == null ? "" : v).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-    const rows = (info.orders || [])
-      .map((o) => `<div class="row"><span>#${esc(o.id)} ${esc(o.time || "")}</span><span>${esc(o.summary || "")}</span></div>`)
+    const rows = (info.showOrders === false ? [] : info.orders || [])
+      .map((o) => `<div class="row ord"><span>#${esc(o.id)} ${esc(o.time || "")}</span><span>${esc(o.summary || "")}</span></div>`)
       .join("");
     return `<!doctype html><html><head><meta charset="utf-8"><title>자리 이동</title><style>
       @page { margin: 4mm; }
       body { font-family: "Noto Sans TC","Noto Sans KR",sans-serif; width: 72mm; margin: 0 auto; color: #000; }
-      .store { text-align: center; font-size: 13px; }
-      h1 { text-align: center; font-size: 20px; margin: 6px 0 10px; }
-      .big { text-align: center; font-size: 34px; font-weight: 700; margin: 10px 0; }
+      .store { text-align: center; font-size: ${z.storeName}px; font-weight: ${z.storeNameWeight}; }
+      h1 { text-align: center; font-size: ${z.title}px; font-weight: ${z.titleWeight}; margin: 6px 0 10px; }
+      .big { text-align: center; font-size: ${z.tables}px; font-weight: ${z.tablesWeight}; margin: 10px 0; }
       hr { border: none; border-top: 2px solid #000; margin: 8px 0; }
-      .row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; gap: 8px; }
-      .qr { text-align: center; font-size: 14px; font-weight: 700; margin-top: 8px; }
-      .qr small { display: block; font-weight: 400; font-size: 12px; }
+      .row { display: flex; justify-content: space-between; font-size: ${z.info}px; font-weight: ${z.infoWeight}; margin-bottom: 4px; gap: 8px; }
+      .row.ord { font-size: ${z.orders}px; font-weight: ${z.ordersWeight}; }
+      .qr { text-align: center; font-size: ${z.footer}px; font-weight: ${z.footerWeight}; margin-top: 8px; }
+      .qr small { display: block; font-weight: 400; font-size: ${Math.max(8, z.footer - 2)}px; }
     </style></head><body>
       <div class="store">${esc(info.storeName || "한국관")}</div>
       <h1>자리 이동 · 換桌</h1>

@@ -280,6 +280,77 @@ function check(name, cond, extra = "") {
     check("새 QR 안내가 들어간다", printed.includes("새 자리 QR"));
   }
 
+  out.push("\n[설정 > 인쇄에서 고칠 수 있다]");
+  // 2026-09-10 사장님: "이것도 설정 -> 인쇄 에서 수정할 수 있게 해줘."
+  {
+    await page.locator('.admin-tabs button[data-tab="settings"]').click();
+    await page.waitForTimeout(700);
+    await page.locator('.settings-nav-btn[data-category="print"]').click();
+    await page.waitForTimeout(400);
+    check("자리 이동 빌지 카드가 보인다", await page.locator("#moveSlipEnabledToggle").isVisible());
+    check("미리보기가 있다", await page.locator("#moveSlipPreviewFrame").isVisible());
+    // 미리보기는 실제로 인쇄되는 그 HTML 그대로여야 한다 — 따로 그린
+    // 그림이면 화면과 종이가 조금씩 달라지고, 그 차이는 종이가 나온 뒤에야 보인다.
+    const previewText = await page.frameLocator("#moveSlipPreviewFrame").locator("body").innerText();
+    check("미리보기에 자리 번호가 크게 들어간다", previewText.includes("5 → 8"), previewText.slice(0, 120));
+
+    // 크기를 바꾸면 미리보기가 따라온다.
+    await page.locator("#msTables").fill("28");
+    await page.waitForTimeout(300);
+    const css = await page.frameLocator("#moveSlipPreviewFrame").locator("head style").innerText();
+    check("바꾼 크기가 미리보기에 반영된다", /\.big[^}]*font-size: 28px/.test(css), css.slice(0, 200));
+
+    await page.locator("#saveMoveSlipBtn").click();
+    await page.waitForTimeout(700);
+    const saved = await page.evaluate(async () => (await fetch("/api/settings/move-slip")).json());
+    check("저장된다", saved.tables === 28, JSON.stringify(saved));
+    check("켜짐/끄기도 같이 저장된다", saved.enabled === true && saved.showOrders === true, JSON.stringify(saved));
+
+    // 저장한 크기가 실제로 나가는 종이에 쓰이는지 — 설정만 저장되고 인쇄가
+    // 예전 크기로 나가면 아무 의미가 없다.
+    const usesSaved = await page.evaluate(() => {
+      const html = window.__moveSlipHtmlForTest({ from: "5", to: "8", at: "19:32", orders: [] }, { tables: 28 });
+      return /\.big[^}]*font-size: 28px/.test(html);
+    });
+    check("인쇄에도 그 크기가 쓰인다", usesSaved);
+
+    // 범위 밖 값은 서버가 잘라낸다 — 오타 하나로 종이를 낭비하거나 못 읽는
+    // 빌지가 나오면 안 된다.
+    const clamped = await page.evaluate(async () => {
+      const r = await fetch("/api/settings/move-slip", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tables: 999, storeNameWeight: 12345 }),
+      });
+      return r.json();
+    });
+    check("너무 큰 크기는 잘라낸다", clamped.tables === 40, JSON.stringify(clamped));
+    check("굵기는 100 단위로 맞춘다", clamped.storeNameWeight === 900, JSON.stringify(clamped));
+
+    // 껐으면 인쇄하지 않는다.
+    await page.evaluate(async () => {
+      await fetch("/api/settings/move-slip", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: false }),
+      });
+    });
+    const off = await page.evaluate(async () => (await fetch("/api/settings/move-slip")).json());
+    check("끌 수 있다", off.enabled === false, JSON.stringify(off));
+    {
+      // 사장님이 배포 전에 눈으로 확인할 수 있게 찍어둔다.
+      const path = require("path");
+      const fs = require("fs");
+      const shots = path.join(__dirname, "..", "..", "..", "_screens");
+      fs.mkdirSync(shots, { recursive: true });
+      await page.locator("#moveSlipEnabledToggle").locator("xpath=../..").screenshot({ path: path.join(shots, "move-slip-settings.png") });
+    }
+    await page.evaluate(async () => {
+      await fetch("/api/settings/move-slip", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: true, tables: 34 }),
+      });
+    });
+  }
+
   out.push("\n[화면에서]");
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(900);
