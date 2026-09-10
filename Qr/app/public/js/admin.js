@@ -954,6 +954,16 @@
       rawbtTestFailed: "✘ RawBT로 보내는 데 실패했어요 — 이 기기에 RawBT 앱이 설치되어 있는지 확인해주세요.",
       alarmTitle: "🔔 주문 알림음",
       alarmHint: "새 주문이 들어올 때 나는 소리예요. 이 컴퓨터/태블릿에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
+      alarmDurationLabel: "알림 길이",
+      alarmDurOnce: "한 번만",
+      alarmDur3: "3초",
+      alarmDur5: "5초",
+      alarmDur10: "10초",
+      alarmDur30: "30초",
+      alarmDurAck: "끌 때까지",
+      alarmDurationHint: "울리는 동안 「실시간 주문」 화면 위쪽에 「🔕 알림 끄기」 버튼이 뜨고, 그걸 누르면 바로 멈춰요. 「끌 때까지」도 아무도 안 누르면 2분에서 저절로 멈춥니다.",
+      alarmStopBtn: "🔕 알림 끄기",
+      alarmPreviewStopBtn: "■ 정지",
       alarmToneLabel: "벨소리",
       alarmToneBeep: "기본 삐",
       alarmToneDing: "딩동",
@@ -1567,6 +1577,16 @@
       rawbtTestFailed: "✘ 傳送給 RawBT 失敗 — 請確認這台裝置是否已安裝 RawBT App。",
       alarmTitle: "🔔 新訂單提示音",
       alarmHint: "新訂單進來時發出的聲音。只影響這台電腦/平板，不會影響其他人的畫面。",
+      alarmDurationLabel: "提示音長度",
+      alarmDurOnce: "只響一次",
+      alarmDur3: "3 秒",
+      alarmDur5: "5 秒",
+      alarmDur10: "10 秒",
+      alarmDur30: "30 秒",
+      alarmDurAck: "直到關閉",
+      alarmDurationHint: "響鈴期間「即時訂單」畫面上方會出現「🔕 停止提示音」按鈕，按一下就會立刻停止。選「直到關閉」時，若一直沒人按，2 分鐘後也會自動停止。",
+      alarmStopBtn: "🔕 停止提示音",
+      alarmPreviewStopBtn: "■ 停止",
       alarmToneLabel: "鈴聲",
       alarmToneBeep: "基本嗶聲",
       alarmToneDing: "叮咚",
@@ -2412,6 +2432,23 @@
   // 무슨 짓을 해도 한계가 있어서, 설정 화면에 그 안내를 같이 적어뒀다.
   const ALARM_SOUND_KEY = "hg_admin_alarmSound";
   const ALARM_VOLUME_KEY = "hg_admin_alarmVolume";
+  // 알림 길이 — 2026-09-10 사장님: "알림을 좀 더 길게 해달라는 요청이 있어".
+  //
+  // 소리 하나를 길게 늘이지 않는다. 늘인 소리는 그냥 길기만 하고, 홀에서는
+  // 오히려 배경음처럼 들려서 더 안 들린다. 정한 시간 동안 같은 소리를 다시
+  // 울리는 쪽이 "저거 울리고 있다"로 들린다.
+  //
+  // 초 단위. 0 = 예전처럼 한 번만, -1 = 누가 끌 때까지(안전을 위해 2분에서
+  // 저절로 멈춘다 — 아무도 없는 가게에서 밤새 울리면 안 된다).
+  const ALARM_DURATION_KEY = "hg_admin_alarmDuration";
+  const ALARM_DURATION_CHOICES = [0, 3, 5, 10, 30, -1];
+  // 기본값을 0(한 번)이 아니라 5초로 둔다. 이번 요청 자체가 "짧아서 놓친다"
+  // 였으므로, 설정을 한 번도 안 건드린 기기에서도 길어져야 한다. 울리는 동안
+  // 「알림 끄기」 버튼이 떠 있어서 시끄러우면 한 번 누르면 끝난다.
+  const ALARM_DEFAULT_DURATION = 5;
+  const ALARM_ACK_CAP_MS = 2 * 60 * 1000;
+  // 소리 사이의 쉼. 붙여서 울리면 한 덩어리로 뭉쳐서 몇 번 울렸는지 모른다.
+  const ALARM_REPEAT_GAP = 0.35;
   const ALARM_VOLUME_MAX = 1000; // %
   const ALARM_DEFAULT_SOUND = "beep";
   const ALARM_DEFAULT_VOLUME = 100;
@@ -2510,6 +2547,20 @@
     },
   };
 
+  // 소리마다 실제로 나는 길이(초). 위 ALARM_SOUNDS 의 alarmTone 스케줄에서
+  // 나온 값이라, 소리를 고치면 여기도 같이 고쳐야 한다 — 짧게 잡으면 앞
+  // 소리가 채 끝나기 전에 다음 소리가 겹쳐 울린다.
+  const ALARM_SOUND_LEN = {
+    beep: 0.52,
+    ding: 1.06,
+    bell: 1.6,
+    chime: 0.78,
+    triple: 0.52,
+    alarm: 1.18,
+    siren: 2.1,
+    arcade: 0.43,
+  };
+
   function readStoredNumber(key, fallback, min, max) {
     let v;
     try {
@@ -2536,6 +2587,15 @@
     const v = 100 * Math.pow(ALARM_VOLUME_MAX / 100, (p - 50) / 50);
     return Math.min(ALARM_VOLUME_MAX, Math.round(v / 10) * 10);
   }
+  function getAlarmDuration() {
+    let v;
+    try {
+      v = parseInt(localStorage.getItem(ALARM_DURATION_KEY), 10);
+    } catch (e) {
+      v = NaN;
+    }
+    return ALARM_DURATION_CHOICES.indexOf(v) >= 0 ? v : ALARM_DEFAULT_DURATION;
+  }
   function getAlarmSound() {
     let v = null;
     try {
@@ -2553,6 +2613,7 @@
     }
   }
 
+  /** 한 번 울린다. 반복은 startAlarm() 이 맡는다. */
   function playAlarm(soundId, volumePercent) {
     try {
       const ctx = alarmAudio();
@@ -2578,9 +2639,55 @@
     }
   }
 
+  // ---------- 알림 울리기 / 멈추기 ----------
+  let alarmTimer = null;
+  let alarmActive = false;
+
+  function stopAlarm() {
+    if (alarmTimer) clearTimeout(alarmTimer);
+    alarmTimer = null;
+    alarmActive = false;
+    updateAlarmUiState();
+  }
+
+  /**
+   * 정한 길이만큼 알림을 울린다.
+   *
+   * opt.duration 을 주면 그 길이로(미리듣기), 안 주면 설정값으로. 이미 울리고
+   * 있으면 멈추고 새로 시작한다 — 주문이 연달아 들어올 때 소리가 겹쳐서
+   * 뭉치면 몇 건인지도 모르고 그냥 시끄럽기만 하다.
+   */
+  function startAlarm(opt) {
+    opt = opt || {};
+    stopAlarm();
+    const id = ALARM_SOUNDS[opt.sound] ? opt.sound : getAlarmSound();
+    const vol = opt.volume === undefined ? getAlarmVolume() : opt.volume;
+    if (vol <= 0) return;
+    const dur = opt.duration === undefined ? getAlarmDuration() : opt.duration;
+    const endAt = Date.now() + (dur < 0 ? ALARM_ACK_CAP_MS : Math.max(0, dur) * 1000);
+    const stepMs = ((ALARM_SOUND_LEN[id] || 1) + ALARM_REPEAT_GAP) * 1000;
+    alarmActive = true;
+    updateAlarmUiState();
+    const tick = () => {
+      playAlarm(id, vol);
+      // 다음 소리가 끝나는 시점이 정한 길이를 넘으면 거기서 끝낸다. 0초(한
+      // 번만)일 때도 이 자리에서 한 번은 울린 뒤에 멈춘다.
+      alarmTimer = setTimeout(Date.now() + stepMs < endAt ? tick : stopAlarm, stepMs);
+    };
+    tick();
+  }
+
+  /** 울리는 동안만 「알림 끄기」 버튼을 보여준다. */
+  function updateAlarmUiState() {
+    const stop = $("#alarmStopBtn");
+    if (stop) stop.hidden = !alarmActive;
+    const preview = $("#alarmPreviewBtn");
+    if (preview) preview.textContent = alarmActive ? T("alarmPreviewStopBtn") : T("alarmPreviewBtn");
+  }
+
   // 기존 호출부(신규 주문 감지)는 그대로 playBeep()을 부른다.
   function playBeep() {
-    playAlarm();
+    startAlarm();
   }
 
   // ---------- 알림음 설정 화면 ----------
@@ -2594,6 +2701,12 @@
     alarmSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
   }
   function applyAlarmUi() {
+    const dur = getAlarmDuration();
+    $$("input[name='alarmDuration']").forEach((r) => {
+      r.checked = parseInt(r.value, 10) === dur;
+      if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
+    });
+    updateAlarmUiState();
     const vol = getAlarmVolume();
     const slider = $("#alarmVolume");
     // 손잡이를 끌고 있는 중이라면 위치를 다시 써넣지 않는다 — 반올림 때문에
@@ -2619,18 +2732,31 @@
       storeAlarmPref(ALARM_VOLUME_KEY, alarmPosToVol(pos));
       applyAlarmUi();
     });
+    // 음량은 한 번만 들려준다. 크기를 재는 중인데 5초씩 울리면 다음 칸으로
+    // 넘어갈 수가 없다.
     $("#alarmVolume").addEventListener("change", () => {
       alarmSliding = false;
       flashAlarmSaved();
-      playAlarm();
+      startAlarm({ duration: 0 });
     });
+    // 길이를 고를 때는 그 길이로 실제로 들려준다 — 고르는 게 길이니까.
+    $$("input[name='alarmDuration']").forEach((r) =>
+      r.addEventListener("change", () => {
+        if (!r.checked) return;
+        storeAlarmPref(ALARM_DURATION_KEY, parseInt(r.value, 10));
+        applyAlarmUi();
+        flashAlarmSaved();
+        startAlarm({ duration: previewDuration() });
+      })
+    );
     if ($("#alarmResetBtn"))
       $("#alarmResetBtn").onclick = () => {
         storeAlarmPref(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME);
         storeAlarmPref(ALARM_SOUND_KEY, ALARM_DEFAULT_SOUND);
+        storeAlarmPref(ALARM_DURATION_KEY, ALARM_DEFAULT_DURATION);
         applyAlarmUi();
         flashAlarmSaved();
-        playAlarm();
+        startAlarm({ duration: 0 });
       };
     $$("input[name='alarmTone']").forEach((r) =>
       r.addEventListener("change", () => {
@@ -2638,11 +2764,25 @@
         storeAlarmPref(ALARM_SOUND_KEY, r.value);
         applyAlarmUi();
         flashAlarmSaved();
-        playAlarm(); // 고른 소리를 바로 들려준다
+        // 소리를 고를 때는 한 번만. 여기서 듣고 싶은 건 음색이지 길이가 아니다.
+        startAlarm({ duration: 0 });
       })
     );
-    if ($("#alarmPreviewBtn")) $("#alarmPreviewBtn").onclick = () => playAlarm();
+    if ($("#alarmPreviewBtn"))
+      $("#alarmPreviewBtn").onclick = () => {
+        // 울리는 중이면 같은 버튼이 정지가 된다. 30초·「끌 때까지」를 고른 뒤
+        // 미리듣기를 눌렀는데 멈출 방법이 없으면 설정 화면에서 갇힌다
+        // (「알림 끄기」 버튼은 실시간 주문 화면에 있어서 여기서는 안 보인다).
+        if (alarmActive) stopAlarm();
+        else startAlarm({ duration: previewDuration() });
+      };
     applyAlarmUi();
+  }
+
+  /** 미리듣기 길이 — 「끌 때까지」는 미리듣기에서만 6초로 줄인다. */
+  function previewDuration() {
+    const d = getAlarmDuration();
+    return d < 0 ? 6 : d;
   }
 
   // 2026-09-06 피드백: "저장 되었으면 저장되었다고도 알려주고. 저렇게
@@ -2785,8 +2925,12 @@
     renderPrintDeviceNote();
   }
 
+  if ($("#alarmStopBtn")) $("#alarmStopBtn").onclick = () => stopAlarm();
   $("#soundToggle").onchange = (e) => {
     soundOn = e.target.checked;
+    // 알림음을 끄는 순간 지금 울리고 있는 것도 같이 멎어야 한다. 끄고 나서도
+    // 10초를 더 울리면 그 토글이 안 먹는 것으로 보인다.
+    if (!soundOn) stopAlarm();
     writeStoredToggle("hg_admin_soundOn", soundOn);
     flashToggleSaved();
   };

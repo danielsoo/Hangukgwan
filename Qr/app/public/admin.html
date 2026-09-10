@@ -71,6 +71,11 @@
              켜는 것이라, 두 대에서 켜져 있으면 주문 하나에 빌지가 두 벌
              나온다(2026-09-10 사장님: "다른 곳에서 못 키게 막아줘"). -->
         <span id="printDeviceNote" class="print-device-note" hidden></span>
+        <!-- 알림이 울리는 동안만 뜬다. 화면을 아무 데나 눌러도 멈추게 하면,
+             다른 주문을 처리하느라 화면을 만지던 중에 새 주문이 들어왔을 때
+             그 알림이 눌러보지도 못하고 꺼진다 — 정작 고치려던 "놓친다"가
+             그대로 남는다. 그래서 멈추는 자리는 이 버튼 하나다. -->
+        <button id="alarmStopBtn" class="alarm-stop-btn" hidden data-i18n="alarmStopBtn">🔕 알림 끄기</button>
         <button id="manualOrderBtn" data-i18n="manualOrderBtn">📝 수기 주문</button>
         <button id="refreshOrders" data-i18n="refreshBtn">새로고침</button>
       </div>
@@ -480,6 +485,22 @@
             <label class="alarm-tone"><input type="radio" name="alarmTone" value="siren" /><span data-i18n="alarmToneSiren">사이렌</span></label>
             <label class="alarm-tone"><input type="radio" name="alarmTone" value="arcade" /><span data-i18n="alarmToneArcade">코인 (게임기)</span></label>
           </div>
+
+          <!-- 알림 길이 — 2026-09-10 사장님: "알림을 좀 더 길게 해달라는
+               요청이 있어". 소리 자체를 늘이지 않고 정한 시간 동안 다시
+               울린다(admin.js startAlarm). 한 번 길게 늘인 소리는 그냥
+               길기만 하고, 반복되는 소리라야 홀에서 "저거 울리고 있다"로
+               들린다. -->
+          <div class="alarm-field-label" data-i18n="alarmDurationLabel">알림 길이</div>
+          <div class="alarm-tone-grid alarm-duration-grid">
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="0" /><span data-i18n="alarmDurOnce">한 번만</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="3" /><span data-i18n="alarmDur3">3초</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="5" /><span data-i18n="alarmDur5">5초</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="10" /><span data-i18n="alarmDur10">10초</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="30" /><span data-i18n="alarmDur30">30초</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="-1" /><span data-i18n="alarmDurAck">끌 때까지</span></label>
+          </div>
+          <p class="settings-hint alarm-note" data-i18n="alarmDurationHint">울리는 동안 「실시간 주문」 화면 위쪽에 「🔕 알림 끄기」 버튼이 뜨고, 그걸 누르면 바로 멈춰요. 「끌 때까지」도 아무도 안 누르면 2분에서 저절로 멈춥니다.</p>
 
           <div class="alarm-field-label" data-i18n="alarmVolumeLabel">음량</div>
           <div class="alarm-volume-row">

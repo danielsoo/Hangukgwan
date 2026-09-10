@@ -727,7 +727,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .alarm-tone.is-on {
   background: var(--red); border-color: var(--red); color: #fff;
 }
-.alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
+/* 고른 벨소리에만 ▶ 를 붙인다. 길이 알약에는 붙이지 않는다 — 거기서 ▶ 는
+   "이 길이를 재생"처럼 읽혀서 고른 값이라는 뜻이 흐려진다. */
+.alarm-tone-grid:not(.alarm-duration-grid) .alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
 
 .alarm-volume-row { display: flex; align-items: center; gap: 14px; }
 .alarm-volume-row input[type="range"] {
@@ -754,6 +756,23 @@ body:not(.role-staff) .staff-only { display: none !important; }
   min-height: 44px;
 }
 .alarm-reset-btn:hover { background: #f3f3f3; }
+
+/* 알림이 울리는 동안만 뜨는 정지 버튼 (실시간 주문 화면 위쪽).
+   울리는 것 자체가 급한 일이라 눈에 띄어야 하고, 그래서 주변 도구 버튼들과
+   달리 채워진 색으로 둔다. 깜빡임은 prefers-reduced-motion 에서 멈춘다. */
+.alarm-stop-btn {
+  padding: 8px 16px; border: 1px solid var(--red); border-radius: 999px;
+  background: var(--red); color: #fff; font-size: 15px; font-weight: 700;
+  cursor: pointer; min-height: 40px; animation: alarm-stop-pulse 1s ease-in-out infinite;
+}
+.alarm-stop-btn:hover { filter: brightness(1.08); }
+@keyframes alarm-stop-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(181, 35, 44, 0.5); }
+  50% { box-shadow: 0 0 0 7px rgba(181, 35, 44, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .alarm-stop-btn { animation: none; }
+}
 .alarm-saved-msg { margin: 0 !important; }
 .alarm-note { margin: 12px 0 0 !important; }
 .alarm-loud-warn { color: var(--orange); }
