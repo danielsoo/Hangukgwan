@@ -91,12 +91,24 @@ if [ ! -f "$KEYSTORE" ]; then
       -keyalg RSA -keysize 2048 -validity 10950 \
       -dname "CN=Hangukgwan POS, OU=Kitchen, O=Hangukgwan, L=Tainan, C=TW" >/dev/null 2>&1
   else
+    # 여기서 멈추지 않는다. 서명은 순수 자바(apksigner.jar)라 어느 기계에서나
+    # 돌아가므로, 키가 없는 기계에서는 서명 전 APK 까지 만들어 두고 그 파일만
+    # 키가 있는 기계로 옮기면 된다. build-aab.sh 도 번들을 같은 식으로 넘긴다.
+    UNSIGNED="$OUT/dist/hangukgwan-pos-$VERSION_NAME-unsigned.apk"
+    cp "$OUT/unsigned.apk" "$UNSIGNED"
     echo >&2
-    echo "!! 서명키가 없습니다: $KEYSTORE" >&2
-    echo "   이 키는 저장소에 없고 맥에만 있습니다. 맥에서 빌드하세요." >&2
-    echo "   정말로 새 키를 만들어 시험용 APK 를 뽑으려면 ALLOW_NEW_KEY=1 로 다시 실행하세요" >&2
-    echo "   (그 APK 는 태블릿의 기존 설치를 덮어쓰지 못합니다)." >&2
-    exit 1
+    echo "서명키가 없습니다: $KEYSTORE" >&2
+    echo "이 키는 저장소에 없습니다(.gitignore). 서명 안 된 APK 는 태블릿에" >&2
+    echo "설치되지 않으므로, 아래 파일을 키가 있는 기계로 옮겨 서명하세요." >&2
+    echo >&2
+    echo "  서명 전 APK: $UNSIGNED" >&2
+    echo >&2
+    echo "키가 있는 기계에서:" >&2
+    echo "  ./sign-apk.sh hangukgwan-pos-$VERSION_NAME-unsigned.apk" >&2
+    echo >&2
+    echo "정말로 새 키를 만들어 시험용 APK 를 뽑으려면 ALLOW_NEW_KEY=1 로 다시" >&2
+    echo "실행하세요 (그 APK 는 태블릿의 기존 설치를 덮어쓰지 못합니다)." >&2
+    exit 0
   fi
 fi
 

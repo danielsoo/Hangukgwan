@@ -23,6 +23,11 @@
 # "aapt2 가 이 기계에서 실행되지 않습니다" 로 죽는다. 한 체크아웃을 두 기계가
 # 같이 보는 게 이 저장소에서는 평범한 일이므로, 도구는 기계별로 따로 둔다.
 
+# aapt2 는 x86-64 것만 배포된다(npm aaptjs3 에 x64/{linux,darwin,win32} 뿐).
+# 애플 실리콘 맥은 로제타로 돌리지만 arm64 리눅스에는 그런 게 없어서, 거기서는
+# 빌드가 안 된다. 서명(apksigner.jar/jarsigner)은 순수 자바라 어디서든 되므로
+# 그런 기계에서는 sign-apk.sh 로 서명만 맡으면 된다.
+
 BUNDLETOOL_VERSION=1.18.1
 
 OS_TAG=linux
