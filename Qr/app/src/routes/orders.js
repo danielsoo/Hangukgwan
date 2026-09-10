@@ -473,9 +473,30 @@ router.get("/history", requireOwner, async (req, res) => {
   });
 });
 
+// 손님 화면의 「내 주문」 — 지금 이 자리에 앉아 있는 손님이 시킨 것 전부.
+//
+// 2026-09-10 사장님: "내 폰에서 직원이 수기로 추가한 주문도 qr 코드
+// 주문내역에도 안 떠."
+//
+// 예전에는 결제된 주문을 빼고 줬다. 그래서 한 라운드를 결제하는 순간 아직
+// 앉아 계신 손님 화면에서 그 주문이 사라지고, 「아직 주문이 없어요」가 뜬다.
+// 손님은 자기가 시킨 게 사라진 줄 안다.
+//
+// 사장님 규칙은 하나다: "전체 결제를 하지 않는 이상 이 손님은 같은 손님."
+// 그러니 앉아 있는 동안에는 이미 결제한 라운드도 자기 주문내역에 남아야
+// 한다. 경계는 자리 이동과 똑같이 「이 손님이 앉은 시각」이다 —
+// 그래야 낮에 앉았다 간 다른 손님의 주문이 딸려 나오지 않는다.
+//
+// 앉은 시각을 모르는 자리(인원수가 없는 자리, 포장 카운터)는 예전 그대로
+// 안 받은 주문만 준다. 확실하지 않을 때 남의 주문을 보여주는 것보다,
+// 덜 보여주는 편이 낫다.
 router.get("/table/:tableNumber", (req, res) => {
+  const num = String(req.params.tableNumber);
+  const table = store.tables.find((t) => String(t.number) === num);
+  const seatingStart = seatingStartOf(table);
   const list = store.orders
-    .filter((o) => String(o.table_number) === String(req.params.tableNumber) && o.status !== "paid" && o.status !== "cancelled")
+    .filter((o) => String(o.table_number) === num && o.status !== "cancelled")
+    .filter((o) => (seatingStart ? String(o.created_at || "") >= seatingStart : o.status !== "paid"))
     .sort((a, b) => a.id - b.id);
   res.json(list);
 });

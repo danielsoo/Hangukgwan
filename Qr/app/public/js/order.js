@@ -1219,23 +1219,30 @@
     // same as any receipt with a discount line — the total here is what
     // actually matters, since it's what #payOnlineBtn charges.
     let total = 0;
+    // 이미 결제한 라운드는 따로 센다. 「합계」와 온라인 결제 금액은 아직 안
+    // 낸 것만이어야 한다 — 여기에 결제된 것까지 더하면 손님이 같은 돈을 두 번
+    // 내게 된다(서버는 미결제만 청구하므로 화면 숫자만 틀리는 것도 아니고,
+    // 화면과 실제 청구액이 어긋난다).
+    let paidTotal = 0;
     let anyItem = false;
     let anyVipDiscount = false;
     ordersForTable.forEach((o) => {
+      const isPaid = o.status === "paid";
       o.items.forEach((it) => {
         anyItem = true;
         const name = it[`name_${lang}`] || it.name_zh || it.name_en || it.name_ko || "";
         const row = document.createElement("div");
-        row.className = "history-item";
+        row.className = "history-item" + (isPaid ? " paid" : "");
         const addonsSuffix = (it.selected_addons || []).length ? ` +${it.selected_addons.map((a) => a.name).join(", ")}` : "";
         const optionSuffix = [it.option_choice, it.takeout_choice].filter(Boolean).join(", ");
         row.innerHTML = `
           <span class="history-item-name">${name}${optionSuffix ? ` (${optionSuffix})` : ""}${addonsSuffix}<span class="history-item-qty">x${it.qty}</span></span>
-          <span class="history-item-price">${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}</span>
+          <span class="history-item-price">${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}${isPaid ? `<span class="history-paid-badge">${t("historyPaidBadge")}</span>` : ""}</span>
         `;
         list.appendChild(row);
       });
-      total += o.total;
+      if (isPaid) paidTotal += o.total;
+      else total += o.total;
       if (o.vip_discount_percent) anyVipDiscount = true;
     });
     if (!anyItem) {
@@ -1245,6 +1252,14 @@
       note.className = "history-vip-note";
       note.textContent = t("historyVipDiscountAppliedMsg");
       list.appendChild(note);
+    }
+    if (anyItem && paidTotal > 0) {
+      // 이미 낸 돈을 적어주지 않으면, 목록에는 있는데 합계에는 없는 금액이
+      // 생겨서 손님이 계산이 틀렸다고 생각한다.
+      const paidNote = document.createElement("div");
+      paidNote.className = "history-paid-note";
+      paidNote.textContent = `${t("historyAlreadyPaid")} ${money(paidTotal)}`;
+      list.appendChild(paidNote);
     }
     $("#historyTotalBig").textContent = money(total);
     $("#payOnlineBtn").hidden = !(onlinePaymentEnabled && total > 0);

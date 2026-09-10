@@ -192,6 +192,15 @@ body {
 .closed-banner.staff-mode { background: #34506e; }
 
 /* 자리가 옮겨졌을 때의 안내 — 확인 버튼 하나면 새 자리로 간다. */
+/* 이미 결제한 라운드 — 목록에는 남되 합계에는 안 들어간다. 흐리게 두면
+   손님이 "낸 것"과 "낼 것"을 한눈에 가른다. */
+.history-item.paid { opacity: 0.6; }
+.history-paid-badge {
+  display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px;
+  background: #e6efe6; color: #2f6b3a; font-size: 11px; font-weight: 700; vertical-align: middle;
+}
+.history-paid-note { margin-top: 10px; text-align: right; font-size: 13px; color: #6b6357; }
+
 .moved-msg { font-size: 16px; line-height: 1.6; margin: 6px 0 14px; }
 /* 어느 자리로 가는지 — 버튼은 「확인」 하나뿐이라 번호는 그 위에 크게. */
 .moved-msg .moved-table { display: block; font-size: 40px; line-height: 1.2; margin-top: 8px; }
