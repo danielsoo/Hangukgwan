@@ -3415,6 +3415,15 @@
           : `\n주문 없이 인원수만 남아 있던 ${summary.cleared_seats}자리도 같이 비웠어요.`
         : "";
 
+    // 결제완료 칸에서 몇 건이 내려갔는지도 같은 이유로 알려준다 — 갑자기
+    // 빈 칸을 보면 지워진 줄 안다. 지워진 게 아니라는 것까지 적는다.
+    const settledNote =
+      summary && summary.settled_orders
+        ? adminLang === "zh"
+          ? `\n結帳完成欄的 ${summary.settled_orders} 筆已收起（沒有刪除，結算與桌位歷史仍可查看）。`
+          : `\n결제완료 칸의 ${summary.settled_orders}건은 내렸어요. 지운 게 아니라 결산 탭과 테이블 이전 주문에서 그대로 볼 수 있어요.`
+        : "";
+
     // LINE 마감 문자가 왜 안 갔는지는 그 자리에서 알려준다 — 조용히 안 가면
     // 사장님은 갔다고 믿는다. 설정은 Admin > 설정 > 알림.
     let lineNote = "";
@@ -3450,13 +3459,13 @@
       showAlert(
         (adminLang === "zh"
           ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + seatNote + lineNote
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + seatNote + settledNote + lineNote
       );
     } else {
       showAlert(
         (adminLang === "zh"
           ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + seatNote + lineNote
+          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + seatNote + settledNote + lineNote
       );
     }
   }
@@ -3505,6 +3514,13 @@
     // 결제 내역은 테이블 상세 > 이전 주문 탭이나 결산 탭에서 계속 확인 가능.
     const todayLocalStr = localDateStr(new Date());
     cols.paid = cols.paid.filter((o) => localDateStr(new Date(o.updated_at.replace(" ", "T"))) === todayLocalStr);
+
+    // 정산한 것은 내려간다 (2026-09-10 사장님: "정산 누르면 결제완료 애들
+    // 없어지게 해줘"). 정산은 「여기까지 끊는다」는 뜻이라, 끊은 뒤에도 남아
+    // 있으면 다음 장사의 결제와 섞여 어디까지가 정산한 몫인지 화면만 보고는
+    // 가릴 수 없다. 줄이 지워지는 것은 아니다 — 결산 탭과 테이블 상세 >
+    // 이전 주문에서 그대로 볼 수 있다(src/routes/settlements.js).
+    cols.paid = cols.paid.filter((o) => !o.settled_at);
 
     // 결제완료 칼럼은 같은 테이블의 과거 결제 기록이 계속 쌓이면 헷갈리므로,
     // 테이블당 가장 최근에 결제된 주문 1건만 보여준다. 나머지 이력은
