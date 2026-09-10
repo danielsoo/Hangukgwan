@@ -192,11 +192,18 @@
     en: "This page was opened by a previous guest. Reloading — please order again.",
   };
 
-  const SPICE_REQUIRED_MSG = {
-    zh: "請先選擇辣度",
-    ko: "매운 정도를 선택해 주세요",
-    en: "Please choose a spice level",
-  };
+  // 맵기 목록에는 늘 「基本」이 맨 앞에 있다. 저장된 데이터에서 빠져 있어도
+  // 화면에서 채워 넣는다 — 그래야 아무것도 안 건드린 손님에게 매운 것이
+  // 나가는 일이 없다(openItemSheet 주석).
+  const SPICE_BASIC = "基本";
+  function spiceOptionsOf(item) {
+    const parts = String((item && item.spice_options) || "")
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean);
+    if (!parts.length) return [];
+    return parts.includes(SPICE_BASIC) ? parts : [SPICE_BASIC, ...parts];
+  }
 
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
@@ -745,16 +752,21 @@
   function openItemSheet(item) {
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
-    // 매운맛은 처음에 아무것도 안 골라 둔다.
+    // 맵기는 늘 「基本」이 있고, 그게 기본으로 골라져 있다.
     //
-    // 2026-09-10 사장님: "매운맛 선택이 무조건 첫번째거로 선택되어있어.
-    // 메뉴 들어가면 매운정도에 아무것도 선택이 안되어있게. 내가 눌러야
-    // 선택되게."
+    // 2026-09-10 사장님: "매운맛 선택이 무조건 첫번째거로 선택되어있어" →
+    // "맵기 기본에 늘 기본이 있어야 하고 그게 기본 세팅으로 선택이 되어있어야 해."
     //
-    // 첫 칸을 미리 켜두면 손님은 「이미 고른 것」으로 보고 그냥 담는다.
-    // 안 매운 것을 원하던 손님에게 中辣가 나가고, 그 접시는 주방이 다시
-    // 만든다. 고기 선택(options)과 달리 매운맛은 잘못 나가면 못 먹는다.
-    currentSpiceOption = null;
+    // 원래 의도가 그것이었다. 씨앗 데이터는 「基本,小辣」처럼 基本 을 첫 칸에
+    // 두고 있었고, 첫 칸을 미리 고르니 아무것도 안 건드린 손님에게는 基本 이
+    // 나갔다. 그런데 운영 데이터에서 일부 메뉴의 基本 이 빠져 있었다 —
+    // 그러면 첫 칸이 小辣 가 되고, 안 매운 것을 원하던 손님에게 매운 것이
+    // 나간다. 사장님이 보신 것이 그 상태다.
+    //
+    // 그래서 「첫 칸을 고른다」가 아니라 「基本 을 고른다」로 못 박는다.
+    // 데이터가 어떻게 생겼든 화면에는 늘 基本 이 있고 늘 그것이 켜져 있다.
+    // 저장된 데이터도 같이 고쳐 뒀다(src/migrations/2026-09-10-spice-basic.js).
+    currentSpiceOption = item.spice_options ? SPICE_BASIC : null;
     currentTakeoutOption = item.takeout_options ? item.takeout_options.split(",")[0].trim() : null;
     // A counter/takeout QR has no dine-in seat to speak of, so every item
     // defaults to 포장 there instead of the usual 매장 default — the toggle
@@ -815,19 +827,16 @@
     const spiceWrap = $("#itemSpiceOptions");
     const spiceList = $("#spiceOptionsList");
     spiceList.innerHTML = "";
-    const spiceMsg = $("#spiceRequiredMsg");
-    if (spiceMsg) spiceMsg.hidden = true;
     if (item.spice_options) {
       spiceWrap.hidden = false;
-      item.spice_options.split(",").forEach((opt, i) => {
+      spiceOptionsOf(item).forEach((opt) => {
         const b = document.createElement("button");
-        b.textContent = opt.trim();
-        // 미리 켜두지 않는다 — 손님이 직접 눌러야 켜진다.
+        b.textContent = opt;
+        if (opt === currentSpiceOption) b.classList.add("active");
         b.onclick = () => {
-          currentSpiceOption = opt.trim();
+          currentSpiceOption = opt;
           spiceList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
           b.classList.add("active");
-          $("#spiceRequiredMsg").hidden = true;
         };
         spiceList.appendChild(b);
       });
@@ -1005,20 +1014,6 @@
     // 버튼은 이미 disabled 지만, 키보드나 스크립트로도 눌릴 수 있다.
     if (orderingClosed()) {
       showToast(t("closedTitle"));
-      return;
-    }
-    // 매운맛이 있는 메뉴는 고르기 전에는 담을 수 없다. 미리 골라두지
-    // 않기로 한 이상(openItemSheet 참고), 안 고른 채로 담기면 주방에
-    // 매운맛이 비어 도착한다 — 그건 화면이 손님에게 물어보지 않은 것이지
-    // 손님이 「상관없다」고 답한 것이 아니다.
-    if (currentItem.spice_options && !currentSpiceOption) {
-      const msg = $("#spiceRequiredMsg");
-      if (msg) {
-        msg.textContent = SPICE_REQUIRED_MSG[lang] || SPICE_REQUIRED_MSG.zh;
-        msg.hidden = false;
-      }
-      $("#itemSpiceOptions").scrollIntoView({ behavior: "smooth", block: "center" });
-      showToast(SPICE_REQUIRED_MSG[lang] || SPICE_REQUIRED_MSG.zh);
       return;
     }
     if (currentItem.mix_options) {
