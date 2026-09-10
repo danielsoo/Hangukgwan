@@ -2143,6 +2143,15 @@
       ? `\n\n＋ VIP卡 NT$${cardAmount}（一律現金）\n= 向客人收 NT$${sum}\n下面選的付款方式只套用在餐點 NT$${foodPayable}`
       : `\n\n＋ VIP 카드 NT$${cardAmount} (무조건 현금)\n= 손님께 받을 돈 NT$${sum}\n아래에서 고르는 결제수단은 밥값 NT$${foodPayable}에만 적용됩니다`;
   }
+  // 금액 한 줄 표기. **모듈 자리에 둔다.**
+  //
+  // 2026-09-10: 이게 renderSettlement 안의 지역 함수였다. 결산 화면의
+  // 오전/오후 칸은 그 바깥에 있어서 「nt is not defined」로 죽었고, 그 뒤의
+  // 렌더가 통째로 멈췄다 — 사장님 화면에서 1인당 평균부터 아래가 전부 0 으로
+  // 보인 이유가 이것이다. 여러 곳에서 쓰는 도우미는 쓰는 곳들이 다 보이는
+  // 자리에 있어야 한다.
+  const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
+
   // 오전 / 오후 (2026-09-10 사장님 요청). 위의 큰 숫자가 합산이고 이 두 칸이
   // 그것을 가른 것이다 — 색으로 갈라 두고(css .stl-half-am/.stl-half-pm),
   // 합산에는 「합산」 표를 붙인다.
@@ -10933,7 +10942,6 @@
     const closeBtn = $("#settlementCloseBtn");
     closeBtn.disabled = !data.date;
     closeBtn.title = data.date ? "" : T("settlementCloseRangeHint");
-    const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
     const share = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
 
     // ── 1. 오늘 한눈에 ────────────────────────────────────────────
