@@ -69,6 +69,24 @@ const sites = [
 for (const [name, re] of sites) check(name, re.test(admin), "안 붙어 있다");
 check("ESC/POS 텍스트 주문서", /padLine\(`桌號 \$\{o\.table_number\}\$\{partyTag\(o\)\}`/.test(escpos), "안 붙어 있다");
 
+out.push("\n[자리 배지도 같은 표기를 쓴다]");
+// 2026-09-10 사장님: "자리도 통일시켜줘". 자리 칩과 배치도 타일이 예전에는
+// 「👥3+1」, 「👥5인 (大3·小1)」 이었다. 같은 사실을 세 가지로 적으면 홀에서
+// 부르는 말이 사람마다 달라진다.
+check("자리 배지가 좌석 표기를 쓴다", /table-party-badge">\$\{fmtPartySeat\(t\)\}/.test(admin));
+check("배치도 타일도 같은 표기", (admin.match(/tb-party">\$\{fmtPartySeat\(t\)\}/g) || []).length >= 2,
+  "타일 두 곳 중 한쪽만 바뀌었다");
+check("예전 표기가 남아 있지 않다",
+  !/fmtPartyShort|大\$\{b\.adults\}/.test(admin), "👥3+1 / 大3·小1 표기가 아직 있다");
+// 좌석번호가 옆에 없는 자리(결산 상세)는 숫자는 같되 사람 표시를 앞에 붙인다 —
+// 거기서 「(3-2)」 만 있으면 무엇의 3인지 알 수 없다.
+check("결산 상세는 사람 표시를 붙인다", /return tag \? `👥 \$\{tag\}` : ""/.test(admin));
+
+out.push("\n[자리 이동 빌지도 같은 표기]");
+check("빌지 인원 줄이 (어른-아이)", /\(\$\{info\.partyAdults\}-\$\{info\.partyChildren \|\| 0\}\)/.test(escpos),
+  "빌지에 아직 大·小 표기가 있다");
+check("화면 쪽 빌지 문구도 같다", /\(\$\{info\.partyAdults\}-\$\{info\.partyChildren \|\| 0\}\)/.test(admin));
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail === 0 ? 0 : 1);

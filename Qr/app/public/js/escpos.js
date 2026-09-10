@@ -548,8 +548,10 @@
       // 어른(大)/아이(小)까지 적는다 — 옮긴 자리에서 아이 의자·아이 그릇을
       // 몇 개 옮겨야 하는지가 이 종이에 있어야 홀에서 다시 안 묻는다.
       // 구분이 생기기 전(2026-09-10)에 앉은 손님은 총원만 적는다.
-      const kids = info.partyChildren || 0;
-      const detail = kids && info.partyAdults != null ? ` (大${info.partyAdults}·小${kids})` : "";
+      // 좌석번호 옆 표기(partyTag)와 같은 「(어른-아이)」 를 쓴다
+      // (2026-09-10 사장님: "자리도 통일시켜줘"). 여기는 「인원 / 人數」 라는
+      // 이름표가 앞에 있으므로 총원을 먼저 적는다.
+      const detail = info.partyAdults == null ? "" : ` (${info.partyAdults}-${info.partyChildren || 0})`;
       row("인원 / 人數", `${info.partySize}${detail}`, sz("info", 13), wt("info", 400), 8);
     }
     if (info.note) row("", info.note, sz("info", 13), wt("info", 400), 8);

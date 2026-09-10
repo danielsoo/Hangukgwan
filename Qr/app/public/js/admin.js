@@ -1472,7 +1472,6 @@
   // differs between Korean and Chinese, so these are built directly per
   // language rather than through the flat T() dictionary above.
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
-  const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
 
   /**
    * 인원수를 어른(大)/아이(小)까지 적는다 — 2026-09-10 사장님: "인원수 물을 때
@@ -1488,23 +1487,13 @@
    */
   /** 자리 이동 빌지의 인원 줄 — escpos.js 의 같은 자리와 모양을 맞춘다. */
   function moveSlipPartyText(info) {
-    const kids = (info && info.partyChildren) || 0;
-    if (!kids || info.partyAdults == null) return String(info.partySize);
-    return `${info.partySize} (大${info.partyAdults}·小${kids})`;
+    if (!info || !info.partySize) return "";
+    // 좌석번호 옆 표기와 같은 「(어른-아이)」 를 쓴다(2026-09-10 "자리도 통일").
+    // 여기는 「인원 / 人數」 라는 이름표가 앞에 있으므로 총원을 먼저 적는다.
+    if (info.partyAdults == null) return String(info.partySize);
+    return `${info.partySize} (${info.partyAdults}-${info.partyChildren || 0})`;
   }
 
-  function partyBreakdown(o) {
-    const total = o && o.party_size;
-    if (!total) return null;
-    if (o.party_adults == null) return { total, adults: null, children: 0 };
-    return { total, adults: o.party_adults, children: o.party_children || 0 };
-  }
-  function fmtPartyDetail(o) {
-    const b = partyBreakdown(o);
-    if (!b) return "";
-    if (!b.children) return fmtPartyCount(b.total);
-    return `${fmtPartyCount(b.total)} (大${b.adults}·小${b.children})`;
-  }
   /**
    * 좌석번호 옆에 붙는 인원 — 「(3-2)」 는 어른 3, 아이 2 라는 뜻이다.
    *
@@ -1518,6 +1507,9 @@
    * 어른/아이를 물어본 적이 없는 손님(party_adults 가 없음 — 구분이 생기기
    * 전에 앉은 손님)은 총원만 「(4)」. 그때 「(4-0)」 이라고 적으면 아이가 없다고
    * 말하는 셈인데, 우리는 물어본 적이 없다.
+   *
+   * 같은 규칙이 escpos.js 에도 있다(브라우저용 순수 함수라 이 파일을 못
+   * 부른다). test/party-tag.test.js 가 둘이 글자 하나까지 같은지 잰다.
    */
   function partyTag(o) {
     if (!o || !o.party_size) return "";
@@ -1525,11 +1517,26 @@
     return ` (${o.party_adults}-${o.party_children || 0})`;
   }
 
-  /** 자리 배지처럼 좁은 자리용 — 「👥3+1」. */
-  function fmtPartyShort(o) {
-    const b = partyBreakdown(o);
-    if (!b) return "";
-    return b.children ? `👥${b.adults}+${b.children}` : `👥${b.total}`;
+  /**
+   * 좌석번호가 바로 옆(또는 바로 위)에 있는 자리 — 「(3-2)」 만 적는다.
+   * 자리 칩, 배치도 타일처럼 숫자 밑에 붙는 곳이 여기다.
+   *
+   * 2026-09-10 사장님: "자리도 통일시켜줘" — 주문서·주문 카드가 (3-2) 인데
+   * 자리 배지만 「👥3+1」, 「👥5인 (大3·小1)」 이면 같은 사실을 세 가지로
+   * 적는 셈이고, 홀에서 부르는 말이 사람마다 달라진다.
+   */
+  function fmtPartySeat(o) {
+    return partyTag(o).trim();
+  }
+
+  /**
+   * 좌석번호가 옆에 없는 자리(결산 주문 상세의 「현금 · … · …」 줄) —
+   * 숫자는 같고 사람 표시만 앞에 붙인다. 거기서 「(3-2)」 만 있으면 무엇의
+   * 3인지 알 수 없다.
+   */
+  function fmtPartyDetail(o) {
+    const tag = fmtPartySeat(o);
+    return tag ? `👥 ${tag}` : "";
   }
 
   // ---------- 품절 기간 표시 ----------
@@ -4545,7 +4552,7 @@
       // 사라지지 않고 직원이 「손님 나감」으로 직접 비운다 — 그러려면 어느
       // 테이블에 숫자가 남아 있는지가 눈에 보여야 한다. 숨기면 아무도
       // 모르고, 다음 손님이 인원수를 안 물어보는 이유도 알 수 없게 된다.
-      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyDetail(t)}</div>` : "";
+      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartySeat(t)}</div>` : "";
       const delBtn = canTableEdit() && !mergePayMode && tableEditMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
       chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
@@ -6235,7 +6242,7 @@
     const unassignBtn = canTableEdit() ? `<button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>` : "";
     el.innerHTML = `
       ${unassignBtn}
-      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartyShort(t)}</span>` : ""}
+      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartySeat(t)}</span>` : ""}
     `;
     container.appendChild(el);
 
@@ -6574,7 +6581,7 @@
             tableEl.style.width = w + "px";
             tableEl.style.height = h + "px";
             tableEl.innerHTML = `
-              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartyShort(t)}</span>` : ""}
+              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartySeat(t)}</span>` : ""}
             `;
             tableEl.onclick = () => openTableDetail(t.number, t.label);
             zoneEl.appendChild(tableEl);
