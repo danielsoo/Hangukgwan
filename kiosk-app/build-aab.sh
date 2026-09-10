@@ -42,24 +42,60 @@ fetch_tools() {
   local npmdir="$TOOLS/npm"
   if [ ! -f "$ANDROID_JAR" ] || [ ! -f "$D8_JAR" ] || [ ! -f "$ECJ_JAR" ] || [ ! -x "$AAPT2" ]; then
     echo "==> 빌드 도구를 받는 중 ($TOOLS) - 처음 한 번만 걸립니다"
+    if ! command -v npm >/dev/null 2>&1; then
+      echo "!! npm 이 필요합니다 (빌드 도구를 npm 레지스트리에서 받아옵니다)." >&2
+      echo "   맥이면:  brew install node" >&2
+      exit 1
+    fi
     mkdir -p "$npmdir"
-    ( cd "$npmdir" && npm i --silent --no-audit --no-fund --no-package-lock \
-        @drxiaozhi/minapk aaptjs3 >/dev/null )
+    # package.json 을 먼저 놓는다. 없으면 npm 이 상위 폴더로 올라가며
+    # 프로젝트 뿌리를 찾고, 엉뚱한 곳에 설치하거나 아무것도 안 하고 끝난다.
+    cat > "$npmdir/package.json" <<'JSON'
+{ "name": "hangukgwan-android-tools", "version": "1.0.0", "private": true }
+JSON
+    # 출력을 숨기지 않는다. 2026-09-10 에 --silent 로 가려놔서, 맥에서
+    # 설치가 실패했는데 화면에는 그 다음 줄의 cp 오류만 떴다.
+    ( cd "$npmdir" && npm install --no-audit --no-fund @drxiaozhi/minapk aaptjs3 )
+
     local m="$npmdir/node_modules/@drxiaozhi/minapk/tools"
-    cp "$m/android.jar" "$ANDROID_JAR"
-    cp "$m/d8.jar" "$D8_JAR"
-    cp "$m"/ecj-*.jar "$ECJ_JAR"
-    # aapt2 는 플랫폼별 실행 파일이다. 맥이면 darwin, 리눅스면 linux.
     local os=linux
     case "$(uname -s)" in Darwin) os=darwin ;; esac
     local arch=x64
-    cp "$npmdir/node_modules/aaptjs3/bin/$arch/$os/aapt2" "$AAPT2"
+    case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; esac
+    local aapt_src="$npmdir/node_modules/aaptjs3/bin/$arch/$os/aapt2"
+    # 애플 실리콘 맥에는 arm64 실행 파일이 없을 수 있다. 그때는 x64 를 쓴다
+    # (로제타가 돌려준다).
+    [ -x "$aapt_src" ] || aapt_src="$npmdir/node_modules/aaptjs3/bin/x64/$os/aapt2"
+
+    local missing=""
+    for f in "$m/android.jar" "$m/d8.jar" "$aapt_src"; do
+      [ -e "$f" ] || missing="$missing\n  $f"
+    done
+    ls "$m"/ecj-*.jar >/dev/null 2>&1 || missing="$missing\n  $m/ecj-*.jar"
+    if [ -n "$missing" ]; then
+      echo >&2
+      echo "!! npm 설치가 끝났는데 도구가 없습니다:$(printf "$missing")" >&2
+      echo "   위 npm 출력에 이유가 있습니다. $TOOLS 를 지우고 다시 돌려보세요." >&2
+      exit 1
+    fi
+
+    cp "$m/android.jar" "$ANDROID_JAR"
+    cp "$m/d8.jar" "$D8_JAR"
+    cp "$m"/ecj-*.jar "$ECJ_JAR"
+    cp "$aapt_src" "$AAPT2"
     chmod +x "$AAPT2"
   fi
   if [ ! -f "$BUNDLETOOL" ]; then
     echo "==> bundletool 을 받는 중"
-    curl -fsSL -o "$BUNDLETOOL" \
+    curl -fL -o "$BUNDLETOOL" \
       "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+  fi
+  # aapt2 가 이 기계에서 실제로 도는지 여기서 확인한다. 안 그러면 1/6 단계에서
+  # 알아보기 어려운 오류로 죽는다.
+  if ! "$AAPT2" version >/dev/null 2>&1; then
+    echo "!! aapt2 가 이 기계에서 실행되지 않습니다: $AAPT2" >&2
+    echo "   $TOOLS 를 지우고 다시 돌려보세요." >&2
+    exit 1
   fi
 }
 fetch_tools
