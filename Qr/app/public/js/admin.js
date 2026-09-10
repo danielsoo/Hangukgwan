@@ -1474,6 +1474,44 @@
   const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
   const fmtPartyCount = (n) => (adminLang === "zh" ? `👥 ${n} 位` : `👥 ${n}인`);
 
+  /**
+   * 인원수를 어른(大)/아이(小)까지 적는다 — 2026-09-10 사장님: "인원수 물을 때
+   * 어른(大), 아이(小) 묻기".
+   *
+   * 大/小 는 두 언어에서 똑같이 쓴다. 메뉴판과 빌지에 찍히는 글자가 그거라서,
+   * 관리자 화면에서만 「어른/아이」로 부르면 홀에서 말이 어긋난다.
+   *
+   * 아이가 없으면 총원만 적는다. 「4인 (大4·小0)」 은 읽는 사람에게 아무것도
+   * 더 알려주지 않으면서 자리 배지만 길어지게 한다.
+   * 구분이 생기기 전에 앉은 손님(party_adults 가 없음)도 총원만 적는다 —
+   * 그때는 어른/아이를 물어본 적이 없으므로 「大4」 는 사실이 아니다.
+   */
+  /** 자리 이동 빌지의 인원 줄 — escpos.js 의 같은 자리와 모양을 맞춘다. */
+  function moveSlipPartyText(info) {
+    const kids = (info && info.partyChildren) || 0;
+    if (!kids || info.partyAdults == null) return String(info.partySize);
+    return `${info.partySize} (大${info.partyAdults}·小${kids})`;
+  }
+
+  function partyBreakdown(o) {
+    const total = o && o.party_size;
+    if (!total) return null;
+    if (o.party_adults == null) return { total, adults: null, children: 0 };
+    return { total, adults: o.party_adults, children: o.party_children || 0 };
+  }
+  function fmtPartyDetail(o) {
+    const b = partyBreakdown(o);
+    if (!b) return "";
+    if (!b.children) return fmtPartyCount(b.total);
+    return `${fmtPartyCount(b.total)} (大${b.adults}·小${b.children})`;
+  }
+  /** 자리 배지처럼 좁은 자리용 — 「👥3+1」. */
+  function fmtPartyShort(o) {
+    const b = partyBreakdown(o);
+    if (!b) return "";
+    return b.children ? `👥${b.adults}+${b.children}` : `👥${b.total}`;
+  }
+
   // ---------- 품절 기간 표시 ----------
   // 사장님(2026-09-09): "당일 품절이라서 다음날 자동으로 품절 풀어지게...
   // 품절 기간을 정할 수 있게도 하자."
@@ -4482,7 +4520,7 @@
       // 사라지지 않고 직원이 「손님 나감」으로 직접 비운다 — 그러려면 어느
       // 테이블에 숫자가 남아 있는지가 눈에 보여야 한다. 숨기면 아무도
       // 모르고, 다음 손님이 인원수를 안 물어보는 이유도 알 수 없게 된다.
-      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyCount(t.party_size)}</div>` : "";
+      const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartyDetail(t)}</div>` : "";
       const delBtn = canTableEdit() && !mergePayMode && tableEditMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
       chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
@@ -4581,7 +4619,7 @@
     // 그냥 나가버린 테이블은 직원이 직접 비워야 한다. 그러려면 그 숫자가
     // 화면에 보여야 한다 — 안 보이면 무엇을 비우는지 알 수 없고, 애초에
     // 비워야 한다는 것도 모른다.
-    const partyText = table && table.party_size ? ` · ${fmtPartyCount(table.party_size)}` : "";
+    const partyText = table && table.party_size ? ` · ${fmtPartyDetail(table)}` : "";
     // 사장님 피드백(2026-09-06): "모든 기능을 다 오른쪽 제일 아래 있는
     // 걸로 합쳐서 넣어줘. 그리고 전체 결제 완료를 없애줘. 대신에 그
     // 기능은 모든 메뉴들을 체크하면 가능하게 해줘" — 헤더/footer에 각각
@@ -6169,7 +6207,7 @@
     const unassignBtn = canTableEdit() ? `<button class="table-unassign" title="${T("tableUnassignTitle")}">✕</button>` : "";
     el.innerHTML = `
       ${unassignBtn}
-      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+      <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartyShort(t)}</span>` : ""}
     `;
     container.appendChild(el);
 
@@ -6508,7 +6546,7 @@
             tableEl.style.width = w + "px";
             tableEl.style.height = h + "px";
             tableEl.innerHTML = `
-              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">👥${t.party_size}</span>` : ""}
+              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartyShort(t)}</span>` : ""}
             `;
             tableEl.onclick = () => openTableDetail(t.number, t.label);
             zoneEl.appendChild(tableEl);
@@ -6720,7 +6758,11 @@
       from: fromLabel || fromNumber,
       to: toNum,
       at: new Date().toTimeString().slice(0, 5),
+      // 자리 이동 빌지에도 어른/아이를 그대로 적는다 — 옮긴 자리에서
+      // 아이 의자를 몇 개 옮겨야 하는지가 이 종이에 있어야 한다.
       partySize: body.party_size || null,
+      partyAdults: body.party_adults == null ? null : body.party_adults,
+      partyChildren: body.party_children || 0,
       orders: movedOrders,
     };
   }
@@ -8528,6 +8570,8 @@
       to: "8",
       at: new Date().toTimeString().slice(0, 5),
       partySize: 4,
+      partyAdults: 3,
+      partyChildren: 1,
       orders: [
         { id: 128, time: "19:05", summary: `${T("moveSlipSampleItemA")}×2` },
         { id: 131, time: "19:24", summary: `${T("moveSlipSampleItemB")}×1` },
@@ -8699,7 +8743,7 @@
       <div class="big">${esc(info.from)} → ${esc(info.to)}</div>
       <hr>
       <div class="row"><span>시각 / 時間</span><span>${esc(info.at || "")}</span></div>
-      ${info.partySize ? `<div class="row"><span>인원 / 人數</span><span>${esc(info.partySize)}</span></div>` : ""}
+      ${info.partySize ? `<div class="row"><span>인원 / 人數</span><span>${esc(moveSlipPartyText(info))}</span></div>` : ""}
       ${rows ? `<hr>${rows}` : ""}
       <hr>
       <div class="qr">손님은 새 자리 QR 로 주문<small>請客人改掃新桌號 QR</small></div>
@@ -9522,7 +9566,7 @@
     // 값들이다. 없으면 그 줄을 아예 안 만든다.
     const meta = [
       o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentMethodLabelFor(o.payment_method)}` : null,
-      o.party_size ? fmtPartyCount(o.party_size) : null,
+      o.party_size ? fmtPartyDetail(o) : null,
       o.discount_amount ? `${T("settlementDiscountAmount")} NT$${Number(o.discount_amount).toLocaleString()}` : null,
       o.paid_at ? `${T("settlementOrdersPaidAt")} ${String(o.paid_at).slice(5, 16)}` : null,
       `${T("settlementOrdersStatus")} ${statusLabel(o.status)}`,

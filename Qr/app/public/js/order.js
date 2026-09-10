@@ -95,6 +95,12 @@
   let storeLat = null;
   let storeLng = null;
   let partySize = null;
+  // 어른(大)/아이(小) — 2026-09-10 사장님: "인원수 물을 때 어른(大), 아이(小)
+  // 묻기". partySize 는 계속 총원이고(결산·빌지가 그대로 쓴다), 아래 둘은
+  // 그 안의 내역이다. 구분이 생기기 전에 앉은 손님은 서버가 전부 어른으로
+  // 채워 내려준다.
+  let partyAdults = null;
+  let partyChildren = null;
   let onlinePaymentEnabled = false;
 
   // 지금 손님이 주문할 수 있는 시간인가 — 서버(/api/settings 의 ordering)가
@@ -137,10 +143,16 @@
   let membership = null;
   let membershipInitAttempted = false;
 
+  /** 1인 1메뉴 안내의 기준 인원 — 어른 수(구분이 없던 손님은 총원). */
+  function partyMinCount() {
+    if (partyAdults != null) return partyAdults;
+    return partySize || 0;
+  }
+
   const PARTY_WARNING = {
-    zh: (n) => `您點的餐點數量少於 ${n} 人份，需要再加點嗎？`,
-    ko: (n) => `인원(${n}명)보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
-    en: (n) => `Your order has fewer items than your party size (${n}). Feel free to add more if you'd like.`,
+    zh: (n) => `您點的餐點數量少於大人 ${n} 位，需要再加點嗎？`,
+    ko: (n) => `어른 ${n}명보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
+    en: (n) => `Your order has fewer items than the number of adults (${n}). Feel free to add more if you'd like.`,
   };
 
   // Shown when trying to add a griddle (불판) item below its
@@ -293,6 +305,8 @@
         btn.disabled = false;
         btn.classList.remove("is-closed");
       }
+      // 직원 화면은 잠기지 않으므로 여기서 물어봐야 한다.
+      askSeatingIfOpen();
       return;
     }
     banner.classList.remove("staff-mode");
@@ -320,6 +334,9 @@
       btn.disabled = closed;
       btn.classList.toggle("is-closed", closed);
     }
+    // 영업이 시작되면(1분마다 도는 refreshOrderingState 가 여기로 온다)
+    // 그때 미뤄둔 질문을 한다.
+    askSeatingIfOpen();
   }
 
   // 영업 시작·종료 시각을 걸치고 앉아 있는 손님이 있다. 20:58 에 페이지를
@@ -958,7 +975,7 @@
   // continues on to actually submit the order (this is a heads-up, not a
   // hard block on ordering less than the headcount).
   function showPartyWarningModal(onConfirm) {
-    $("#partyWarningMsg").textContent = (PARTY_WARNING[lang] || PARTY_WARNING.zh)(partySize);
+    $("#partyWarningMsg").textContent = (PARTY_WARNING[lang] || PARTY_WARNING.zh)(partyMinCount());
     $("#partyWarningBackdrop").hidden = false;
     $("#partyWarningConfirmBtn").onclick = () => {
       $("#partyWarningBackdrop").hidden = true;
@@ -975,16 +992,20 @@
     // Belt-and-suspenders: party size is required before an order can go
     // through, even if something let the modal get skipped/dismissed.
     if (!partySize) {
-      showPartySizeModal();
+      pendingSeatingPrompt = "party";
+      askSeatingIfOpen();
       return;
     }
     // Same belt-and-suspenders idea for the counter's required pickup name.
     if (isCounterTable && !counterCustomerName) {
-      showCounterNameModal();
+      pendingSeatingPrompt = "counter";
+      askSeatingIfOpen();
       return;
     }
 
-    if (!skipPartyWarning && !isCounterTable && partySize && cartCount() < partySize) {
+    // 안내 기준은 어른 수다. 아이는 나눠 먹는 경우가 많아서 총원으로 세면
+    // 어른 2 · 아이 2 가족이 3그릇을 시켜도 "적게 시켰다"는 말을 듣는다.
+    if (!skipPartyWarning && !isCounterTable && partyMinCount() > 0 && cartCount() < partyMinCount()) {
       showPartyWarningModal(() => submitOrderFlow(true));
       return;
     }
@@ -1510,10 +1531,23 @@
   // clears it as a side effect of that same status change (see the PATCH
   // handler in src/routes/orders.js) — which is the real signal that this
   // party is done and the table is free for whoever scans it next.
-  let partySizeStep = 1;
+  let adultsStep = 1;
+  let childrenStep = 0;
+  function renderPartySizeModal() {
+    $("#partyAdultsVal").textContent = adultsStep;
+    $("#partyChildrenVal").textContent = childrenStep;
+    const total = adultsStep + childrenStep;
+    // 합계를 적어준다. 두 줄로 나뉘어 있으면 "그래서 몇 명으로 들어갔지"가
+    // 바로 안 보이는데, 이 숫자가 빌지와 결산에 그대로 들어가는 값이다.
+    $("#partyTotalMsg").textContent = total > 0 ? t("partyTotalLabel").replace("{n}", total) : "";
+    // 아무도 없는 인원수는 저장할 수 없다 — 서버도 막지만, 눌러본 뒤에
+    // 알림창으로 알게 되는 것보다 버튼이 안 눌리는 편이 낫다.
+    $("#partySizeConfirmBtn").disabled = total < 1;
+  }
   function showPartySizeModal() {
-    partySizeStep = 1;
-    $("#partySizeVal").textContent = partySizeStep;
+    adultsStep = 1;
+    childrenStep = 0;
+    renderPartySizeModal();
     $("#partySizeBackdrop").hidden = false;
   }
 
@@ -1580,6 +1614,35 @@
     return true;
   }
 
+  /**
+   * 지금 물어볼 수 없어서 미뤄둔 질문 — "party"(인원수) 또는 "counter"(포장
+   * 이름·전화).
+   *
+   * 2026-09-10 사장님: "주문 가능 시간이 아니면 인원수도 묻지 말아야 돼.
+   * 안 그러면 인원수는 있는데 이상하게 돼."
+   *
+   * 실제로 이상해지는 방식은 이렇다. 영업이 끝난 뒤 QR 을 찍은 손님이
+   * 인원수를 넣으면 그 자리에 party_size 가 박히고, 그 순간부터 관리자
+   * 화면에는 아무도 없는 자리에 「👥 4인」 배지가 뜬다. 주문이 하나도 없으니
+   * 결제로 지워질 일도 없어서, 다음 날 아침 첫 손님이 앉을 때까지 그대로
+   * 남는다. 게다가 그 자리는 「손님이 앉아 있다」로 취급되므로 새로 온 손님
+   * 에게는 인원수를 아예 안 묻게 된다 — 어제 밤 지나가던 사람이 넣은 숫자로
+   * 오늘 장사를 하게 되는 것이다.
+   *
+   * 그래서 묻지 않고 들고만 있다가, 영업이 시작되면(1분마다 도는
+   * refreshOrderingState → applyOrderingState) 그때 묻는다. 손님은 화면을
+   * 그대로 둔 채 기다리기만 하면 된다.
+   */
+  let pendingSeatingPrompt = null;
+  function askSeatingIfOpen() {
+    if (!pendingSeatingPrompt) return;
+    if (orderingClosed()) return;
+    const which = pendingSeatingPrompt;
+    pendingSeatingPrompt = null;
+    if (which === "counter") showCounterNameModal();
+    else showPartySizeModal();
+  }
+
   async function initPartySize() {
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
@@ -1601,18 +1664,26 @@
           counterCustomerName = savedName;
           counterCustomerPhone = savedPhone;
         } else {
-          showCounterNameModal();
+          // 인원수와 같은 이유로 영업시간 밖에서는 묻지 않는다 — 주문을 못
+          // 넣는 화면에서 이름과 전화번호부터 받아두는 건 손님에게 곧
+          // 주문이 된다는 뜻으로 읽힌다.
+          pendingSeatingPrompt = "counter";
+          askSeatingIfOpen();
         }
         return;
       }
       if (res.ok && data.party_size) {
         partySize = data.party_size;
+        // 구분이 생기기 전에 앉은 손님이면 서버가 전부 어른으로 채워 보낸다.
+        partyAdults = data.party_adults == null ? data.party_size : data.party_adults;
+        partyChildren = data.party_children || 0;
         return; // already registered for this table's current party — don't ask again
       }
     } catch (e) {
       /* network error — fall through and ask, same as if none was registered */
     }
-    showPartySizeModal();
+    pendingSeatingPrompt = "party";
+    askSeatingIfOpen();
   }
   $("#counterNameConfirmBtn").onclick = () => {
     const name = $("#counterNameInput").value.trim();
@@ -1632,13 +1703,24 @@
     $("#counterNameBackdrop").hidden = true;
     resetIdleTimer();
   };
-  $("#partySizeMinus").onclick = () => {
-    partySizeStep = Math.max(1, partySizeStep - 1);
-    $("#partySizeVal").textContent = partySizeStep;
+  // 어른은 0까지 내려간다 — 아이만 앉는 자리는 없다시피 하지만, 어른 칸이
+  // 1에서 안 내려가면 "아이 2명"을 넣으려던 손님이 3명으로 넣게 된다.
+  // 대신 합계가 0이면 확인 버튼이 잠긴다(renderPartySizeModal).
+  $("#partyAdultsMinus").onclick = () => {
+    adultsStep = Math.max(0, adultsStep - 1);
+    renderPartySizeModal();
   };
-  $("#partySizePlus").onclick = () => {
-    partySizeStep = Math.min(30, partySizeStep + 1);
-    $("#partySizeVal").textContent = partySizeStep;
+  $("#partyAdultsPlus").onclick = () => {
+    adultsStep = Math.min(30, adultsStep + 1);
+    renderPartySizeModal();
+  };
+  $("#partyChildrenMinus").onclick = () => {
+    childrenStep = Math.max(0, childrenStep - 1);
+    renderPartySizeModal();
+  };
+  $("#partyChildrenPlus").onclick = () => {
+    childrenStep = Math.min(30, childrenStep + 1);
+    renderPartySizeModal();
   };
   $("#partySizeConfirmBtn").onclick = async () => {
     const btn = $("#partySizeConfirmBtn");
@@ -1647,7 +1729,7 @@
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ partySize: partySizeStep }),
+        body: JSON.stringify({ adults: adultsStep, children: childrenStep }),
       });
       // fetch() only rejects on a network-level failure — a 4xx/5xx response
       // still resolves normally, so this must be checked explicitly.
@@ -1658,7 +1740,9 @@
       // party_size_required and this same modal pops back up — confusing,
       // since they already thought they'd answered it once.
       if (!res.ok) throw new Error("save_failed");
-      partySize = partySizeStep;
+      partyAdults = adultsStep;
+      partyChildren = childrenStep;
+      partySize = adultsStep + childrenStep;
       $("#partySizeBackdrop").hidden = true;
       resetIdleTimer();
     } catch (e) {
@@ -1715,10 +1799,15 @@
   resetIdleTimer();
 
   applyStaticI18n();
-  loadSettings();
+  // 설정 → 메뉴 순서는 예전 그대로 둔다. 바뀐 것은 「인원수를 언제 묻는가」뿐이다.
+  const settingsReady = loadSettings().catch(() => {});
   loadMenu();
   // checkPriorOrder() must run after initPartySize() resolves — it branches
   // on isCounterTable (see the comment inside checkPriorOrder), which
   // initPartySize() is what sets.
-  initPartySize().then(checkPriorOrder);
+  // loadSettings() 를 먼저 기다린다 — 영업시간을 알기 전에 initPartySize() 가
+  // 돌면 「지금 주문할 수 있는가」를 모르는 채로 인원수를 묻게 된다.
+  // 설정을 못 받아온 경우에는 예전처럼 묻는다(기본값이 "열림"이다). 네트워크가
+  // 잠깐 끊긴 것 때문에 앉아 계신 손님이 주문을 못 하게 되면 더 나쁘다.
+  settingsReady.then(() => initPartySize()).then(checkPriorOrder);
 })();

@@ -269,11 +269,29 @@
     <div class="lock-card">
       <div class="lock-icon">🍽️</div>
       <h2 data-i18n="partySizeTitle">몇 분이세요?</h2>
-      <div class="qty-row" style="justify-content:center;margin:16px 0;">
-        <button id="partySizeMinus">−</button>
-        <span id="partySizeVal">1</span>
-        <button id="partySizePlus">+</button>
+      <!-- 어른(大)/아이(小) — 2026-09-10 사장님: "인원수 물을 때 어른(大),
+           아이(小) 묻기". 두 줄로 따로 세는 이유: 한 칸에 총원만 받으면
+           빌지에도 총원만 남아서, 아이 의자·아이 그릇을 몇 개 내야 하는지는
+           결국 홀에서 다시 물어봐야 한다. -->
+      <div class="party-rows">
+        <div class="party-row">
+          <span class="party-label"><span data-i18n="partyAdultsLabel">어른</span><em>大</em></span>
+          <div class="qty-row">
+            <button type="button" id="partyAdultsMinus">−</button>
+            <span id="partyAdultsVal">1</span>
+            <button type="button" id="partyAdultsPlus">+</button>
+          </div>
+        </div>
+        <div class="party-row">
+          <span class="party-label"><span data-i18n="partyChildrenLabel">아이</span><em>小</em></span>
+          <div class="qty-row">
+            <button type="button" id="partyChildrenMinus">−</button>
+            <span id="partyChildrenVal">0</span>
+            <button type="button" id="partyChildrenPlus">+</button>
+          </div>
+        </div>
       </div>
+      <div class="party-total" id="partyTotalMsg"></div>
       <button class="add-btn" id="partySizeConfirmBtn" data-i18n="partySizeConfirm">확인</button>
     </div>
   </div>

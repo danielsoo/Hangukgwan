@@ -374,6 +374,12 @@ router.post("/", async (req, res) => {
     // the same way computeSettlement()'s turnover estimate does, and take
     // one order's party_size per group rather than summing every order.
     party_size: orderingTable.party_size,
+    // 어른(大)/아이(小) 구분도 같이 박아둔다 — 2026-09-10. 위와 같은 이유로
+    // 테이블 쪽 값은 결제가 끝나면 사라지므로, 나중에 이 주문을 다시 볼 때
+    // 남아 있는 건 여기뿐이다. 구분이 생기기 전 주문에는 이 두 칸이 없고,
+    // 읽는 쪽은 그때 전체 인원을 어른으로 친다(partyBreakdownOf).
+    party_adults: orderingTable.party_adults == null ? null : orderingTable.party_adults,
+    party_children: orderingTable.party_children == null ? null : orderingTable.party_children,
     // Only set for 포장 카운터 orders (null for every real table) — see the
     // customerName/pickupNumber derivation above.
     customer_name: customerName,
@@ -635,6 +641,8 @@ router.post("/move", requireAdmin, async (req, res) => {
     from,
     to,
     party_size: toTable.party_size || null,
+    party_adults: toTable.party_adults == null ? null : toTable.party_adults,
+    party_children: toTable.party_children == null ? null : toTable.party_children,
   });
 });
 

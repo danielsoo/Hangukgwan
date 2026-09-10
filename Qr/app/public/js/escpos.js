@@ -484,7 +484,8 @@
    * 한다. 붙여두거나 옛 주문서 위에 얹어두는 용도라, 멀리서도 번호가 읽히게
    * 큰 글씨 두 개(옛 자리 → 새 자리)가 이 종이의 전부다.
    *
-   * info = { from, to, at, partySize, note, orders: [{ id, time, summary }] }
+   * info = { from, to, at, partySize, partyAdults, partyChildren, note,
+   *          orders: [{ id, time, summary }] }
    */
   function buildEscPosMoveSlip(info, storeName, sizes) {
     info = info || {};
@@ -527,7 +528,14 @@
     text(`${info.from} → ${info.to}`, sz("tables", 34), wt("tables", 700), "center", 18);
     divider();
     row("시각 / 時間", info.at || "", sz("info", 13), wt("info", 400), 8);
-    if (info.partySize) row("인원 / 人數", `${info.partySize}`, sz("info", 13), wt("info", 400), 8);
+    if (info.partySize) {
+      // 어른(大)/아이(小)까지 적는다 — 옮긴 자리에서 아이 의자·아이 그릇을
+      // 몇 개 옮겨야 하는지가 이 종이에 있어야 홀에서 다시 안 묻는다.
+      // 구분이 생기기 전(2026-09-10)에 앉은 손님은 총원만 적는다.
+      const kids = info.partyChildren || 0;
+      const detail = kids && info.partyAdults != null ? ` (大${info.partyAdults}·小${kids})` : "";
+      row("인원 / 人數", `${info.partySize}${detail}`, sz("info", 13), wt("info", 400), 8);
+    }
     if (info.note) row("", info.note, sz("info", 13), wt("info", 400), 8);
     if (orders.length) {
       divider();

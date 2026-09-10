@@ -37,6 +37,8 @@ function clearPartySizeIfSettled(store, tableNumber) {
   if (!table || !table.party_size) return false;
   table.party_size = null;
   table.party_size_updated_at = null;
+  table.party_adults = null;
+  table.party_children = null;
   return true;
 }
 
@@ -58,6 +60,15 @@ function movePartySize(store, fromNumber, toNumber) {
   const to = store.tables.find((t) => String(t.number) === String(toNumber));
   if (!from || !to || !from.party_size) return false;
   to.party_size = (to.party_size || 0) + from.party_size;
+  // 어른/아이 구분도 그대로 따라간다. 옮긴 자리에서 다시 묻지 않기 위해
+  // 인원수를 옮기는 것이므로, 그 내역만 빠뜨리면 반쪽짜리가 된다.
+  // 예전 손님(구분이 없던 시절 자리)은 party_adults 가 없으므로, 그럴 때는
+  // 전체 인원을 어른으로 친다 — 없는 값을 0으로 두면 합계가 어긋난다.
+  const fromAdults = from.party_adults == null ? from.party_size : from.party_adults;
+  const fromChildren = from.party_children || 0;
+  const toAdults = to.party_adults == null ? (to.party_size || 0) - fromAdults - fromChildren : to.party_adults;
+  to.party_adults = Math.max(0, toAdults) + fromAdults;
+  to.party_children = (to.party_children || 0) + fromChildren;
   // 「언제부터 앉아 있는가」도 그대로 따라간다. 자리를 옮겼다고 이 손님이
   // 방금 온 손님이 되는 것은 아니다 — 사장님(2026-09-10): "자리를 옮기던
   // 시간이 오래 걸리던 전체 결제를 하지 않는 이상 이 손님은 같은 손님."
@@ -66,6 +77,8 @@ function movePartySize(store, fromNumber, toNumber) {
   to.party_size_updated_at = starts[0] || new Date().toISOString();
   from.party_size = null;
   from.party_size_updated_at = null;
+  from.party_adults = null;
+  from.party_children = null;
   return true;
 }
 
@@ -90,4 +103,17 @@ function seatingStartOf(table) {
   return new Date(t.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
 }
 
-module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf };
+/**
+ * 이 자리의 어른/아이 수 — 구분이 생기기 전(2026-09-10)에 앉은 손님과
+ * 그 뒤에 앉은 손님을 부르는 쪽에서 나눠 다루지 않도록 한 곳에서 맞춰준다.
+ * 구분이 없던 자리는 전체 인원을 어른으로 친다. 0으로 두면 「어른 수」를
+ * 쓰는 1인 1메뉴 안내가 그 손님들에게만 조용히 사라진다.
+ */
+function partyBreakdownOf(table) {
+  if (!table || !table.party_size) return { adults: 0, children: 0, total: 0 };
+  const children = table.party_children || 0;
+  const adults = table.party_adults == null ? table.party_size : table.party_adults;
+  return { adults, children, total: table.party_size };
+}
+
+module.exports = { hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf, partyBreakdownOf };

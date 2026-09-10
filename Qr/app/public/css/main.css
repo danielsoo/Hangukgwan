@@ -363,6 +363,23 @@ button.is-closed:hover {
 .lock-card h2 { font-family: var(--font-display); font-size: 18px; margin: 0 0 8px; }
 .lock-card p { font-size: 14px; color: var(--muted); margin: 0; }
 
+/* 인원수 — 어른(大)/아이(小) 두 줄. 2026-09-10.
+   손님이 서서 한 손으로 누르는 자리라 버튼을 44px 로 키웠다(모달의 다른
+   .qty-row 보다 크다). 옆에 大/小 를 같이 적는 건 메뉴판·빌지가 쓰는 글자가
+   그거라서, 홀에서 말이 어긋나지 않게 하려는 것이다. */
+.party-rows { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 10px; }
+.party-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 14px;
+}
+.party-label { display: flex; align-items: baseline; gap: 6px; font-size: 16px; font-weight: 700; }
+.party-label em { font-style: normal; font-size: 13px; color: var(--muted); }
+.party-row .qty-row { margin-bottom: 0; gap: 10px; }
+.party-row .qty-row button { width: 44px; height: 44px; font-size: 20px; }
+.party-row .qty-row span { font-size: 19px; font-weight: 700; min-width: 32px; text-align: center; }
+.party-total { font-size: 15px; font-weight: 700; color: var(--muted); margin-bottom: 14px; min-height: 20px; }
+#partySizeConfirmBtn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
 .toast-banner {
   position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%);
   background: #2b2620; color: #fff; padding: 12px 18px; border-radius: 12px;

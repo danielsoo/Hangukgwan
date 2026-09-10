@@ -2,6 +2,7 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
+const { partyBreakdownOf } = require("../partySize");
 const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
@@ -161,18 +162,31 @@ function movedToFor(table) {
   return { to: m.to, at: m.at, order_ids: m.order_ids || [] };
 }
 
+// 어른(大)/아이(小)를 나눠 받는다 — 2026-09-10 사장님: "인원수 물을 때
+// 어른(大), 아이(小) 묻기".
+//
+// 옛 형태(`partySize` 하나만)도 계속 받는다. 손님 폰에 예전 화면이 떠 있는
+// 채로 배포가 되면 그 폰은 아직 옛 모양으로 보내는데, 거기서 400을 돌려주면
+// 그 손님은 인원수를 못 넣어 주문 자체를 못 한다. 그때는 전부 어른으로 친다.
 router.put("/:tableNumber/party-size", async (req, res) => {
-  const size = parseInt((req.body || {}).partySize, 10);
+  const b = req.body || {};
+  const hasSplit = b.adults !== undefined || b.children !== undefined;
+  const adults = hasSplit ? parseInt(b.adults, 10) || 0 : parseInt(b.partySize, 10) || 0;
+  const children = hasSplit ? parseInt(b.children, 10) || 0 : 0;
+  const size = adults + children;
+  if (adults < 0 || children < 0) return res.status(400).json({ error: "invalid_party_size" });
   if (!size || size < 1 || size > 50) return res.status(400).json({ error: "invalid_party_size" });
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
   table.party_size = size;
+  table.party_adults = adults;
+  table.party_children = children;
   table.party_size_updated_at = new Date().toISOString();
   // 새 손님이 앉았다 — 「자리가 옮겨졌어요」 안내는 여기서 끝난다.
   // 안 지우면 오늘 저녁 내내 그 자리 손님마다 옮겨가라는 말을 듣는다.
   delete table.moved_to;
   await save();
-  res.json({ party_size: table.party_size });
+  res.json({ party_size: table.party_size, party_adults: table.party_adults, party_children: table.party_children });
 });
 
 // Public: lets the customer page check whether this table already has a
@@ -192,8 +206,12 @@ router.get("/:tableNumber/party-size", (req, res) => {
   // 오래된 안내는 내려보내지 않는다. 새 손님이 앉으면 위 PUT 이 지우지만,
   // 아무도 안 앉은 채로 하루가 지나면 그대로 남아 있게 된다.
   const moved = movedToFor(table);
+  const party = partyBreakdownOf(table);
   res.json({
     party_size: table.party_size || null,
+    // 구분이 생기기 전에 앉은 손님도 같은 모양으로 내려간다(전부 어른).
+    party_adults: table.party_size ? party.adults : null,
+    party_children: table.party_size ? party.children : null,
     is_counter: !!table.is_counter,
     moved_to: moved,
   });
@@ -212,6 +230,8 @@ router.delete("/:tableNumber/party-size", requireAdmin, async (req, res) => {
   if (!table) return res.status(404).json({ error: "table_not_found" });
   table.party_size = null;
   table.party_size_updated_at = null;
+  table.party_adults = null;
+  table.party_children = null;
   await save();
   res.json({ ok: true });
 });
