@@ -26,7 +26,7 @@ process.env.SESSION_SECRET = "e2e-raster";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
-const { chromium } = require("playwright");
+const { launchBrowser } = require("./browser");
 const app = require("../server");
 
 // 이 프린터(XP-N160II)류의 입력 버퍼는 대개 64KB 안팎이다. 명령 하나가
@@ -44,7 +44,7 @@ function check(name, cond, extra = "") {
 (async () => {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const browser = await launchBrowser();
   const page = await browser.newPage();
   page.on("dialog", (d) => d.dismiss());
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });

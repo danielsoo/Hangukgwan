@@ -24,7 +24,7 @@ process.env.SESSION_SECRET = "e2e-discount-stack";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
-const { chromium } = require("playwright");
+const { launchBrowser } = require("./browser");
 const app = require("../server");
 const { store } = require("../src/db");
 
@@ -40,7 +40,7 @@ const digits = (s) => (String(s).match(/\d+/g) || []).map(Number);
 (async () => {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const browser = await launchBrowser();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await ctx.newPage();
   page.on("dialog", (d) => d.dismiss());

@@ -24,7 +24,7 @@ process.env.SESSION_SECRET = "e2e-header";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
-const { chromium } = require("playwright");
+const { launchBrowser } = require("./browser");
 const app = require("../server");
 const { resolveSiteDir } = require("../src/site");
 
@@ -43,7 +43,7 @@ function check(name, cond, extra = "") {
   }
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const browser = await launchBrowser();
   const shots = path.join(__dirname, "..", "..", "..", "_screens");
   fs.mkdirSync(shots, { recursive: true });
 

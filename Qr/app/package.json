@@ -28,6 +28,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "playwright-core": "^1.63.0",
     "supertest": "^7.0.0"
   }
 }

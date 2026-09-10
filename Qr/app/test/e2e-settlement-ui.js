@@ -25,7 +25,7 @@ process.env.SESSION_SECRET = "settlement-ui";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
-const { chromium } = require("playwright");
+const { launchBrowser } = require("./browser");
 const app = require("../server");
 const { store, getDb, connectDB, save } = require("../src/db");
 
@@ -43,7 +43,7 @@ const D = "2026-09-09";
   const server = app.listen(0);
   await new Promise((r) => server.on("listening", r));
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const browser = await launchBrowser();
   const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
   page.on("dialog", (d) => d.dismiss());
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });

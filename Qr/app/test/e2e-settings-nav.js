@@ -25,7 +25,7 @@ process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
 const path = require("path");
 const fs = require("fs");
-const { chromium } = require("playwright");
+const { launchBrowser } = require("./browser");
 const app = require("../server");
 
 let pass = 0;
@@ -41,7 +41,7 @@ const MAX_CARDS_PER_CATEGORY = 4;
 (async () => {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
-  const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
+  const browser = await launchBrowser();
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   page.on("dialog", (d) => d.dismiss());
