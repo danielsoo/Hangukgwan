@@ -1457,3 +1457,60 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-order-line-sub { color: var(--muted); font-size: 13px; padding-left: 12px; }
 .stl-order-meta { margin-top: 8px; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .stl-order.cancelled .stl-order-table, .stl-order.cancelled .stl-order-total { text-decoration: line-through; opacity: 0.6; }
+
+/* ── 테스터 모드 (src/testMode.js) ─────────────────────────────────────
+   켜져 있다는 것을 놓칠 수 없어야 한다. 놓치면 테스트 주문을 진짜로
+   착각하거나, 켜둔 줄 모르고 하루를 보낸다. 그래서 색은 가게 색이 아니라
+   일부러 튀는 색이고, 배너는 화면 맨 위에 고정된다. */
+.test-mode-banner {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: repeating-linear-gradient(45deg, #7c2d12, #7c2d12 14px, #9a3412 14px, #9a3412 28px);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+}
+.test-mode-banner-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fde68a;
+  flex: none;
+  animation: testModePulse 1.4s ease-in-out infinite;
+}
+@keyframes testModePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+#testModeBannerText { flex: 1; }
+.test-mode-banner-btn {
+  flex: none;
+  background: #fff;
+  color: #7c2d12;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.test-mode-state { margin: 8px 0 4px; }
+.test-mode-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.test-mode-phone { margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.test-mode-phone input { flex: 1; min-width: 220px; font-size: 13px; padding: 6px 8px; }
+/* 테스트 주문은 주문판에서 한눈에 갈려야 한다. */
+.order-card.test-order { outline: 2px dashed #9a3412; outline-offset: -2px; }
+.order-card-test-badge {
+  display: inline-block;
+  background: #9a3412;
+  color: #fff;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  margin-left: 6px;
+}

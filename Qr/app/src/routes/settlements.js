@@ -13,11 +13,19 @@ const router = express.Router();
 // 마감 스냅샷도 자기 컬렉션에 산다(src/db.js) — 하루에 한 줄씩 영원히
 // 쌓이는 것이라 store 문서에 두면 계속 커진다. 같은 날짜를 다시 닫으면
 // 새로 만들지 않고 덮어쓴다.
-async function saveSettlementSnapshot(snapshot) {
-  const [existing] = await findDocs("daily_settlements", { date: snapshot.date });
+// testId 가 있으면 그 테스트 세션의 스냅샷으로 따로 저장한다.
+//
+// 같은 날짜라도 진짜 마감과 테스트 마감은 **다른 줄**이어야 한다. 한 줄을
+// 나눠 쓰면 테스터 모드를 끄면서 그 줄을 지울 때 그날의 진짜 마감까지 같이
+// 사라진다. 장부에서 하루가 통째로 없어지는 것이라 되돌릴 방법이 없다.
+async function saveSettlementSnapshot(snapshot, testId) {
+  const key = testId
+    ? { date: snapshot.date, test_session: testId }
+    : { date: snapshot.date, test_session: { $exists: false } };
+  const [existing] = await findDocs("daily_settlements", key);
   const row = existing
     ? { ...existing, ...snapshot }
-    : { id: nextId("daily_settlements"), ...snapshot };
+    : { id: nextId("daily_settlements"), ...snapshot, ...(testId ? { test_session: testId } : {}) };
   await saveDoc("daily_settlements", row);
   return row;
 }
@@ -38,24 +46,31 @@ router.get("/", requireOwner, async (req, res) => {
   // 메모리의 store.orders 는 최근 며칠치뿐이다(src/db.js) — 지난 달 결산을
   // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
   // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
-  const orders = await ordersInRange(start, end);
+  const orders = await ordersInRange(start, end, req);
   res.json(computeSettlement(orders, start, end));
 });
 
 // 결산이 볼 주문을 날짜 범위로 가져온다. 인덱스는 created_at 에 걸려 있다
 // (src/migrations/2026-09-10-orders-collection.js).
-function ordersInRange(start, end) {
+function ordersInRange(start, end, req) {
   // 영업 시작 전(=테스트) 주문은 매출에 넣지 않는다. 사장님(2026-09-10):
   // "9월 8일 저녁부터 실제로 시행... 그 전까지는 전부 테스트였고."
   // 시작 시각이 범위 안에 걸치면 그 시각부터 센다(그날 낮의 테스트와 그날
   // 저녁의 첫 손님을 갈라야 한다).
   const from = `${start} 00:00:00`;
   const started = serviceStartedAt(store);
+  // 테스터 모드(src/testMode.js): 테스트 기기는 **테스트 주문만** 본다.
+  //
+  // 주문판과는 규칙이 다르다. 주문판에서는 테스트 기기도 진짜 주문을 같이
+  // 본다 — 테스트하는 동안에도 손님은 오고 그 주문을 놓치면 안 되니까.
+  // 결산은 반대다. 진짜 매출과 테스트 금액이 한 숫자로 섞이면 그 숫자는
+  // 아무 뜻이 없고, 사장님이 그걸 진짜 매출로 볼 위험이 생긴다. 테스트
+  // 기기의 결산은 방금 넣어본 테스트 주문만의 깨끗한 모래상자다.
+  //
+  // 평소 기기는 언제나 진짜만 본다. 그건 어떤 경우에도 안 바뀐다.
+  const testId = testMode.currentId(req, store);
   return findOrders({
-    // 테스터 모드로 넣은 주문은 매출이 아니다(src/testMode.js). 테스트
-    // 기기에서 결산을 열더라도 여기서는 뺀다 — 장부는 한 가지 숫자만
-    // 말해야 하고, 그 숫자가 보는 기기에 따라 달라지면 그건 장부가 아니다.
-    test_session: { $exists: false },
+    test_session: testId ? testId : { $exists: false },
     created_at: { $gte: started && started > from ? started : from, $lte: `${end} 23:59:59` },
   });
 }
@@ -65,7 +80,15 @@ function ordersInRange(start, end) {
 // live numbers for an old date would otherwise drift from what actually
 // closed that night.
 router.get("/history", requireOwner, async (req, res) => {
-  const list = await findDocs("daily_settlements", {}, { sort: { date: -1 }, limit: 90 });
+  // 결산과 같은 규칙(위 ordersInRange 주석) — 테스트 기기는 테스트 마감만,
+  // 평소 기기는 진짜 마감만. 한 화면에 섞이면 어느 줄이 진짜 장부인지
+  // 알 수 없게 된다.
+  const testId = testMode.currentId(req, store);
+  const list = await findDocs(
+    "daily_settlements",
+    { test_session: testId ? testId : { $exists: false } },
+    { sort: { date: -1 }, limit: 90 }
+  );
   res.json(list);
 });
 
@@ -73,22 +96,16 @@ router.get("/history", requireOwner, async (req, res) => {
 // Safe to call more than once for the same date — replaces any existing
 // snapshot for that date rather than duplicating it.
 router.post("/close", requireOwner, async (req, res) => {
-  // 테스터 모드에서는 마감을 하지 않는다(src/testMode.js).
-  //
-  // 마감은 테스트로 눌러볼 수 있는 종류의 버튼이 아니다. 그날 장부를 확정해
-  // 영구 기록으로 박고, 직원들 LINE 으로 마감 알림까지 나간다. 영업 중에
-  // 눌리면 장부가 어긋나고 직원들이 마감인 줄 안다.
-  //
-  // 결산 **화면**은 테스트 기기에서도 그대로 볼 수 있다 — 막는 것은
-  // 확정하는 이 한 번뿐이다.
-  if (testMode.isTest(req, store)) {
-    return res.status(403).json({ error: "test_mode_no_close" });
-  }
+  // 테스터 모드에서도 마감이 된다(2026-09-10 사장님: "결산이랑 주문까지
+  // 구현되게 해줘"). 다만 찍히는 것은 **테스트 세션의 스냅샷**이다 —
+  // 그날의 진짜 마감과는 다른 줄이고, 테스터 모드를 끄면 같이 사라진다.
+  // 진짜 장부는 손대지 않는다.
+  const testId = testMode.currentId(req, store);
   const date = (req.body && req.body.date) || taipeiDateString();
-  const snapshot = computeSettlement(await ordersInRange(date, date), date);
+  const snapshot = computeSettlement(await ordersInRange(date, date, req), date);
   // 스냅샷은 자기 컬렉션으로, store 문서는 번호 카운터 때문에 한 번.
-  await Promise.all([saveSettlementSnapshot(snapshot), save()]);
-  res.json(snapshot);
+  await Promise.all([saveSettlementSnapshot(snapshot, testId), save()]);
+  res.json({ ...snapshot, ...(testId ? { test_session: testId } : {}) });
 });
 
 // 한 주문이 실제로 결제된 시각. 부분 결제(품목별)로 나눠 낸 라운드는
@@ -114,24 +131,31 @@ function paidAtOf(order) {
 // 조용히 실패했다. 매출 숫자 자체는 응답으로 돌려주되, 그건 이미 그 화면의
 // 결제완료 칼럼에서 직원이 보고 있는 값이라 새로 새는 정보가 없다.
 router.post("/shift-close", requireAdmin, async (req, res) => {
-  // 마감은 테스트로 눌러볼 수 있는 버튼이 아니다 — 위 POST /close 와 같은
-  // 이유. 여기는 LINE 문자까지 나가므로 더더욱.
-  if (testMode.isTest(req, store)) {
-    return res.status(403).json({ error: "test_mode_no_close" });
-  }
+  // 테스터 모드에서도 정산이 된다. 숫자와 화면은 진짜와 똑같이 돌아가되
+  // 두 가지가 다르다(아래):
+  //   · 스냅샷이 테스트 세션 것으로 따로 찍히고, 끄면 같이 사라진다
+  //   · **LINE 문자는 안 나간다** — 직원 폰으로 가는 것이라 시험으로
+  //     보낼 수 없다. 직원이 마감인 줄 알고 움직인다.
+  const testId = testMode.currentId(req, store);
   const shift = req.body && req.body.shift === "am" ? "am" : "day";
   const date = taipeiDateString();
   const closedAt = nowLocal();
-  const orders = await ordersInRange(date, date);
+  const orders = await ordersInRange(date, date, req);
   const snapshot = computeSettlement(orders, date);
 
   // 오전 정산이 누른 시각을 그날 스냅샷에 남긴다. 하루 정산이 오전/오후를
   // 가르는 기준이 이것이다 — 영업시간표를 보고 "오전은 14시까지" 라고
   // 짐작하는 것보다, 실제로 정산을 누른 시각이 정확하다(14시 20분에 눌렀으면
   // 14시 10분 결제는 오전 몫이다).
-  const [prev] = await findDocs("daily_settlements", { date });
+  const [prev] = await findDocs(
+    "daily_settlements",
+    testId ? { date, test_session: testId } : { date, test_session: { $exists: false } }
+  );
   const amClosedAt = shift === "am" ? closedAt : (prev && prev.am_closed_at) || null;
-  await saveSettlementSnapshot({ ...snapshot, am_closed_at: amClosedAt, last_shift_closed_at: closedAt });
+  await saveSettlementSnapshot(
+    { ...snapshot, am_closed_at: amClosedAt, last_shift_closed_at: closedAt },
+    testId
+  );
   await save();
 
   // 하루 정산이면 오전 몫과 오후 몫을 갈라 한 줄씩 보여준다. 오전 정산을
@@ -149,7 +173,11 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   }
 
   let line = { sent: false, error: "disabled" };
-  if (store.settings.line_notify_enabled) {
+  if (testId) {
+    // 테스트에서는 여기까지 다 돌고 문자만 안 보낸다. 화면에는 "테스트라
+    // 안 보냈다"고 그대로 알려준다 — 조용히 안 보내면 LINE 이 고장난 줄 안다.
+    line = { sent: false, error: "test_mode" };
+  } else if (store.settings.line_notify_enabled) {
     const lines = [formatShiftSummary(snapshot, { shift, closedAt, amPart, pmPart })];
     const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
     if (warn) lines.push("", warn);

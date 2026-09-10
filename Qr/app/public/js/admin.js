@@ -2135,6 +2135,7 @@
       loadTicketFontSizes(),
       loadMoveSlipSettings(),
       loadVipSaleSettings(),
+      loadTestMode(),
     ]);
     // loadOrders() and loadTables() run concurrently above, so the order
     // queue's very first render can land before `tables` is populated —
@@ -3535,7 +3536,13 @@
 
   function renderOrderCard(o) {
     const card = document.createElement("div");
-    card.className = "order-card" + (printFailedOrderIds.has(o.id) ? " print-failed" : "");
+    // 테스터 모드 주문은 한눈에 갈려야 한다(src/testMode.js). 테스트 기기는
+    // 진짜 주문과 테스트 주문을 같이 보므로, 표시가 없으면 직원이 없는
+    // 손님의 음식을 만든다.
+    card.className =
+      "order-card" +
+      (printFailedOrderIds.has(o.id) ? " print-failed" : "") +
+      (o.test_session ? " test-order" : "");
     card.dataset.orderId = o.id;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleTimeString("ko-KR", {
       hour: "2-digit",
@@ -3593,7 +3600,9 @@
     const movedTag = o.moved_from ? `<span class="order-card-moved">${fmtMovedFrom(o.moved_from)}</span>` : "";
     card.innerHTML = `
       <div class="order-card-top">
-        <span>${tableTag}${typeBadge}${movedTag}</span>
+        <span>${tableTag}${typeBadge}${movedTag}${
+          o.test_session ? '<span class="order-card-test-badge">테스트</span>' : ""
+        }</span>
         <span class="order-card-top-right">
           <span class="order-card-time">${time}</span>
           <span class="order-card-drag-handle" title="${T("dragHandleTitle")}">⠿</span>
@@ -8107,6 +8116,157 @@
 
 
 
+  // ---------- 테스터 모드 (src/testMode.js) ----------
+  //
+  // 화면이 할 일은 셋이다.
+  //   1. 켜져 있으면 놓칠 수 없게 보여준다 (위쪽 고정 배너)
+  //   2. 켜고 끄는 길을 준다
+  //   3. 끄기 전에 **무엇이 사라지는지 먼저 보여준다**
+  //
+  // 3번이 제일 중요하다. 지우는 것은 되돌릴 수 없고, 설정·메뉴는 "테스트가
+  // 바꾼 것"과 "그 사이 다른 직원이 진짜로 바꾼 것"을 자동으로 가를 수 없다.
+  // 목록을 눈으로 보고 확인을 누르는 것이 그 둘을 가르는 유일한 방법이다.
+  let testModeState = { active: false, thisDevice: false };
+
+  async function loadTestMode() {
+    try {
+      const res = await fetch("/api/test-mode");
+      if (!res.ok) return;
+      testModeState = await res.json();
+    } catch (e) {
+      // 못 읽으면 꺼진 것으로 둔다. 배너가 안 뜨는 것이 잘못 뜨는 것보다 낫다.
+      testModeState = { active: false, thisDevice: false };
+    }
+    renderTestMode();
+  }
+
+  function renderTestMode() {
+    const st = testModeState || {};
+    const banner = $("#testModeBanner");
+    if (banner) banner.hidden = !st.thisDevice;
+
+    const off = $("#testModeOff");
+    const on = $("#testModeOn");
+    if (off) off.hidden = !!st.active;
+    if (on) on.hidden = !st.active;
+    if (!st.active) return;
+
+    const started = $("#testModeStartedAt");
+    if (started && st.startedAt) {
+      started.textContent = " (시작 " + new Date(st.startedAt).toLocaleString("ko-KR") + ")";
+    }
+    const mine = $("#testModeThisDevice");
+    if (mine) {
+      mine.textContent = st.thisDevice
+        ? "이 기기는 테스트 중이에요. 여기서 만드는 주문·결산은 종료할 때 사라집니다."
+        : "이 기기는 평소 그대로예요. 여기서 넣는 주문은 진짜로 남습니다.";
+    }
+    const joinBtn = $("#testModeJoinBtn");
+    const leaveBtn = $("#testModeLeaveBtn");
+    if (joinBtn) joinBtn.hidden = !!st.thisDevice;
+    if (leaveBtn) leaveBtn.hidden = !st.thisDevice;
+    const url = $("#testModeJoinUrl");
+    if (url && st.joinPath) url.value = location.origin + st.joinPath + "&to=/admin";
+  }
+
+  function wireTestMode() {
+    const start = $("#testModeStartBtn");
+    if (start) {
+      start.onclick = async () => {
+        if (!(await showConfirm("테스터 모드를 켤까요?\n\n이 기기에서 만드는 주문·결산은 종료할 때 전부 사라집니다.\n다른 기기와 손님 QR 주문은 평소 그대로예요."))) return;
+        const res = await fetch("/api/test-mode/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        if (!res.ok) return showAlert("테스터 모드를 켜지 못했어요.");
+        testModeState = await res.json();
+        renderTestMode();
+        await loadOrders();
+      };
+    }
+    const join = $("#testModeJoinBtn");
+    if (join) {
+      join.onclick = async () => {
+        const res = await fetch("/api/test-mode/join", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        if (!res.ok) return showAlert("참여하지 못했어요.");
+        testModeState = await res.json();
+        renderTestMode();
+        await loadOrders();
+      };
+    }
+    const leave = $("#testModeLeaveBtn");
+    if (leave) {
+      leave.onclick = async () => {
+        const res = await fetch("/api/test-mode/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        if (!res.ok) return;
+        testModeState = await res.json();
+        renderTestMode();
+        await loadOrders();
+      };
+    }
+    const phone = $("#testModePhoneBtn");
+    if (phone) phone.onclick = () => { const b = $("#testModePhoneBox"); if (b) b.hidden = !b.hidden; };
+    const copy = $("#testModeCopyBtn");
+    if (copy) {
+      copy.onclick = async () => {
+        const el = $("#testModeJoinUrl");
+        if (!el) return;
+        el.select();
+        try { await navigator.clipboard.writeText(el.value); copy.textContent = "복사됨"; setTimeout(() => (copy.textContent = "복사"), 1500); }
+        catch (e) { document.execCommand("copy"); }
+      };
+    }
+    const end = $("#testModeEndBtn");
+    if (end) end.onclick = endTestMode;
+    const bannerEnd = $("#testModeBannerEnd");
+    if (bannerEnd) bannerEnd.onclick = endTestMode;
+  }
+
+  async function endTestMode() {
+    // 먼저 무엇이 사라지는지 받아온다. 이걸 건너뛰고 바로 지우면 안 된다.
+    let pv = null;
+    try {
+      const res = await fetch("/api/test-mode/preview-end");
+      if (res.ok) pv = await res.json();
+    } catch (e) {}
+    if (!pv) return showAlert("테스터 모드 상태를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.");
+
+    const lines = ["테스터 모드를 종료하면 아래가 영구히 사라집니다.", ""];
+    const rows = pv.rows || {};
+    const label = { orders: "주문", payments: "결제기록", daily_settlements: "마감 기록", reservations: "예약" };
+    for (const [k, v] of Object.entries(rows)) if (v > 0) lines.push(`· ${label[k] || k} ${v}건`);
+    if (pv.vipCards > 0) lines.push(`· VIP 카드 ${pv.vipCards}장`);
+    if (pv.photos > 0) lines.push(`· 테스트 중 올린 사진 ${pv.photos}장`);
+
+    const menu = pv.menu || {};
+    const menuChanged = (menu.added || []).length + (menu.removed || []).length + (menu.modified || []).length;
+    if (menuChanged) lines.push(`· 메뉴 ${menuChanged}건이 켜기 전으로 되돌아갑니다`);
+    if ((pv.settings || []).length) lines.push(`· 설정 ${pv.settings.length}가지가 켜기 전으로 되돌아갑니다`);
+
+    if (menuChanged || (pv.settings || []).length) {
+      lines.push("");
+      lines.push("⚠ 메뉴·설정은 테스트가 바꾼 것인지 그 사이 다른 직원이 진짜로 바꾼 것인지 가릴 수 없어요. 되돌릴 게 있다면 아래 목록을 확인해 주세요.");
+      if ((pv.settings || []).length) lines.push("설정: " + pv.settings.join(", "));
+      if (menuChanged) {
+        const names = [...(menu.added || []), ...(menu.modified || []), ...(menu.removed || [])].map((m) => m.name);
+        lines.push("메뉴: " + names.slice(0, 12).join(", ") + (names.length > 12 ? " 외" : ""));
+      }
+    }
+    lines.push("");
+    lines.push("계속할까요?");
+    if (!(await showConfirm(lines.join("\n")))) return;
+
+    const res = await fetch("/api/test-mode/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ revertSettings: true, revertMenu: true }),
+    });
+    if (!res.ok) return showAlert("종료하지 못했어요.");
+    const body = await res.json();
+    testModeState = { active: false, thisDevice: false };
+    renderTestMode();
+    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings()]);
+    const d = body.deleted || {};
+    await showAlert(`테스터 모드를 종료했어요.\n주문 ${d.orders || 0}건, 마감 ${d.daily_settlements || 0}건을 지웠습니다.`);
+  }
+
   async function loadSettings() {
     const res = await fetch("/api/settings");
     const s = await res.json();
@@ -10766,5 +10926,6 @@
   };
 
   applyAdminI18n();
+  wireTestMode();
   checkAuth();
 })();

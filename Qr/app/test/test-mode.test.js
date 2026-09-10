@@ -68,6 +68,7 @@ function device() {
     get: (u) => send("get", u),
     post: (u) => send("post", u),
     put: (u) => send("put", u),
+    patch: (u) => send("patch", u),
   };
 }
 
@@ -179,16 +180,58 @@ function device() {
     check("테스트 기기에도 보인다 (테스트 중에도 장사는 해야 한다)", mine.body.some((o) => o.id === realOrderId));
   }
 
-  out.push("\n[6] 결산은 테스트를 세지 않는다");
+  out.push("\n[6] 결산 — 테스트 기기는 테스트만, 평소 기기는 진짜만");
   {
     const today = new Date().toISOString().slice(0, 10);
-    const r = await boss.get(`/api/settlements?start=${today}&end=${today}`);
-    const ids = JSON.stringify(r.body || {});
-    check("결산 응답이 온다", r.status === 200, String(r.status));
-    check("테스트 주문 번호가 결산에 없다", !ids.includes(`"id":${testOrderId}`), ids.slice(0, 200));
 
+    // 매출이 잡히려면 결제가 돼 있어야 한다. 테스트 주문 하나를 결제한다.
+    const paid = await boss.patch(`/api/orders/${testOrderId}`).send({ status: "paid", paymentMethod: "cash" });
+    check("테스트 주문을 결제할 수 있다", paid.status === 200, JSON.stringify(paid.body).slice(0, 120));
+
+    const mine = await boss.get(`/api/settlements?start=${today}&end=${today}`);
+    check("테스트 기기 결산이 나온다", mine.status === 200, String(mine.status));
+    check("테스트 매출이 잡힌다", mine.body.total_revenue > 0, JSON.stringify(mine.body.total_revenue));
+
+    // 진짜 주문도 하나 결제해 두고, 두 숫자가 서로 안 섞이는지 본다.
+    await staff.patch(`/api/orders/${realOrderId}`).send({ status: "paid", paymentMethod: "cash" });
+    const theirs = await staff.get(`/api/settlements?start=${today}&end=${today}`);
+    check("평소 기기 결산도 나온다", theirs.status === 200);
+    check(
+      "★ 두 숫자가 섞이지 않는다",
+      theirs.body.total_revenue !== mine.body.total_revenue &&
+        theirs.body.total_revenue > 0 &&
+        mine.body.total_revenue > 0,
+      `테스트 ${mine.body.total_revenue} / 진짜 ${theirs.body.total_revenue}`
+    );
+
+    out.push("  -- 마감도 된다 (2026-09-10 사장님: 결산까지 구현) --");
     const close = await boss.post("/api/settlements/close").send({});
-    check("테스트 기기는 마감을 못 한다", close.status === 403 && close.body.error === "test_mode_no_close", JSON.stringify(close.body));
+    check("테스트 기기도 마감할 수 있다", close.status === 200, JSON.stringify(close.body).slice(0, 120));
+    check("그 마감에는 테스트 표가 붙는다", close.body.test_session === session.id, String(close.body.test_session));
+
+    const myHist = await boss.get("/api/settlements/history");
+    check("테스트 기기 기록에 그 마감이 보인다", (myHist.body || []).some((r) => r.test_session === session.id));
+    const theirHist = await staff.get("/api/settlements/history");
+    check(
+      "★ 평소 기기 기록에는 테스트 마감이 안 보인다",
+      !(theirHist.body || []).some((r) => r.test_session),
+      JSON.stringify((theirHist.body || []).map((r) => r.date))
+    );
+
+    // 평소 기기로 진짜 마감을 하나 찍어둔다. [9]에서 이게 살아남는지 본다.
+    const realClose = await staff.post("/api/settlements/close").send({});
+    check("평소 기기의 진짜 마감이 찍힌다", realClose.status === 200 && !realClose.body.test_session, JSON.stringify(realClose.body.test_session));
+
+    out.push("  -- 정산은 되지만 LINE 은 안 나간다 --");
+    store.settings.line_notify_enabled = true;
+    await save();
+    const shift = await boss.post("/api/settlements/shift-close").send({ shift: "am" });
+    check("테스트 기기도 정산을 누를 수 있다", shift.status === 200, JSON.stringify(shift.body).slice(0, 120));
+    check(
+      "★ 직원 LINE 으로는 안 나간다",
+      shift.body.line && shift.body.line.sent === false && shift.body.line.error === "test_mode",
+      JSON.stringify(shift.body.line)
+    );
   }
 
   out.push("\n[7] 손님 폰을 참여시키기");
@@ -237,6 +280,11 @@ function device() {
     check("설정이 되돌아왔다", store.settings.store_name_ko === beforeName, String(store.settings.store_name_ko));
     check("메뉴 가격이 되돌아왔다", store.menuItems.find((m) => m.id === itemId).price !== 99999);
     check("활성 세션이 사라졌다", !store.settings.test_session);
+    check("테스트 마감도 지워졌다", (r.body.deleted.daily_settlements || 0) >= 1, JSON.stringify(r.body.deleted));
+
+    const hist = await boss.get("/api/settlements/history");
+    check("★ 진짜 마감은 그대로 있다", (hist.body || []).length >= 1, JSON.stringify((hist.body || []).map((x) => x.date)));
+    check("★ 남은 마감에 테스트 표가 없다", !(hist.body || []).some((x) => x.test_session), JSON.stringify(hist.body || []));
   }
 
   out.push("\n[10] 종료하면 참여했던 기기가 전부 같이 풀린다");
