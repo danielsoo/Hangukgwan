@@ -1,7 +1,7 @@
 const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
 const { requireOwner, requireAdmin } = require("../auth");
-const { computeSettlement, taipeiDateString } = require("../settlement");
+const { computeSettlement, taipeiDateString, paidAtOf } = require("../settlement");
 const { rangesForDate, orderHours } = require("../openHours");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
@@ -138,15 +138,6 @@ router.post("/close", requireOwner, async (req, res) => {
   res.json({ ...snapshot, ...(testId ? { test_session: testId } : {}) });
 });
 
-// 한 주문이 실제로 결제된 시각. 부분 결제(품목별)로 나눠 낸 라운드는
-// 마지막 품목이 결제된 때를 그 주문의 결제 시각으로 본다 — 그 전에는 아직
-// 받을 돈이 남아 있었다. 옛 주문이나 한 번에 결제된 주문은 updated_at.
-function paidAtOf(order) {
-  const stamps = (order.items || []).map((it) => it.paid_at).filter(Boolean);
-  if (stamps.length) return stamps.sort().pop();
-  return order.updated_at || order.created_at;
-}
-
 // 사장님 요청(2026-09-10): "현재 line 으로 결산 보내주는 기능이 있기는 한데
 // 한 번도 사용한 적은 없어... 이제 오전 정산 오후 정산(하루 정산) 총 하루에
 // 2개 있는데 오늘부터 받아볼 수 있나?"
@@ -203,18 +194,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   //
   // 이미 정산된 것은 다시 건드리지 않는다. 오후 정산이 오전 몫의 시각까지
   // 덮어쓰면 「언제 끊었는가」가 사라진다.
-  const justSettled = (store.orders || []).filter(
-    (o) => o.status === "paid" && !o.settled_at && String(o.created_at || "").slice(0, 10) === date && !!o.test_session === !!testId
-  );
-  if (justSettled.length) {
-    justSettled.forEach((o) => {
-      o.settled_at = closedAt;
-      o.settled_shift = shift;
-    });
-    // 주문마다 그 줄만 쓴다 — store 문서를 통째로 쓰면 같은 순간 들어온
-    // 주문이 지워진다(CLAUDE.md 「store 문서를 통째로 쓰지 않는다」).
-    await saveOrders(justSettled);
-  }
+  const justSettled = await markSettled(date, closedAt, shift, testId);
 
   // 장사가 끝났으니 남은 인원수를 비운다(src/partySize.js clearIdleSeats).
   // 주문 없이 인원수만 찍힌 자리는 결제할 것이 없어서 스스로 비워지지
@@ -268,6 +248,137 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   });
 });
 
+/**
+ * 정산한 것을 결제완료 칸에서 내린다 (claude/... 「정산하면 결제완료 칸이
+ * 비게」). 지우는 것이 아니라 표시만 단다 — 결산도 이전 주문도 이 줄들을
+ * 계속 읽는다.
+ *
+ * 그 정산이 덮는 것까지만 내린다(closedAt 이전에 결제된 것). 오전 정산이
+ * 저녁 결제까지 내려버리면 저녁 직원이 방금 받은 돈을 화면에서 못 찾는다.
+ */
+async function markSettled(date, closedAt, shift, testId) {
+  const rows = (store.orders || []).filter(
+    (o) =>
+      o.status === "paid" &&
+      !o.settled_at &&
+      String(o.created_at || "").slice(0, 10) === date &&
+      !!o.test_session === !!testId &&
+      paidAtOf(o) <= closedAt
+  );
+  if (!rows.length) return rows;
+  rows.forEach((o) => {
+    o.settled_at = closedAt;
+    o.settled_shift = shift;
+  });
+  // 주문마다 그 줄만 쓴다 — store 문서를 통째로 쓰면 같은 순간 들어온
+  // 주문이 지워진다(CLAUDE.md 「store 문서를 통째로 쓰지 않는다」).
+  await saveOrders(rows);
+  return rows;
+}
+
+// ── 오전 정산을 안 눌렀으면 대신 눌러준다 ────────────────────────────
+//
+// 사장님(2026-09-10): "일단 기본은 직접 정산을 누르는 걸로 지정할건데 만약
+// 그 다음 영업시간 5분전까지 정산이 안 눌려 있으면 눌러줘. 그렇게 하면
+// 섞일 염려가 전혀 없을 것 같아."
+//
+// 오전과 오후를 가르는 기준이 「오전 정산을 누른 시각」이다. 그걸 안 누른
+// 날은 가를 기준이 없어서 그날 매출이 통째로 「못 가른 날」이 된다
+// (src/settlement.js halfBoundaryFor). 저녁 손님이 들어오기 시작하면 그
+// 뒤로는 영영 못 가른다 — 점심 매출과 저녁 매출이 한 덩어리가 된다.
+//
+// 그래서 **저녁 영업 5분 전**까지 안 눌렀으면 그 시각으로 대신 누른다.
+// 5분 전인 이유: 그 순간에는 점심 장사가 확실히 끝나 있고 저녁 손님은
+// 아직 안 들어왔다. 어느 쪽에 넣어야 할지 헷갈리는 결제가 없는 유일한 틈이다.
+//
+// 눌린 시각은 「지금」이 아니라 **그 5분 전 시각**으로 적는다. 요청이
+// 16:27 에 들어와서 그때 돌았더라도 경계는 16:25 다 — 그래야 같은 날을
+// 몇 번을 다시 계산해도 같은 답이 나온다.
+const AUTO_AM_LEAD_MIN = 5;
+let autoAmCloseDoneFor = null; // "YYYY-MM-DD" — 이 프로세스에서 이미 확인한 날
+
+/** 오늘 자동 정산이 걸리는 시각 "YYYY-MM-DD HH:MM:SS". 가를 수 없으면 null. */
+function autoAmCutFor(dateStr) {
+  const hm = eveningStartHm();
+  if (!hm) return null;
+  const [h, m] = hm.split(":").map((x) => parseInt(x, 10));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  const total = h * 60 + m - AUTO_AM_LEAD_MIN;
+  if (total < 0) return null;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${dateStr} ${pad(Math.floor(total / 60))}:${pad(total % 60)}:00`;
+}
+
+/**
+ * 요청이 올 때마다 값싸게 한 번 본다. 돌 때가 아니면 DB 도 안 건드린다.
+ *
+ * 크론을 따로 두지 않은 이유: 자동 정산 시각은 영업시간 설정에서 나오므로
+ * 사장님이 영업시간을 바꾸면 같이 움직여야 한다. 고정 크론은 그걸 못 따라간다.
+ * 그 시각에 가게 태블릿은 주문판을 4초마다 새로 읽고 있으니, 요청이 없어서
+ * 못 도는 일은 사실상 없다.
+ */
+async function maybeAutoCloseAm(req) {
+  try {
+    // 테스터 모드 기기의 요청으로는 진짜 정산을 돌리지 않는다.
+    if (testMode.currentId(req, store)) return;
+    const date = taipeiDateString();
+    if (autoAmCloseDoneFor === date) return;
+    const cut = autoAmCutFor(date);
+    if (!cut) return;
+    if (nowLocal() < cut) return;
+
+    await connectDB();
+    const col = getDb().collection("daily_settlements");
+    // 이미 눌렸으면(직접이든 자동이든) 오늘은 더 볼 일이 없다.
+    const [existing] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
+    if (existing && existing.am_closed_at) {
+      autoAmCloseDoneFor = date;
+      return;
+    }
+
+    // 인스턴스가 여러 개라 같은 순간에 둘이 여기 올 수 있다. 시각을 먼저
+    // **조건부로** 박고, 실제로 박은 쪽만 나머지를 한다 — 안 그러면 LINE
+    // 문자가 두 통 간다. 사장님이 받기로 한 건 하루 두 통이다.
+    const claim = await col.updateOne(
+      { date, test_session: { $exists: false }, am_closed_at: { $in: [null, undefined] } },
+      { $set: { am_closed_at: cut, am_closed_auto: true } },
+      { upsert: false }
+    );
+    if (!claim || !claim.modifiedCount) {
+      // 아직 그날 스냅샷 자체가 없으면 만들면서 박는다.
+      if (existing) {
+        autoAmCloseDoneFor = date;
+        return; // 다른 인스턴스가 방금 박았다
+      }
+      await saveSettlementSnapshot({ date, am_closed_at: cut, am_closed_auto: true });
+    }
+    autoAmCloseDoneFor = date;
+
+    // 이제 그 경계로 그날을 다시 계산해 스냅샷을 채운다.
+    const orders = await ordersInRange(date, date, req);
+    const snapshot = computeSettlement(orders, date, date, {
+      amClosedAt: { [date]: cut },
+      eveningStartsAt: eveningStartHm(),
+    });
+    await saveSettlementSnapshot({ ...snapshot, am_closed_at: cut, am_closed_auto: true });
+
+    // 오전 몫을 정산된 것으로 내린다 — 직접 누른 것과 같은 처리다.
+    await markSettled(date, cut, "am", null);
+
+    if (store.settings.line_notify_enabled) {
+      const lines = [
+        formatShiftSummary(snapshot, { shift: "am", closedAt: cut, amPart: null, pmPart: null }),
+        "",
+        `※ 오전 정산 버튼을 누르지 않아 ${cut.slice(11, 16)} 에 자동으로 마감했습니다.`,
+      ];
+      await sendLineMessage(store, lines.join("\n"));
+    }
+  } catch (e) {
+    // 여기서 실패해도 주문판은 그대로 돌아야 한다.
+    console.warn("자동 오전 정산 실패:", e && e.message);
+  }
+}
+
 // Sends a one-off test message using whatever LINE settings are currently
 // saved, so the owner can confirm the channel access token actually works
 // right after entering it, instead of waiting until the next cron run.
@@ -318,3 +429,5 @@ router.get("/cron-close", async (req, res) => {
 });
 
 module.exports = router;
+module.exports.maybeAutoCloseAm = maybeAutoCloseAm;
+module.exports.autoAmCutFor = autoAmCutFor;

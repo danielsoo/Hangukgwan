@@ -35,7 +35,10 @@ out.push("[1] 정산이 표시를 남긴다 (src/routes/settlements.js)");
   check("★ 이미 정산된 것은 다시 안 건드린다", /!o\.settled_at/.test(settlements), "");
   check("그날 것만 고른다", /String\(o\.created_at \|\| ""\)\.slice\(0, 10\) === date/.test(settlements), "");
   check("★ 테스트 주문과 진짜 주문을 섞지 않는다", /!!o\.test_session === !!testId/.test(settlements), "");
-  check("주문마다 그 줄만 쓴다 (store 통째로 X)", /await saveOrders\(justSettled\)/.test(settlements), "");
+  // 표시를 다는 일은 markSettled 한 곳으로 모았다 — 직접 누른 정산과 자동
+  // 오전 정산이 같은 규칙을 써야 하기 때문이다(test/auto-am-close.test.js).
+  check("주문마다 그 줄만 쓴다 (store 통째로 X)", /async function markSettled[\s\S]{0,1200}await saveOrders\(rows\)/.test(settlements), "");
+  check("정산이 덮는 것까지만 내린다", /paidAtOf\(o\) <= closedAt/.test(settlements), "");
   check("몇 건 내렸는지 화면에 알려준다", /settled_orders: justSettled\.length/.test(settlements), "");
 }
 

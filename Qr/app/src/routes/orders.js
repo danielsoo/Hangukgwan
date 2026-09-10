@@ -9,6 +9,8 @@ const { parseAddons } = require("../addons");
 const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 const testMode = require("../testMode");
 const seating = require("../seating");
+// 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
+const { maybeAutoCloseAm } = require("./settlements");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -584,6 +586,17 @@ router.get("/:id", (req, res) => {
 
 // Admin: list orders, optional ?status= and ?date=YYYY-MM-DD
 router.get("/", requireAdmin, (req, res) => {
+  // 오전 정산을 안 눌렀으면 저녁 영업 5분 전에 대신 눌러준다.
+  //
+  // 사장님(2026-09-10): "만약 그 다음 영업시간 5분전까지 정산이 안 눌려
+  // 있으면 눌러줘. 그렇게 하면 섞일 염려가 전혀 없을 것 같아."
+  //
+  // 여기 붙인 이유: 그 시각에 가게 태블릿이 이 주소를 4초마다 부르고 있다.
+  // 크론을 따로 두면 영업시간을 바꿨을 때 같이 안 움직인다(자세한 이유는
+  // routes/settlements.js maybeAutoCloseAm 주석).
+  //
+  // 응답을 기다리게 하지 않는다 — 주문판이 이것 때문에 느려지면 안 된다.
+  maybeAutoCloseAm(req);
   // 테스터 모드(src/testMode.js): 평소 기기에는 테스트 주문을 아예 안 보낸다.
   // 실시간 주문판에 섞이면 직원이 없는 손님의 음식을 만든다.
   //
