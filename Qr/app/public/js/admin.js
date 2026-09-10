@@ -512,6 +512,7 @@
       orderCardDeliveryBadge: "배달",
       orderCardMixedBadge: "혼합",
       printFailedCardMsg: "⚠️ 인쇄 실패 — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도",
+      orderCardLocUnverified: "📍 위치 미확인",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
       printFailReasonOff: "자동 인쇄가 꺼져 있어요",
       printFailReasonElsewhere: "이 기기는 인쇄 담당이 아니에요",
@@ -1154,6 +1155,7 @@
       orderCardDeliveryBadge: "外送",
       orderCardMixedBadge: "混合",
       printFailedCardMsg: "⚠️ 列印失敗 — 請確認廚房是否收到，或用下方列印按鈕重試",
+      orderCardLocUnverified: "📍 位置未確認",
       printFailReasonApp: "APP 無法連線到出單機",
       printFailReasonOff: "自動列印已關閉",
       printFailReasonElsewhere: "這台裝置不是列印裝置",
@@ -3943,9 +3945,14 @@
     // 자리를 옮긴 주문 — 주방에는 이미 옛 번호가 찍힌 티켓이 나가 있다.
     // 이 표시가 없으면 "5번 것이 왜 8번에 있지" 가 된다.
     const movedTag = o.moved_from ? `<span class="order-card-moved">${fmtMovedFrom(o.moved_from)}</span>` : "";
+    // 위치 확인이 안 된 주문 — 「멀리 있다」가 아니라 「확인 못 했다」이다.
+    // 실내라 위치가 안 잡혔거나 손님이 권한을 거부한 경우가 대부분이고,
+    // 그래도 자리에 앉아 계신 손님이다. 직원이 눈으로 보고 판단하도록
+    // 사실만 적어 둔다(src/routes/orders.js).
+    const locTag = o.location_unverified ? `<span class="order-card-loc-unverified">${T("orderCardLocUnverified")}</span>` : "";
     card.innerHTML = `
       <div class="order-card-top">
-        <span>${tableTag}${typeBadge}${movedTag}${
+        <span>${tableTag}${typeBadge}${movedTag}${locTag}${
           o.test_session ? '<span class="order-card-test-badge">테스트</span>' : ""
         }</span>
         <span class="order-card-top-right">

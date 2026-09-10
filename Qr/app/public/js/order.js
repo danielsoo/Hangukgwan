@@ -1113,7 +1113,14 @@
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         (err) => reject(err),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+        // enableHighAccuracy 를 껐다. 이 값은 GPS 위성을 직접 잡으라는
+        // 뜻인데, 실내에서는 잡히지 않아 10초를 다 쓰고 실패한다. 가게 안이
+        // 바로 그 실내다. 우리가 재는 것은 「가게에서 200m 안인가」뿐이라
+        // 기지국·와이파이 기반 위치로 충분하다 — 훨씬 빠르고 실내에서도 잡힌다.
+        //
+        // maximumAge 도 늘렸다. 같은 손님이 추가 주문할 때마다 위치를 다시
+        // 잡을 이유가 없다. 5분 안의 값이면 그대로 쓴다.
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
       );
     });
   }
@@ -1165,8 +1172,22 @@
       try {
         coords = await getGeolocation();
       } catch (e) {
-        alert(t("locationErrorMsg"));
-        return;
+        // 여기서 막지 않는다.
+        //
+        // 2026-09-10 저녁, 사장님: "이런 오류가 꽤 많은 테이블에서 일어나"
+        // — 「無法取得您的位置」 창이 뜨고 주문 버튼이 아무것도 안 했다.
+        // 자리에 앉아 계신 손님이 밥을 못 시킨다.
+        //
+        // 위치를 막는 목적은 「QR 사진을 찍어 집에서 주문하는 것」을 멈추는
+        // 것이지 앞에 앉은 손님을 돌려보내는 게 아니다. 위치를 못 잡는 이유는
+        // 대개 손님 잘못이 아니다 — 실내, 브라우저 권한 거부, 새 도메인이라
+        // 권한이 처음부터 다시, 기기 설정. 그걸 전부 「주문 불가」로 처리하면
+        // 얻는 것보다 잃는 게 훨씬 크다.
+        //
+        // 그래서 좌표 없이 보낸다. 서버는 「멀리 있다」가 확인된 경우에만
+        // 막고, 확인이 안 된 주문에는 표를 달아 직원 화면에 보여준다.
+        // 자리에 손님이 앉아 있는지는 직원이 눈으로 안다.
+        coords = null;
       }
     }
 

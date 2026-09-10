@@ -1536,3 +1536,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-size: 13px;
   color: var(--muted, #777);
 }
+
+/* 위치 확인이 안 된 주문. 경고가 아니라 사실 표시다 — 빨간색을 쓰면
+   직원이 「막아야 하는 주문」으로 읽는다. */
+.order-card-loc-unverified {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #eef1f5;
+  color: #5a6472;
+  font-size: 12px;
+  white-space: nowrap;
+}

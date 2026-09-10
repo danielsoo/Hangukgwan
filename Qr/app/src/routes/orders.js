@@ -221,8 +221,22 @@ router.post("/", async (req, res) => {
     if (!customerPhone) return res.status(400).json({ error: "customer_phone_required" });
   }
 
+  // 위치는 「멀리 있다」가 확인됐을 때만 막는다.
+  //
+  // 2026-09-10 저녁, 사장님: "이런 오류가 꽤 많은 테이블에서 일어나" —
+  // 손님 화면에 「無法取得您的位置」 가 뜨고 주문이 아예 안 들어갔다.
+  //
+  // 이 검사의 목적은 QR 사진을 찍어 집에서 주문하는 것을 막는 것이다.
+  // 위치를 못 잡는 것과 멀리 있는 것은 다르다 — 실내, 권한 거부, 도메인이
+  // 바뀌어 권한이 처음부터 다시, 기기 설정. 그 전부를 「주문 불가」로 묶으면
+  // 앞에 앉은 손님이 밥을 못 시킨다. 잃는 게 훨씬 크다.
+  //
+  // 그래서 좌표가 아예 없는 주문은 받되 표를 달아 둔다. 자리에 손님이
+  // 앉아 있는지는 직원이 눈으로 안다 — 화면이 그 판단에 필요한 사실만
+  // 넘겨주면 된다.
   const locationError = isTestDevice ? null : checkLocation(lat, lng);
-  if (locationError) return res.status(403).json({ error: locationError });
+  if (locationError === "out_of_range") return res.status(403).json({ error: locationError });
+  const locationUnverified = locationError === "location_required";
 
   // VIP membership discount — a customer signed in with Google (see the
   // 회원 modal in public/js/order.js) who has an active linked card gets
@@ -388,6 +402,11 @@ router.post("/", async (req, res) => {
     // 로그인 안 한 손님은 null 이고, 그 경우 주문 내역은 예전처럼 그 브라우저
     // 안에만(localStorage) 남는다.
     account_id: customer && customer.accountId ? customer.accountId : null,
+    // 위치 확인이 안 된 주문이라는 표. 「멀리 있다」가 아니라 「확인 못 했다」
+    // 이다 — 화면이 이 표를 보고 직원에게 알려주면, 직원은 그 자리에 손님이
+    // 앉아 있는지 눈으로 보고 판단한다. 확인된 주문에는 이 칸을 안 만든다
+    // (칸이 없다 = 정상, testMode.tag 와 같은 규칙).
+    ...(locationUnverified ? { location_unverified: true } : {}),
     // 테스트 기기가 넣은 것이면 표를 남긴다. 이 한 칸이 있는 주문만
     // 「테스터 모드 종료」때 지워진다 — 없으면 진짜 주문이다.
     ...testMode.tag(req, store),
