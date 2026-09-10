@@ -133,11 +133,19 @@ out.push("[LINE 마감 문자에도 같이 들어간다]");
     DATE
   );
   const am = formatShiftSummary(snap, { shift: "am", closedAt: `${DATE} 14:12:00` });
-  check("오전 머리말", am.startsWith("🌅 9/10 오전 정산 (14:12 마감)"), am.split("\n")[0]);
-  check("특약95절이 이름으로 나온다", am.includes("特約95折 -NT$50"), am);
-  check("직접 입력이 따로 나온다", am.includes("직접 입력 -NT$2"), am);
+  check("오전 머리말", am.startsWith("🌅 오전 정산 · 9/10 (목)"), am.split("\n")[0]);
+  check("마감 시각이 다음 줄에", am.split("\n")[1] === "14:12 마감", am.split("\n")[1]);
+  check("특약95절이 이름으로 나온다", am.includes("特約95折  -NT$50"), am);
+  check("직접 입력이 따로 나온다", am.includes("직접 입력  -NT$2"), am);
   check("결제수단이 한글로", am.includes("현금"), am);
-  check("VIP 카드 줄", am.includes("─ VIP 카드") && am.includes("차액 +NT$450"), am);
+  check("VIP 카드 묶음", am.includes("▸ VIP 카드") && am.includes("차액  +NT$450"), am);
+
+  // 사장님(2026-09-10): "다닥다닥 붙어있으니까 답답하고 체계적이지 않아."
+  // 묶음 사이에는 빈 줄이 하나씩 있어야 하고, 묶음 안의 줄은 들여쓴다.
+  check("묶음 사이에 빈 줄이 있다", am.includes("\n\n▸ "), JSON.stringify(am.slice(0, 120)));
+  check("묶음 안의 줄은 들여쓴다", am.split("\n").some((l) => l.startsWith("   ") && l.trim()), am);
+  check("빈 줄이 두 개씩 겹치지 않는다", !am.includes("\n\n\n"), JSON.stringify(am));
+  check("줄 끝에 공백을 남기지 않는다", !am.split("\n").some((l) => /\s$/.test(l)), JSON.stringify(am));
 
   const day = formatShiftSummary(snap, {
     shift: "day",
@@ -145,11 +153,12 @@ out.push("[LINE 마감 문자에도 같이 들어간다]");
     amPart: { revenue: 948, count: 1 },
     pmPart: { revenue: 500, count: 1 },
   });
-  check("하루 머리말", day.startsWith("🌙 9/10 하루 정산 (21:07 마감)"), day.split("\n")[0]);
-  check("오전/오후를 갈라 보여준다", day.includes("오전 NT$948") && day.includes("오후 NT$500"), day);
+  check("하루 머리말", day.startsWith("🌙 하루 정산 · 9/10 (목)"), day.split("\n")[0]);
+  check("요일이 붙는다 — 며칠 뒤에 봐도 무슨 장사였는지 안다", /\(목\)/.test(day), day.split("\n")[0]);
+  check("오전/오후를 갈라 보여준다", day.includes("오전  NT$948") && day.includes("오후  NT$500"), day);
   check("오전 정산 안 누른 날엔 가르지 않는다",
-    !formatShiftSummary(snap, { shift: "day", closedAt: `${DATE} 21:07:00` }).includes("  오전 "));
-  check("미결제 없으면 그렇게 적는다", day.includes("✅ 미결제 주문 없음"), day);
+    !formatShiftSummary(snap, { shift: "day", closedAt: `${DATE} 21:07:00` }).includes("▸ 오전 / 오후"));
+  check("미결제 없으면 그렇게 적는다", day.includes("✅ 미결제 없음"), day);
 }
 
 console.log(out.join("\n"));

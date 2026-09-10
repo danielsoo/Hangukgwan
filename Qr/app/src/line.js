@@ -140,6 +140,21 @@ const nt = (n) => `NT$${Number(n || 0).toLocaleString()}`;
 // "2026-09-10" → "9/10", "2026-09-10 21:07:31" → "21:07"
 const shortDate = (d) => (d ? `${Number(d.slice(5, 7))}/${Number(d.slice(8, 10))}` : "");
 const clockOf = (ts) => (ts && ts.length >= 16 ? ts.slice(11, 16) : "");
+// "2026-09-10" → " (목)". 며칠 뒤에 문자를 다시 봐도 무슨 요일 장사였는지
+// 바로 안다 — 금요일과 화요일의 매출을 같은 눈으로 보면 안 된다.
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+function weekdayOf(dateStr) {
+  if (!dateStr) return "";
+  // 정오로 만들어서 시간대에 따라 날짜가 하루 밀리지 않게 한다.
+  const d = new Date(`${dateStr}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? "" : ` (${WEEKDAYS[d.getDay()]})`;
+}
+// 묶음 안의 줄은 세 칸 들여쓴다 — 제목과 내용이 눈으로 구분되게.
+const indent = (line) => `   ${line}`;
+// 한 묶음: "▸ 제목" 아래에 들여쓴 줄들.
+function section(title, rows) {
+  return [`▸ ${title}`, ...rows.map(indent)].join("\n");
+}
 
 // 사장님 요청(2026-09-10): "오전 정산 오후 정산(하루 정산) 총 하루에 2개
 // 있는데 오늘부터 받아볼 수 있나?" — 직원이 관리자 화면에서 「🌅 오전 정산」
@@ -156,68 +171,107 @@ const clockOf = (ts) => (ts && ts.length >= 16 ? ts.slice(11, 16) : "");
 function formatShiftSummary(snapshot, opts = {}) {
   const isAm = opts.shift === "am";
   const clock = clockOf(opts.closedAt);
-  const head = `${isAm ? "🌅" : "🌙"} ${shortDate(snapshot.date)} ${isAm ? "오전 정산" : "하루 정산"}${clock ? ` (${clock} 마감)` : ""}`;
-  const lines = [head, `매출: ${nt(snapshot.total_revenue)}`];
+  const blocks = [];
 
-  // 하루 정산에서는 오전/오후가 각각 얼마였는지 한 줄씩. 오전 정산을 누른
-  // 적이 없는 날은 가를 기준이 없으므로 넣지 않는다 — 없는 경계를 지어내는
+  // 머리말 — 무슨 정산인지, 언제 마감했는지. 두 줄로 나눈다.
+  blocks.push(
+    [
+      `${isAm ? "🌅" : "🌙"} ${isAm ? "오전 정산" : "하루 정산"} · ${shortDate(snapshot.date)}${weekdayOf(snapshot.date)}`,
+      clock ? `${clock} 마감` : null,
+    ]
+      .filter(Boolean)
+      .join("\n")
+  );
+
+  // 제일 먼저 보고 싶은 두 줄 — 얼마 벌었나, 몇 명 왔나.
+  const head = [`매출  ${nt(snapshot.total_revenue)}`];
+  const guestParts = [];
+  if (snapshot.paid_order_count) guestParts.push(`${snapshot.paid_order_count}건`);
+  if (snapshot.guest_count) {
+    // 어른·아이를 같이 적는다(2026-09-10 사장님 요청). 아이가 없는 날은
+    // 괄호를 붙이지 않는다 — 늘 붙으면 한 줄이 길어지기만 한다.
+    const split =
+      snapshot.adult_count != null && snapshot.child_count > 0
+        ? ` (어른 ${snapshot.adult_count}·아이 ${snapshot.child_count})`
+        : "";
+    guestParts.push(`손님 ${snapshot.guest_count}명${split}`);
+  }
+  // 라벨은 「결제」다 — 값 쪽에 이미 "손님 130명" 이 들어 있어서, 라벨까지
+  // 손님이면 한 줄에 같은 말이 두 번 나온다.
+  if (guestParts.length) head.push(`결제  ${guestParts.join(" · ")}`);
+  blocks.push(head.join("\n"));
+
+  // 하루 정산에서는 오전/오후가 각각 얼마였는지. 오전 정산을 누른 적이
+  // 없는 날은 가를 기준이 없으므로 넣지 않는다 — 없는 경계를 지어내는
   // 것보다 안 보여주는 쪽이 낫다.
   if (!isAm && opts.amPart && opts.pmPart) {
-    lines.push(`  오전 ${nt(opts.amPart.revenue)} (${opts.amPart.count}건)`);
-    lines.push(`  오후 ${nt(opts.pmPart.revenue)} (${opts.pmPart.count}건)`);
+    blocks.push(
+      section("오전 / 오후", [
+        `오전  ${nt(opts.amPart.revenue)} · ${opts.amPart.count}건`,
+        `오후  ${nt(opts.pmPart.revenue)} · ${opts.pmPart.count}건`,
+      ])
+    );
   }
-
-  // 어른·아이를 같이 적는다 (2026-09-10 사장님 요청). 문자는 한 줄이
-  // 길어지면 폰에서 잘리므로 괄호 안에 짧게만 붙인다.
-  const split =
-    snapshot.adult_count != null && snapshot.child_count != null && snapshot.child_count > 0
-      ? `(어른 ${snapshot.adult_count}·아이 ${snapshot.child_count})`
-      : "";
-  const guests = snapshot.guest_count ? ` · 손님 ${snapshot.guest_count}명${split}` : "";
-  lines.push(`결제: ${snapshot.paid_order_count}건${guests}`);
 
   const methods = snapshot.payment_method_breakdown || [];
   if (methods.length) {
-    lines.push("─ 결제수단");
-    for (const m of methods) {
-      lines.push(`  ${PAYMENT_METHOD_NAMES[m.method] || m.method} ${nt(m.revenue)} (${m.order_count}건)`);
-    }
+    blocks.push(
+      section(
+        "결제수단",
+        methods.map((m) => `${PAYMENT_METHOD_NAMES[m.method] || m.method}  ${nt(m.revenue)} · ${m.order_count}건`)
+      )
+    );
   }
 
   // 할인 — 사장님 요청(2026-09-10): "할인한 양이랑 그 중에 vip 카드 중 어떤
   // 거에서 할인, 그냥 직접 할인 등 그것도 결산 페이지랑 보고에 들어갔으면
   // 좋겠어." 종류별로 한 줄씩.
   if (snapshot.discount_total) {
-    lines.push(`─ 할인 -${nt(snapshot.discount_total)}`);
-    for (const d of snapshot.discount_breakdown || []) {
-      lines.push(`  ${DISCOUNT_NAMES[d.discount_type] || d.discount_type} -${nt(d.amount)} (${d.order_count}건)`);
-    }
+    blocks.push(
+      section(
+        `할인  -${nt(snapshot.discount_total)}`,
+        (snapshot.discount_breakdown || []).map(
+          (d) => `${DISCOUNT_NAMES[d.discount_type] || d.discount_type}  -${nt(d.amount)} · ${d.order_count}건`
+        )
+      )
+    );
   }
 
   // VIP 카드가 적자인지 흑자인지 — 판 돈에서 그 카드들이 깎아준 돈을 뺀 것.
   // 카드도 안 팔리고 카드 할인도 없었으면 넣지 않는다.
   const vip = snapshot.vip_card_program;
   if (vip && (vip.cards_sold || vip.card_discount_given)) {
-    lines.push("─ VIP 카드");
-    const sold = vip.cards_sold ? `판매 ${nt(vip.card_sales_revenue)} (${vip.cards_sold}장)` : "판매 없음";
-    lines.push(`  ${sold} · 할인 -${nt(vip.card_discount_given)}`);
-    lines.push(`  차액 ${vip.net >= 0 ? "+" : "-"}${nt(Math.abs(vip.net))}`);
+    blocks.push(
+      section("VIP 카드", [
+        vip.cards_sold ? `판매  ${nt(vip.card_sales_revenue)} · ${vip.cards_sold}장` : "판매  없음",
+        `할인  -${nt(vip.card_discount_given)}`,
+        `차액  ${vip.net >= 0 ? "+" : "-"}${nt(Math.abs(vip.net))}`,
+      ])
+    );
   }
 
-  if (snapshot.cancelled_order_count) lines.push(`취소: ${snapshot.cancelled_order_count}건`);
+  if (snapshot.cancelled_order_count) {
+    blocks.push(section("취소", [`${snapshot.cancelled_order_count}건 · ${nt(snapshot.cancelled_amount)}`]));
+  }
 
   // 미결제는 맨 아래. 돈이 빠져나간 자리라 눈에 걸려야 한다.
   if (snapshot.problem_order_count > 0) {
-    lines.push(`⚠️ 미결제/문제 주문: ${snapshot.problem_order_count}건 (${nt(snapshot.problem_amount)})`);
-    const preview = (snapshot.problem_orders || [])
+    const rows = (snapshot.problem_orders || [])
       .slice(0, 5)
-      .map((o) => `  - ${o.created_at.slice(11, 16)} ${o.table_number}번 테이블 ${nt(o.total)}`);
-    lines.push(...preview);
-    if ((snapshot.problem_orders || []).length > 5) lines.push(`  ...외 ${snapshot.problem_orders.length - 5}건`);
+      .map((o) => `${o.created_at.slice(11, 16)} · ${o.table_number}번 테이블 · ${nt(o.total)}`);
+    if ((snapshot.problem_orders || []).length > 5) {
+      rows.push(`…외 ${snapshot.problem_orders.length - 5}건`);
+    }
+    blocks.push(
+      [`⚠️ 미결제 ${snapshot.problem_order_count}건 · ${nt(snapshot.problem_amount)}`, ...rows.map(indent)].join("\n")
+    );
   } else {
-    lines.push("✅ 미결제 주문 없음");
+    blocks.push("✅ 미결제 없음");
   }
-  return lines.join("\n");
+
+  // 묶음 사이는 빈 줄 하나. 사장님(2026-09-10): "다닥다닥 붙어있으니까
+  // 답답하고 체계적이지 않아."
+  return blocks.join("\n\n");
 }
 
 module.exports = {

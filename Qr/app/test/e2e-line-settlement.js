@@ -118,12 +118,12 @@ function check(name, cond, extra = "") {
   check("LINE 으로 한 통 나갔다", linePushes.length === 1, `${linePushes.length}통`);
   const amText = linePushes[0] ? linePushes[0].text : "";
   check("승인된 사람에게 갔다", linePushes[0] && linePushes[0].to === "U_owner");
-  check("오전 정산 문자다", /^🌅 \d+\/\d+ 오전 정산 \(\d\d:\d\d 마감\)/.test(amText), amText.split("\n")[0]);
+  check("오전 정산 문자다", /^🌅 오전 정산 · \d+\/\d+ \(.\)\n\d\d:\d\d 마감/.test(amText), amText.split("\n").slice(0, 2).join(" / "));
   const lunchPaid = lunchOrder.total;
   check(`점심(12시대) 매출이 들어 있다 — NT$${lunchPaid}`,
-    amText.includes(`매출: NT$${lunchPaid.toLocaleString()}`), amText);
-  check("결제수단이 한글로 적힌다", /현금 NT\$/.test(amText), amText);
-  check("VIP 카드 할인이 이름으로 적힌다", amText.includes("特約95折 -NT$"), amText);
+    amText.includes(`매출  NT$${lunchPaid.toLocaleString()}`), amText);
+  check("결제수단이 한글로 적힌다", /현금\s+NT\$/.test(amText), amText);
+  check("VIP 카드 할인이 이름으로 적힌다", /特約95折\s+-NT\$/.test(amText), amText);
   {
     // 여기가 이번에 더한 것이다. 주문이 없어서 결제할 것도 없던 자리는
     // 스스로 비워지지 않는다 — 정산이 비워줘야 한다.
@@ -157,12 +157,15 @@ function check(name, cond, extra = "") {
 
   check("두 번째 문자가 나갔다", linePushes.length === 2, `${linePushes.length}통`);
   const dayText = linePushes[1] ? linePushes[1].text : "";
-  check("하루 정산 문자다", /^🌙 \d+\/\d+ 하루 정산 \(\d\d:\d\d 마감\)/.test(dayText), dayText.split("\n")[0]);
+  check("하루 정산 문자다", /^🌙 하루 정산 · \d+\/\d+ \(.\)\n\d\d:\d\d 마감/.test(dayText), dayText.split("\n").slice(0, 2).join(" / "));
   check("하루 매출은 점심+저녁",
-    dayText.includes(`매출: NT$${(lunchPaid + dinnerPaid).toLocaleString()}`), dayText);
-  check("오전 몫이 적힌다", dayText.includes(`오전 NT$${lunchPaid.toLocaleString()}`), dayText);
-  check("오후 몫이 적힌다", dayText.includes(`오후 NT$${dinnerPaid.toLocaleString()}`), dayText);
-  check("현금과 신용카드가 따로 잡힌다", /현금 NT\$/.test(dayText) && /신용카드 NT\$/.test(dayText), dayText);
+    dayText.includes(`매출  NT$${(lunchPaid + dinnerPaid).toLocaleString()}`), dayText);
+  check("오전 몫이 적힌다", dayText.includes(`오전  NT$${lunchPaid.toLocaleString()}`), dayText);
+  check("오후 몫이 적힌다", dayText.includes(`오후  NT$${dinnerPaid.toLocaleString()}`), dayText);
+  check("현금과 신용카드가 따로 잡힌다", /현금\s+NT\$/.test(dayText) && /신용카드\s+NT\$/.test(dayText), dayText);
+  // 사장님(2026-09-10): "다닥다닥 붙어있으니까 답답하고 체계적이지 않아."
+  check("묶음 사이에 빈 줄이 있다", dayText.includes("\n\n▸ "), JSON.stringify(dayText.slice(0, 140)));
+  check("빈 줄이 두 개씩 겹치지 않는다", !dayText.includes("\n\n\n"), JSON.stringify(dayText));
   await page.locator("#appDialogOk").click();
   await page.waitForTimeout(300);
 
