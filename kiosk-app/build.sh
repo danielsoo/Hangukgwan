@@ -14,12 +14,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
-TOOLS=/opt/andtools
-AAPT2="$TOOLS/aapt2"
-ANDROID_JAR="$TOOLS/android.jar"
-D8_JAR="$TOOLS/d8.jar"
-APKSIGNER_JAR="$TOOLS/apksigner.jar"
-ECJ_JAR="$TOOLS/ecj.jar"
+. "$HERE/tools.sh"
+fetch_tools
 
 PKG=tw.hangukgwan.kiosk
 MIN_SDK=21
@@ -81,15 +77,27 @@ cp "$OUT/base.apk" "$OUT/unsigned.apk"
 ( cd "$OUT/dex" && zip -q "$OUT/unsigned.apk" classes.dex )
 
 echo "==> 6/6 sign"
+# 서명키가 없는 기계에서 조용히 새 키를 만들면 안 된다. 그렇게 만든 APK 는
+# 태블릿에 이미 깔린 앱을 덮어 설치하지 못하고("서명이 다릅니다"), 그 사실을
+# 설치하는 순간에야 알게 된다. 키는 맥에만 있다(.gitignore).
 if [ ! -f "$KEYSTORE" ]; then
-  echo "    (generating a new signing key - keep this file, updates need the same one)"
-  mkdir -p "$(dirname "$KEYSTORE")"
-  keytool -genkeypair -v \
-    -keystore "$KEYSTORE" \
-    -storepass "$KS_PASS" -keypass "$KS_PASS" \
-    -alias "$KEY_ALIAS" \
-    -keyalg RSA -keysize 2048 -validity 10950 \
-    -dname "CN=Hangukgwan POS, OU=Kitchen, O=Hangukgwan, L=Tainan, C=TW" >/dev/null 2>&1
+  if [ "${ALLOW_NEW_KEY:-}" = "1" ]; then
+    echo "    (ALLOW_NEW_KEY=1 - 새 서명키를 만듭니다. 이 APK 로는 기존 설치를 덮어쓸 수 없습니다)"
+    mkdir -p "$(dirname "$KEYSTORE")"
+    keytool -genkeypair -v \
+      -keystore "$KEYSTORE" \
+      -storepass "$KS_PASS" -keypass "$KS_PASS" \
+      -alias "$KEY_ALIAS" \
+      -keyalg RSA -keysize 2048 -validity 10950 \
+      -dname "CN=Hangukgwan POS, OU=Kitchen, O=Hangukgwan, L=Tainan, C=TW" >/dev/null 2>&1
+  else
+    echo >&2
+    echo "!! 서명키가 없습니다: $KEYSTORE" >&2
+    echo "   이 키는 저장소에 없고 맥에만 있습니다. 맥에서 빌드하세요." >&2
+    echo "   정말로 새 키를 만들어 시험용 APK 를 뽑으려면 ALLOW_NEW_KEY=1 로 다시 실행하세요" >&2
+    echo "   (그 APK 는 태블릿의 기존 설치를 덮어쓰지 못합니다)." >&2
+    exit 1
+  fi
 fi
 
 APK="$OUT/dist/hangukgwan-pos-$VERSION_NAME.apk"
