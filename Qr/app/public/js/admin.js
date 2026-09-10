@@ -67,6 +67,37 @@
   // 「판단했다」는 「찍었다」가 아니다. 자동 인쇄가 꺼져 있어서 안 찍은
   // 것도 판단이다 — 안 그러면 나중에 자동 인쇄를 켜는 순간 그동안 쌓인
   // 신규 주문이 한꺼번에 쏟아진다.
+  // 알림 빌지(자리 이동 · 품목 추가·취소)를 이미 뽑았는지 기억한다.
+  //
+  // 주문 원장(DECIDED_KEY)과 따로 두는 이유: 한 주문이 여러 번 옮겨지고
+  // 여러 번 고쳐질 수 있다. 주문 번호 하나로는 「어느 변경까지 찍었는가」를
+  // 담을 수 없어서, 키에 그 변경이 일어난 시각을 붙인다.
+  const NOTICE_KEY = "hg_admin_printedNotices";
+  const NOTICE_KEEP = 300;
+  let noticeStorageOk = true;
+  function readNoticeKeys() {
+    try {
+      const raw = localStorage.getItem(NOTICE_KEY);
+      if (raw === null) return null; // 이 기기에서 처음
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.filter((v) => typeof v === "string") : []);
+    } catch (e) {
+      noticeStorageOk = false;
+      return null;
+    }
+  }
+  function writeNoticeKeys() {
+    if (!noticeStorageOk) return;
+    try {
+      const arr = [...printedNoticeKeys].slice(-NOTICE_KEEP);
+      printedNoticeKeys = new Set(arr);
+      localStorage.setItem(NOTICE_KEY, JSON.stringify(arr));
+    } catch (e) {
+      noticeStorageOk = false;
+    }
+  }
+  let printedNoticeKeys = readNoticeKeys();
+
   const DECIDED_KEY = "hg_admin_decidedOrderIds";
   const DECIDED_KEEP = 300; // 주문 번호는 계속 커진다 — 최근 것만 들고 있으면 된다
   let decidedStorageOk = true;
@@ -3212,6 +3243,51 @@
         }
       }
     }
+
+    printPendingNotices(fresh);
+  }
+
+  // 주방이 알아야 할 「이미 있는 주문의 변화」를 종이로 내보낸다.
+  //
+  // 사장님(2026-09-10): "늘 출력이 되어야 해. 수기던 고객이 직접 주문을
+  // 하던 자리 옮김이던."
+  //
+  // 새 주문과 같은 원칙으로 돈다 — 먼저 「찍기로 했다」를 남기고 찍는다.
+  // 그래야 그 사이 도착한 다음 응답이 같은 것을 또 찍지 않는다.
+  function printPendingNotices(fresh) {
+    const firstEver = printedNoticeKeys === null;
+    if (firstEver) printedNoticeKeys = new Set();
+
+    const jobs = [];
+    for (const o of fresh) {
+      if (o.status === "paid" || o.status === "cancelled") continue;
+      if (o.moved_at && o.moved_from) {
+        const key = `m${o.id}@${o.moved_at}`;
+        if (!printedNoticeKeys.has(key)) {
+          jobs.push({ key, order: o, notice: { kind: "moved", from: o.moved_from, to: o.table_number } });
+        }
+      }
+      const ch = o.items_changed;
+      if (ch && ch.at && ((ch.added || []).length || (ch.removed || []).length)) {
+        const key = `c${o.id}@${ch.at}`;
+        if (!printedNoticeKeys.has(key)) {
+          jobs.push({ key, order: o, notice: { kind: "changed" }, change: ch });
+        }
+      }
+    }
+    if (!jobs.length) return;
+
+    jobs.forEach((j) => printedNoticeKeys.add(j.key));
+    writeNoticeKeys();
+
+    // 이 기기에서 처음 켠 것이면 밀려 있던 변화를 몰아 찍지 않는다 —
+    // 새 주문 쪽과 같은 이유다(위 firstEverOnThisDevice).
+    if (firstEver) return;
+    if (!autoPrintOn || !printHereAllowed()) return;
+
+    (async () => {
+      for (const j of jobs) await printNoticeTicket(j);
+    })();
   }
 
   // "YYYY-MM-DD" in the browser's own local timezone (the admin device is
@@ -10010,6 +10086,51 @@
       <hr>
       <div class="qr">손님은 새 자리 QR 로 주문<small>請客人改掃新桌號 QR</small></div>
     </body></html>`;
+  }
+
+  // 알림 빌지 한 장. 새 주문 빌지와 다른 점 두 가지:
+  //   · 한 장만 나간다 (주방용만 — 결제용 사본은 새 주문에만 의미가 있다)
+  //   · 주문 상태를 건드리지 않는다. 「신규 → 조리 중」으로 밀어버리면
+  //     아직 안 찍힌 주문을 찍힌 것으로 만든다.
+  async function printNoticeTicket(job) {
+    const o = job.order;
+    try {
+      if (typeof buildEscPosRasterTicket !== "function") return false;
+      const bridge = appPrintBridge();
+      if (!bridge) {
+        const res = await fetch("/api/settings/escpos");
+        if (!res.ok) return false;
+        const cfg = await res.json();
+        if (!cfg.rawbtEnabled) return false;
+      }
+      const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+      const counter = isCounterOrder(o);
+      const tableLabel = counter
+        ? o.pickup_number && o.customer_name
+          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          : "外帶櫃檯"
+        : `桌號 ${o.table_number}${partyTag(o)}`;
+      const labelInfo = { tableLabel, phoneLine: counter && o.customer_phone ? `☎ ${o.customer_phone}` : null };
+
+      // 찍을 줄을 고른다. 자리 이동은 그 자리로 옮겨 가는 음식 전부(홀이
+      // 무엇을 어디로 옮기는지 알아야 한다), 변경은 바뀐 줄만.
+      const lines =
+        job.notice.kind === "moved"
+          ? o.items || []
+          : [
+              ...(job.change.added || []).map((it) => Object.assign({}, it, { __delta: "+" })),
+              ...(job.change.removed || []).map((it) => Object.assign({}, it, { __delta: "-" })),
+            ];
+      if (!lines.length) return false;
+
+      const bytes = buildEscPosRasterTicket(Object.assign({}, o, { items: lines }), storeName, ticketFontSizes, labelInfo, {
+        notice: job.notice,
+      });
+      return await sendRasterTicketParts([bytes], bridge);
+    } catch (e) {
+      console.warn("notice print failed:", e);
+      return false;
+    }
   }
 
   async function tryPrintViaRawBt(o) {

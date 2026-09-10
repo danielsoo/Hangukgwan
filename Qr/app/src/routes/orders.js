@@ -858,6 +858,9 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
 
   const takeoutCount = validated.filter((v) => v.order_type === "takeout").length;
   order.order_type = takeoutCount === 0 ? "dine_in" : takeoutCount === validated.length ? "takeout" : "mixed";
+  // 바꾸기 전 목록을 떠 둔다 — 아래 diffOrderLines 가 이걸로 「무엇이 늘고
+  // 무엇이 빠졌는가」를 낸다.
+  const before = (order.items || []).map((it) => Object.assign({}, it));
   order.items = validated;
   // Re-apply whatever VIP discount this order was originally placed with
   // (order.vip_discount_percent, set once at POST / time and never changed
@@ -868,10 +871,68 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   order.total = order.vip_discount_percent ? Math.round((total * (100 - order.vip_discount_percent)) / 100) : total;
   order.updated_at = nowLocal();
 
+  // 무엇이 늘고 무엇이 빠졌는지 여기서 계산해 둔다.
+  //
+  // 사장님(2026-09-10): "늘 출력이 되어야 해. 수기던 고객이 직접 주문을
+  // 하던 자리 옮김이던."
+  //
+  // 이 경로가 제일 위험했다. 결제 전에 요리를 더 넣으면 금액에는 반영되는데
+  // 주방에는 아무것도 안 갔다. 손님은 시켰고 돈도 내는데 음식이 안 나간다.
+  //
+  // 전체를 다시 찍지 않고 **바뀐 줄만** 남긴다. 이미 만들고 있는 요리를
+  // 다시 만들게 하면 안 되기 때문이다. 화면(admin.js)이 이 값을 보고
+  // 「추가·취소」 빌지를 한 장 뽑는다.
+  const changed = diffOrderLines(before, validated);
+  if (changed.added.length || changed.removed.length) {
+    order.items_changed = { at: order.updated_at, added: changed.added, removed: changed.removed };
+  }
+
   await saveOrder(order);
   broadcastOrdersChanged(req);
   res.json(order);
 });
+
+// 두 품목 목록의 차이. 같은 줄인지는 「주방이 같은 것으로 볼 것인가」로
+// 가른다 — 메뉴가 같아도 고기 선택이나 맵기가 다르면 다른 요리다.
+function orderLineKey(it) {
+  return [
+    it.item_id,
+    it.option_choice || "",
+    it.spice_choice || "",
+    it.takeout_choice || "",
+    it.order_type || "",
+    (it.note || "").trim(),
+    (it.selected_addons || []).map((a) => a.name).sort().join("|"),
+  ].join("\u0000");
+}
+
+function diffOrderLines(before, after) {
+  const count = (list) => {
+    const m = new Map();
+    for (const it of list || []) {
+      const k = orderLineKey(it);
+      const cur = m.get(k);
+      if (cur) cur.qty += it.qty;
+      else m.set(k, Object.assign({}, it, { qty: it.qty }));
+    }
+    return m;
+  };
+  const a = count(before);
+  const b = count(after);
+  const added = [];
+  const removed = [];
+  for (const [k, line] of b) {
+    const was = a.get(k);
+    const delta = line.qty - (was ? was.qty : 0);
+    if (delta > 0) added.push(Object.assign({}, line, { qty: delta }));
+  }
+  for (const [k, line] of a) {
+    const now = b.get(k);
+    const delta = line.qty - (now ? now.qty : 0);
+    if (delta > 0) removed.push(Object.assign({}, line, { qty: delta }));
+  }
+  return { added, removed };
+}
 
 // Admin: 부분 결제 — 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고
 // 다른 테이블 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만
@@ -957,3 +1018,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+// 테스트가 직접 잰다(test/order-change-notice.test.js). 라우터를 세우지 않고
+// 「무엇이 늘고 무엇이 빠졌는가」만 따로 확인할 수 있어야 한다.
+module.exports.diffOrderLines = diffOrderLines;
+module.exports.orderLineKey = orderLineKey;

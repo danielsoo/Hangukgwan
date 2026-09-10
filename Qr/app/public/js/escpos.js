@@ -423,7 +423,26 @@
       divider();
     }
 
-    line(`${storeName} ${priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    // 알림 빌지 — 새 주문이 아니라 「이미 있는 주문에 무슨 일이 생겼다」를
+    // 알리는 종이다(자리 이동, 품목 추가·취소). 주방은 종이만 보고 움직이므로
+    // 무슨 종이인지가 맨 위에서 바로 읽혀야 한다. 새 주문 빌지와 헷갈리면
+    // 요리를 처음부터 다시 만들게 된다.
+    const notice = (opts && opts.notice) || null;
+    if (notice) {
+      if (notice.kind === "moved") {
+        line("*** 자리 이동 / 換桌 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+        line(`${notice.from} → ${notice.to}`, sz("storeName", 17) + 8, 900, { align: "center" });
+        line("음식은 새 자리로", sz("tableNo", 13), 700, { align: "center" });
+        line("餐點請送到新桌號", sz("tableNo", 13), 700, { align: "center" });
+      } else {
+        line("*** 주문 변경 / 訂單異動 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+        line("아래 것만 반영하세요", sz("tableNo", 13), 700, { align: "center" });
+        line("僅需處理以下項目", sz("tableNo", 13), 700, { align: "center" });
+      }
+      divider();
+    }
+
+    line(`${storeName} ${notice ? "通知單" : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
@@ -431,6 +450,10 @@
     divider();
 
     o.items.forEach((it) => {
+      // 변경 빌지의 각 줄은 「추가」인지 「취소」인지가 품목 이름보다 먼저
+      // 읽혀야 한다. 취소를 추가로 읽으면 만들지 말아야 할 것을 만든다.
+      if (it.__delta === "-") line("[취소 / 取消]", sz("itemDetail", 13), 900);
+      else if (it.__delta === "+") line("[추가 / 追加]", sz("itemDetail", 13), 900);
       row(itemName(it), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
       if (it.option_choice) line("  └ " + it.option_choice, sz("itemDetail", 13), wt("itemDetail", 400));
       if (it.spice_choice && it.spice_choice !== "基本") line("  └ " + it.spice_choice, sz("itemDetail", 13), wt("itemDetail", 400));
@@ -465,7 +488,11 @@
       line("※ 飲料/酒類恕不折扣", sz("itemDetail", 13), wt("itemDetail", 400));
     }
     divider();
-    if (priceCopy && discount.active) {
+    if (notice) {
+      // 합계는 안 찍는다. 이 종이에 적힌 것은 주문 전체가 아니라 바뀐 부분
+      // 뿐이라, 합계를 같이 두면 「이만큼만 받으면 되는」 것으로 읽힌다.
+      row("주문번호 / 單號", `#${o.id}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+    } else if (priceCopy && discount.active) {
       row("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     } else {
       row("合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
