@@ -12,12 +12,63 @@ set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 cd "$HERE"
 
-TOOLS=/opt/andtools
+# 빌드 도구를 어디서 찾을지.
+#
+# 2026-09-10 사장님이 맥에서 이 스크립트를 돌렸을 때:
+#   ./build-aab.sh: line 36: /opt/andtools/aapt2: No such file or directory
+#
+# /opt/andtools 는 이 앱을 처음 만든 클라우드 샌드박스에만 있던 경로다.
+# 맥에는 없다. 그래서 도구를 직접 받아 $HERE/.tools 에 둔다 — 한 번 받아두면
+# 그 다음부터는 그대로 쓴다(.gitignore 에 넣어 저장소에는 안 올린다).
+#
+# 왜 안드로이드 SDK 를 안 쓰나: 이 앱을 만든 환경에서 구글 SDK 다운로드
+# 호스트가 막혀 있었고, 그 뒤로도 Gradle 없이 aapt2/ecj/d8/bundletool 만으로
+# 빌드해 왔다. 맥에 SDK 를 새로 깔게 하는 것보다 필요한 다섯 개만 받는 쪽이
+# 가볍다.
+TOOLS="${ANDTOOLS:-/opt/andtools}"
+if [ ! -x "$TOOLS/aapt2" ]; then
+  TOOLS="$HERE/.tools"
+fi
 AAPT2="$TOOLS/aapt2"
 ANDROID_JAR="$TOOLS/android.jar"
 D8_JAR="$TOOLS/d8.jar"
 ECJ_JAR="$TOOLS/ecj.jar"
 BUNDLETOOL="$TOOLS/bundletool.jar"
+
+BUNDLETOOL_VERSION=1.18.1
+
+fetch_tools() {
+  mkdir -p "$TOOLS"
+  local npmdir="$TOOLS/npm"
+  if [ ! -f "$ANDROID_JAR" ] || [ ! -f "$D8_JAR" ] || [ ! -f "$ECJ_JAR" ] || [ ! -x "$AAPT2" ]; then
+    echo "==> 빌드 도구를 받는 중 ($TOOLS) - 처음 한 번만 걸립니다"
+    mkdir -p "$npmdir"
+    ( cd "$npmdir" && npm i --silent --no-audit --no-fund --no-package-lock \
+        @drxiaozhi/minapk aaptjs3 >/dev/null )
+    local m="$npmdir/node_modules/@drxiaozhi/minapk/tools"
+    cp "$m/android.jar" "$ANDROID_JAR"
+    cp "$m/d8.jar" "$D8_JAR"
+    cp "$m"/ecj-*.jar "$ECJ_JAR"
+    # aapt2 는 플랫폼별 실행 파일이다. 맥이면 darwin, 리눅스면 linux.
+    local os=linux
+    case "$(uname -s)" in Darwin) os=darwin ;; esac
+    local arch=x64
+    cp "$npmdir/node_modules/aaptjs3/bin/$arch/$os/aapt2" "$AAPT2"
+    chmod +x "$AAPT2"
+  fi
+  if [ ! -f "$BUNDLETOOL" ]; then
+    echo "==> bundletool 을 받는 중"
+    curl -fsSL -o "$BUNDLETOOL" \
+      "https://github.com/google/bundletool/releases/download/$BUNDLETOOL_VERSION/bundletool-all-$BUNDLETOOL_VERSION.jar"
+  fi
+}
+fetch_tools
+
+if ! command -v java >/dev/null 2>&1; then
+  echo "!! java 가 필요합니다 (ecj / d8 / bundletool / jarsigner 가 전부 자바입니다)." >&2
+  echo "   맥이면:  brew install openjdk   그리고 안내대로 PATH 에 추가" >&2
+  exit 1
+fi
 
 MIN_SDK=21
 TARGET_SDK=36
@@ -87,11 +138,31 @@ AAB="$OUT/dist/hangukgwan-pos-$VERSION_NAME.aab"
 # An .aab is signed with jarsigner, not apksigner - the APK signature schemes
 # don't apply to a bundle. This is only the UPLOAD key: Play re-signs the APKs
 # it generates from this bundle with the app signing key it holds.
-jarsigner -keystore "$KEYSTORE" \
-  -storepass "$KS_PASS" -keypass "$KS_PASS" \
-  -signedjar "$AAB" \
-  -digestalg SHA-256 -sigalg SHA256withRSA \
-  "$OUT/app.aab" "$KEY_ALIAS" > /dev/null
+#
+# 서명키는 저장소에 없다(.gitignore). 키가 없는 기계에서는 서명 안 된
+# 번들까지 만들어 두고 멈춘다 — Play 는 서명 안 된 것을 받지 않으므로 그
+# 파일을 키가 있는 기계로 옮겨 아래 한 줄로 서명하면 된다.
+if [ -f "$KEYSTORE" ]; then
+  jarsigner -keystore "$KEYSTORE" \
+    -storepass "$KS_PASS" -keypass "$KS_PASS" \
+    -signedjar "$AAB" \
+    -digestalg SHA-256 -sigalg SHA256withRSA \
+    "$OUT/app.aab" "$KEY_ALIAS" > /dev/null
+else
+  UNSIGNED="$OUT/dist/hangukgwan-pos-$VERSION_NAME-unsigned.aab"
+  cp "$OUT/app.aab" "$UNSIGNED"
+  echo
+  echo "서명키가 없습니다: $KEYSTORE"
+  echo "서명 안 된 번들: $UNSIGNED"
+  echo
+  echo "키가 있는 기계에서 이 한 줄로 서명하세요:"
+  echo "  jarsigner -keystore kiosk-app/keystore/hangukgwan.jks \\"
+  echo "    -storepass $KS_PASS -keypass $KS_PASS \\"
+  echo "    -signedjar hangukgwan-pos-$VERSION_NAME.aab \\"
+  echo "    -digestalg SHA-256 -sigalg SHA256withRSA \\"
+  echo "    hangukgwan-pos-$VERSION_NAME-unsigned.aab $KEY_ALIAS"
+  exit 0
+fi
 
 java -jar "$BUNDLETOOL" validate --bundle "$AAB" | head -20
 

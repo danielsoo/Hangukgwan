@@ -39,3 +39,8 @@ _screens/
 # FIREBASE_SERVICE_ACCOUNT 에만 넣는다. (Qr/app/src/firebaseAdmin.js 참고)
 *firebase-adminsdk*.json
 serviceAccountKey.json
+
+# 앱 빌드 도구(aapt2/ecj/d8/bundletool) — 받아서 쓰는 것이라 저장소에 안 올린다
+kiosk-app/.tools/
+kiosk-app/build-aab/
+kiosk-app/build/
