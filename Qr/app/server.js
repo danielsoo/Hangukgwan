@@ -5,8 +5,10 @@ const express = require("express");
 const session = require("express-session");
 const compression = require("compression");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave } = require("./src/db");
 const seed = require("./src/seed");
+// 0번 테이블 정리 마이그레이션이 「지워도 안전한가」를 묻는 데 쓴다.
+const { hasUnpaidOrder } = require("./src/partySize");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
@@ -18,6 +20,7 @@ const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-h
 // 배포한 것이 화면에 안 닿던 문제 — 자세한 배경은 그 파일 맨 위 주석.
 const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
+const { applyRemoveTable020260910 } = require("./src/migrations/2026-09-10-remove-table-0");
 
 const app = express();
 
@@ -151,6 +154,9 @@ app.use(async (req, res, next) => {
       // 구이류와 기타 사이에 "전통한식요리 經典韓式料理" — 71~83번이 그리로
       // 옮겨가고 빈 기타는 없어진다.
       await applyTraditionalCategory20260910(store, { save, nextId });
+      // 포장 손님이 들어오던 「外帶」 0번 테이블을 없앤다. 지워도 안전할
+      // 때만 지우고, 아니면 다음 부팅에 다시 본다.
+      await applyRemoveTable020260910(store, { save, refreshAndSave, hasUnpaidOrder });
       migratedOnce = true;
     }
     next();
