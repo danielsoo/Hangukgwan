@@ -12,14 +12,30 @@
 # 호스트가 막혀 있었고, 그 뒤로도 Gradle 없이 aapt2/ecj/d8 만으로 빌드해 왔다.
 # 새 기계에 SDK 를 통째로 깔게 하는 것보다 필요한 몇 개만 받는 쪽이 가볍다.
 #
-# ANDTOOLS= 로 이미 있는 도구 폴더를 가리킬 수 있다. 없으면 kiosk-app/.tools
-# 에 받아둔다(.gitignore, 한 번 받으면 그 다음부터는 그대로 쓴다).
+# 도구 폴더를 고르는 규칙:
+#   1. ANDTOOLS= 로 지정했으면 그걸 쓴다 (비어 있으면 거기에 받는다)
+#   2. /opt/andtools 에 이미 있으면 그걸 쓴다 (클라우드 샌드박스)
+#   3. 그 밖에는 kiosk-app/.tools/<os>-<arch> 에 받아둔다 (.gitignore)
+#
+# 왜 os-arch 로 나누나 — 2026-09-10:
+# 맥에서 받아둔 .tools 안에는 darwin/arm64 용 aapt2 가 들어 있다. 그런데 같은
+# 폴더를 리눅스 쪽에서 마운트해 빌드하면 그 실행 파일이 그대로 잡혀서
+# "aapt2 가 이 기계에서 실행되지 않습니다" 로 죽는다. 한 체크아웃을 두 기계가
+# 같이 보는 게 이 저장소에서는 평범한 일이므로, 도구는 기계별로 따로 둔다.
 
 BUNDLETOOL_VERSION=1.18.1
 
-TOOLS="${ANDTOOLS:-/opt/andtools}"
-if [ ! -x "$TOOLS/aapt2" ]; then
-  TOOLS="$HERE/.tools"
+OS_TAG=linux
+case "$(uname -s)" in Darwin) OS_TAG=darwin ;; esac
+ARCH_TAG=x64
+case "$(uname -m)" in arm64|aarch64) ARCH_TAG=arm64 ;; esac
+
+if [ -n "${ANDTOOLS:-}" ]; then
+  TOOLS="$ANDTOOLS"
+elif [ -x "/opt/andtools/aapt2" ]; then
+  TOOLS="/opt/andtools"
+else
+  TOOLS="$HERE/.tools/$OS_TAG-$ARCH_TAG"
 fi
 AAPT2="$TOOLS/aapt2"
 ANDROID_JAR="$TOOLS/android.jar"
@@ -61,13 +77,9 @@ JSON
 
     local m="$npmdir/node_modules/@drxiaozhi/minapk/tools"
     # aapt2 는 플랫폼별 실행 파일이다.
-    local os=linux
-    case "$(uname -s)" in Darwin) os=darwin ;; esac
-    local arch=x64
-    case "$(uname -m)" in arm64|aarch64) arch=arm64 ;; esac
-    local aapt_src="$npmdir/node_modules/aaptjs3/bin/$arch/$os/aapt2"
+    local aapt_src="$npmdir/node_modules/aaptjs3/bin/$ARCH_TAG/$OS_TAG/aapt2"
     # 애플 실리콘에 arm64 실행 파일이 없으면 x64 로 떨어진다(로제타가 돌린다).
-    [ -x "$aapt_src" ] || aapt_src="$npmdir/node_modules/aaptjs3/bin/x64/$os/aapt2"
+    [ -x "$aapt_src" ] || aapt_src="$npmdir/node_modules/aaptjs3/bin/x64/$OS_TAG/aapt2"
 
     local missing=""
     for f in "$m/android.jar" "$m/d8.jar" "$m/apksigner.jar" "$aapt_src"; do
@@ -101,7 +113,8 @@ JSON
   # 알아보기 어려운 오류로 죽는다.
   if ! "$AAPT2" version >/dev/null 2>&1; then
     echo "!! aapt2 가 이 기계에서 실행되지 않습니다: $AAPT2" >&2
-    echo "   $TOOLS 를 지우고 다시 돌려보세요." >&2
+    echo "   다른 기계에서 받아둔 도구일 수 있습니다. 이 폴더만 지우고 다시:" >&2
+    echo "     rm -rf $TOOLS" >&2
     exit 1
   fi
 }
