@@ -1227,6 +1227,38 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .table-detail-clear-party:hover { border-color: var(--navy); color: var(--navy); }
 .table-detail-clear-party:disabled { opacity: 0.5; cursor: default; }
 
+/* 결제창 맨 아래 줄. 「받을 돈」과 VIP 카드 판매 버튼이 왼쪽, 결제 버튼이
+   오른쪽. 좁은 화면에서는 줄바꿈된다 — 태블릿을 세로로 쓰는 날이 있다. */
+.table-detail-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  border-top: 2px solid var(--ink);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+.table-detail-footer-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* 돈을 받는 버튼이라 결제 버튼과 헷갈리면 안 된다 — 채운 버튼이 아니라
+   테두리만 있는 버튼으로 두고, 금액을 버튼 안에 같이 적는다. */
+.table-detail-footer .vip-sell-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 8px 14px;
+  min-height: 38px;
+  font-size: 15px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.table-detail-footer .vip-sell-btn:hover { border-color: var(--navy); color: var(--navy); }
+.vip-sell-price { font-size: 26px; font-weight: 700; margin: 4px 0 2px; }
+/* app-dialog-modal 은 가운데 정렬이라, 입력칸 라벨만 왼쪽으로 되돌린다. */
+#vipSellBackdrop label { text-align: left; }
+
 /* 데이터 저장 공간 경고 띠. 인쇄 실패 띠(.print-fail-banner)와 같은 자리에
    같은 모양으로 뜨지만, 색으로 급한 정도를 나눈다 — "슬슬 준비하자"와
    "지금 해야 한다"는 다른 소식이다. */

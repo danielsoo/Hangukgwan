@@ -196,6 +196,15 @@ function hm(offsetMinutes) {
   out.push("\n[관리자 화면이 지금 상태를 말해준다]");
   // 규칙만 보여주면 사장님이 머리로 시계를 맞춰봐야 하고, 그러다
   // "왜 손님이 주문을 못 하지" 가 된다.
+  //
+  // 여기서 한 번 새로 불러온다. 위의 setHours 는 화면을 거치지 않고 서버에
+  // 바로 넣은 것이라, 이 창은 아직 로그인할 때 받아둔 옛 시간을 들고 있다.
+  // 이 줄이 없으면 이 검사는 「지금 몇 시인가」에 달려 있게 된다 — 실제로
+  // 2026-09-10 11:26(대만) 에, 심어둔 기본 영업시간(11:00~13:30) 안이라는
+  // 이유만으로 빨갛게 떴다. 재려는 건 시계가 아니라 화면이 방금 저장된
+  // 규칙을 말해주는가이다.
+  await adminPage.reload({ waitUntil: "networkidle" });
+  await adminPage.waitForTimeout(400);
   await adminPage.locator('.admin-tabs button[data-tab="settings"]').click();
   await adminPage.waitForTimeout(800);
   // 「주문 받는 시간」은 설정 > 주문 규칙 안에 있다 — 다른 분류를 열어둔

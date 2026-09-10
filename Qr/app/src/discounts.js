@@ -12,6 +12,8 @@
 //   해줘. 예를 들어 vip 할인을 했더니 2원의 잔돈이 있어서 재량으로 2원을
 //   깎아주려고." — 그래서 둘을 같이 걸 수 있고, 순서가 정해진다.
 
+const { isCardSaleItem } = require("./vip");
+
 const VIP_DISCOUNT_RATES = { te95: 0.95, vip9: 0.9 };
 
 // 품목 한 줄의 금액 — 추가 옵션(addons)까지 더한 뒤 수량을 곱한다.
@@ -22,11 +24,18 @@ function lineTotalOf(it) {
 
 // indexes를 주면 그 인덱스들만(부분 결제로 이번에 실제 결제되는 품목만),
 // 생략하면 items 전체를 더한다. exclude(it)가 참이면 그 줄은 뺀다.
+//
+// VIP 카드 판매(NT$300)는 어떤 할인의 기준에도 절대 들어가지 않는다.
+// 카드값을 9折 해주는 건 말이 안 되고, 재량 할인의 기준 금액에 섞이면
+// "밥값의 2원을 떼려던" 퍼센트가 카드값까지 먹는다. 지금 판매는 자기
+// 주문 한 건으로 따로 기록되므로(src/routes/vipCards.js) 이 줄이 실제로
+// 쓰일 일은 없지만, 나중에 누가 카드를 밥값 주문에 끼워 넣더라도 돈 계산이
+// 조용히 틀리지는 않게 여기서 한 번 막아둔다.
 function sumItems(items, indexes, exclude) {
   const idxs = indexes || items.map((_, i) => i);
   return idxs.reduce((s, i) => {
     const it = items[i];
-    if (!it || (exclude && exclude(it))) return s;
+    if (!it || isCardSaleItem(it) || (exclude && exclude(it))) return s;
     return s + lineTotalOf(it);
   }, 0);
 }

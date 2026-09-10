@@ -1,7 +1,18 @@
 const express = require("express");
-const { store, refreshAndSave, patchArrayItem, nextId } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId, saveOrder } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
-const { expiryDate, isExpired, isActive, isClaimed } = require("../vip");
+const {
+  expiryDate,
+  isExpired,
+  isActive,
+  isClaimed,
+  cardSalePrice,
+  cardSaleDiscountPercent,
+  normalizeCardSale,
+  CARD_SALE_CATEGORY,
+} = require("../vip");
+const { nowLocal, taipeiDateString } = require("../time");
+const { broadcastOrdersChanged } = require("../realtime");
 // Gated the same as other money-affecting configuration (payment settings,
 // staff permissions) — a discount rate is a financial setting, not
 // day-to-day order handling any staff member should be able to touch.
@@ -141,6 +152,144 @@ router.delete("/:id", canManageVip, async (req, res) => {
     s.vipCards = s.vipCards.filter((c) => c.id !== id);
   });
   res.json({ ok: true });
+});
+
+// ── 카드 판매 ────────────────────────────────────────────────────────────
+//
+// 2026-09-10 사장님: "vip카드 구매도 현금으로만 구매가능. 버튼필요 —
+// VIP卡販售 / 300원. 직원이 결제할 때 손님이 vip 사고 싶다면 살 수 있게
+// 해줘. 직원이 결제창에서 직접 쉽게 추가할 수 있게 버튼으로."
+
+// 판매가와 「같이 등록할 때 붙는 기본 할인율」. 값은 사장님이 고친다.
+router.get("/sale-settings", requireAdmin, (req, res) => {
+  res.json({
+    price: cardSalePrice(store.settings),
+    discount_percent: cardSaleDiscountPercent(store.settings),
+  });
+});
+
+router.put("/sale-settings", canManageVip, async (req, res) => {
+  store.settings.vip_card_sale = normalizeCardSale(req.body);
+  await save();
+  res.json(store.settings.vip_card_sale);
+});
+
+/**
+ * 카드 한 장을 판다 — 현금으로.
+ *
+ * 판매를 「이미 현금으로 결제된 주문 한 건」으로 기록한다. 밥값 주문에
+ * 품목으로 끼워 넣지 않는 이유가 셋이다.
+ *
+ *   1. 현금만 받는다. 밥값에 섞으면 그 손님이 카드로 밥값을 낼 때
+ *      카드값까지 카드로 넘어간다.
+ *   2. 할인이 걸리면 안 된다. 밥값 주문에 있으면 特約95折/재량 할인의
+ *      기준 금액에 섞여 들어간다(src/discounts.js 에도 막아뒀지만,
+ *      애초에 섞이지 않는 편이 훨씬 낫다).
+ *   3. 아직 주문을 하나도 안 한 손님도, 이미 다 결제한 손님도 살 수 있다.
+ *
+ * 이미 paid 라서 주방 대기열에는 안 뜨고(대기열은 미결제만 본다), 그
+ * 테이블의 「결제 완료」 탭에 판매 기록으로 남는다.
+ *
+ * party_size 를 일부러 안 넣는다 — 넣으면 결산의 손님 수가 카드를 산
+ * 테이블마다 한 번씩 더 세어진다.
+ *
+ * 직원 누구나 할 수 있다(requireAdmin). 돈을 받는 일이라 결제 완료를
+ * 누르는 것과 같은 급이다. 카드번호를 같이 등록하는 것도 여기서는 할인율을
+ * 정하는 게 아니라 사장님이 설정해둔 값을 그대로 붙이는 것뿐이라, 설정
+ * 권한(canManageVip)까지 요구하지 않는다.
+ */
+router.post("/sell", requireAdmin, async (req, res) => {
+  const { tableNumber, cardNumber } = req.body || {};
+  const table = store.tables.find((t) => t.number === String(tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+
+  const number = String(cardNumber == null ? "" : cardNumber).trim();
+  const price = cardSalePrice(store.settings);
+  const discount = cardSaleDiscountPercent(store.settings);
+
+  // 카드번호는 선택이다(사장님이 고른 쪽) — 바쁠 때는 돈만 받고 번호는
+  // 나중에 VIP 탭에서 등록할 수 있다. 번호를 적었는데 이미 있는 번호면
+  // 판매 자체를 멈춘다. 돈만 받고 남의 카드에 덮어쓰면 그 손님 할인이
+  // 조용히 사라진다.
+  let card = null;
+  if (number) {
+    let dupe = false;
+    await refreshAndSave((s) => {
+      if (s.vipCards.some((c) => c.card_number === number)) {
+        dupe = true;
+        return;
+      }
+      card = {
+        id: nextId("vip_cards"),
+        card_number: number,
+        discount_percent: discount,
+        // 발급일은 오늘. 유효기간은 여기서부터 1년이다(expiryDate).
+        issue_date: taipeiDateString(),
+        note: null,
+        sold_at: nowLocal(),
+        google_uid: null,
+        account_id: null,
+        customer_name: null,
+        customer_email: null,
+        registered_at: null,
+        created_at: new Date().toISOString(),
+      };
+      s.vipCards.push(card);
+    });
+    if (dupe) return res.status(400).json({ error: "card_exists" });
+  }
+
+  const now = nowLocal();
+  const item = {
+    item_id: null,
+    name_ko: "VIP 카드 판매",
+    name_zh: "VIP卡販售",
+    name_en: "VIP card",
+    unit_price: price,
+    qty: 1,
+    selected_addons: [],
+    // 결산이 밥값과 갈라 보는 표시이자, 할인 계산에서 빼는 기준.
+    category_key: CARD_SALE_CATEGORY,
+    order_type: table.is_counter ? "takeout" : "dine_in",
+    // 부분 결제 화면과 결제수단 집계가 품목 단위로 보는 값들.
+    paid: true,
+    paid_at: null, // 아래에서 주문 시각과 같은 값으로 채운다
+    payment_method: "cash",
+    note: number ? `card ${number}` : "",
+  };
+  const order = {
+    id: nextId("orders"),
+    table_number: String(table.number),
+    status: "paid",
+    order_type: item.order_type,
+    subtotal: price,
+    total: price,
+    payment_method: "cash",
+    vip_card_number: null,
+    vip_discount_percent: null,
+    discount_amount: 0,
+    discount_type: null,
+    // 이 주문이 밥이 아니라 카드 한 장이라는 표시. 화면이 「VIP卡販售」로
+    // 알아보는 데 쓴다.
+    kind: "vip_card_sale",
+    vip_card_sold: number || null,
+    note: "",
+    created_at: now,
+    updated_at: now,
+    items: [item],
+    party_size: null,
+    party_adults: null,
+    party_children: null,
+    customer_name: null,
+    customer_phone: null,
+    pickup_number: null,
+    account_id: null,
+  };
+  item.paid_at = now;
+  store.orders.push(order);
+  await Promise.all([saveOrder(order), save()]);
+  broadcastOrdersChanged(req);
+  res.status(201).json({ order, card: card ? serialize(card) : null, price });
 });
 
 module.exports = router;

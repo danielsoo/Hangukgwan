@@ -848,6 +848,24 @@
       vipConfigNotSet: "아직 설정되지 않았습니다 — 손님은 구글 로그인을 사용할 수 없어요.",
       vipConfigSet: "✔ 설정되어 있습니다.",
       vipConfigInvalid: "⚠ 형식이 올바르지 않아요 (apiKey, projectId가 포함된 JSON이어야 해요).",
+      // VIP 카드 판매 — 사장님(2026-09-10): "vip카드 구매도 현금으로만
+      // 구매가능. 버튼필요 - VIP卡販售 /300원."
+      vipSaleTitle: "VIP 카드 판매 (VIP卡販售)",
+      vipSaleHint:
+        "결제 화면 맨 아래에 「VIP卡販售」 버튼이 생겨요. 직원이 그 버튼을 누르면 여기서 정한 금액이 현금 판매로 바로 기록됩니다. 카드번호는 그때 같이 넣어도 되고, 나중에 회원(VIP) 탭에서 넣어도 돼요.",
+      vipSalePriceLabel: "카드 판매가 (NT$)",
+      vipSaleDiscountLabel: "판매하면서 등록할 때 붙는 할인율 (%)",
+      vipSaleDiscountHint: "카드마다 다르게 주고 싶으면, 등록된 뒤 회원(VIP) 탭에서 그 카드만 고치면 돼요.",
+      vipSellBtn: "💳 VIP卡販售",
+      vipSellTitle: "VIP卡販售",
+      vipSellCashOnly: "현금으로만 판매합니다.",
+      vipSellCardNumberLabel: "카드번호 (선택 — 나중에 회원(VIP) 탭에서 넣어도 돼요)",
+      vipSellConfirmBtn: "현금으로 판매",
+      vipSellDone: "VIP 카드를 판매했어요 (현금)",
+      vipSellDoneWithCard: "VIP 카드를 판매하고 카드번호도 등록했어요 (현금)",
+      vipSellFailed: "판매를 기록하지 못했어요. 다시 시도해주세요.",
+      vipCardSaleItemName: "VIP 카드 판매",
+      settlementCategoryVipCard: "VIP 카드 판매",
       vipConfigInvalidJson: "JSON 형식이 올바르지 않아요. Firebase 콘솔에서 복사한 내용을 다시 확인해주세요.",
       vipSettingsSavedMsg: "저장되었습니다",
       escposSettingsTitle: "주방 프린터 직접 인쇄 (ESC/POS · QZ Tray)",
@@ -1432,6 +1450,22 @@
       vipConfigNotSet: "尚未設定 — 顧客目前無法使用 Google 登入。",
       vipConfigSet: "✔ 已設定。",
       vipConfigInvalid: "⚠ 格式不正確（必須是包含 apiKey、projectId 的 JSON）。",
+      vipSaleTitle: "VIP卡販售",
+      vipSaleHint:
+        "結帳畫面最下方會出現「VIP卡販售」按鈕。店員按下後，會直接以這裡設定的金額記錄為現金銷售。卡號可以當場輸入，也可以之後在會員(VIP)分頁補登。",
+      vipSalePriceLabel: "卡片售價 (NT$)",
+      vipSaleDiscountLabel: "販售時一併登記的折扣率 (%)",
+      vipSaleDiscountHint: "想給某張卡不同折扣的話，登記後到會員(VIP)分頁單獨修改那張卡即可。",
+      vipSellBtn: "💳 VIP卡販售",
+      vipSellTitle: "VIP卡販售",
+      vipSellCashOnly: "僅接受現金。",
+      vipSellCardNumberLabel: "卡號（選填 — 也可以之後在會員(VIP)分頁補登）",
+      vipSellConfirmBtn: "以現金販售",
+      vipSellDone: "已售出 VIP 卡（現金）",
+      vipSellDoneWithCard: "已售出 VIP 卡並登記卡號（現金）",
+      vipSellFailed: "沒能記錄這筆販售，請再試一次。",
+      vipCardSaleItemName: "VIP卡販售",
+      settlementCategoryVipCard: "VIP卡販售",
       vipConfigInvalidJson: "JSON 格式不正確，請重新確認從 Firebase 主控台複製的內容。",
       vipSettingsSavedMsg: "已儲存",
       escposSettingsTitle: "廚房出單機直接列印（ESC/POS · QZ Tray）",
@@ -1994,7 +2028,17 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
-    await Promise.all([loadOrders(), loadMenu(), loadTables(), loadSettings(), loadTicketFontSizes(), loadMoveSlipSettings()]);
+    // loadVipSaleSettings 는 직원도 부른다 — 판매가는 결제창 버튼에 찍히는
+    // 값이라 사장님만 보는 정보가 아니다(설정 카드 자체는 owner-only).
+    await Promise.all([
+      loadOrders(),
+      loadMenu(),
+      loadTables(),
+      loadSettings(),
+      loadTicketFontSizes(),
+      loadMoveSlipSettings(),
+      loadVipSaleSettings(),
+    ]);
     // loadOrders() and loadTables() run concurrently above, so the order
     // queue's very first render can land before `tables` is populated —
     // harmless before this feature, but renderOrderCard now looks up
@@ -4955,11 +4999,25 @@
     // vipDiscountToggleHtml, renderTableOrderBlock/renderMergedOrderGroup
     // 참고). 라운드가 여러 개여도 모두 같은 테이블 전체 값을 공유해서
     // 보여주므로 footer에 따로 둘 필요가 없다.
-    const footer = tableDetailView === "active" && activeOrders.length
+    // VIP 카드 판매 — 사장님(2026-09-10): "직원이 결제할 때 손님이 vip 사고
+    // 싶다면 살 수 있게 해줘. 직원이 결제창에서 직접 쉽게 추가할 수 있게
+    // 버튼으로 추가할 수 있게 해줘."
+    //
+    // 주문이 하나도 없어도 내놓는다. 밥을 다 먹고 결제까지 끝낸 손님이
+    // 나가면서 "카드 하나 주세요" 하는 게 오히려 흔한 순간이고, 그때
+    // 이 버튼이 없으면 직원이 살 길을 못 찾는다. 그래서 아래 footer 는
+    // 이제 「받을 돈이 있을 때」가 아니라 「현재 주문 탭일 때」 나온다.
+    const vipSellBtnHtml = `<button type="button" id="vipSellBtn" class="vip-sell-btn">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${vipSalePrice}`}</button>`;
+    const footer = tableDetailView === "active"
       ? `
-        <div style="display:flex;justify-content:space-between;align-items:center;border-top:2px solid var(--ink);margin-top:4px;padding-top:12px;">
-          <p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>
-          ${footerPayBtn}
+        <div class="table-detail-footer">
+          <div class="table-detail-footer-left">
+            ${activeOrders.length
+              ? `<p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>`
+              : ""}
+            ${vipSellBtnHtml}
+          </div>
+          ${activeOrders.length ? footerPayBtn : ""}
         </div>
       `
       : "";
@@ -5009,6 +5067,14 @@
     }
     const moveBtn = $("#moveTableBtn");
     if (moveBtn) moveBtn.onclick = () => openMoveTable(tableNumber, label || openTableLabel);
+    const sellBtn = $("#vipSellBtn");
+    if (sellBtn) {
+      sellBtn.onclick = () =>
+        openVipSellModal(tableNumber, () => {
+          // 판 기록이 바로 「결제 완료」 탭에 보이게 다시 그린다.
+          openTableDetail(tableNumber, label, focusOrderId);
+        });
+    }
 
     $("#tableDetailBody")
       .querySelectorAll("[data-edit-id]")
@@ -6744,6 +6810,9 @@
           if (showMainTile) {
             const tableEl = document.createElement("div");
             tableEl.className = "table-block" + (bundledOrders.length ? " has-order" : "");
+            // 어느 자리 타일인지 화면에서 집어낼 수 있게 남긴다 — 타일에
+            // 보이는 글자는 표시 이름(label)일 수도 있어서 글자로는 못 찾는다.
+            tableEl.dataset.tableNumber = t.number;
             tableEl.style.left = nextLeft + "px";
             tableEl.style.top = top + "px";
             tableEl.style.width = w + "px";
@@ -6759,6 +6828,8 @@
           takeoutOrders.forEach((o) => {
             const tileEl = document.createElement("div");
             tileEl.className = "table-block has-order takeout-order-tile";
+            tileEl.dataset.tableNumber = t.number;
+            tileEl.dataset.orderId = o.id;
             tileEl.style.left = nextLeft + "px";
             tileEl.style.top = top + "px";
             tileEl.style.width = w + "px";
@@ -7766,6 +7837,123 @@
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2500);
   };
+
+  // ---------- VIP 카드 판매 ----------
+  //
+  // 2026-09-10 사장님: "vip카드 구매도 현금으로만 구매가능. 버튼필요 —
+  // VIP卡販售 / 300원. 직원이 결제할 때 손님이 vip 사고 싶다면 살 수 있게
+  // 해줘. 직원이 결제창에서 직접 쉽게 추가할 수 있게 버튼으로."
+  //
+  // 판매가는 사장님만 고칠 수 있어서 /api/settings 가 아니라 자기 라우트로
+  // 온다. 직원 화면에서는 이 카드 자체가 안 보이지만(owner-only), 결제창의
+  // 판매 버튼에는 금액이 찍혀야 하므로 값 자체는 직원도 읽을 수 있다.
+  let vipSalePrice = null;
+
+  async function loadVipSaleSettings() {
+    try {
+      const res = await fetch("/api/vip-cards/sale-settings");
+      if (!res.ok) return;
+      const s = await res.json();
+      vipSalePrice = s.price;
+      const priceInput = $("#vipSalePriceInput");
+      const discountInput = $("#vipSaleDiscountInput");
+      if (priceInput) priceInput.value = s.price;
+      if (discountInput) discountInput.value = s.discount_percent;
+    } catch (e) {
+      /* 값을 못 읽어도 결제창은 그대로 열려야 한다 */
+    }
+  }
+
+  const saveVipSaleBtn = $("#saveVipSaleBtn");
+  if (saveVipSaleBtn) {
+    saveVipSaleBtn.onclick = async () => {
+      const msg = $("#vipSaleMsg");
+      const res = await fetch("/api/vip-cards/sale-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          price: $("#vipSalePriceInput").value,
+          discount_percent: $("#vipSaleDiscountInput").value,
+        }),
+      });
+      if (!res.ok) return;
+      const saved = await res.json();
+      vipSalePrice = saved.price;
+      // 서버가 자른 값을 그대로 되돌려 보여준다 — 0 을 넣었는데 화면에만
+      // 0 이 남아 있으면 다음에 열었을 때 "내가 넣은 게 아닌데" 가 된다.
+      $("#vipSalePriceInput").value = saved.price;
+      $("#vipSaleDiscountInput").value = saved.discount_percent;
+      msg.style.color = "#1a8a44";
+      msg.textContent = T("savedMsg");
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2500);
+    };
+  }
+
+  /**
+   * 결제창의 「VIP卡販售」 버튼이 여는 창.
+   *
+   * 고를 것을 최소로 뒀다 — 금액은 설정에서 이미 정해져 있고, 카드번호는
+   * 비워도 된다(사장님이 고른 쪽: "번호는 선택 입력"). 바쁠 때 돈만 받고
+   * 번호는 나중에 회원(VIP) 탭에서 넣으면 된다.
+   */
+  function openVipSellModal(tableNumber, onDone) {
+    const backdrop = $("#vipSellBackdrop");
+    if (!backdrop) return;
+    const input = $("#vipSellCardNumber");
+    const err = $("#vipSellError");
+    const confirmBtn = $("#vipSellConfirm");
+    input.value = "";
+    err.hidden = true;
+    confirmBtn.disabled = false;
+    $("#vipSellPrice").textContent = `NT$${vipSalePrice == null ? "" : vipSalePrice}`;
+    backdrop.hidden = false;
+    input.focus();
+
+    const close = () => {
+      backdrop.hidden = true;
+      $("#vipSellCancel").onclick = null;
+      confirmBtn.onclick = null;
+      input.onkeydown = null;
+    };
+    $("#vipSellCancel").onclick = close;
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") confirmBtn.click();
+    };
+    confirmBtn.onclick = async () => {
+      const number = input.value.trim();
+      // 두 번 눌러서 두 장이 팔리는 일이 없게 잠근다. 돈이 걸린 버튼이다.
+      confirmBtn.disabled = true;
+      err.hidden = true;
+      let body = null;
+      let ok = false;
+      try {
+        const res = await fetch("/api/vip-cards/sell", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tableNumber, cardNumber: number || undefined }),
+        });
+        body = await res.json().catch(() => null);
+        ok = res.ok;
+      } catch (e) {
+        ok = false;
+      }
+      if (!ok) {
+        confirmBtn.disabled = false;
+        err.textContent =
+          body && body.error === "card_exists" ? T("vipCardNumberTaken") : T("vipSellFailed");
+        err.hidden = false;
+        return;
+      }
+      close();
+      await loadOrders();
+      if (typeof onDone === "function") onDone();
+      // 돈을 받는 일이라 확인 한 번을 남긴다 — 얼마를 받았는지가 화면에
+      // 또렷하게 남아야 서랍과 맞출 때 헷갈리지 않는다.
+      const paid = body && body.price != null ? body.price : vipSalePrice;
+      await showAlert(`${number ? T("vipSellDoneWithCard") : T("vipSellDone")}\nNT$${paid}`);
+    };
+  }
 
   // ---------- VIP (회원) 카드 관리 (owner only) ----------
   // Cards are keyed by their own `id`, not the customer — a row starts as
@@ -9435,6 +9623,9 @@
     // 사장님이 이름을 바꿨을 때 여기만 옛 이름으로 남는다.
     const categoryLabel = (key) => {
       if (key === "uncategorized") return T("settlementCategoryNone");
+      // VIP 카드 판매는 메뉴가 아니라서 카테고리 목록에 없다 — 그대로 두면
+      // 결산에 "vip_card" 라는 날것이 찍힌다.
+      if (key === "vip_card") return T("settlementCategoryVipCard");
       const c = (categories || []).find((x) => x.key === key);
       return c ? catName(c) : key;
     };

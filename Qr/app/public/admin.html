@@ -711,6 +711,27 @@
           <button id="saveVipSettingsBtn" data-i18n="saveBtn">저장</button>
           <div class="save-msg" id="vipSettingsMsg" hidden></div>
         </div>
+        <!-- 카드 판매 — 사장님(2026-09-10): "vip카드 구매도 현금으로만
+             구매가능. 버튼필요 - VIP卡販售 /300원." 값을 여기서 고칠 수
+             있게 한 건 사장님이 고른 쪽이다. 읽는 규칙은 src/vip.js 한 곳. -->
+        <div class="settings-card">
+          <h3 data-i18n="vipSaleTitle">VIP 카드 판매 (VIP卡販售)</h3>
+          <p class="settings-hint" data-i18n="vipSaleHint">
+            결제 화면 맨 아래에 「VIP卡販售」 버튼이 생겨요. 직원이 그 버튼을 누르면 여기서 정한 금액이
+            <strong>현금</strong> 판매로 바로 기록됩니다. 카드번호는 그때 같이 넣어도 되고, 나중에 회원(VIP) 탭에서 넣어도 돼요.
+          </p>
+          <label><span data-i18n="vipSalePriceLabel">카드 판매가 (NT$)</span>
+            <input type="number" id="vipSalePriceInput" min="1" step="1" />
+          </label>
+          <label><span data-i18n="vipSaleDiscountLabel">판매하면서 등록할 때 붙는 할인율 (%)</span>
+            <input type="number" id="vipSaleDiscountInput" min="1" max="100" step="0.1" />
+          </label>
+          <p class="settings-hint" data-i18n="vipSaleDiscountHint">
+            카드마다 다르게 주고 싶으면, 등록된 뒤 회원(VIP) 탭에서 그 카드만 고치면 돼요.
+          </p>
+          <button id="saveVipSaleBtn" data-i18n="saveBtn">저장</button>
+          <div class="save-msg" id="vipSaleMsg" hidden></div>
+        </div>
         </div>
 
         <div id="settings-cat-print" class="settings-category owner-only" hidden>
@@ -1020,6 +1041,30 @@
      사장님(2026-09-09): "당일 품절이라서 다음날 자동으로 품절 풀어지게...
      직원들이 다음날 잊어버릴까봐." 잊지 않게 하려면 찍는 게 쉬워야 해서,
      수정 폼을 열지 않고 배지에서 바로 고르게 한다. -->
+<!-- VIP 카드 판매 — 결제 화면 맨 아래 버튼에서 열린다.
+     사장님(2026-09-10): "직원이 결제할 때 손님이 vip 사고 싶다면 살 수 있게
+     해줘. 직원이 결제창에서 직접 쉽게 추가할 수 있게 버튼으로 추가할 수
+     있게 해줘." 그래서 고를 것을 최소로 뒀다 — 금액은 설정에서 이미
+     정해져 있고, 카드번호는 비워도 된다. -->
+<div id="vipSellBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal">
+    <h2 style="margin-top:0;" data-i18n="vipSellTitle">VIP卡販售</h2>
+    <p id="vipSellPrice" class="vip-sell-price"></p>
+    <p class="settings-hint" style="margin-top:0;" data-i18n="vipSellCashOnly">현금으로만 판매합니다.</p>
+    <label style="display:block;font-size:14px;color:var(--muted);margin-top:12px;">
+      <span data-i18n="vipSellCardNumberLabel">카드번호 (선택 — 나중에 회원(VIP) 탭에서 넣어도 돼요)</span>
+      <input type="text" id="vipSellCardNumber" autocomplete="off"
+             data-i18n-placeholder="vipCardNumberPlaceholder" placeholder="카드번호 (예: V0001)"
+             style="width:100%;box-sizing:border-box;font-size:17px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:4px;" />
+    </label>
+    <p id="vipSellError" style="color:var(--red);font-size:14px;margin:12px 0 0;" hidden></p>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="danger-btn" id="vipSellCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="vipSellConfirm" data-i18n="vipSellConfirmBtn">현금으로 판매</button>
+    </div>
+  </div>
+</div>
+
 <div id="soldOutBackdrop" class="modal-backdrop" hidden>
   <div class="modal app-dialog-modal">
     <h2 style="margin-top:0;" data-i18n="soldOutTitle">품절 설정</h2>

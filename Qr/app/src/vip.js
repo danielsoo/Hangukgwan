@@ -56,4 +56,65 @@ function cardBelongsTo(card, customer) {
   return false;
 }
 
-module.exports = { expiryDate, isExpired, isActive, isClaimed, cardBelongsTo };
+// ── 카드 판매 ────────────────────────────────────────────────────────────
+//
+// 2026-09-10 사장님: "vip카드 구매도 현금으로만 구매가능. 버튼필요 —
+// VIP卡販售 / 300원. 직원이 결제할 때 손님이 vip 사고 싶다면 살 수 있게."
+//
+// 값을 설정에서 바꿀 수 있게 하되(사장님이 고른 쪽), 읽는 규칙은 여기
+// 한 곳에만 둔다. 판매 라우트와 관리자 화면과 테스트가 각자 기본값을
+// 들고 있으면, 사장님이 값을 올린 날 어느 한 곳만 300 으로 남는다.
+//
+// 저장 형태: store.settings.vip_card_sale = { price, discount_percent }
+const DEFAULT_CARD_PRICE = 300;
+const DEFAULT_CARD_DISCOUNT = 10; // VIP9折
+const MAX_CARD_PRICE = 100000;
+
+// 설정이 비었거나 깨져 있어도 절대 던지지 않는다. 여기서 던지면 결제창이
+// 안 열린다 — 카드 한 장 못 파는 것보다 훨씬 큰 손해다.
+function cardSalePrice(settings) {
+  const raw = ((settings || {}).vip_card_sale || {}).price;
+  const n = Math.round(Number(raw));
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_CARD_PRICE;
+  return Math.min(n, MAX_CARD_PRICE);
+}
+
+// 판매하면서 카드번호까지 같이 등록할 때 붙는 할인율. 사장님이 카드마다
+// 다르게 주고 싶으면 VIP 탭에서 그 카드만 고치면 된다.
+function cardSaleDiscountPercent(settings) {
+  const raw = ((settings || {}).vip_card_sale || {}).discount_percent;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0 || n > 100) return DEFAULT_CARD_DISCOUNT;
+  return Math.round(n * 10) / 10;
+}
+
+// 저장할 때 한 번 더 자른다 — 읽는 쪽이 매번 고쳐 읽는 것에 기대지 않게.
+function normalizeCardSale(body) {
+  return {
+    price: cardSalePrice({ vip_card_sale: { price: (body || {}).price } }),
+    discount_percent: cardSaleDiscountPercent({ vip_card_sale: { discount_percent: (body || {}).discount_percent } }),
+  };
+}
+
+// 이 품목이 「카드 한 장」인가. 결산과 화면이 밥값과 갈라 보는 표시이고,
+// 할인 계산에서 빼는 기준이기도 하다 — 카드값을 9折 해줄 이유는 없다.
+const CARD_SALE_CATEGORY = "vip_card";
+
+function isCardSaleItem(it) {
+  return !!(it && it.category_key === CARD_SALE_CATEGORY);
+}
+
+module.exports = {
+  expiryDate,
+  isExpired,
+  isActive,
+  isClaimed,
+  cardBelongsTo,
+  cardSalePrice,
+  cardSaleDiscountPercent,
+  normalizeCardSale,
+  isCardSaleItem,
+  CARD_SALE_CATEGORY,
+  DEFAULT_CARD_PRICE,
+  DEFAULT_CARD_DISCOUNT,
+};
