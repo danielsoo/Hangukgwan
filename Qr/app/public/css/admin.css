@@ -920,6 +920,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 @media (max-width: 860px) { .settlement-charts-grid { grid-template-columns: 1fr; } }
 .settlement-chart-wrap { position: relative; width: 100%; height: 260px; margin-bottom: 16px; overflow: hidden; }
 .settlement-chart-wrap canvas { position: absolute; top: 0; left: 0; width: 100% !important; height: 100% !important; }
+/* 그래프를 못 그렸을 때 그 자리에 뜨는 말. 빈 그래프는 「오늘 손님이
+   없었나 보다」로 읽힌다 — 못 그렸으면 못 그렸다고 적어야 한다. */
+.stl-chart-missing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a8f9c;
+  background: #fafafa;
+  border: 1px dashed #d8dbe3;
+  border-radius: 10px;
+}
 
 /* Modal */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }

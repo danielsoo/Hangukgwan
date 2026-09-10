@@ -528,6 +528,7 @@
       settlementViewingPm: "🌙 오후만",
       settlementViewAll: "합산 보기",
       settlementShiftNote: "아래 내용이 전부 이 시간대의 것입니다.",
+      settlementChartUnavailable: "그래프를 그리지 못했어요 (chart 파일을 못 불러왔습니다). 숫자는 위쪽 표와 아래 목록에 그대로 있습니다.",
       labelLocationCheckEnabled: "위치 확인 사용",
       locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
@@ -1207,6 +1208,7 @@
       settlementViewingPm: "🌙 只看下午",
       settlementViewAll: "看合計",
       settlementShiftNote: "以下內容全部只包含這個時段。",
+      settlementChartUnavailable: "圖表無法顯示（chart 檔案載入失敗）。數字仍在上方統計與下方清單中。",
       labelLocationCheckEnabled: "啟用位置確認",
       locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
@@ -11039,9 +11041,42 @@
   // Bar chart of today's (or the selected date's) top-selling items by
   // revenue — the table below already has the exact numbers, this is just
   // the "그래프로도 보여줘" visual on top of it.
+  // 그래프를 못 그릴 때 **말은 해준다.**
+  //
+  // 2026-09-10 사장님: "여기도 볼 수 있게 해줘. 지금은 비어있어."
+  // 원인은 Chart.js 주소가 404 였던 것이지만(admin.html 주석), 진짜 문제는
+  // 그게 아니라 **아무 말 없이 빈칸이었다는 것**이다. 빈 그래프는 「오늘
+  // 손님이 없었나 보다」로 읽힌다. 못 그렸으면 못 그렸다고 적어야 한다.
+  function chartFallbackNote(canvas, show) {
+    const wrap = canvas && canvas.closest(".settlement-chart-wrap");
+    if (!wrap) return;
+    let el = wrap.querySelector(".stl-chart-missing");
+    if (!show) {
+      if (el) el.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("p");
+      el.className = "stl-chart-missing";
+      wrap.appendChild(el);
+    }
+    el.textContent = T("settlementChartUnavailable");
+  }
+
+  // 그릴 수 있으면 true. 못 그리면 그 자리에 이유를 적고 false.
+  function chartReady(canvas) {
+    if (!canvas) return false;
+    if (typeof Chart === "undefined") {
+      chartFallbackNote(canvas, true);
+      return false;
+    }
+    chartFallbackNote(canvas, false);
+    return true;
+  }
+
   function renderItemsChart(itemBreakdown) {
     const canvas = $("#settlementItemsChart");
-    if (!canvas || typeof Chart === "undefined") return;
+    if (!chartReady(canvas)) return;
     const top = itemBreakdown.slice(0, 10);
     if (settlementItemsChart) settlementItemsChart.destroy();
     settlementItemsChart = new Chart(canvas.getContext("2d"), {
@@ -11064,7 +11099,7 @@
   // out at a glance, not just as a number in the list below.
   function renderHistoryChart(list) {
     const canvas = $("#settlementHistoryChart");
-    if (!canvas || typeof Chart === "undefined") return;
+    if (!chartReady(canvas)) return;
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
     if (settlementHistoryChart) settlementHistoryChart.destroy();
     settlementHistoryChart = new Chart(canvas.getContext("2d"), {
@@ -11094,7 +11129,7 @@
   // actual trend instead of one flat total.
   function renderTrendChart(dailyBreakdown) {
     const canvas = $("#settlementTrendChart");
-    if (!canvas || typeof Chart === "undefined") return;
+    if (!chartReady(canvas)) return;
     if (settlementTrendChart) settlementTrendChart.destroy();
     settlementTrendChart = new Chart(canvas.getContext("2d"), {
       type: "bar",
@@ -11117,7 +11152,7 @@
   // instead of needing a second chart.
   function renderHourlyChart(hourlyBreakdown) {
     const canvas = $("#settlementHourlyChart");
-    if (!canvas || typeof Chart === "undefined") return;
+    if (!chartReady(canvas)) return;
     const byHour = new Map(hourlyBreakdown.map((h) => [h.hour, h]));
     const hours = Array.from({ length: 24 }, (_, h) => h);
     const data = hours.map((h) => (byHour.get(h) ? byHour.get(h).order_count : 0));
