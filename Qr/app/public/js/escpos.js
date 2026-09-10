@@ -442,7 +442,7 @@
       divider();
     }
 
-    line(`${storeName} ${notice ? "通知單" : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    line(`${storeName} ${notice ? (priceCopy ? "通知單 · 結帳" : "通知單 · 廚房") : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
@@ -489,9 +489,22 @@
     }
     divider();
     if (notice) {
-      // 합계는 안 찍는다. 이 종이에 적힌 것은 주문 전체가 아니라 바뀐 부분
-      // 뿐이라, 합계를 같이 두면 「이만큼만 받으면 되는」 것으로 읽힌다.
       row("주문번호 / 單號", `#${o.id}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+      // 주방용에는 합계를 안 찍는다. 이 종이에 적힌 것은 주문 전체가 아니라
+      // 바뀐 부분 뿐이라, 합계를 같이 두면 「이만큼만 받으면 되는」 것으로
+      // 읽힌다.
+      //
+      // 결제용에는 반대로 꼭 있어야 한다 — 품목이 늘거나 빠지면 받을 돈이
+      // 바뀌고, 그 새 금액을 알려주는 종이가 이것 하나뿐이다. 위의 줄들은
+      // 바뀐 부분이고 이 숫자는 주문 전체라서, 라벨로 분명히 갈라 둔다.
+      if (priceCopy) {
+        divider();
+        if (discount.active) {
+          row("변경 후 전체 / 異動後合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+        } else {
+          row("변경 후 전체 / 異動後合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+        }
+      }
     } else if (priceCopy && discount.active) {
       row("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     } else {

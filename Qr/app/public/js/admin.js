@@ -10123,10 +10123,23 @@
             ];
       if (!lines.length) return false;
 
-      const bytes = buildEscPosRasterTicket(Object.assign({}, o, { items: lines }), storeName, ticketFontSizes, labelInfo, {
-        notice: job.notice,
-      });
-      return await sendRasterTicketParts([bytes], bridge);
+      const noticeOrder = Object.assign({}, o, { items: lines });
+      const parts = [buildEscPosRasterTicket(noticeOrder, storeName, ticketFontSizes, labelInfo, { notice: job.notice })];
+      // 품목이 바뀌면 받을 돈도 바뀐다. 새 주문과 똑같이 결제용 사본을 한 장
+      // 더 내보낸다 — 그 새 금액을 알려주는 종이가 이것 하나뿐이다.
+      // 자리 이동은 금액이 그대로라 주방용 한 장이면 된다.
+      if (job.notice.kind === "changed") {
+        parts.push(
+          buildEscPosRasterTicket(noticeOrder, storeName, ticketFontSizes, labelInfo, {
+            notice: job.notice,
+            priceCopy: true,
+            discount: computeTicketDiscountInfo(o),
+          })
+        );
+      }
+      // 한 줄기로 보낸다 — 따로 보내면 두 번째가 조용히 사라진다
+      // (sendRasterTicketParts 주석).
+      return await sendRasterTicketParts(parts, bridge);
     } catch (e) {
       console.warn("notice print failed:", e);
       return false;

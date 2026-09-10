@@ -78,7 +78,9 @@ out.push("\n[4] 그 값이 종이까지 가는가 (public/js/admin.js)");
   check("★ 찍기 전에 먼저 기록한다", /jobs\.forEach\(\(j\) => printedNoticeKeys\.add\(j\.key\)\);[\s\S]{0,40}writeNoticeKeys\(\);/.test(src), "");
   check("담당 기기가 아니면 안 찍는다", /if \(!autoPrintOn \|\| !printHereAllowed\(\)\) return;/.test(src), "");
   check("★ 알림 인쇄가 주문 상태를 밀지 않는다", !/printNoticeTicket[\s\S]{0,2000}markPrintSucceededAndAdvance/.test(src), "");
-  check("알림은 한 장만 나간다", /sendRasterTicketParts\(\[bytes\], bridge\)/.test(src), "");
+  check("★ 품목 변경은 두 장 — 주방용 + 결제용", /job\.notice\.kind === "changed"[\s\S]{0,300}priceCopy: true/.test(src), "");
+  check("자리 이동은 한 장 (금액이 그대로다)", /const parts = \[buildEscPosRasterTicket\(noticeOrder/.test(src), "");
+  check("두 장을 한 줄기로 보낸다", /sendRasterTicketParts\(parts, bridge\)/.test(src), "");
 }
 
 out.push("\n[5] 종이에 무슨 종이인지 적히는가 (public/js/escpos.js)");
@@ -89,7 +91,9 @@ out.push("\n[5] 종이에 무슨 종이인지 적히는가 (public/js/escpos.js)
   check("주문 변경 표제가 있다", /주문 변경 \/ 訂單異動/.test(src), "");
   check("★ 취소 줄이 품목 이름보다 먼저 읽힌다", /it\.__delta === "-"[\s\S]{0,80}취소 \/ 取消/.test(src), "");
   check("추가 줄도 표시된다", /it\.__delta === "\+"[\s\S]{0,80}추가 \/ 追加/.test(src), "");
-  check("★ 알림 빌지에는 합계를 안 찍는다", /if \(notice\) \{[\s\S]{0,400}주문번호 \/ 單號/.test(src), "");
+  check("★ 알림 주방용에는 합계를 안 찍는다", /if \(notice\) \{[\s\S]{0,200}주문번호 \/ 單號/.test(src), "");
+  check("★ 알림 결제용에는 변경 후 전체 금액이 찍힌다", /if \(priceCopy\) \{[\s\S]{0,300}異動後合計/.test(src), "");
+  check("주방용·결제용이 종이 위에서 구분된다", /通知單 · 結帳[\s\S]{0,40}通知單 · 廚房/.test(src), "");
 }
 
 console.log(out.join("\n"));
