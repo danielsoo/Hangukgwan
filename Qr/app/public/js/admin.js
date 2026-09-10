@@ -2734,11 +2734,38 @@
   const statusLabel = (s) => T("status" + s.charAt(0).toUpperCase() + s.slice(1));
   const nextLabel = (s) => T("next" + s.charAt(0).toUpperCase() + s.slice(1));
 
+  // 칼럼 안의 순서를 이 화면이 스스로 정한다 (2026-09-10).
+  //
+  // 예전에는 `orders` 배열에 담긴 순서를 그대로 믿고 쌓았다. 그 순서는
+  // 서버가 정해준 것이라(GET /api/orders 의 sort), 화면을 갱신하려면 목록을
+  // 통째로 다시 받아오는 수밖에 없었다. 주문 한 건만 바뀌어도 마찬가지였다.
+  //
+  // 서버와 같은 규칙을 여기서 쓴다: 드래그로 자리를 정해둔 것(queue_order)이
+  // 먼저, 그 안에서는 정해둔 순서대로. 손대지 않은 것들은 그 뒤에 새 주문이
+  // 위로 오게 id 역순. 결제완료 칼럼은 아래에서 자기만의 규칙으로 따로
+  // 정렬하므로 여기를 거치지 않는다.
+  //
+  // 이렇게 해두면 배열 순서가 화면에 영향을 주지 않는다. 그래서 주문 한 건이
+  // 바뀌었을 때 그 한 건만 갈아끼우고 다시 그려도 서버에서 통째로 받아온
+  // 것과 같은 화면이 나온다 — applyOrderUpdate() 가 그걸 한다.
+  function sortWithinColumn(list) {
+    return list.slice().sort((a, b) => {
+      const aHas = a.queue_order != null;
+      const bHas = b.queue_order != null;
+      if (aHas && bHas) return a.queue_order - b.queue_order;
+      if (aHas !== bHas) return aHas ? -1 : 1;
+      return b.id - a.id;
+    });
+  }
+
   function renderOrders() {
     const cols = { new: [], preparing: [], served: [], paid: [] };
     orders.forEach((o) => {
       if (cols[o.status]) cols[o.status].push(o);
     });
+    cols.new = sortWithinColumn(cols.new);
+    cols.preparing = sortWithinColumn(cols.preparing);
+    cols.served = sortWithinColumn(cols.served);
 
     // 결제완료 칼럼은 오늘 결제된 주문만 보여준다 (2026-09 피드백) — 그 전에는
     // 전체 기간이 다 쌓여서 어제/그제 결제 건까지 계속 보였다. 지난 날짜의
@@ -2813,13 +2840,15 @@
     ).element;
   }
 
-  // Reads the column's final DOM order back out and persists it — both to
-  // the server and into the in-memory `orders` array (so an intervening
-  // renderOrders() call, e.g. the next 4-second poll landing before the
-  // PATCH resolves, doesn't visually snap back: renderOrders() rebuilds
-  // each column by iterating `orders` in its current array order, so the
-  // array itself needs to reflect the drop too, not just the field the
-  // server will eventually re-sort by).
+  // Reads the column's final DOM order back out and persists it — to the
+  // server, and into each card's queue_order so an intervening
+  // renderOrders() (e.g. a poll landing before the PATCH resolves) doesn't
+  // visually snap back.
+  //
+  // 2026-09-10: renderOrders() 가 칼럼별로 스스로 정렬하게 되면서, 화면을
+  // 결정하는 것은 queue_order 하나가 됐다(sortWithinColumn). 아래에서
+  // `orders` 배열 자체도 같이 재배치하는 것은 이제 화면에는 영향이 없지만,
+  // 배열 순서와 queue_order 가 서로 어긋난 채 남지 않도록 그대로 둔다.
   async function persistColumnOrder(body) {
     const orderIds = [...body.querySelectorAll(".order-card")].map((el) => parseInt(el.dataset.orderId, 10));
     const idsSet = new Set(orderIds);
@@ -2910,15 +2939,17 @@
           ordersRequestSeq++;
           const previousStatus = o.status;
           o.status = targetStatus; // reflect locally so the render below doesn't flicker back to the old column first
-          const ok = await updateOrderStatus(o.id, targetStatus);
-          if (!ok) {
+          const updated = await updateOrderStatus(o.id, targetStatus);
+          if (!updated) {
             // The server rejected it — undo the optimistic change instead of
             // silently leaving the card wherever it was dropped, so staff
             // get a clear reason instead of watching it quietly snap back.
             o.status = previousStatus;
             await showAlert(T("orderStatusChangeFailed"));
+            await loadOrders(); // 거절당했을 때는 서버 상태를 통째로 다시 맞춘다
+            return;
           }
-          await loadOrders(); // re-renders with the server's fresh state, no need to also renderOrders() below
+          applyOrderUpdate(updated); // 서버가 돌려준 그 한 건만 — 재조회 없음
           return;
         }
         // Dropped back into the same column — just a priority reorder.
@@ -3107,9 +3138,19 @@
       const btn = document.createElement("button");
       btn.className = "primary";
       btn.textContent = nextLabel(o.status);
-      btn.onclick = (e) => {
+      btn.onclick = async (e) => {
         e.stopPropagation();
-        updateOrderStatus(o.id, NEXT_STATUS[o.status]);
+        // 2026-09-10: 예전에는 요청만 던져놓고 화면 갱신을 **서버가 되쏘는
+        // Pusher 알림**에 기대고 있었다. 즉 카드가 움직이려면 PATCH 왕복,
+        // Pusher 왕복, 주문 목록 재조회가 차례로 다 끝나야 했다. 누른 사람
+        // 입장에서는 그 셋을 전부 기다리는 시간이 「조리 시작」의 반응
+        // 속도였다.
+        //
+        // 서버는 갱신된 주문을 PATCH 응답으로 이미 돌려준다. 그것으로 바로
+        // 갱신하면 왕복 하나로 끝난다.
+        btn.disabled = true; // 왕복 도중 두 번 눌려 단계가 두 칸 가지 않게
+        const updated = await updateOrderStatus(o.id, NEXT_STATUS[o.status]);
+        if (!applyOrderUpdate(updated)) await loadOrders();
       };
       actions.appendChild(btn);
     }
@@ -3118,7 +3159,9 @@
       cancelBtn.textContent = T("cancelBtn");
       cancelBtn.onclick = async (e) => {
         e.stopPropagation();
-        if (await showConfirm(T("confirmCancelOrder"))) updateOrderStatus(o.id, "cancelled");
+        if (!(await showConfirm(T("confirmCancelOrder")))) return;
+        const updated = await updateOrderStatus(o.id, "cancelled");
+        if (!applyOrderUpdate(updated)) await loadOrders();
       };
       actions.appendChild(cancelBtn);
     }
@@ -3814,7 +3857,41 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    return res.ok; // callers that optimistically updated the UI (e.g. drag-to-change-status) need to know if it should be undone
+    // 2026-09-10: 예전에는 res.ok(불리언)만 돌려줬다. 서버는 갱신된 주문을
+    // 응답으로 이미 주고 있는데(orders.js 의 PATCH /:id, res.json(order))
+    // 그걸 버리고 곧바로 loadOrders() 로 목록 전체를 다시 받아왔다. 이제
+    // 그 주문을 그대로 돌려주고, 부르는 쪽이 applyOrderUpdate() 로 자기
+    // 목록의 그 한 자리만 갈아끼운다 — 요청 한 번이 사라진다.
+    //
+    // 실패하면 null. 기존 호출부들은 `if (!ok)` 로 검사하고 있어서 불리언을
+    // 객체/null 로 바꿔도 그대로 동작한다.
+    if (!res.ok) return null;
+    return res.json().catch(() => null);
+  }
+
+  // 서버가 돌려준 주문 한 건을 로컬 목록에 반영하고 화면을 다시 그린다.
+  // loadOrders() 의 "받아오는" 절반을 뺀 나머지다.
+  //
+  // renderOrders() 가 칼럼별로 스스로 정렬하므로(sortWithinColumn), 배열의
+  // 어느 자리에 넣든 화면은 서버에서 통째로 받아온 것과 같다.
+  function applyOrderUpdate(updated) {
+    if (!updated || typeof updated.id !== "number") return false;
+    const i = orders.findIndex((o) => o.id === updated.id);
+    if (i === -1) orders.push(updated);
+    else orders[i] = updated;
+    knownOrderIds.add(updated.id);
+    // 신규에서 벗어난 주문은 "인쇄 실패" 표시를 달고 있을 이유가 없다 —
+    // 직원이 이미 다른 방법으로 알아챘다는 뜻이다(loadOrders() 와 같은 규칙).
+    if (updated.status !== "new") printFailedOrderIds.delete(updated.id);
+    // 이미 날아가 있는 GET /api/orders 응답이 이 갱신 뒤에 도착해서 방금
+    // 바꾼 것을 옛 값으로 덮지 않도록, 그것을 지금 낡은 것으로 표시한다
+    // (드래그 쪽에서 쓰는 것과 같은 장치 — ordersRequestSeq 주석 참고).
+    ordersRequestSeq++;
+    if (!draggingOrderId) renderOrders();
+    renderTables();
+    if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
+    if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+    return true;
   }
 
   // 부분 결제(메뉴 품목 단위 체크) — 사장님 피드백(2026-09-05): "체크체크
@@ -4980,6 +5057,7 @@
           // 완료로 변경" 버튼뿐이다(진짜 테이블은 nextBtn 자체가 없음 — 위
           // buildOrderRoundParts 참고) — toStatus === "paid"일 때만 결제
           // 방식 팝업(特約95折/VIP9折 토글 포함)을 띄운다.
+          let applied = false;
           if (toStatus === "paid") {
             const o = tableOrders.find((x) => x.id === orderId);
             const discountType = counterVipDiscountTypeByOrderId.get(orderId) || null;
@@ -4998,17 +5076,20 @@
               discountRequiresCashOnly(discountType)
             );
             if (!method) return;
-            const ok = await updateOrderStatus(orderId, toStatus, method, discountType, manualValue);
-            if (!ok) {
+            const updated = await updateOrderStatus(orderId, toStatus, method, discountType, manualValue);
+            if (!updated) {
               await showAlert(T("paySelectedFailedMsg"));
               return;
             }
             counterVipDiscountTypeByOrderId.delete(orderId);
             counterManualDiscountValueByOrderId.delete(orderId);
+            applied = applyOrderUpdate(updated);
           } else {
-            await updateOrderStatus(orderId, toStatus);
+            applied = applyOrderUpdate(await updateOrderStatus(orderId, toStatus));
           }
-          await loadOrders();
+          // 서버가 돌려준 주문으로 그 한 자리만 갈아끼웠으면 목록을 다시
+          // 받아올 필요가 없다. 응답을 못 받은 경우에만 예전처럼 통째로.
+          if (!applied) await loadOrders();
           openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };

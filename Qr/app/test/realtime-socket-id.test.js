@@ -119,6 +119,50 @@ check("소켓 번호를 Pusher 연결에서 읽는다", /pusherClient\.connectio
 check('/api 가 아니면 손대지 않는다', /url\.startsWith\("\/api\/"\)/.test(adminSrc));
 check("감싸기 전의 fetch 를 보관한다", /const nativeFetch = window\.fetch\.bind\(window\)/.test(adminSrc));
 
+out.push("\n[7] 알림을 뺐으면 화면은 스스로 갱신해야 한다");
+// 이 절이 이 파일에서 제일 중요하다. 누른 기기에게 알림을 안 보내기로 한
+// 순간, "요청만 던져놓고 서버가 되쏘는 알림을 기다려 화면을 고치던" 자리는
+// 전부 아무 일도 안 하는 버튼이 된다. 실제로 「조리 시작」과 「취소」가
+// 그랬다 — 알림 제외를 넣은 커밋에서 잡지 못하고 넘어갈 뻔했다.
+check("「다음 단계」 버튼이 응답으로 직접 갱신한다", /const updated = await updateOrderStatus\(o\.id, NEXT_STATUS\[o\.status\]\);\s*\n\s*if \(!applyOrderUpdate\(updated\)\) await loadOrders\(\);/.test(adminSrc));
+check("「취소」 버튼이 응답으로 직접 갱신한다", /const updated = await updateOrderStatus\(o\.id, "cancelled"\);\s*\n\s*if \(!applyOrderUpdate\(updated\)\) await loadOrders\(\);/.test(adminSrc));
+check("드래그로 칼럼을 옮겨도 응답으로 갱신한다", /applyOrderUpdate\(updated\); \/\/ 서버가 돌려준 그 한 건만/.test(adminSrc));
+check("테이블 상세의 단계/결제 버튼도 마찬가지", /applied = applyOrderUpdate\(await updateOrderStatus\(orderId, toStatus\)\)/.test(adminSrc));
+
+// 결과를 버리는 호출이 남아 있으면 그 자리는 알림에 매달려 있을 가능성이
+// 높다. 지금 허용되는 것은 두 가지뿐이다.
+const bareCalls = (adminSrc.match(/^\s*updateOrderStatus\(/gm) || []).length;
+check(
+  "결과를 안 쓰는 호출은 한 곳뿐 (markPrintSucceededAndAdvance — 스스로 renderOrders 한다)",
+  bareCalls === 1,
+  `${bareCalls}곳`
+);
+check(
+  "그 한 곳은 로컬 상태를 고치고 다시 그린다",
+  /o\.status = "preparing";\s*\n\s*updateOrderStatus\(o\.id, "preparing"\);\s*\n\s*renderOrders\(\);/.test(adminSrc)
+);
+
+out.push("\n[8] 칼럼 정렬 규칙이 서버와 같아야 한다");
+// applyOrderUpdate 는 "배열의 어느 자리에 넣어도 화면은 같다"에 기대고 있다.
+// 그 전제는 renderOrders 가 서버와 **같은 규칙**으로 칼럼을 정렬할 때만
+// 참이다. 두 곳이 조용히 갈라지면 카드가 엉뚱한 자리에 서고, 원인을 찾기
+// 어렵다. 그래서 규칙을 이루는 줄들을 양쪽에서 직접 대조한다.
+const RULE = [
+  "const aHas = a.queue_order != null;",
+  "const bHas = b.queue_order != null;",
+  "if (aHas && bHas) return a.queue_order - b.queue_order;",
+  "if (aHas !== bHas) return aHas ? -1 : 1;",
+  "return b.id - a.id;",
+];
+const serverSort = ordersSrc.replace(/\s+/g, " ");
+const clientSort = adminSrc.replace(/\s+/g, " ");
+RULE.forEach((line) => {
+  const needle = line.replace(/\s+/g, " ");
+  check(`서버·화면 양쪽에 같은 줄: ${line}`, serverSort.includes(needle) && clientSort.includes(needle));
+});
+check("renderOrders 가 세 칼럼을 정렬한다", /cols\.new = sortWithinColumn\(cols\.new\);/.test(adminSrc) && /cols\.preparing = sortWithinColumn\(cols\.preparing\);/.test(adminSrc) && /cols\.served = sortWithinColumn\(cols\.served\);/.test(adminSrc));
+check("정렬은 복사본에 한다 (orders 배열 자체를 흔들지 않게)", /return list\.slice\(\)\.sort/.test(adminSrc));
+
 console.log(out.join("\n"));
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
