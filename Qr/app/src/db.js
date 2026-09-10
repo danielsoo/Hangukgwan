@@ -66,7 +66,12 @@ function getClient() {
     );
   }
   if (!clientPromise) {
-    const client = new MongoClient(uri);
+    // maxPoolSize: 서버리스에서는 인스턴스 하나가 동시에 처리하는 요청이
+    // 몇 개뿐인데, 드라이버 기본값은 100이라 인스턴스가 뜰 때마다 최대
+    // 100개의 연결을 열 수 있다. Vercel 이 인스턴스를 여러 개 띄우면 그게
+    // 금방 Atlas 의 연결 한도에 닿고(무료 M0 는 500), 한도 근처에서는
+    // 연결을 새로 여는 데 시간이 걸리기 시작한다. 10이면 충분하다.
+    const client = new MongoClient(uri, { maxPoolSize: 10 });
     clientPromise = client.connect();
   }
   return clientPromise;
@@ -371,7 +376,7 @@ function getDb() {
 }
 
 module.exports = {
-  connectDB, getDb, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
+  connectDB, getDb, getClient, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
   savePhoto, getPhoto, deletePhoto,
   findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,

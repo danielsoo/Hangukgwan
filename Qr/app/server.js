@@ -5,7 +5,7 @@ const express = require("express");
 const session = require("express-session");
 const compression = require("compression");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient } = require("./src/db");
 const seed = require("./src/seed");
 const { applyFeedback202609 } = require("./src/migrations/2026-09-feedback");
 const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
@@ -160,7 +160,12 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET || "dev-secret-change-me",
     store: MongoStore.create({
-      mongoUrl: process.env.MONGODB_URI,
+      // mongoUrl 을 주면 connect-mongo 가 자기 몫의 MongoClient 를 또 하나
+      // 만든다 — src/db.js 가 이미 만든 것과 별개로. 서버리스에서는
+      // 인스턴스가 뜰 때마다 Atlas 로 가는 TLS 핸드셰이크를 두 번 하고,
+      // 연결 수도 두 배로 쓴다는 뜻이다(무료 M0 는 연결 한도가 있다).
+      // 같은 클라이언트를 넘겨 하나만 쓰게 한다.
+      clientPromise: getClient(),
       dbName: process.env.MONGODB_DB || "hangukgwan",
       collectionName: "sessions",
       // 세션 만료 시각만 늘리는 쓰기를 요청마다 하지 않는다.
