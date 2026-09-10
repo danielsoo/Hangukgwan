@@ -8401,10 +8401,36 @@
   async function endTestMode() {
     // 먼저 무엇이 사라지는지 받아온다. 이걸 건너뛰고 바로 지우면 안 된다.
     let pv = null;
+    let alreadyOff = false;
     try {
       const res = await fetch("/api/test-mode/preview-end");
       if (res.ok) pv = await res.json();
+      // 다른 기기가 이미 껐다. 이 화면만 켜져 있는 줄 알고 있는 것이다.
+      //
+      // 2026-09-10 사장님: "내걸 띄우고 태블릿에 들어갔다가 내가 끈 후에
+      // 태블릿도 끄려고 하면 테스터 모드 상태를 읽지 못했대."
+      //
+      // 서버는 "지금 열린 세션이 없다"고 정확히 답하고 있었는데, 화면이
+      // 그걸 「읽지 못했다」로 뭉쳐서 보여줬다. 사장님은 통신이 안 되는 줄
+      // 알고 새로고침을 반복하게 된다 — 실제로는 아무 문제가 없고 이미
+      // 끝나 있는데. 조용히 뭉개지 말고 무슨 일인지 그대로 말한다.
+      else if (res.status === 400) {
+        const body = await res.json().catch(() => ({}));
+        alreadyOff = body.error === "test_mode_not_active";
+      }
     } catch (e) {}
+
+    if (alreadyOff) {
+      // 이 기기에 남은 표시도 같이 정리한다. 안 그러면 빨간 띠가 계속
+      // 붙어 있고, 누를 때마다 같은 안내가 반복된다.
+      try {
+        const res = await fetch("/api/test-mode/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        if (res.ok) testModeState = await res.json();
+      } catch (e) {}
+      renderTestMode();
+      await loadOrders();
+      return showAlert("테스터 모드는 이미 다른 기기에서 종료됐어요.\n이 기기 화면도 방금 정리했습니다.");
+    }
     if (!pv) return showAlert("테스터 모드 상태를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.");
 
     const lines = ["테스터 모드를 종료하면 아래가 영구히 사라집니다.", ""];
