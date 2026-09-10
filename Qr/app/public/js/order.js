@@ -117,10 +117,17 @@
   // 주문을 할 때는 가능할 수 있도록."
   let isStaffSession = false;
 
-  // 자리 이동 안내가 「내 것」인지 가리는 데 쓰는 표시. 1분마다 도는
-  // refreshTableState 가 이 값을 읽으므로 선언이 위에 있어야 한다.
+  // 자리 이동 안내가 「내 것」인지 가리는 데 쓰는 표시. refreshTableState 가
+  // 이 값을 읽으므로 선언이 위에 있어야 한다.
   const SEAT_KEY = `hgk_seat_${tableNumber}`;
   let movedNoticeShown = false;
+
+  // 이 자리에 생긴 일을 바로 받아보는 통로(Pusher). 연결돼 있으면 폰이
+  // 주기적으로 물어볼 필요가 없다 — 아래 setInterval 이 이 값을 본다.
+  let realtimeCfg = null;
+  let realtimeChannelName = null;
+  let realtimeTableConnected = false;
+  let realtimeTableClient = null;
   // True when this QR points at the counter's takeout-only order flow
   // instead of a real dine-in table (see the "포장 카운터" section in Admin >
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
@@ -363,17 +370,18 @@
     }
   }
   /**
-   * 이 자리에 무슨 일이 생겼는지 다시 물어본다 — 지금은 「자리가 옮겨졌는가」.
+   * 이 자리에 무슨 일이 생겼는지 물어본다 — 지금은 「자리가 옮겨졌는가」.
    *
-   * 2026-09-10 사장님: "손님이 보고있는 원래 테이블 qr 화면에서 자리 이동
-   * 메시지랑 리다이렉트용 확인 버튼이 안 떠."
+   * 이건 이제 주 경로가 아니라 그물이다. 정상적인 경로는 push 다
+   * (initRealtimeTable — 직원이 자리 이동을 누르는 그 순간 도착한다).
    *
-   * 원인이 여기였다. 안내를 화면을 처음 불러올 때만 확인하고 있었다. 그런데
-   * 자리를 옮기는 그 순간 손님은 이미 그 화면을 켜둔 채 앉아 있다 — 새로고침을
-   * 할 이유가 없다. 직원이 말로 알려주지 않으면 영영 안 뜬다.
+   * 2026-09-10 사장님: "60초마다 갱신하는 게 아니라 그 이벤트가 발생하면
+   * 그걸 인지하고 작동하는 방식으로 하면 되는 거 아니야?"
    *
-   * 영업시간 확인과 같은 박자로 돈다(1분, 화면을 보고 있을 때만). 폰을 다시
-   * 집어들면 그 자리에서 한 번 더 물어본다 — 자리를 옮긴 직후가 딱 그 순간이다.
+   * 그래서 아래 setInterval 은 push 가 붙어 있는 동안 이 함수를 아예 부르지
+   * 않는다. 부르는 경우는 둘뿐이다 — Pusher 를 아직 설정하지 않은 매장이거나
+   * 연결이 끊겼을 때, 그리고 폰을 다시 집어들었을 때(잠겨 있는 동안 온
+   * 이벤트는 놓쳤을 수 있으니 그 한 번은 물어보는 게 맞다).
    */
   async function refreshTableState() {
     if (movedNoticeShown) return;
@@ -383,19 +391,91 @@
       if (!res.ok) return;
       const data = await res.json();
       rememberSeating(data.seating_started_at);
+      if (data.realtime_channel) {
+        realtimeChannelName = data.realtime_channel;
+        initRealtimeTable();
+      }
       checkMovedTable(data.moved_to);
     } catch (e) {
-      /* 다음 분에 다시 묻는다 */
+      /* 다음 기회에 다시 묻는다 */
     }
+  }
+
+  /**
+   * 이 자리 채널을 구독한다 — 자리 이동을 그 즉시 받는다.
+   *
+   * 관리자 화면이 주문 알림에 쓰는 것과 같은 Pusher 연결이다
+   * (public/js/admin.js 의 initRealtimeOrders, src/realtime.js).
+   *
+   * 채널 이름은 서버가 정해서 내려준다(GET /api/tables/:n/party-size 의
+   * realtime_channel). 여기서 직접 만들지 않는 이유는 자리 번호에 한글이나
+   * 공백이 들어갈 수 있어서인데, 규칙을 양쪽에 두면 한쪽만 고쳐졌을 때
+   * 안내가 영영 안 오는 쪽으로 조용히 어긋난다.
+   *
+   * pusher.min.js 는 필요할 때만 받아온다. 손님 화면은 식사 중에 한 번
+   * 열리고 마는 화면이라, Pusher 를 안 쓰는 매장에까지 CDN 스크립트를
+   * 매번 얹지 않는다.
+   */
+  function initRealtimeTable() {
+    if (realtimeTableClient) return;
+    if (!realtimeChannelName) return;
+    const cfg = realtimeCfg;
+    if (!cfg || !cfg.enabled || !cfg.key || !cfg.cluster) return;
+    loadPusherScript(() => {
+      if (realtimeTableClient || typeof Pusher === "undefined") return;
+      try {
+        realtimeTableClient = new Pusher(cfg.key, { cluster: cfg.cluster });
+        const channel = realtimeTableClient.subscribe(realtimeChannelName);
+        channel.bind("moved", (payload) => checkMovedTable(payload));
+        realtimeTableClient.connection.bind("connected", () => {
+          realtimeTableConnected = true;
+        });
+        // 끊기면 다시 물어보는 쪽으로 돌아간다 — 손님이 옮긴 걸 모르는 채로
+        // 옛 자리에 주문을 넣는 것보다는 한 번씩 묻는 게 낫다.
+        realtimeTableClient.connection.bind("disconnected", () => {
+          realtimeTableConnected = false;
+        });
+        realtimeTableClient.connection.bind("unavailable", () => {
+          realtimeTableConnected = false;
+        });
+      } catch (e) {
+        realtimeTableConnected = false;
+      }
+    });
+  }
+
+  let pusherScriptState = null; // null | "loading" | "done"
+  const pusherScriptWaiting = [];
+  function loadPusherScript(done) {
+    if (typeof Pusher !== "undefined" || pusherScriptState === "done") return done();
+    pusherScriptWaiting.push(done);
+    if (pusherScriptState === "loading") return;
+    pusherScriptState = "loading";
+    const el = document.createElement("script");
+    el.src = "https://js.pusher.com/8.4.0/pusher.min.js";
+    el.async = true;
+    el.onload = () => {
+      pusherScriptState = "done";
+      while (pusherScriptWaiting.length) pusherScriptWaiting.shift()();
+    };
+    // 못 받아와도 화면은 그대로 돌아간다 — 아래 setInterval 이 물어보는
+    // 쪽으로 계속 돈다.
+    el.onerror = () => {
+      pusherScriptState = null;
+      pusherScriptWaiting.length = 0;
+    };
+    document.head.appendChild(el);
   }
 
   setInterval(() => {
     refreshOrderingState();
-    refreshTableState();
+    // push 가 붙어 있으면 물어보지 않는다.
+    if (!realtimeTableConnected) refreshTableState();
   }, 60000);
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     refreshOrderingState();
+    // 잠겨 있는 동안 온 이벤트는 놓쳤을 수 있다 — 켤 때 한 번은 확인한다.
     refreshTableState();
   });
 
@@ -407,6 +487,11 @@
     storeLat = Number.isNaN(lat) ? null : lat;
     storeLng = Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;
+    // 자리 이동을 즉시 받기 위한 연결 정보(key/cluster 는 공개해도 되는 값
+    // 이다 — src/routes/settings.js 주석). 채널 이름은 initPartySize 가
+    // 서버에서 따로 받아온다.
+    realtimeCfg = s.realtime || null;
+    initRealtimeTable();
     if (s.ordering) ordering = s.ordering;
     isStaffSession = !!s.is_staff;
     applyOrderingState();
@@ -1684,9 +1769,23 @@
         /* 저장이 안 돼도 이동 자체는 되어야 한다 */
       }
       // 옛 자리의 표시는 지운다. 남겨두면 나중에 이 폰으로 그 자리를 다시
-      // 열었을 때 지난 안내가 또 뜬다.
+      // 열었을 때 지난 안내가 또 뜬다. 주문 번호도 옮겨간 자리로 「옮기는」
+      // 것이지 복사가 아니다 — 옛 자리에 그대로 남겨두면 뒤로 가기 한 번에
+      // 이미 확인한 안내가 다시 뜬다.
       try {
         localStorage.removeItem(SEAT_KEY);
+        localStorage.removeItem(`hgk_orders_${tableNumber}`);
+      } catch (e) {}
+      // 서버에도 다 봤다고 알린다 — 그래야 옛 자리가 그 즉시 깨끗해진다
+      // (2026-09-10 사장님: "그 즉시 그 자리는 빈 자리로"). 답을 기다리지
+      // 않는다. 이동 자체가 이 요청 때문에 늦어지면 안 된다.
+      try {
+        fetch(`/api/tables/${encodeURIComponent(tableNumber)}/moved-ack`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: moved.to }),
+          keepalive: true,
+        }).catch(() => {});
       } catch (e) {}
       location.href = `/t/${encodeURIComponent(moved.to)}`;
     };
@@ -1727,6 +1826,10 @@
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
       const data = await res.json();
+      if (res.ok && data.realtime_channel) {
+        realtimeChannelName = data.realtime_channel;
+        initRealtimeTable();
+      }
       // 인원수를 묻기 전에 확인한다. 옮겨간 손님에게 이 자리 인원수를
       // 물어보면, 그 손님은 옮긴 줄도 모르고 여기에 다시 자리를 잡는다.
       if (res.ok && checkMovedTable(data.moved_to)) return;

@@ -24,6 +24,11 @@ process.env.NODE_ENV = "test";
 process.env.SESSION_SECRET = "e2e-move-table";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
+// key/cluster 만 준다. APP_ID/SECRET 이 없으므로 서버 쪽 Pusher 는 null 로
+// 남아 실제로 아무 데도 보내지 않고(src/realtime.js), 손님 화면 쪽만
+// "실시간이 켜진 매장" 으로 보인다 — 여기서 재려는 게 그쪽이다.
+process.env.PUSHER_KEY = "e2e-key";
+process.env.PUSHER_CLUSTER = "e2e";
 
 const path = require("path");
 const fs = require("fs");
@@ -321,6 +326,127 @@ function check(name, cond, extra = "") {
     await sp.waitForURL(`**/t/${Q}`, { timeout: 5000 });
     check("확인을 누르면 새 자리로 간다", sp.url().endsWith(`/t/${Q}`), sp.url());
     await seated.close();
+  }
+
+  out.push("\n[알림이 오면 바로 안다 — 물어보지 않고]");
+  // 2026-09-10 사장님: "60초마다 갱신하는 게 아니라 그 이벤트가 발생하면
+  // 그걸 인지하고 작동하는 방식으로 하면 되는 거 아니야?"
+  //
+  // 진짜 Pusher 서버에 붙을 수는 없으니 브라우저 쪽 Pusher 를 가짜로 세우고,
+  // 「그 자리 채널로 moved 가 왔다」 를 손으로 흘려넣는다. 재려는 건 하나다 —
+  // 화면을 만지지도, 다시 물어보지도 않았는데 안내가 뜨는가.
+  {
+    const T = tabless[15].number;
+    const U = tabless[16].number;
+    await put(`/api/tables/${T}/party-size`, { adults: 2, children: 0 });
+    const ord = await post("/api/orders", { tableNumber: T, items: [{ itemId, qty: 1 }] });
+
+    const ctxT = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await ctxT.addInitScript(() => {
+      window.__subs = {};
+      window.__fetches = 0;
+      const realFetch = window.fetch;
+      window.fetch = function (u, o) {
+        if (String(u).includes("/party-size")) window.__fetches++;
+        return realFetch.apply(this, arguments);
+      };
+      window.Pusher = function () {
+        const conn = {
+          _h: {},
+          bind(ev, fn) { (this._h[ev] = this._h[ev] || []).push(fn); },
+          fire(ev) { (this._h[ev] || []).forEach((f) => f()); },
+        };
+        this.connection = conn;
+        this.subscribe = (name) => {
+          const ch = { _h: {}, bind(ev, fn) { (this._h[ev] = this._h[ev] || []).push(fn); } };
+          window.__subs[name] = ch;
+          setTimeout(() => conn.fire("connected"), 0);
+          return ch;
+        };
+      };
+    });
+    const tp = await ctxT.newPage();
+    tp.on("dialog", (d) => d.dismiss());
+    await tp.goto(`${base}/t/${T}`, { waitUntil: "networkidle" });
+    await tp.evaluate(([t, id]) => localStorage.setItem(`hgk_orders_${t}`, JSON.stringify([id])), [String(T), ord.body.id]);
+    await tp.waitForTimeout(600);
+
+    const chan = await tp.evaluate(() => Object.keys(window.__subs));
+    check("실시간이 켜진 매장에서는 이 자리 채널을 구독한다", chan.length === 1, JSON.stringify(chan));
+    check("서버가 정해준 이름 그대로 구독한다", chan[0] === `table-${T}`, `${chan[0]} vs table-${T}`);
+
+    const before = await tp.evaluate(() => window.__fetches);
+    // 직원이 자리 이동을 눌렀다 → 그 자리 채널로 moved 가 온다.
+    const seating = store.tables.find((t) => String(t.number) === String(T)).party_size_updated_at;
+    await tp.evaluate(([name, payload]) => {
+      const ch = window.__subs[name];
+      (ch._h.moved || []).forEach((f) => f(payload));
+    }, [chan[0], { to: String(U), at: "2026-09-10 12:00:00", order_ids: [ord.body.id], seating }]);
+    await tp.waitForTimeout(200);
+    check("알림 하나로 안내가 뜬다", await tp.locator("#movedBackdrop").isVisible());
+    check("옮겨갈 자리가 적혀 있다", (await tp.locator("#movedBackdrop").innerText()).includes(String(U)),
+      await tp.locator("#movedBackdrop").innerText());
+    check("그 사이 서버에 다시 물어보지 않았다",
+      (await tp.evaluate(() => window.__fetches)) === before,
+      "push 를 받고도 폴링이 돈다");
+    await ctxT.close();
+  }
+
+  out.push("\n[옮기는 즉시 옛 자리는 빈 자리가 된다]");
+  // 2026-09-10 사장님: "자리 이동을 하면 그 즉시 그 자리는 빈 자리로 새 손님을
+  // 받을 준비가 되어있어야 해. 그리고 60초마다 갱신하는 게 아니라 그 이벤트가
+  // 발생하면 그걸 인지하고 작동하는 방식으로 하면 되는 거 아니야?"
+  //
+  // 안내가 옛 자리에 붙어 있는 시간만큼 그 자리는 「아직 뭔가 남은 자리」다.
+  // 손님이 확인을 누르는 순간 서버에서도 지워야 한다 — 안 그러면 같은 폰으로
+  // 뒤로 가기 한 번만 해도 이미 확인한 안내가 다시 뜬다.
+  {
+    const R = tabless[13].number;
+    const S = tabless[14].number;
+    await put(`/api/tables/${R}/party-size`, { adults: 2, children: 0 });
+    const ord = await post("/api/orders", { tableNumber: R, items: [{ itemId, qty: 1 }] });
+
+    const ctxR = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    const rp = await ctxR.newPage();
+    rp.on("dialog", (d) => d.dismiss());
+    await rp.goto(`${base}/t/${R}`, { waitUntil: "networkidle" });
+    await rp.evaluate(([t, id]) => localStorage.setItem(`hgk_orders_${t}`, JSON.stringify([id])), [String(R), ord.body.id]);
+
+    // 손님 폰이 구독할 채널을 서버가 정해서 내려준다 — 폰이 자리 번호로
+    // 직접 만들면 한글이나 공백이 든 번호에서 조용히 어긋난다.
+    {
+      const st = await api(`/api/tables/${R}/party-size`);
+      check("서버가 이 자리 채널 이름을 내려준다", !!st.body.realtime_channel, String(st.body.realtime_channel));
+      check("채널 이름은 Pusher 가 받는 글자만 쓴다",
+        /^[A-Za-z0-9_\-=@,.;]+$/.test(String(st.body.realtime_channel || "")), String(st.body.realtime_channel));
+    }
+
+    await post("/api/orders/move", { from: R, to: S });
+    await rp.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+    await rp.waitForTimeout(800);
+    check("안내가 뜬다", await rp.locator("#movedBackdrop").isVisible());
+    await rp.locator("#movedGoBtn").click();
+    await rp.waitForURL(`**/t/${S}`, { timeout: 5000 });
+
+    // 확인을 누른 뒤 옛 자리에는 아무것도 남지 않는다.
+    await rp.waitForTimeout(500);
+    {
+      const st = await api(`/api/tables/${R}/party-size`);
+      check("확인을 누르면 서버에서 안내가 사라진다", st.body.moved_to == null, JSON.stringify(st.body.moved_to));
+      check("옛 자리에 인원수가 남아 있지 않다", !st.body.party_size, String(st.body.party_size));
+    }
+    check("옛 자리에 남은 주문이 없다",
+      store.orders.filter((o) => String(o.table_number) === String(R) && o.status !== "cancelled").length === 0);
+
+    // 같은 폰으로 옛 자리 QR 을 다시 열어도 지난 안내가 되살아나지 않는다.
+    await rp.goto(`${base}/t/${R}`, { waitUntil: "networkidle" });
+    await rp.waitForTimeout(700);
+    check("옛 자리를 다시 열어도 안내가 다시 뜨지 않는다", await rp.locator("#movedBackdrop").isHidden());
+    {
+      const left = await rp.evaluate((k) => localStorage.getItem(`hgk_orders_${k}`), String(R));
+      check("폰에도 옛 자리 주문 번호가 남지 않는다", !left || left === "[]", String(left));
+    }
+    await ctxR.close();
   }
 
   out.push("\n[옮겨진 손님 폰이 새 자리로 데려다준다]");

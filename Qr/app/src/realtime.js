@@ -73,4 +73,46 @@ function broadcastOrdersChanged(req) {
   }
 }
 
-module.exports = { broadcastOrdersChanged, socketIdFrom };
+
+// 자리 하나에만 가는 채널 이름.
+//
+// 자리 이동 안내는 「그 자리에 앉아 있던 손님의 폰」 한 대에만 가면 된다.
+// 모두가 듣는 "orders" 채널에 실으면 매장 안 모든 손님 폰이 남의 자리
+// 이동과 주문 번호까지 받아보게 된다 — 쓸 데도 없고, 보낼 이유도 없다.
+//
+// Pusher 채널 이름에 쓸 수 있는 글자는 a-z A-Z 0-9 _ - = @ , . ; 뿐이다.
+// 자리 번호는 사장님이 직접 붙이는 문자열이라(한글도, 공백도 들어갈 수
+// 있다) 그대로 쓰면 조용히 실패한다. 안전한 글자만으로 된 번호는 그대로
+// 두어 로그에서 알아보기 쉽게 하고, 나머지는 hex 로 바꾼다.
+//
+// 손님 화면은 이 이름을 스스로 만들지 않는다 — GET /api/tables/:n/party-size
+// 가 내려주는 값을 그대로 구독한다. 같은 규칙을 서버와 브라우저 두 곳에
+// 두면 한쪽만 고쳐졌을 때 안내가 영영 안 오는 쪽으로 어긋난다.
+function channelForTable(number) {
+  const n = String(number == null ? "" : number);
+  if (/^[A-Za-z0-9_-]{1,80}$/.test(n)) return `table-${n}`;
+  return `table-x${Buffer.from(n, "utf8").toString("hex")}`;
+}
+
+/**
+ * 「이 자리 손님이 저쪽으로 옮겨졌다」를 그 자리 화면에 바로 알린다.
+ *
+ * 2026-09-10 사장님: "60초마다 갱신하는 게 아니라 그 이벤트가 발생하면
+ * 그걸 인지하고 작동하는 방식으로 하면 되는 거 아니야?"
+ *
+ * 맞다. 직원이 자리 이동을 누르는 그 순간 손님 폰은 이미 그 화면을 켜둔
+ * 채 앉아 있다. 폰이 주기적으로 물어보게 하는 대신 여기서 밀어준다.
+ *
+ * broadcastOrdersChanged 와 같은 이유로 fire-and-forget 이다 — 이동 자체는
+ * 이미 저장이 끝났고, Pusher 가 안 될 때(계정 미설정 포함) 이동이 실패하면
+ * 안 된다. 그 경우 손님 폰은 예전처럼 화면을 다시 켤 때·주문을 넣기 전에
+ * 한 번씩 물어보는 쪽으로 알아낸다(public/js/order.js).
+ */
+function broadcastTableMoved(from, payload) {
+  if (!pusher) return;
+  pusher.trigger(channelForTable(from), "moved", payload || {}).catch((err) => {
+    console.error("[realtime] pusher trigger failed:", err.message);
+  });
+}
+
+module.exports = { broadcastOrdersChanged, broadcastTableMoved, channelForTable, socketIdFrom };

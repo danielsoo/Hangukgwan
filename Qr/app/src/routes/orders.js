@@ -6,7 +6,7 @@ const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
 const { isActive: isVipActive, cardBelongsTo } = require("../vip");
 const { parseAddons } = require("../addons");
-const { broadcastOrdersChanged } = require("../realtime");
+const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -630,6 +630,15 @@ router.post("/move", requireAdmin, async (req, res) => {
   await saveOrders(moving);
   await save();
   broadcastOrdersChanged(req);
+  // 옛 자리 화면에 바로 알린다. 이 한 줄이 안내를 「1분 안에」 에서 「누르는
+  // 즉시」 로 바꾼다 — 손님은 그 사이에 옛 자리로 주문을 한 번 더 넣을 수
+  // 있고, 그러면 그 주문만 빈 자리로 떨어져 나간다.
+  broadcastTableMoved(from, {
+    to,
+    at: now,
+    order_ids: moving.map((o) => o.id),
+    seating: movedSeating,
+  });
   res.json({
     ok: true,
     moved: moving.length,

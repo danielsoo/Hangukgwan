@@ -3,6 +3,7 @@ const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = requir
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const { partyBreakdownOf } = require("../partySize");
+const { channelForTable } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
@@ -149,9 +150,21 @@ router.patch("/:id", canEditTables, async (req, res) => {
 // Asked once per fresh page load (see public/js/order.js) and kept on the
 // table itself, since until payment everyone ordering from that table is
 // treated as the same party.
-// 자리 이동 안내를 얼마나 오래 보여줄지. 한 끼 식사보다 넉넉하되, 그날을
-// 넘기지는 않는 길이 — 저녁에 옮긴 안내가 다음 날 점심 손님에게 뜨면 안 된다.
-const MOVED_NOTICE_MS = 3 * 60 * 60 * 1000;
+// 자리 이동 안내를 얼마나 오래 들고 있을지.
+//
+// 2026-09-10 사장님: "자리 이동을 하면 그 즉시 그 자리는 빈 자리로 새 손님을
+// 받을 준비가 되어있어야 해."
+//
+// 그래서 이 값은 이제 「안내를 보여주는 기간」이 아니라 못 받은 폰을 위한
+// 마지막 그물일 뿐이다. 실제 경로는 셋이고, 정상적인 경우 전부 즉시 끝난다.
+//   1. 옮기는 순간 그 자리 채널로 push 가 간다(src/realtime.js).
+//   2. 손님이 「확인」을 누르면 폰이 POST /moved-ack 로 알려주고 여기서 지운다.
+//   3. 새 손님이 앉아 인원수가 들어오면 PUT /party-size 가 지운다.
+// 남는 경우는 하나뿐이다 — 손님 폰이 그 순간 잠겨 있거나 꺼져 있어서 push 도
+// 못 받고 확인도 못 누른 채, 그 자리에 아무도 새로 앉지 않은 상태. 그 폰이
+// 다시 켜졌을 때 한 번 알려주면 되므로 길 필요가 없다. 예전의 3시간은 저녁
+// 손님의 안내가 밤늦게까지 자리에 남아 있게 했다.
+const MOVED_NOTICE_MS = 30 * 60 * 1000;
 
 function movedToFor(table) {
   const m = table && table.moved_to;
@@ -221,7 +234,38 @@ router.get("/:tableNumber/party-size", (req, res) => {
     // (src/routes/orders.js 의 moved_to.seating).
     seating_started_at: table.party_size ? table.party_size_updated_at || null : null,
     moved_to: moved,
+    // 이 자리에 무슨 일이 생기면 알려줄 채널. 손님 폰은 이걸 구독해두고
+    // 자리 이동을 「1분 안에」 가 아니라 「그 즉시」 받는다. Pusher 가 설정
+    // 안 된 매장에서는 realtime.enabled 가 false 라(GET /api/settings) 폰이
+    // 구독을 아예 시도하지 않는다.
+    realtime_channel: channelForTable(table.number),
   });
+});
+
+/**
+ * 손님이 「확인」을 눌렀다 — 안내를 다 봤으니 옛 자리에서 지운다.
+ *
+ * 2026-09-10 사장님: "자리 이동을 하면 그 즉시 그 자리는 빈 자리로."
+ *
+ * 이게 없으면 안내가 시간이 다 될 때까지 자리에 붙어 있는다. 그 사이 같은
+ * 폰으로 옛 자리 QR 을 다시 열면(뒤로 가기 한 번이면 된다) 이미 확인한
+ * 안내가 또 뜬다.
+ *
+ * 직원 로그인을 요구하지 않는다 — 누르는 사람이 손님이다. 대신 지우는
+ * 조건을 좁게 잡는다: 옮겨간 자리 번호가 서버가 아는 것과 같을 때만.
+ * 그래야 지나가던 요청 하나가 남의 안내를 조용히 없애지 못한다.
+ */
+router.post("/:tableNumber/moved-ack", async (req, res) => {
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  const m = table.moved_to;
+  if (!m || !m.to) return res.json({ ok: true, cleared: false });
+  if (String((req.body || {}).to || "") !== String(m.to)) {
+    return res.status(409).json({ error: "moved_to_mismatch" });
+  }
+  delete table.moved_to;
+  await save();
+  res.json({ ok: true, cleared: true });
 });
 
 // Clears the registered party size — called once a table is fully settled
