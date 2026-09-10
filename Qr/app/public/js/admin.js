@@ -954,17 +954,17 @@
       rawbtTestFailed: "✘ RawBT로 보내는 데 실패했어요 — 이 기기에 RawBT 앱이 설치되어 있는지 확인해주세요.",
       alarmTitle: "🔔 주문 알림음",
       alarmHint: "새 주문이 들어올 때 나는 소리예요. 이 컴퓨터/태블릿에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
-      alarmDurationLabel: "알림 길이",
-      alarmDurOnce: "한 번만",
-      alarmDur3: "3초",
-      alarmDur5: "5초",
-      alarmDur10: "10초",
-      alarmDur30: "30초",
-      alarmDurAck: "끌 때까지",
-      alarmDurationHint: "울리는 동안 「실시간 주문」 화면 위쪽에 「🔕 알림 끄기」 버튼이 뜨고, 그걸 누르면 바로 멈춰요. 「끌 때까지」도 아무도 안 누르면 2분에서 저절로 멈춥니다.",
       alarmStopBtn: "🔕 알림 끄기",
       alarmPreviewStopBtn: "■ 정지",
-      alarmToneLabel: "벨소리",
+      alarmToneShortLabel: "짧은 알림음",
+      alarmToneLongLabel: "긴 벨소리",
+      alarmToneLongHint: "알림은 어떤 소리를 골라도 한 번만 울려요. 긴 벨소리는 그 곡 자체가 길어서, 같은 소리가 여러 번 울리는 것처럼 들리지 않아요. 울리는 동안 「실시간 주문」 화면 위쪽의 「🔕 알림 끄기」로 바로 멈출 수 있어요.",
+      alarmToneMusicbox: "오르골",
+      alarmToneChimeLong: "차임벨",
+      alarmToneMarimba: "마림바",
+      alarmToneGayageum: "가야금",
+      alarmToneDigital: "디지털",
+      alarmToneSirenLong: "긴 사이렌",
       alarmToneBeep: "기본 삐",
       alarmToneDing: "딩동",
       alarmToneBell: "종소리",
@@ -1577,17 +1577,17 @@
       rawbtTestFailed: "✘ 傳送給 RawBT 失敗 — 請確認這台裝置是否已安裝 RawBT App。",
       alarmTitle: "🔔 新訂單提示音",
       alarmHint: "新訂單進來時發出的聲音。只影響這台電腦/平板，不會影響其他人的畫面。",
-      alarmDurationLabel: "提示音長度",
-      alarmDurOnce: "只響一次",
-      alarmDur3: "3 秒",
-      alarmDur5: "5 秒",
-      alarmDur10: "10 秒",
-      alarmDur30: "30 秒",
-      alarmDurAck: "直到關閉",
-      alarmDurationHint: "響鈴期間「即時訂單」畫面上方會出現「🔕 停止提示音」按鈕，按一下就會立刻停止。選「直到關閉」時，若一直沒人按，2 分鐘後也會自動停止。",
       alarmStopBtn: "🔕 停止提示音",
       alarmPreviewStopBtn: "■ 停止",
-      alarmToneLabel: "鈴聲",
+      alarmToneShortLabel: "短提示音",
+      alarmToneLongLabel: "長鈴聲",
+      alarmToneLongHint: "不論選哪一種，提示音都只會響一次。長鈴聲本身就是一段 5~8 秒的旋律，不會像同一個聲音重複響那樣被誤認成多筆訂單。響鈴期間可用「即時訂單」畫面上方的「🔕 停止提示音」立即停止。",
+      alarmToneMusicbox: "音樂盒",
+      alarmToneChimeLong: "門鈴鐘聲",
+      alarmToneMarimba: "馬林巴",
+      alarmToneGayageum: "伽倻琴",
+      alarmToneDigital: "數位鈴聲",
+      alarmToneSirenLong: "長警報聲",
       alarmToneBeep: "基本嗶聲",
       alarmToneDing: "叮咚",
       alarmToneBell: "鐘聲",
@@ -2433,23 +2433,14 @@
   // 무슨 짓을 해도 한계가 있어서, 설정 화면에 그 안내를 같이 적어뒀다.
   const ALARM_SOUND_KEY = "hg_admin_alarmSound";
   const ALARM_VOLUME_KEY = "hg_admin_alarmVolume";
-  // 알림 길이 — 2026-09-10 사장님: "알림을 좀 더 길게 해달라는 요청이 있어".
+  // 「알림 길이」 설정은 없앴다 — 2026-09-10 사장님: "알림을 특정 시간동안
+  // 반복해달라는 게 아니야. 알림음이 길었으면 좋겠다고. 알림을 반복하면
+  // 여러 주문 들어온 것 같잖아."
   //
-  // 소리 하나를 길게 늘이지 않는다. 늘인 소리는 그냥 길기만 하고, 홀에서는
-  // 오히려 배경음처럼 들려서 더 안 들린다. 정한 시간 동안 같은 소리를 다시
-  // 울리는 쪽이 "저거 울리고 있다"로 들린다.
-  //
-  // 초 단위. 0 = 예전처럼 한 번만, -1 = 누가 끌 때까지(안전을 위해 2분에서
-  // 저절로 멈춘다 — 아무도 없는 가게에서 밤새 울리면 안 된다).
-  const ALARM_DURATION_KEY = "hg_admin_alarmDuration";
-  const ALARM_DURATION_CHOICES = [0, 3, 5, 10, 30, -1];
-  // 기본값을 0(한 번)이 아니라 5초로 둔다. 이번 요청 자체가 "짧아서 놓친다"
-  // 였으므로, 설정을 한 번도 안 건드린 기기에서도 길어져야 한다. 울리는 동안
-  // 「알림 끄기」 버튼이 떠 있어서 시끄러우면 한 번 누르면 끝난다.
-  const ALARM_DEFAULT_DURATION = 5;
-  const ALARM_ACK_CAP_MS = 2 * 60 * 1000;
-  // 소리 사이의 쉼. 붙여서 울리면 한 덩어리로 뭉쳐서 몇 번 울렸는지 모른다.
-  const ALARM_REPEAT_GAP = 0.35;
+  // 맞는 지적이다. 짧은 소리를 사이를 두고 다시 울리면, 귀는 그걸 한 번
+  // 길게 울린 알림이 아니라 여러 번 들어온 알림으로 듣는다. 그래서 반복을
+  // 걷어내고, 아래 ALARM_SOUNDS 에 처음부터 길이가 긴 벨소리(멜로디)를
+  // 넣었다. 무엇을 고르든 알림은 딱 한 번 울린다.
   const ALARM_VOLUME_MAX = 1000; // %
   const ALARM_DEFAULT_SOUND = "beep";
   const ALARM_DEFAULT_VOLUME = 100;
@@ -2495,15 +2486,70 @@
     o.type = opt.type || "sine";
     const t = ctx.currentTime + (opt.at || 0);
     const dur = opt.dur || 0.2;
-    o.frequency.setValueAtTime(opt.freq, t);
-    if (opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, t + dur);
+    // steps 를 주면 오실레이터 하나가 그 시각에 음 높이만 바꾼다 — 소리가
+    // 끊기지 않으므로 사이렌처럼 "이어지는 한 소리"로 들린다. glide 면 미끄러진다.
+    if (opt.steps && opt.steps.length) {
+      opt.steps.forEach(([at, f], i) => {
+        if (i === 0 || !opt.glide) o.frequency.setValueAtTime(f, t + at);
+        else o.frequency.exponentialRampToValueAtTime(f, t + at);
+      });
+    } else {
+      o.frequency.setValueAtTime(opt.freq, t);
+      if (opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, t + dur);
+    }
     const peak = opt.gain === undefined ? 0.3 : opt.gain;
+    const attack = opt.attack || 0.008;
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(peak, t + (opt.attack || 0.008));
+    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    if (opt.hold) {
+      // 끝까지 세기를 유지하다가 마지막에만 내린다(사이렌·긴 삐).
+      const rel = opt.release || 0.2;
+      g.gain.setValueAtTime(peak, t + Math.max(attack, dur - rel));
+    }
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(dest);
+    // 필터는 음색용이다. 사각파를 그냥 쓰면 째지는데, 위쪽을 깎으면 마림바나
+    // 오르골처럼 둥근 소리가 된다.
+    let tail = g;
+    if (opt.filter) {
+      const f = ctx.createBiquadFilter();
+      f.type = opt.filter[0];
+      f.frequency.value = opt.filter[1];
+      if (opt.filter[2]) f.Q.value = opt.filter[2];
+      g.connect(f);
+      tail = f;
+    }
+    o.connect(g);
+    tail.connect(dest);
     o.start(t);
     o.stop(t + dur + 0.02);
+  }
+
+  // 음 이름 → 진동수. 아래 멜로디를 악보처럼 읽을 수 있게 두는 것뿐이다.
+  const SEMITONE_FROM_A = { C: -9, "C#": -8, D: -7, "D#": -6, E: -5, F: -4, "F#": -3, G: -2, "G#": -1, A: 0, "A#": 1, B: 2 };
+  function hz(name) {
+    const m = /^([A-G]#?)(\d)$/.exec(name);
+    if (!m) return 440;
+    return 440 * Math.pow(2, (SEMITONE_FROM_A[m[1]] + (parseInt(m[2], 10) - 4) * 12) / 12);
+  }
+  /**
+   * 멜로디 한 줄. notes = [["G5", 시작초, 길이초, (세기)], ...]
+   *
+   * 음이 계속 바뀌고 서로 겹쳐서 쉼이 없다 — 그래서 같은 소리를 여러 번
+   * 울리는 것과 달리 "긴 벨소리 하나"로 들린다.
+   */
+  function alarmPhrase(ctx, dest, notes, opt) {
+    opt = opt || {};
+    notes.forEach((n) => {
+      alarmTone(ctx, dest, {
+        freq: hz(n[0]),
+        at: n[1],
+        dur: n[2],
+        gain: n[3] === undefined ? opt.gain : n[3],
+        type: opt.type,
+        attack: opt.attack,
+        filter: opt.filter,
+      });
+    });
   }
 
   // 벨소리 샘플. 새 소리를 넣으려면 여기에 한 줄 추가하고 admin.html의
@@ -2546,11 +2592,93 @@
       alarmTone(c, d, { freq: 987.77, dur: 0.08, type: "square", gain: 0.22 });
       alarmTone(c, d, { freq: 1318.5, dur: 0.35, at: 0.08, type: "square", gain: 0.22 });
     },
+
+    // ── 긴 벨소리 (2026-09-10) ──────────────────────────────────────────
+    // 위의 여덟은 "삐" 하고 마는 신호음이라, 홀이 시끄러우면 그 순간을
+    // 놓친다. 아래는 처음부터 5~8초짜리 곡이다. 음이 계속 바뀌고 서로
+    // 겹쳐서 쉼이 없으므로, 같은 소리를 여러 번 울리는 것과 달리 "한 번
+    // 길게 울렸다"로 들린다 — 사장님: "알림을 반복하면 여러 주문 들어온
+    // 것 같잖아."
+    //
+    // 곡은 전부 여기서 지어 쓴다. 남의 벨소리를 가져다 쓰면 저작권이
+    // 걸리고, 음원 파일을 올리면 배포와 캐시를 타서 정작 필요한 순간에
+    // 안 나는 일이 생긴다.
+
+    // 오르골 — 성글고 부드럽다. 홀이 조용한 시간대(점심 전, 마감 무렵)에.
+    musicbox: (c, d) => {
+      const N = [
+        ["G5", 0, 1.3], ["E5", 0.45, 1.3], ["C5", 0.9, 1.5],
+        ["D5", 1.55, 1.1], ["E5", 1.9, 1.1], ["G5", 2.3, 1.7],
+        ["A5", 3.0, 1.1], ["G5", 3.4, 1.1], ["E5", 3.8, 1.7],
+        ["D5", 4.5, 1.1], ["C5", 4.9, 1.3], ["D5", 5.35, 1.1],
+        ["E5", 5.75, 1.3], ["C5", 6.25, 2.0],
+      ];
+      alarmPhrase(c, d, N, { type: "sine", gain: 0.26, attack: 0.005 });
+      // 한 옥타브 위를 아주 작게 겹쳐 얹으면 오르골 특유의 반짝임이 난다.
+      alarmPhrase(c, d, N.map((n) => [n[0].replace(/\d/, (x) => +x + 1), n[1], n[2] * 0.5, 0.05]), { type: "sine" });
+    },
+
+    // 차임 — 크고 낮게 울리는 종. 주방까지 닿아야 할 때.
+    chimelong: (c, d) => {
+      alarmPhrase(c, d, [
+        ["C5", 0, 1.8], ["G5", 0.5, 1.8], ["E5", 1.0, 2.0],
+        ["A5", 1.95, 1.8], ["E5", 2.45, 1.8], ["C5", 2.95, 2.0],
+        ["G5", 3.9, 1.6], ["C6", 4.4, 2.2],
+      ], { type: "triangle", gain: 0.24, attack: 0.01 });
+    },
+
+    // 마림바 — 통통 튀는 나무 소리. 짧은 음이 촘촘해서 시끄러운 홀에서 잘 뚫는다.
+    marimba: (c, d) => {
+      const seq = ["C5","E5","G5","E5","D5","F5","A5","F5","E5","G5","C6","G5","A5","F5","E5","C5","G4","C5"];
+      alarmPhrase(
+        c, d,
+        seq.map((n, i) => [n, i * 0.24, i === seq.length - 1 ? 1.4 : 0.42]),
+        { type: "sine", gain: 0.28, attack: 0.004, filter: ["lowpass", 2600] }
+      );
+    },
+
+    // 가야금 — 5음계(도레파솔라)로 지은 우리 가락. 가게 얼굴에 맞는 소리 하나.
+    gayageum: (c, d) => {
+      alarmPhrase(c, d, [
+        ["A4", 0, 1.2], ["G4", 0.5, 1.1], ["F4", 1.0, 1.4],
+        ["D4", 1.85, 1.2], ["F4", 2.35, 1.1], ["G4", 2.85, 1.5],
+        ["A4", 3.65, 1.2], ["C5", 4.15, 1.4], ["A4", 4.85, 1.2],
+        ["G4", 5.35, 1.1], ["F4", 5.85, 2.2],
+      ], { type: "triangle", gain: 0.3, attack: 0.006, filter: ["lowpass", 2000] });
+    },
+
+    // 디지털 — 요즘 휴대폰 벨소리 같은 오름 아르페지오. 네 번 올라가고 내려앉는다.
+    digital: (c, d) => {
+      const chords = [
+        ["E5", "G#5", "B5", "E6"],
+        ["D#5", "G5", "B5", "D#6"],
+        ["C#5", "F5", "G#5", "C#6"],
+        ["B4", "D#5", "F#5", "B5"],
+      ];
+      const notes = [];
+      chords.forEach((ch, k) =>
+        ch.forEach((n, i) => notes.push([n, k * 0.9 + i * 0.18, i === 3 ? 0.55 : 0.26]))
+      );
+      notes.push(["E5", 3.75, 1.5], ["B5", 3.75, 1.5]);
+      alarmPhrase(c, d, notes, { type: "square", gain: 0.16, attack: 0.005, filter: ["lowpass", 3200] });
+    },
+
+    // 긴 사이렌 — 오실레이터 하나가 6초 동안 오르내린다. 끊기는 데가 없어서
+    // 아무리 길어도 "여러 번"으로 들릴 수가 없는 소리다.
+    sirenlong: (c, d) => {
+      const steps = [];
+      for (let i = 0; i <= 8; i++) steps.push([i * 0.7, i % 2 ? 1240 : 620]);
+      alarmTone(c, d, {
+        steps, glide: true, dur: 5.9, type: "sawtooth", gain: 0.22,
+        hold: true, release: 0.5, attack: 0.05, filter: ["lowpass", 2200],
+      });
+    },
   };
 
-  // 소리마다 실제로 나는 길이(초). 위 ALARM_SOUNDS 의 alarmTone 스케줄에서
-  // 나온 값이라, 소리를 고치면 여기도 같이 고쳐야 한다 — 짧게 잡으면 앞
-  // 소리가 채 끝나기 전에 다음 소리가 겹쳐 울린다.
+  // 소리마다 실제로 나는 길이(초). 위 ALARM_SOUNDS 의 스케줄에서 나온
+  // 값이라, 소리를 고치면 여기도 같이 고쳐야 한다. 이 값으로 「알림 끄기」
+  // 버튼을 언제 내릴지 정한다 — 짧게 잡으면 아직 울리는데 버튼이 사라지고,
+  // 길게 잡으면 끝난 소리에 버튼만 남는다.
   const ALARM_SOUND_LEN = {
     beep: 0.52,
     ding: 1.06,
@@ -2560,7 +2688,15 @@
     alarm: 1.18,
     siren: 2.1,
     arcade: 0.43,
+    musicbox: 7.5,
+    chimelong: 5.7,
+    marimba: 5.0,
+    gayageum: 7.2,
+    digital: 4.85,
+    sirenlong: 5.9,
   };
+  // 이 길이부터는 「긴 벨소리」로 친다 — 설정 화면에서 초를 적어준다.
+  const ALARM_LONG_FROM = 4;
 
   function readStoredNumber(key, fallback, min, max) {
     let v;
@@ -2587,15 +2723,6 @@
     if (p <= 50) return Math.round(p * 2);
     const v = 100 * Math.pow(ALARM_VOLUME_MAX / 100, (p - 50) / 50);
     return Math.min(ALARM_VOLUME_MAX, Math.round(v / 10) * 10);
-  }
-  function getAlarmDuration() {
-    let v;
-    try {
-      v = parseInt(localStorage.getItem(ALARM_DURATION_KEY), 10);
-    } catch (e) {
-      v = NaN;
-    }
-    return ALARM_DURATION_CHOICES.indexOf(v) >= 0 ? v : ALARM_DEFAULT_DURATION;
   }
   function getAlarmSound() {
     let v = null;
@@ -2625,16 +2752,18 @@
       const g = ctx.createGain();
       g.gain.value = vol / 100;
       g.connect(alarmLimiter);
+      alarmGains.push(g);
       ALARM_SOUNDS[id](ctx, g);
       // 소리가 끝난 뒤 노드를 떼어낸다. 안 떼면 주문 한 건마다 게인 노드가
       // 하나씩 쌓여서 하루 종일 켜두는 홀 태블릿에서 조금씩 무거워진다.
       setTimeout(() => {
+        alarmGains = alarmGains.filter((x) => x !== g);
         try {
           g.disconnect();
         } catch (e) {
           /* 이미 정리됨 */
         }
-      }, 4000);
+      }, (ALARM_SOUND_LEN[id] || 1) * 1000 + 3000);
     } catch (e) {
       /* 자동재생 차단 등 — 알림음 때문에 주문 화면이 멈추면 안 된다 */
     }
@@ -2643,20 +2772,38 @@
   // ---------- 알림 울리기 / 멈추기 ----------
   let alarmTimer = null;
   let alarmActive = false;
+  // 지금 울리고 있는 소리의 음량 노드들 — stopAlarm() 이 이걸 잡고 내린다.
+  let alarmGains = [];
 
   function stopAlarm() {
     if (alarmTimer) clearTimeout(alarmTimer);
     alarmTimer = null;
     alarmActive = false;
+    // 예약된 음까지 실제로 끊는다. 긴 벨소리는 8초짜리 곡이 통째로 미리
+    // 예약돼 있어서, 타이머만 지우면 버튼을 눌러도 소리는 끝까지 난다.
+    // 뚝 끊으면 "틱" 소리가 나므로 60ms 에 걸쳐 내린다.
+    if (alarmGains.length) {
+      const ctx = audioCtx;
+      alarmGains.forEach((g) => {
+        try {
+          const now = ctx.currentTime;
+          g.gain.cancelScheduledValues(now);
+          g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.06);
+        } catch (e) {
+          /* 이미 정리됨 */
+        }
+      });
+      alarmGains = [];
+    }
     updateAlarmUiState();
   }
 
   /**
-   * 정한 길이만큼 알림을 울린다.
+   * 알림을 울린다 — 딱 한 번. 길이는 고른 벨소리 자체의 길이다.
    *
-   * opt.duration 을 주면 그 길이로(미리듣기), 안 주면 설정값으로. 이미 울리고
-   * 있으면 멈추고 새로 시작한다 — 주문이 연달아 들어올 때 소리가 겹쳐서
-   * 뭉치면 몇 건인지도 모르고 그냥 시끄럽기만 하다.
+   * 이미 울리고 있으면 멈추고 새로 시작한다. 주문이 연달아 들어올 때 소리가
+   * 겹쳐서 뭉치면 몇 건인지도 모르고 그냥 시끄럽기만 하다.
    */
   function startAlarm(opt) {
     opt = opt || {};
@@ -2664,18 +2811,11 @@
     const id = ALARM_SOUNDS[opt.sound] ? opt.sound : getAlarmSound();
     const vol = opt.volume === undefined ? getAlarmVolume() : opt.volume;
     if (vol <= 0) return;
-    const dur = opt.duration === undefined ? getAlarmDuration() : opt.duration;
-    const endAt = Date.now() + (dur < 0 ? ALARM_ACK_CAP_MS : Math.max(0, dur) * 1000);
-    const stepMs = ((ALARM_SOUND_LEN[id] || 1) + ALARM_REPEAT_GAP) * 1000;
     alarmActive = true;
     updateAlarmUiState();
-    const tick = () => {
-      playAlarm(id, vol);
-      // 다음 소리가 끝나는 시점이 정한 길이를 넘으면 거기서 끝낸다. 0초(한
-      // 번만)일 때도 이 자리에서 한 번은 울린 뒤에 멈춘다.
-      alarmTimer = setTimeout(Date.now() + stepMs < endAt ? tick : stopAlarm, stepMs);
-    };
-    tick();
+    playAlarm(id, vol);
+    // 소리가 끝나면 「알림 끄기」 버튼도 같이 내린다.
+    alarmTimer = setTimeout(stopAlarm, (ALARM_SOUND_LEN[id] || 1) * 1000 + 120);
   }
 
   /** 울리는 동안만 「알림 끄기」 버튼을 보여준다. */
@@ -2702,11 +2842,6 @@
     alarmSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
   }
   function applyAlarmUi() {
-    const dur = getAlarmDuration();
-    $$("input[name='alarmDuration']").forEach((r) => {
-      r.checked = parseInt(r.value, 10) === dur;
-      if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
-    });
     updateAlarmUiState();
     const vol = getAlarmVolume();
     const slider = $("#alarmVolume");
@@ -2733,31 +2868,20 @@
       storeAlarmPref(ALARM_VOLUME_KEY, alarmPosToVol(pos));
       applyAlarmUi();
     });
-    // 음량은 한 번만 들려준다. 크기를 재는 중인데 5초씩 울리면 다음 칸으로
-    // 넘어갈 수가 없다.
+    // 음량은 짧은 소리로 재본다. 크기를 맞추는 중인데 8초짜리 곡이 돌면
+    // 다음 칸으로 넘어갈 수가 없다 — 여기서 듣고 싶은 건 크기지 곡이 아니다.
     $("#alarmVolume").addEventListener("change", () => {
       alarmSliding = false;
       flashAlarmSaved();
-      startAlarm({ duration: 0 });
+      startAlarm({ sound: "beep" });
     });
-    // 길이를 고를 때는 그 길이로 실제로 들려준다 — 고르는 게 길이니까.
-    $$("input[name='alarmDuration']").forEach((r) =>
-      r.addEventListener("change", () => {
-        if (!r.checked) return;
-        storeAlarmPref(ALARM_DURATION_KEY, parseInt(r.value, 10));
-        applyAlarmUi();
-        flashAlarmSaved();
-        startAlarm({ duration: previewDuration() });
-      })
-    );
     if ($("#alarmResetBtn"))
       $("#alarmResetBtn").onclick = () => {
         storeAlarmPref(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME);
         storeAlarmPref(ALARM_SOUND_KEY, ALARM_DEFAULT_SOUND);
-        storeAlarmPref(ALARM_DURATION_KEY, ALARM_DEFAULT_DURATION);
         applyAlarmUi();
         flashAlarmSaved();
-        startAlarm({ duration: 0 });
+        startAlarm();
       };
     $$("input[name='alarmTone']").forEach((r) =>
       r.addEventListener("change", () => {
@@ -2765,25 +2889,20 @@
         storeAlarmPref(ALARM_SOUND_KEY, r.value);
         applyAlarmUi();
         flashAlarmSaved();
-        // 소리를 고를 때는 한 번만. 여기서 듣고 싶은 건 음색이지 길이가 아니다.
-        startAlarm({ duration: 0 });
+        // 고른 소리를 통째로 들려준다. 긴 벨소리는 길이도 골라야 할 대상이라
+        // 앞부분만 들려주면 무엇을 고른 건지 알 수가 없다. 길면 「정지」로 끊는다.
+        startAlarm();
       })
     );
     if ($("#alarmPreviewBtn"))
       $("#alarmPreviewBtn").onclick = () => {
-        // 울리는 중이면 같은 버튼이 정지가 된다. 30초·「끌 때까지」를 고른 뒤
-        // 미리듣기를 눌렀는데 멈출 방법이 없으면 설정 화면에서 갇힌다
-        // (「알림 끄기」 버튼은 실시간 주문 화면에 있어서 여기서는 안 보인다).
+        // 울리는 중이면 같은 버튼이 정지가 된다. 8초짜리 곡을 끝까지 듣고
+        // 있을 이유는 없고, 「알림 끄기」 버튼은 실시간 주문 화면에 있어서
+        // 여기서는 안 보인다.
         if (alarmActive) stopAlarm();
-        else startAlarm({ duration: previewDuration() });
+        else startAlarm();
       };
     applyAlarmUi();
-  }
-
-  /** 미리듣기 길이 — 「끌 때까지」는 미리듣기에서만 6초로 줄인다. */
-  function previewDuration() {
-    const d = getAlarmDuration();
-    return d < 0 ? 6 : d;
   }
 
   // 2026-09-06 피드백: "저장 되었으면 저장되었다고도 알려주고. 저렇게

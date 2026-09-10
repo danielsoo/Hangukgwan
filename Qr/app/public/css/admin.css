@@ -727,9 +727,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .alarm-tone.is-on {
   background: var(--red); border-color: var(--red); color: #fff;
 }
-/* 고른 벨소리에만 ▶ 를 붙인다. 길이 알약에는 붙이지 않는다 — 거기서 ▶ 는
-   "이 길이를 재생"처럼 읽혀서 고른 값이라는 뜻이 흐려진다. */
-.alarm-tone-grid:not(.alarm-duration-grid) .alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
+.alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
+/* 긴 벨소리는 곡 길이를 알약 안에 같이 적는다 — 고르기 전에 "이게 몇 초짜리
+   인가" 를 알아야 한다. 미리듣기로 하나씩 재보게 만들 일이 아니다. */
+.alarm-tone-len {
+  font-style: normal; font-size: 12px; font-weight: 600; margin-left: 7px;
+  opacity: 0.6;
+}
+.alarm-tone.is-on .alarm-tone-len { opacity: 0.85; }
 
 .alarm-volume-row { display: flex; align-items: center; gap: 14px; }
 .alarm-volume-row input[type="range"] {

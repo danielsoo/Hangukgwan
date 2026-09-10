@@ -516,7 +516,7 @@
           <h3 data-i18n="alarmTitle">🔔 주문 알림음</h3>
           <p class="settings-hint" data-i18n="alarmHint">새 주문이 들어올 때 나는 소리예요. 이 컴퓨터/태블릿에서만 적용되고 다른 사람 화면에는 영향이 없어요.</p>
 
-          <div class="alarm-field-label" data-i18n="alarmToneLabel">벨소리</div>
+          <div class="alarm-field-label" data-i18n="alarmToneShortLabel">짧은 알림음</div>
           <div class="alarm-tone-grid">
             <label class="alarm-tone"><input type="radio" name="alarmTone" value="beep" /><span data-i18n="alarmToneBeep">기본 삐</span></label>
             <label class="alarm-tone"><input type="radio" name="alarmTone" value="ding" /><span data-i18n="alarmToneDing">딩동</span></label>
@@ -528,21 +528,20 @@
             <label class="alarm-tone"><input type="radio" name="alarmTone" value="arcade" /><span data-i18n="alarmToneArcade">코인 (게임기)</span></label>
           </div>
 
-          <!-- 알림 길이 — 2026-09-10 사장님: "알림을 좀 더 길게 해달라는
-               요청이 있어". 소리 자체를 늘이지 않고 정한 시간 동안 다시
-               울린다(admin.js startAlarm). 한 번 길게 늘인 소리는 그냥
-               길기만 하고, 반복되는 소리라야 홀에서 "저거 울리고 있다"로
-               들린다. -->
-          <div class="alarm-field-label" data-i18n="alarmDurationLabel">알림 길이</div>
-          <div class="alarm-tone-grid alarm-duration-grid">
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="0" /><span data-i18n="alarmDurOnce">한 번만</span></label>
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="3" /><span data-i18n="alarmDur3">3초</span></label>
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="5" /><span data-i18n="alarmDur5">5초</span></label>
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="10" /><span data-i18n="alarmDur10">10초</span></label>
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="30" /><span data-i18n="alarmDur30">30초</span></label>
-            <label class="alarm-tone"><input type="radio" name="alarmDuration" value="-1" /><span data-i18n="alarmDurAck">끌 때까지</span></label>
+          <!-- 긴 벨소리 — 2026-09-10 사장님: "알림음이 길었으면 좋겠다고.
+               알림을 반복하면 여러 주문 들어온 것 같잖아." 짧은 소리를 여러
+               번 울리는 대신, 처음부터 5~8초짜리 곡을 넣었다. 길이는 각 곡이
+               갖고 있는 것이라 따로 고를 것이 없다. -->
+          <div class="alarm-field-label" data-i18n="alarmToneLongLabel">긴 벨소리</div>
+          <div class="alarm-tone-grid alarm-tone-long">
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="musicbox" /><span data-i18n="alarmToneMusicbox">오르골</span><em class="alarm-tone-len">7초</em></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="chimelong" /><span data-i18n="alarmToneChimeLong">차임벨</span><em class="alarm-tone-len">6초</em></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="marimba" /><span data-i18n="alarmToneMarimba">마림바</span><em class="alarm-tone-len">5초</em></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="gayageum" /><span data-i18n="alarmToneGayageum">가야금</span><em class="alarm-tone-len">7초</em></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="digital" /><span data-i18n="alarmToneDigital">디지털</span><em class="alarm-tone-len">5초</em></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="sirenlong" /><span data-i18n="alarmToneSirenLong">긴 사이렌</span><em class="alarm-tone-len">6초</em></label>
           </div>
-          <p class="settings-hint alarm-note" data-i18n="alarmDurationHint">울리는 동안 「실시간 주문」 화면 위쪽에 「🔕 알림 끄기」 버튼이 뜨고, 그걸 누르면 바로 멈춰요. 「끌 때까지」도 아무도 안 누르면 2분에서 저절로 멈춥니다.</p>
+          <p class="settings-hint alarm-note" data-i18n="alarmToneLongHint">알림은 어떤 소리를 골라도 한 번만 울려요. 긴 벨소리는 그 곡 자체가 길어서, 같은 소리가 여러 번 울리는 것처럼 들리지 않아요. 울리는 동안 「실시간 주문」 화면 위쪽의 「🔕 알림 끄기」로 바로 멈출 수 있어요.</p>
 
           <div class="alarm-field-label" data-i18n="alarmVolumeLabel">음량</div>
           <div class="alarm-volume-row">
