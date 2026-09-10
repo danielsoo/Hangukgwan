@@ -2,7 +2,7 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { partyBreakdownOf } = require("../partySize");
+const { partyBreakdownOf, hasUnpaidOrder } = require("../partySize");
 const { channelForTable } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
 
@@ -287,8 +287,34 @@ router.delete("/:tableNumber/party-size", requireAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+// 자리를 없앤다. 세 가지는 거절한다 — 지우고 나면 되돌릴 방법이 없어서다.
+//
+// 2026-09-10: 포장 손님이 「테이블 0」 으로 들어오고 있었다. 진짜 포장
+// 카운터(is_counter)는 따로 멀쩡히 있는데, 손님에게 나가던 QR 이 번호 0 짜리
+// 일반 테이블을 가리키고 있었다. 그걸 정리하려면 그 자리를 지워야 하는데,
+// 이 라우트는 그때까지 아무것도 확인하지 않고 지웠다.
+//
+//  1. 그 자리에 아직 안 받은 돈이 있으면 안 된다. 지우는 순간 그 주문은
+//     배치도에서 열 수 없는 주문이 된다 — 결제 탭이 자리에서 주문을 찾기
+//     때문이다. 돈을 못 받는다.
+//  2. 손님이 앉아 계시면(party_size) 안 된다. 주문을 아직 안 넣었을 뿐
+//     사람은 그 자리에 있다.
+//  3. 포장 카운터는 지울 수 없다. 이건 자리가 아니라 포장 주문이 들어오는
+//     길목이고, 지우면 포장 QR 전체가 죽는다. 실수로 눌릴 자리에 있다.
+//
+// 거절할 때는 왜인지 함께 돌려준다 — 화면이 아무 말 없이 "안 지워졌네" 로
+// 끝나면 사장님은 버튼이 고장 난 줄 안다.
 router.delete("/:id", canEditTables, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  const table = store.tables.find((t) => t.id === id);
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  if (table.is_counter) return res.status(400).json({ error: "counter_not_deletable" });
+  if (hasUnpaidOrder(store, table.number)) {
+    return res.status(400).json({ error: "table_has_unpaid_orders", table_number: table.number });
+  }
+  if (table.party_size) {
+    return res.status(400).json({ error: "table_seated", table_number: table.number });
+  }
   await refreshAndSave((s) => {
     s.tables = s.tables.filter((t) => t.id !== id);
   });
@@ -332,6 +358,7 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
         <div class="card${t.is_counter ? " counter-card" : ""}">
           <div class="scan-header">掃描 點餐<br/>QR Code</div>
           <div class="table-no-badge${t.is_counter ? " counter-badge" : ""}">${t.label || t.number}</div>
+          ${!t.is_counter && t.label ? `<div class="table-no-sub">${t.number}번</div>` : ""}
           <div class="qr-wrap">${svg}</div>
           <div class="url">${url}</div>
           <div class="store-name">${storeNameZh}</div>
@@ -354,6 +381,12 @@ router.get("/qr-sheet", requireAdmin, async (req, res) => {
     page-break-inside: avoid; display:flex; flex-direction:column; align-items:center; gap:6px;
   }
   .counter-card { border-color: #16213e; border-style: solid; }
+  /* 라벨을 붙인 자리는 번호가 통째로 가려진다. 2026-09-10 에 그것 때문에
+     번호 0 짜리 일반 테이블이 「포장」 이라는 이름으로 포장 카운터 행세를
+     하고 있었고, 인쇄물에도 화면에도 0 이 어디에도 안 보여서 아무도
+     알아채지 못했다. 라벨 아래에 번호를 작게 같이 적는다 — 포장 카운터만
+     번호가 없다(그건 자리가 아니다). */
+  .table-no-sub { font-size: 12px; color: #666; margin-top: -2px; }
   .scan-header {
     font-size: 13px; font-weight: 700; color: #222; line-height: 1.3; letter-spacing: 0.5px;
   }

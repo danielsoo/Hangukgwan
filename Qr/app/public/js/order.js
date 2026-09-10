@@ -133,6 +133,15 @@
   // 테이블 / QR 코드) — set once initPartySize() learns it from the server.
   // Skips the headcount prompt entirely and defaults every item to 포장.
   let isCounterTable = false;
+  // 이 QR 이 가리키는 자리가 서버에 없다. 자리를 정리하면 이미 손님 손에
+  // 나가 있던 옛 QR 이 이 상태가 된다 — 2026-09-10 에 포장 손님이 들어오던
+  // 「테이블 0」 을 없애면서 실제로 생긴다.
+  //
+  // 이때 아무것도 안 하면 화면은 인원수부터 묻고, 손님이 답하면 그것도
+  // 실패하고, 주문을 누르면 "인원수를 먼저 입력해주세요" 가 뜬다. 손님은
+  // 자기가 뭘 잘못한 줄 알고 그 자리에서 몇 번을 다시 해본다. 그럴 바에는
+  // 첫 화면에서 분명히 말하는 게 낫다.
+  let tableGone = false;
   // Required pickup name for a counter/takeout order — collected via
   // #counterNameBackdrop (see showCounterNameModal below) instead of the
   // headcount prompt real tables get.
@@ -267,8 +276,13 @@
     return !!(ordering && ordering.enabled && !ordering.open);
   }
 
-  /** 이 화면에서 주문을 막아야 하는가. 직원은 막지 않는다. */
+  /**
+   * 이 화면에서 주문을 막아야 하는가. 직원은 막지 않는다 — 없어진 자리만
+   * 예외다. 그 자리는 직원이 대신 눌러도 서버가 받지 않으므로, 열어두면
+   * 직원만 한 번 더 헛걸음한다.
+   */
   function orderingClosed() {
+    if (tableGone) return true;
     return orderingClosedForCustomers() && !isStaffSession;
   }
 
@@ -305,6 +319,20 @@
   function applyOrderingState() {
     const closed = orderingClosed();
     const banner = $("#closedBanner");
+    // 없어진 자리는 영업시간과 무관하다 — 기다린다고 열리지 않으므로
+    // 영업시간 안내 대신 무엇을 하면 되는지만 적는다.
+    if (tableGone) {
+      banner.classList.remove("staff-mode");
+      banner.innerHTML = `<b>${t("tableGoneTitle")}</b><div class="closed-sub">${t("tableGoneSub")}</div>`;
+      banner.hidden = false;
+      for (const id of ["#addToCartBtn", "#submitOrderBtn"]) {
+        const btn = $(id);
+        if (!btn) continue;
+        btn.disabled = true;
+        btn.classList.add("is-closed");
+      }
+      return;
+    }
     // 직원에게는 잠그지 않되, 지금이 영업시간 밖이라는 것은 알려준다.
     // 안 알려주면 직원은 손님도 지금 주문할 수 있는 줄 안다.
     if (!closed && orderingClosedForCustomers() && isStaffSession) {
@@ -1826,6 +1854,13 @@
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
       const data = await res.json();
+      // 자리가 아예 없다(404). 네트워크가 끊긴 것과는 다르다 — 그건 아래
+      // catch 로 가서 예전처럼 묻는다. 여기서만 화면을 잠근다.
+      if (res.status === 404) {
+        tableGone = true;
+        applyOrderingState();
+        return;
+      }
       if (res.ok && data.realtime_channel) {
         realtimeChannelName = data.realtime_channel;
         initRealtimeTable();
