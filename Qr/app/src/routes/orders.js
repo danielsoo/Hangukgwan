@@ -39,7 +39,14 @@ const router = express.Router();
 // 합, PATCH /:id/items 주석대로 절대 바뀌지 않는 고정값)은 그대로 두고,
 // 실제로 받는 금액만 이 할인만큼 줄인다 — 아래 PATCH /:id, PATCH
 // /:id/split-pay 참고.
-const VIP_DISCOUNT_RATES = { te95: 0.95, vip9: 0.9 };
+// 실제 계산은 src/discounts.js — 돈이 걸린 산수라 라우트 밖으로 빼서
+// test/discounts.test.js 가 직접 검증한다.
+const {
+  VIP_DISCOUNT_RATES,
+  computeDiscountAmount: computeDiscountAmountPure,
+  parseManualDiscount,
+  discountTypeKey,
+} = require("../discounts");
 // 사장님 요청(2026-09-07): "결제종류 현금, 라인페이, 신용카드, 기타" — "기타"
 // 하나 추가. 이 목록은 결제 방식 팝업(직원이 직접 고르는 값)에서 허용되는
 // 값만 담는다 — "online"(손님이 직접 결제하는 온라인 결제, src/routes/
@@ -61,41 +68,10 @@ function categoryKeyOf(it) {
   return cat ? cat.key : null;
 }
 
-// 음료·주류(카테고리 key "drink" — src/seed.js 참고, 이 매장은 주류를 따로
-// 분리하지 않고 drink 안에 함께 둔다) 품목은 할인 대상에서 제외하고 나머지
-// 품목의 금액만 더한다. indexes를 주면 그 인덱스들만(부분 결제로 이번에
-// 실제 결제되는 품목만), 생략하면 order.items 전체를 대상으로 한다.
-function discountEligibleTotal(items, indexes) {
-  const idxs = indexes || items.map((_, i) => i);
-  return idxs.reduce((s, i) => {
-    const it = items[i];
-    if (!it || categoryKeyOf(it) === "drink") return s;
-    const addonsTotal = (it.selected_addons || []).reduce((a, x) => a + x.price, 0);
-    return s + (it.unit_price + addonsTotal) * it.qty;
-  }, 0);
-}
-
-function computeVipDiscount(vipDiscountType, eligibleTotal) {
-  const rate = VIP_DISCOUNT_RATES[vipDiscountType];
-  if (!rate) return 0;
-  return eligibleTotal - Math.round(eligibleTotal * rate);
-}
-
-// 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/퍼센트
-// 할인 (직접 입력)이 가능하도록 넣어줘" — 特約95折/VIP9折처럼 정해진
-// 카드가 아니라, 결제를 처리하는 직원이 그 자리에서 임의로 정하는
-// 할인이다. 위 discountEligibleTotal과 달리 음료·주류를 빼지 않는다 —
-// 特約95折/VIP9折는 그 물리 카드 프로그램 고유의 규칙(음료 제외)일 뿐,
-// 직원 재량 할인까지 같은 제한을 물려받을 이유가 없다.
-function fullEligibleTotal(items, indexes) {
-  const idxs = indexes || items.map((_, i) => i);
-  return idxs.reduce((s, i) => {
-    const it = items[i];
-    if (!it) return s;
-    const addonsTotal = (it.selected_addons || []).reduce((a, x) => a + x.price, 0);
-    return s + (it.unit_price + addonsTotal) * it.qty;
-  }, 0);
-}
+// 特約95折/VIP9折이 빼는 "음료·주류"의 판정 — 카테고리 key "drink"
+// (src/seed.js 참고, 이 매장은 주류를 따로 분리하지 않고 drink 안에 함께
+// 둔다). 실제 합산은 src/discounts.js가 이 함수를 받아서 한다.
+const isDrinkItem = (it) => categoryKeyOf(it) === "drink";
 
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을
@@ -105,52 +81,35 @@ function fullEligibleTotal(items, indexes) {
 // 결제 자체가 막히면 안 된다. 단, "할인은 현금만"은 유일하게 진짜 에러로
 // 취급한다(호출부에서 400을 돌려줌).
 //
-// vipDiscountType이 "manual"이면 特約95折/VIP9折처럼 정해진 비율표가 없고
-// 직원이 그때그때 입력한 금액/퍼센트(manualDiscountMode/manualDiscountValue)를
-// 써야 한다 — 이 값 자체는 서버가 미리 정해둔 카탈로그가 없으니 클라이언트
-// 입력을 받을 수밖에 없지만, 범위는 여기서 반드시 검증한다(퍼센트는
-// 0~100, 금액은 양수만 — 실제로 청구액을 넘는지는 아래
-// computeDiscountAmount가 eligibleTotal로 다시 한번 clamp한다).
+// 재량 할인(manualDiscountMode/manualDiscountValue)은 特約95折/VIP9折처럼
+// 정해진 비율표가 없어서 클라이언트 입력을 받을 수밖에 없지만, 범위는
+// 여기서 반드시 검증한다(퍼센트는 0~100, 금액은 양수만 — 실제로 청구액을
+// 넘는지는 아래 computeDiscountAmount가 다시 한번 clamp한다).
 function resolvePaymentFields(body) {
   const paymentMethod = PAYMENT_METHODS.includes(body.paymentMethod) ? body.paymentMethod : null;
   const rawType = body.vipDiscountType;
-  const vipDiscountType = Object.keys(VIP_DISCOUNT_RATES).includes(rawType) || rawType === "manual" ? rawType : null;
-  let manualDiscount = null;
-  if (vipDiscountType === "manual") {
-    const mode = body.manualDiscountMode === "percent" || body.manualDiscountMode === "amount" ? body.manualDiscountMode : null;
-    const value = Number(body.manualDiscountValue);
-    if (mode && Number.isFinite(value) && value > 0) {
-      manualDiscount = { mode, value: mode === "percent" ? Math.min(value, 100) : value };
-    }
-  }
+  // 特約95折/VIP9折만 여기 들어온다. 예전에는 "직접 입력"도 이 자리에
+  // "manual"이라는 값으로 들어와서(둘 중 하나만 고를 수 있었으니까) 두
+  // 할인이 같은 칸을 두고 다퉜다 — 사장님 요청(2026-09-10)으로 둘을 같이
+  // 걸 수 있게 되면서 칸을 나눴다. 옛 클라이언트가 아직 "manual"을 보내도
+  // 아래 manualDiscount 파싱이 그대로 살아 있어 결과는 같다.
+  const vipDiscountType = Object.keys(VIP_DISCOUNT_RATES).includes(rawType) ? rawType : null;
+  // 재량 할인은 이제 vipDiscountType과 무관하게 따로 온다 — 特約95折과
+  // 함께 와도 되고, 혼자 와도 된다.
+  const manualDiscount = parseManualDiscount(body);
   // 재량 할인은 결제수단 제한이 없다 — "할인은 현금만"은 特約95折/VIP9折
-  // 물리 카드 프로그램 고유 규칙이므로 그 둘일 때만 적용한다.
-  const discountRequiresCash = (vipDiscountType === "te95" || vipDiscountType === "vip9") && paymentMethod !== "cash";
-  return {
-    paymentMethod,
-    // manual인데 유효한 값이 없으면(잘못된 입력) 할인 자체를 적용하지
-    // 않는다 — 결제 자체는 그대로 진행되어야 하므로(위 주석 참고) 조용히
-    // null로 무시.
-    vipDiscountType: vipDiscountType === "manual" && !manualDiscount ? null : vipDiscountType,
-    manualDiscount,
-    discountRequiresCash,
-  };
+  // 물리 카드 프로그램 고유 규칙이므로 그 둘일 때만 적용한다. 둘을 같이
+  // 걸면 카드 쪽 규칙이 살아 있으므로 현금만 된다.
+  const discountRequiresCash = !!vipDiscountType && paymentMethod !== "cash";
+  return { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash };
 }
 
-// 特約95折/VIP9折(고정 비율표)와 manual(직원 직접 입력, 음료 제외 없음)을
-// 한 곳에서 처리 — PATCH /:id, PATCH /:id/split-pay 둘 다 이 함수만 부르면
-// 된다.
+// PATCH /:id, PATCH /:id/split-pay 둘 다 이 함수만 부르면 된다.
+// 特約95折/VIP9折 + 재량 할인의 실제 산수는 src/discounts.js 에 있다 —
+// 여기서는 "음료·주류가 무엇인가"(메뉴 카테고리를 봐야 알 수 있는, 이
+// 라우트만 아는 것)만 넣어주고 총액을 받아온다.
 function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes) {
-  if (vipDiscountType === "manual") {
-    if (!manualDiscount) return 0;
-    const eligible = fullEligibleTotal(items, indexes);
-    if (manualDiscount.mode === "percent") {
-      return Math.min(eligible, Math.round(eligible * (manualDiscount.value / 100)));
-    }
-    return Math.min(eligible, Math.round(manualDiscount.value));
-  }
-  const eligible = discountEligibleTotal(items, indexes);
-  return computeVipDiscount(vipDiscountType, eligible);
+  return computeDiscountAmountPure(vipDiscountType, manualDiscount, items, indexes, isDrinkItem).total;
 }
 
 // Straight-line distance between two lat/lng points, in meters.
@@ -293,7 +252,7 @@ router.post("/", async (req, res) => {
       // 이 품목이 주문될 당시 속해 있던 카테고리 key(예: "drink") 스냅샷 —
       // 다른 스냅샷 필드(name_zh, unit_price 등)와 같은 이유로, 나중에 메뉴
       // 카테고리가 바뀌거나 품목이 삭제돼도 흔들리지 않게 한다. VIP 카드
-      // 할인(特約95折/VIP9折, 위 discountEligibleTotal)이 음료·주류를 뺄 때
+      // 할인(特約95折/VIP9折, 위 isDrinkItem)이 음료·주류를 뺄 때
       // 이 값을 쓴다.
       category_key: (store.categories.find((c) => c.id === mi.category_id) || {}).key || null,
       note: (it.note || "").slice(0, 200),
@@ -705,9 +664,9 @@ router.patch("/:id", requireAdmin, async (req, res) => {
         if (!it.payment_method) it.payment_method = paymentMethod;
       });
     }
-    if (vipDiscountType) {
+    if (vipDiscountType || manualDiscount) {
       const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items);
-      order.discount_type = vipDiscountType;
+      order.discount_type = discountTypeKey(vipDiscountType, manualDiscount);
       order.discount_amount = (order.discount_amount || 0) + discountAmount;
     }
   }
@@ -794,7 +753,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       takeout_choice: it.takeoutOption || null,
       selected_addons: selectedAddons,
       order_type: it.orderType === "takeout" ? "takeout" : "dine_in",
-      // POST /의 같은 필드와 동일 — 위 discountEligibleTotal 참고.
+      // POST /의 같은 필드와 동일 — 위 isDrinkItem 참고.
       category_key: (store.categories.find((c) => c.id === mi.category_id) || {}).key || null,
       note: (it.note || "").slice(0, 200),
     });
@@ -880,9 +839,9 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
     if (paymentMethod) order.items[i].payment_method = paymentMethod;
   });
   if (paymentMethod) order.payment_method = paymentMethod;
-  if (vipDiscountType) {
+  if (vipDiscountType || manualDiscount) {
     const discountAmount = computeDiscountAmount(vipDiscountType, manualDiscount, order.items, selectedIdx);
-    order.discount_type = vipDiscountType;
+    order.discount_type = discountTypeKey(vipDiscountType, manualDiscount);
     order.discount_amount = (order.discount_amount || 0) + discountAmount;
   }
   order.updated_at = paidAt;

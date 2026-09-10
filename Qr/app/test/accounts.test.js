@@ -201,9 +201,22 @@ function check(name, cond, extra = "") {
   r = await request(app).post("/api/account/change-password").send({ newPassword: "whatever12345" });
   check("비로그인 비밀번호 변경 차단", r.status === 401);
 
-  out.push("\n[11] 구글 로그인 (Firebase 미설정 상태)");
+  // 이 검사는 원래 "Firebase 미설정이면 503"만 봤는데, 개발자 로컬 .env에
+  // Firebase 키가 들어 있으면(사장님 계정 구글 로그인을 실제로 붙여보려면
+  // 넣어야 한다) 503 대신 invalid_token이 나와서 실패했다. 그런데 이 파일이
+  // npm test 체인의 첫 번째라 && 로 이어진 나머지 21개 파일이 통째로 실행되지
+  // 않았다 — 테스트가 있는데 아무도 돌리지 않는 상태. 설정 여부와 무관하게
+  // 진짜 봐야 하는 것만 본다: 가짜 토큰으로는 절대 로그인되지 않는다.
+  out.push("\n[11] 구글 로그인");
+  const googleConfigured = require("../src/firebaseAdmin").isConfigured();
   r = await request(app).post("/api/account/google").send({ idToken: "fake" });
-  check("미설정이면 503", r.status === 503 && r.body.error === "google_login_not_configured", JSON.stringify(r.body));
+  check(
+    googleConfigured ? "설정돼 있으면 가짜 토큰은 거부(401)" : "미설정이면 503",
+    googleConfigured
+      ? r.status === 401 && r.body.error === "invalid_token"
+      : r.status === 503 && r.body.error === "google_login_not_configured",
+    JSON.stringify(r.body)
+  );
   r = await request(app).get("/api/account/methods");
   check("로그인 수단: 이메일 O / 구글 X", r.body.email === true && r.body.google === false, JSON.stringify(r.body));
 

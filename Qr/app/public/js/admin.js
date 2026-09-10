@@ -132,14 +132,21 @@
   // 충분하고, 포장 카운터는 라운드(주문)마다 결제가 서로 무관하므로 주문
   // id별로 따로 관리한다. 둘 다 테이블/포커스 전환 시 함께 리셋된다
   // (dismissedOrderIds/selectedPayItemKeys와 동일 조건).
-  let tableVipDiscountType = null; // "te95" | "vip9" | "manual" | null
+  let tableVipDiscountType = null; // "te95" | "vip9" | null
   let counterVipDiscountTypeByOrderId = new Map();
   // 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/퍼센트
   // 할인 (직접 입력)이 가능하도록 넣어줘" — 特約95折/VIP9折와 나란히 놓이는
-  // 세 번째 선택지(tableVipDiscountType/counterVipDiscountTypeByOrderId의
-  // 값이 "manual"일 때만 쓰인다). 定率표가 없으므로 실제 값(금액인지
-  // 퍼센트인지 + 그 수치)을 따로 들고 있어야 해서 별도 상태로 둔다 — 위
-  // 두 값과 마찬가지로 테이블은 전체 단위 하나, 포장 카운터는 주문id별로.
+  // 세 번째 버튼. 定率표가 없으므로 실제 값(금액인지 퍼센트인지 + 그 수치)을
+  // 따로 들고 있어야 해서 별도 상태로 둔다 — 위 두 값과 마찬가지로 테이블은
+  // 전체 단위 하나, 포장 카운터는 주문id별로.
+  //
+  // 사장님 요청(2026-09-10): "vip 할인 2개랑 직접 치는 걸 중복으로 할 수
+  // 있게 해줘... vip 할인을 했더니 2원의 잔돈이 있어서 재량으로 2원을
+  // 깎아주려고" — 예전에는 이 값이 있으면 위 tableVipDiscountType이
+  // "manual"이 되면서 特約95折/VIP9折가 밀려났다(한 칸을 셋이서 나눠 씀).
+  // 이제 완전히 독립이다: 特約95折/VIP9折 중 하나 + 재량 할인을 동시에
+  // 걸 수 있고, VIP 할인을 먼저 적용한 뒤 남은 금액에서 재량 할인을 뺀다
+  // (계산 순서는 src/routes/orders.js의 computeDiscountAmount가 최종 결정).
   let tableManualDiscountValue = null; // { mode: "amount" | "percent", value: number } | null
   let counterManualDiscountValueByOrderId = new Map();
 
@@ -1790,23 +1797,36 @@
   // 결제 방식 팝업(showPaymentMethodPopup)에 보여줄 한 줄 요약 — 실제
   // 반영 금액은 항상 서버가 다시 계산해서 저장하므로(아래
   // discountEligibleClientTotal 주석 참고) 이건 미리보기용. manualValue는
-  // discountType이 "manual"일 때만 쓰이며, 特約95折/VIP9折와 달리 음료·
-  // 주류를 제외하지 않으므로 그 문구를 붙이지 않는다(위
+  // manualValue는 재량 할인이 걸려 있을 때만 쓰이며, 特約95折/VIP9折와 달리
+  // 음료·주류를 제외하지 않으므로 그 문구를 붙이지 않는다(위
   // src/routes/orders.js의 fullEligibleTotal 참고).
-  function fmtPaymentSummary(total, discountType, discountAmount, manualValue) {
-    if (!discountType) {
-      return adminLang === "zh" ? `本次結帳合計 NT$${total}` : `이번 결제 합계 NT$${total}`;
+  //
+  // 사장님 요청(2026-09-10)으로 特約95折/VIP9折와 직접 입력을 같이 걸 수
+  // 있게 되면서, 둘 다 걸렸을 때는 화살표를 한 칸 더 이어 붙여 어느 쪽이
+  // 얼마를 깎았는지 순서대로 보여준다 — "VIP 할인 뒤 잔돈 2원을 재량으로
+  // 뗀다"는 게 원래 목적이라, 직원이 팝업에서 그 2원이 실제로 빠졌는지
+  // 눈으로 확인할 수 있어야 한다. breakdown은 computeCombinedDiscountClient
+  // 의 결과({ vipAmount, manualAmount, total }).
+  function fmtPaymentSummary(total, discountType, manualValue, breakdown) {
+    const zh = adminLang === "zh";
+    const head = zh ? `本次結帳合計 NT$${total}` : `이번 결제 합계 NT$${total}`;
+    if (!discountType && !manualValue) return head;
+    const steps = [];
+    if (discountType && breakdown.vipAmount) {
+      const label = VIP_DISCOUNT_LABELS[discountType] || "";
+      steps.push(
+        zh
+          ? `${label}折扣 -NT$${breakdown.vipAmount}（飲料、酒類不適用）`
+          : `${label} 할인 -NT$${breakdown.vipAmount} (음료·주류 제외)`
+      );
     }
-    const label = discountType === "manual" ? fmtManualDiscountLabel(manualValue) : VIP_DISCOUNT_LABELS[discountType] || "";
-    const payable = total - discountAmount;
-    if (discountType === "manual") {
-      return adminLang === "zh"
-        ? `本次結帳合計 NT$${total} → ${label}折扣 -NT$${discountAmount} → 實收 NT$${payable}`
-        : `이번 결제 합계 NT$${total} → ${label} 할인 -NT$${discountAmount} → 실수령 NT$${payable}`;
+    if (manualValue && breakdown.manualAmount) {
+      const label = fmtManualDiscountLabel(manualValue);
+      steps.push(zh ? `${label}折扣 -NT$${breakdown.manualAmount}` : `${label} 할인 -NT$${breakdown.manualAmount}`);
     }
-    return adminLang === "zh"
-      ? `本次結帳合計 NT$${total} → ${label}折扣 -NT$${discountAmount}（飲料、酒類不適用）→ 實收 NT$${payable}`
-      : `이번 결제 합계 NT$${total} → ${label} 할인 -NT$${discountAmount} (음료·주류 제외) → 실수령 NT$${payable}`;
+    const payable = total - breakdown.total;
+    const tail = zh ? `實收 NT$${payable}` : `실수령 NT$${payable}`;
+    return [head, ...steps, tail].join(" → ");
   }
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
@@ -3744,7 +3764,9 @@
     const body = { status };
     if (paymentMethod) body.paymentMethod = paymentMethod;
     if (vipDiscountType) body.vipDiscountType = vipDiscountType;
-    if (vipDiscountType === "manual" && manualDiscountValue) {
+    // 재량 할인은 特約95折/VIP9折와 같이 걸 수 있으므로(2026-09-10) 서로
+    // 무관하게 따로 실어 보낸다 — 서버도 따로 받는다(resolvePaymentFields).
+    if (manualDiscountValue) {
       body.manualDiscountMode = manualDiscountValue.mode;
       body.manualDiscountValue = manualDiscountValue.value;
     }
@@ -3774,7 +3796,7 @@
     const reqBody = { itemIndexes };
     if (paymentMethod) reqBody.paymentMethod = paymentMethod;
     if (vipDiscountType) reqBody.vipDiscountType = vipDiscountType;
-    if (vipDiscountType === "manual" && manualDiscountValue) {
+    if (manualDiscountValue) {
       reqBody.manualDiscountMode = manualDiscountValue.mode;
       reqBody.manualDiscountValue = manualDiscountValue.value;
     }
@@ -4923,9 +4945,17 @@
             const o = tableOrders.find((x) => x.id === orderId);
             const discountType = counterVipDiscountTypeByOrderId.get(orderId) || null;
             const manualValue = counterManualDiscountValueByOrderId.get(orderId) || null;
-            const discountAmount = discountType && o ? previewDiscountAmount(discountType, manualValue, o) : 0;
+            const breakdown =
+              o && (discountType || manualValue)
+                ? computeCombinedDiscountClient(
+                    discountType,
+                    manualValue,
+                    fullEligibleClientTotal(o),
+                    discountEligibleClientTotal(o)
+                  )
+                : { vipAmount: 0, manualAmount: 0, afterVip: 0, total: 0 };
             const method = await showPaymentMethodPopup(
-              fmtPaymentSummary(o ? o.total : 0, discountType, discountAmount, manualValue),
+              fmtPaymentSummary(o ? o.total : 0, discountType, manualValue, breakdown),
               discountRequiresCashOnly(discountType)
             );
             if (!method) return;
@@ -4975,17 +5005,15 @@
           const existing = scope === "table" ? tableManualDiscountValue : counterManualDiscountValueByOrderId.get(orderId) || null;
           const result = await promptManualDiscount(existing);
           if (result === undefined) return; // 취소/입력 오류 — 값 유지
+          // 2026-09-10부터 재량 할인은 特約95折/VIP9折 선택과 완전히 별개다
+          // — 여기서 VIP 쪽 상태를 건드리지 않는다(예전에는 "manual"로
+          // 덮어써서 VIP 할인이 꺼졌다).
           if (scope === "table") {
             tableManualDiscountValue = result;
-            tableVipDiscountType = result ? "manual" : tableVipDiscountType === "manual" ? null : tableVipDiscountType;
+          } else if (result) {
+            counterManualDiscountValueByOrderId.set(orderId, result);
           } else {
-            if (result) {
-              counterManualDiscountValueByOrderId.set(orderId, result);
-              counterVipDiscountTypeByOrderId.set(orderId, "manual");
-            } else {
-              counterManualDiscountValueByOrderId.delete(orderId);
-              if (counterVipDiscountTypeByOrderId.get(orderId) === "manual") counterVipDiscountTypeByOrderId.delete(orderId);
-            }
+            counterManualDiscountValueByOrderId.delete(orderId);
           }
           openTableDetail(tableNumber, label, focusOrderId);
         };
@@ -5075,17 +5103,14 @@
           // payment-discount-rules 참고)라 이 footer 버튼 하나에만 있다.
           const discountType = tableVipDiscountType;
           const manualValue = tableManualDiscountValue;
-          let discountAmount = 0;
-          let manualEligibleTotal = 0;
-          if (discountType === "manual") {
-            manualEligibleTotal = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
-            discountAmount = computeManualDiscountAmountClient(manualValue, manualEligibleTotal);
-          } else if (discountType) {
-            const eligible = selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0);
-            discountAmount = computeVipDiscountClient(discountType, eligible);
-          }
+          // 特約95折/VIP9折와 직접 입력을 같이 걸 수 있으므로(2026-09-10)
+          // 두 기준 금액을 모두 모아 한 번에 계산한다 — 서버(orders.js
+          // computeDiscountAmount)와 같은 순서: VIP 먼저, 남은 금액에서 재량.
+          const fullTotalAll = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
+          const vipEligibleAll = selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0);
+          const breakdown = computeCombinedDiscountClient(discountType, manualValue, fullTotalAll, vipEligibleAll);
           const method = await showPaymentMethodPopup(
-            fmtPaymentSummary(total, discountType, discountAmount, manualValue),
+            fmtPaymentSummary(total, discountType, manualValue, breakdown),
             discountRequiresCashOnly(discountType)
           );
           if (!method) return;
@@ -5102,13 +5127,15 @@
           // 의도한 총 할인액과 같아진다(特約95折/VIP9折가 원래 비율이라
           // 안전한 것과 같은 원리). 라운드가 1개뿐이면 애초에 곱절 문제가
           // 없으니 원래 값(사장님이 입력한 그대로) 그대로 보낸다.
+          //
+          // 2026-09-10: VIP 할인과 같이 걸 수 있게 되면서 환산 기준이
+          // 바뀌었다. 서버의 재량 할인 기준은 "전체 금액"이 아니라 "VIP
+          // 할인을 뺀 뒤 남은 금액"(computeDiscountAmount의 afterVip)이므로,
+          // 퍼센트로 환산할 때도 그 기준으로 나눠야 라운드별 합이 원래
+          // 의도한 할인액과 맞는다.
           const perCallManualValue =
-            discountType === "manual" &&
-            manualValue &&
-            manualValue.mode === "amount" &&
-            selections.length > 1 &&
-            manualEligibleTotal > 0
-              ? { mode: "percent", value: Math.min(100, (discountAmount / manualEligibleTotal) * 100) }
+            manualValue && manualValue.mode === "amount" && selections.length > 1 && breakdown.afterVip > 0
+              ? { mode: "percent", value: Math.min(100, (breakdown.manualAmount / breakdown.afterVip) * 100) }
               : manualValue;
           const results = await Promise.all(
             selections.map((x) => splitPayOrderItems(x.order.id, x.indexes, method, discountType, perCallManualValue))
@@ -5214,6 +5241,21 @@
     }
     return Math.min(eligibleTotal, Math.round(manualValue.value));
   }
+  // 特約95折/VIP9折 + 직접 입력을 같이 걸었을 때의 미리보기 계산 — 서버의
+  // src/routes/orders.js computeDiscountAmount와 반드시 같은 순서/기준이어야
+  // 한다(화면에 보여준 실수령액과 실제 저장액이 어긋나면 안 되므로):
+  // VIP 할인을 음료 제외 금액에 먼저 적용하고, 재량 할인은 그러고 남은
+  // 실수령액(음료 포함 전체 - VIP 할인액)에서 뺀다. 둘 중 하나만 걸려
+  // 있으면 예전 계산과 결과가 같다.
+  //
+  // fullTotal: 이번 대상 품목의 전체 금액(음료 포함)
+  // vipEligibleTotal: 그중 음료·주류를 뺀 금액
+  function computeCombinedDiscountClient(discountType, manualValue, fullTotal, vipEligibleTotal) {
+    const vipAmount = computeVipDiscountClient(discountType, vipEligibleTotal);
+    const afterVip = Math.max(0, fullTotal - vipAmount);
+    const manualAmount = computeManualDiscountAmountClient(manualValue, afterVip);
+    return { vipAmount, manualAmount, afterVip, total: vipAmount + manualAmount };
+  }
   // buildReceiptBodyHtml()의 결제용 사본(priceCopy)에서 쓰는, "이 주문의
   // 테이블/포장카운터에 지금 걸려 있는 할인"을 결제 팝업(위
   // vipDiscountActive/vipRate 등, renderTableOrderBlock 쪽)과 완전히
@@ -5226,31 +5268,38 @@
     const manualDiscountValue = isCounterOrder(o)
       ? counterManualDiscountValueByOrderId.get(o.id) || null
       : tableManualDiscountValue;
-    const isManualDiscount = vipCurrentType === "manual";
-    const active =
-      !!vipCurrentType && o.status !== "paid" && o.status !== "cancelled" && (!isManualDiscount || !!manualDiscountValue);
+    const active = (!!vipCurrentType || !!manualDiscountValue) && o.status !== "paid" && o.status !== "cancelled";
     if (!active) return { active: false };
-    if (isManualDiscount) {
-      // 재량 할인은 음료 포함 전체 금액 기준, 품목별로 나누지 않고
-      // 소계/합계에서만 반영한다(위 fullEligibleClientTotal 주석 참고).
-      const eligibleTotal = fullEligibleClientTotal(o);
-      const discountAmount = computeManualDiscountAmountClient(manualDiscountValue, eligibleTotal);
-      return { active: true, isPercent: false, discountedTotal: o.total - discountAmount };
-    }
-    const rate = VIP_DISCOUNT_RATES_CLIENT[vipCurrentType];
-    const eligibleTotal = discountEligibleClientTotal(o);
-    const discountAmount = computeVipDiscountClient(vipCurrentType, eligibleTotal);
-    return { active: true, isPercent: true, rate, discountedTotal: o.total - discountAmount };
+    const { total: discountAmount } = computeCombinedDiscountClient(
+      vipCurrentType,
+      manualDiscountValue,
+      fullEligibleClientTotal(o),
+      discountEligibleClientTotal(o)
+    );
+    // isPercent는 "품목 하나하나에 할인가를 나눠 찍을 수 있느냐"는 뜻이다.
+    // 정액 재량 할인이 섞이면 품목별로 고르게 나눌 수 없으므로(위
+    // fullEligibleClientTotal 주석), 그때는 소계/합계에서만 보여준다 —
+    // 재량 할인이 걸려 있으면 항상 false.
+    const isPercent = !!vipCurrentType && !manualDiscountValue;
+    return {
+      active: true,
+      isPercent,
+      rate: isPercent ? VIP_DISCOUNT_RATES_CLIENT[vipCurrentType] : undefined,
+      discountedTotal: o.total - discountAmount,
+    };
   }
-  // 결제 방식/재량 할인 미리보기 계산을 한 곳에서 — discountType이
-  // "manual"이면 직접 입력 값을, 아니면 特約95折/VIP9折 고정 비율을 쓴다.
-  // 실제 반영 금액은 항상 서버가 다시 계산하므로 여기 결과는 미리보기용.
+  // 결제 방식/재량 할인 미리보기 계산을 한 곳에서 — 特約95折/VIP9折와
+  // 직접 입력을 같이 걸었으면 둘을 합한 금액을 돌려준다(계산 순서는
+  // computeCombinedDiscountClient 참고). 실제 반영 금액은 항상 서버가
+  // 다시 계산하므로 여기 결과는 미리보기용.
   function previewDiscountAmount(discountType, manualValue, order, indexes) {
-    if (!discountType) return 0;
-    if (discountType === "manual") {
-      return computeManualDiscountAmountClient(manualValue, fullEligibleClientTotal(order, indexes));
-    }
-    return computeVipDiscountClient(discountType, discountEligibleClientTotal(order, indexes));
+    if (!discountType && !manualValue) return 0;
+    return computeCombinedDiscountClient(
+      discountType,
+      manualValue,
+      fullEligibleClientTotal(order, indexes),
+      discountEligibleClientTotal(order, indexes)
+    ).total;
   }
   // 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/
   // 퍼센트 할인(직접 입력)이 가능하도록 넣어줘" → 곧이어 "팝업이 내부에서
@@ -5327,18 +5376,20 @@
       input.select();
     });
   }
-  // 特約95折/VIP9折/직접입력 중 하나만 고를 수 있는 토글 버튼 — 같은 걸
-  // 다시 누르면 해제(미선택으로). scope는 클릭 핸들러가 어느 대상(테이블
-  // 전체는 "table", 포장 카운터 라운드는 그 주문 id)에 적용할지 구분하는
-  // 값으로, data 속성에 그대로 실어둔다. manualValue는 "직접입력" 버튼에
-  // 지금 값을 라벨로 보여주기 위한 것(tableManualDiscountValue 또는
-  // counterManualDiscountValueByOrderId에서 scope에 맞게 뽑아 전달).
+  // 할인 토글 버튼 세 개. 特約95折/VIP9折는 서로 배타(같은 걸 다시 누르면
+  // 해제)지만, "직접 입력"은 그 둘과 나란히 같이 켤 수 있다 — 사장님
+  // 요청(2026-09-10), 위 tableManualDiscountValue 주석 참고. scope는 클릭
+  // 핸들러가 어느 대상(테이블 전체는 "table", 포장 카운터 라운드는 그 주문
+  // id)에 적용할지 구분하는 값으로, data 속성에 그대로 실어둔다.
+  // manualValue는 "직접입력" 버튼에 지금 값을 라벨로 보여주기 위한 것
+  // (tableManualDiscountValue 또는 counterManualDiscountValueByOrderId에서
+  // scope에 맞게 뽑아 전달).
   function renderVipDiscountToggle(currentType, scope, manualValue) {
     const btn = (type) => {
       const active = currentType === type;
       return `<button type="button" data-vip-discount-btn="${type}" data-vip-discount-scope="${scope}" style="padding:6px 10px;font-size:13px;white-space:nowrap;border-radius:6px;border:1px solid ${active ? "var(--red)" : "var(--line)"};background:${active ? "var(--red)" : "#fff"};color:${active ? "#fff" : "var(--ink)"};cursor:pointer;">${VIP_DISCOUNT_LABELS[type]}</button>`;
     };
-    const manualActive = currentType === "manual";
+    const manualActive = !!manualValue;
     const manualBtn = `<button type="button" data-manual-discount-btn data-vip-discount-scope="${scope}" style="padding:6px 10px;font-size:13px;white-space:nowrap;border-radius:6px;border:1px solid ${manualActive ? "var(--red)" : "var(--line)"};background:${manualActive ? "var(--red)" : "#fff"};color:${manualActive ? "#fff" : "var(--ink)"};cursor:pointer;">${fmtManualDiscountLabel(manualValue)}</button>`;
     return `<div style="display:flex;gap:6px;flex-wrap:wrap;">${btn("te95")}${btn("vip9")}${manualBtn}</div>`;
   }
@@ -5394,23 +5445,23 @@
     const manualDiscountValue = isCounterOrder(o)
       ? counterManualDiscountValueByOrderId.get(o.id) || null
       : tableManualDiscountValue;
-    const isManualDiscount = vipCurrentType === "manual";
-    // manual인데 아직 유효한 값이 없으면(입력 취소/실패) 할인이 실제로는
-    // 꺼진 것과 같다 — resolvePaymentFields의 서버 쪽 처리와 동일하게.
+    // 2026-09-10부터 둘은 따로 켜지고 같이 켤 수도 있다 — 어느 한쪽이라도
+    // 켜져 있으면 할인이 걸린 상태다.
+    const isManualDiscount = !!manualDiscountValue;
     const vipDiscountActive =
-      !!vipCurrentType && o.status !== "paid" && o.status !== "cancelled" && (!isManualDiscount || !!manualDiscountValue);
-    const vipRate = vipDiscountActive && !isManualDiscount ? VIP_DISCOUNT_RATES_CLIENT[vipCurrentType] : null;
+      (!!vipCurrentType || isManualDiscount) && o.status !== "paid" && o.status !== "cancelled";
+    const vipRate = vipDiscountActive && vipCurrentType ? VIP_DISCOUNT_RATES_CLIENT[vipCurrentType] : null;
     // 직접 입력(재량) 할인은 음료를 빼지 않으므로(위 payment-discount-rules
     // 참고) 품목별 취소선 표시 대상에서 아예 빼지 않는다 — 대신 아래에서
     // isManualDiscount일 때 vipPriceHtml 자체를 건너뛴다(품목당 취소선은
     // 特約95折/VIP9折 전용, 재량 할인은 소계/합계에서만 보여준다 — 정액
     // 할인은 품목 하나하나에 고르게 나눌 수 없어서).
-    const vipDrinkIds = vipDiscountActive && !isManualDiscount ? drinkItemIdSet() : new Set();
+    const vipDrinkIds = vipDiscountActive && !isManualDiscount && vipRate ? drinkItemIdSet() : new Set();
     // amount(=이 줄의 원래 가격)를 받아, 할인 대상이면 "회색 취소선 원래가 +
     // 새 가격", 아니면(할인 꺼짐/드링크/이미 결제됨/재량 할인) 원래 표시
     // 그대로 반환.
     function vipPriceHtml(amount, isEligible) {
-      if (!vipDiscountActive || isManualDiscount || !isEligible) return `NT$${amount}`;
+      if (!vipDiscountActive || isManualDiscount || !vipRate || !isEligible) return `NT$${amount}`;
       const discounted = amount - Math.round(amount * (1 - vipRate));
       return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${amount}</span><span style="font-weight:700;">NT$${discounted}</span>`;
     }
@@ -5422,15 +5473,13 @@
     // VIP9折는 음료 제외 기준(discountEligibleClientTotal) — 위
     // payment-discount-rules 참고.
     const vipUnpaidIdxs = o.items.map((_, i) => i).filter((i) => !o.items[i].paid);
-    const vipEligibleTotal = vipDiscountActive
-      ? isManualDiscount
-        ? fullEligibleClientTotal(o, vipUnpaidIdxs)
-        : discountEligibleClientTotal(o, vipUnpaidIdxs)
-      : 0;
     const vipDiscountAmount = vipDiscountActive
-      ? isManualDiscount
-        ? computeManualDiscountAmountClient(manualDiscountValue, vipEligibleTotal)
-        : computeVipDiscountClient(vipCurrentType, vipEligibleTotal)
+      ? computeCombinedDiscountClient(
+          vipCurrentType,
+          manualDiscountValue,
+          fullEligibleClientTotal(o, vipUnpaidIdxs),
+          discountEligibleClientTotal(o, vipUnpaidIdxs)
+        ).total
       : 0;
     const itemLines = o.items.map((it, idx) => {
       // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면
@@ -5752,22 +5801,21 @@
     // 테이블 전체(미결제 라운드만) 기준으로 할인액을 딱 한 번 계산 — 위
     // 주석 참고. 이미 결제완료/취소된 라운드는 대상에서 빠진다(라운드별
     // 계산이던 buildOrderRoundParts의 vipDiscountActive 조건과 동일).
-    const isManualDiscount = tableVipDiscountType === "manual";
-    const tableDiscountActive = isManualDiscount ? !!tableManualDiscountValue : !!tableVipDiscountType;
-    let tableDiscountEligibleTotal = 0;
+    // 特約95折/VIP9折와 직접 입력을 같이 걸 수 있으므로(2026-09-10) 두
+    // 기준 금액을 함께 모은다 — VIP는 음료 제외, 재량은 음료 포함 전체.
+    const tableDiscountActive = !!tableVipDiscountType || !!tableManualDiscountValue;
+    let tableFullTotal = 0;
+    let tableVipEligibleTotal = 0;
     if (tableDiscountActive) {
       orders.forEach((o) => {
         if (o.status === "paid" || o.status === "cancelled") return;
         const unpaidIdxs = o.items.map((_, idx) => idx).filter((idx) => !o.items[idx].paid);
-        tableDiscountEligibleTotal += isManualDiscount
-          ? fullEligibleClientTotal(o, unpaidIdxs)
-          : discountEligibleClientTotal(o, unpaidIdxs);
+        tableFullTotal += fullEligibleClientTotal(o, unpaidIdxs);
+        tableVipEligibleTotal += discountEligibleClientTotal(o, unpaidIdxs);
       });
     }
     const tableDiscountAmount = tableDiscountActive
-      ? isManualDiscount
-        ? computeManualDiscountAmountClient(tableManualDiscountValue, tableDiscountEligibleTotal)
-        : computeVipDiscountClient(tableVipDiscountType, tableDiscountEligibleTotal)
+      ? computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, tableFullTotal, tableVipEligibleTotal).total
       : 0;
     // 토글 자체는 어느 라운드에서 만들었든 동일(테이블 전체 공유 값)하므로
     // 마지막 라운드 것을 그대로 쓴다.
@@ -9238,8 +9286,23 @@
     renderBars("#settlementOrderTypeBars", (data.order_type_breakdown || [])
       .map((e) => ({ name: orderTypeLabel(e.order_type), value: e.revenue, count: e.order_count })));
 
+    // 주문에 저장되는 키는 src/routes/orders.js의 discountTypeKey가 만든다
+    // — 한 종류면 "te95", 둘을 같이 걸었으면 "te95+manual" 처럼 붙어서 온다.
+    // vip95/vip10은 이 키가 te95/vip9로 바뀌기 전에 저장된 옛 주문용.
+    const discountPartLabel = (t) =>
+      ({
+        te95: "特約95折",
+        vip9: "VIP9折",
+        vip95: "特約95折",
+        vip10: "VIP9折",
+        manual: T("settlementDiscountManual"),
+        unspecified: T("paymentMethodUnspecified"),
+      })[t] || t;
     const discountLabel = (t) =>
-      ({ vip95: "特約95折", vip10: "VIP9折", manual: T("settlementDiscountManual"), unspecified: T("paymentMethodUnspecified") })[t] || t;
+      String(t || "unspecified")
+        .split("+")
+        .map(discountPartLabel)
+        .join(" + ");
     const discountRows = data.discount_breakdown || [];
     // 할인이 한 건도 없으면 이 묶음을 통째로 감춘다 — 빈 표는 자리만 먹는다.
     $("#settlementDiscountBlock").hidden = discountRows.length === 0;
