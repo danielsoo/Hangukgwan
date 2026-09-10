@@ -311,6 +311,13 @@ function check(name, cond, extra = "") {
       const text = await gp.locator("#movedBackdrop").innerText();
       check("어느 자리로 갔는지 알려준다", text.includes(String(K)), text);
       check("QR 을 다시 찍어도 된다고 알려준다", /QR/.test(text), text);
+      // 사장님이 정한 문구(2026-09-10): "자리 이동을 요청하신 것 같아요!
+      // 주문 링크 이동도 도와드릴께요 / 확인".
+      check("버튼은 「확인」 하나뿐이다",
+        (await gp.locator("#movedGoBtn").innerText()).trim() === "確認",
+        await gp.locator("#movedGoBtn").innerText());
+      check("고를 것이 하나뿐이다", (await gp.locator("#movedBackdrop button").count()) === 1,
+        `${await gp.locator("#movedBackdrop button").count()}`);
     }
     // 확인 하나면 새 자리로 간다.
     await gp.locator("#movedGoBtn").click();
@@ -330,6 +337,16 @@ function check(name, cond, extra = "") {
     const carried = await gp.evaluate((t) => JSON.parse(localStorage.getItem(`hgk_orders_${t}`) || "[]"), String(K));
     check("주문 내역도 새 자리로 옮겨진다", carried.includes(mine.body.id), JSON.stringify(carried));
     check("새 자리에서는 안내가 안 뜬다", await gp.locator("#movedBackdrop").isHidden());
+
+    // 옛 자리는 이제 비어 있다 — 사장님: "원래있던 건 이제 비워지는 거지."
+    {
+      const t = (await api("/api/tables")).body.find((x) => String(x.number) === String(J));
+      check("옛 자리에 인원수가 없다", !t.party_size, `${t.party_size}`);
+      const left = (await api("/api/orders")).body.filter(
+        (o) => String(o.table_number) === String(J) && o.status !== "cancelled"
+      );
+      check("옛 자리에 남은 주문이 없다", left.length === 0, JSON.stringify(left.map((o) => o.id)));
+    }
 
     // 그 자리에 새로 앉은 다른 손님에게는 뜨면 안 된다 — 그게 더 큰 혼란이다.
     const other = await browser.newContext({ viewport: { width: 420, height: 900 } });

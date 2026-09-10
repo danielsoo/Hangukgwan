@@ -192,8 +192,9 @@ body {
 .closed-banner.staff-mode { background: #34506e; }
 
 /* 자리가 옮겨졌을 때의 안내 — 확인 버튼 하나면 새 자리로 간다. */
-.moved-msg { font-size: 16px; line-height: 1.6; margin: 6px 0 18px; }
-.moved-msg b { font-size: 22px; }
+.moved-msg { font-size: 16px; line-height: 1.6; margin: 6px 0 14px; }
+/* 어느 자리로 가는지 — 버튼은 「확인」 하나뿐이라 번호는 그 위에 크게. */
+.moved-msg .moved-table { display: block; font-size: 40px; line-height: 1.2; margin-top: 8px; }
 .moved-sub { font-size: 13px; opacity: 0.75; margin: 12px 0 0; }
 .closed-banner .closed-sub {
   opacity: 0.9;

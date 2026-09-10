@@ -1556,9 +1556,14 @@
     const ids = moved.order_ids || [];
     if (!myIds.some((id) => ids.includes(id))) return false;
 
-    $("#movedMsg").innerHTML = `${t("movedFrom")} <b>${escapeHtml(moved.to)}</b>`;
+    // 사장님이 정한 문구(2026-09-10): "자리 이동을 요청하신 것 같아요!
+    // 주문 링크 이동도 도와드릴께요 / 확인". 버튼은 「확인」 하나뿐이고,
+    // 어느 자리로 가는지는 그 위에 크게 적는다 — 버튼에 번호를 넣으면
+    // 문구가 길어져서 누를 것이 하나라는 게 흐려진다.
+    $("#movedMsg").innerHTML =
+      `${t("movedFrom")}<b class="moved-table">${escapeHtml(moved.to)}</b>`;
     const btn = $("#movedGoBtn");
-    btn.textContent = `${moved.to} ${t("movedGoBtn")}`;
+    btn.textContent = t("movedGoBtn");
     btn.onclick = () => {
       // 주문 내역도 새 자리로 옮겨준다 — 안 그러면 새 자리에서 「내 주문」이
       // 비어 있고, 손님은 자기 주문이 사라진 줄 안다.
