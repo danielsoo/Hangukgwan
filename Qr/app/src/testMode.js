@@ -125,8 +125,17 @@ async function start(db, store, { save, by }) {
   return session;
 }
 
-// 스냅샷에서 빼는 것: 테스트 세션 자체(자기를 담을 수 없다)와 비밀값.
-const SNAPSHOT_SKIP = new Set([SETTING_KEY]);
+// 스냅샷에서 빼는 것: 테스트 세션 자체(자기를 담을 수 없다)와 비밀값,
+// 그리고 **지금 어느 기기가 빌지를 뽑고 있는가**(print_device).
+//
+// 2026-09-10 사장님이 여기에 걸릴 뻔했다. 테스터 모드를 켠 뒤에 인쇄 담당을
+// 가게 태블릿으로 옮겼는데, 종료하면 설정이 「켜기 전」으로 되돌아가면서
+// 담당도 같이 되돌아간다 — 프린터에 닿지도 못하는 기기로. 그러면 그 순간부터
+// 자동 인쇄가 조용히 멈추고, 아무도 이유를 모른다.
+//
+// print_device 는 「가게를 어떻게 운영하는가」가 아니라 「지금 어느 기기가
+// 켜져 있는가」다. 테스트로 만든 값이 아니므로 되돌릴 대상도 아니다.
+const SNAPSHOT_SKIP = new Set([SETTING_KEY, "print_device"]);
 
 function snapshotSettings(store) {
   const out = {};

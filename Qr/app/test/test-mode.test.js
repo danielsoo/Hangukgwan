@@ -124,6 +124,9 @@ function device() {
   out.push("\n[2] 켜기 — 켠 기기만 테스트가 된다");
   let session;
   {
+    // 켜기 전에 「엉뚱한 기기」가 인쇄 담당을 쥐고 있는 상태를 만들어 둔다.
+    // 아래 [11] 이 이걸 쓴다 — 종료가 이 값을 되돌려 놓으면 안 된다.
+    await boss.put("/api/settings/print-device").send({ id: "dev-off-lan", name: "사장님 폰" });
     const r = await boss.post("/api/test-mode/start").send({});
     check("사장이 켤 수 있다", r.status === 200 && r.body.active === true, JSON.stringify(r.body));
     check("켠 기기는 바로 참여 상태", r.body.thisDevice === true);
@@ -266,6 +269,8 @@ function device() {
 
   out.push("\n[9] ★★ 종료 — 테스트만 사라지고 진짜는 남는다");
   {
+    // 테스트 중에 인쇄 담당을 가게 태블릿으로 옮긴다. [11] 이 이 값을 본다.
+    await boss.put("/api/settings/print-device").send({ id: "dev-tablet", name: "가게 태블릿" });
     const r = await boss.post("/api/test-mode/end").send({});
     check("종료된다", r.status === 200 && r.body.ok === true, JSON.stringify(r.body));
     check("테스트 주문이 지워졌다", r.body.deleted.orders >= 3, JSON.stringify(r.body.deleted));
@@ -296,7 +301,21 @@ function device() {
     check("상태가 꺼짐으로 보인다", s.body.active === false, JSON.stringify(s.body));
   }
 
-  out.push("\n[11] 권한");
+  out.push("\n[11] 종료해도 인쇄 담당은 되돌리지 않는다");
+  {
+    // 2026-09-10 사장님이 여기에 걸릴 뻔했다. 테스터 모드를 켠 뒤 인쇄 담당을
+    // 가게 태블릿으로 옮겼는데, 종료하면 설정이 「켜기 전」으로 돌아가면서
+    // 담당도 프린터에 닿지 못하는 기기로 같이 돌아간다. 그 순간부터 자동
+    // 인쇄가 조용히 멈추고 아무도 이유를 모른다.
+    //
+    // print_device 는 「가게를 어떻게 운영하는가」가 아니라 「지금 어느 기기가
+    // 켜져 있는가」다. 테스트로 만든 값이 아니므로 되돌릴 대상이 아니다.
+    const pd = store.settings.print_device || {};
+    check("★ 테스트 중에 옮긴 담당이 그대로다", pd.id === "dev-tablet", JSON.stringify(pd));
+    check("★ 켜기 전 담당으로 돌아가지 않았다", pd.id !== "dev-off-lan", JSON.stringify(pd));
+  }
+
+  out.push("\n[12] 권한");
   {
     const anon = device();
     const r = await anon.post("/api/test-mode/start").send({});
