@@ -10,7 +10,10 @@ const CATEGORIES = [
   { key: "noodle", name_zh: "麵類", name_ko: "면류", name_en: "Noodles", sort_order: 2 },
   { key: "hotpot", name_zh: "鍋類", name_ko: "찌개류", name_en: "Hot Pots & Soups", sort_order: 3 },
   { key: "bbq", name_zh: "烤肉類", name_ko: "구이류", name_en: "Korean BBQ", sort_order: 4 },
-  { key: "other", name_zh: "其他", name_ko: "기타", name_en: "Other Dishes", sort_order: 5 },
+  // 2026-09-10: 기타(其他)에 있던 71~83번이 전부 이 카테고리로 옮겨가면서
+  // 기타는 남는 항목이 없어 없앴다 — 이미 살아 있는 데이터베이스 쪽은
+  // src/migrations/2026-09-10-traditional-category.js가 같은 일을 한다.
+  { key: "traditional", name_zh: "經典韓式料理", name_ko: "전통한식요리", name_en: "Classic Korean Dishes", sort_order: 5 },
   { key: "drink", name_zh: "飲料", name_ko: "음료", name_en: "Drinks", sort_order: 6 },
 ];
 
@@ -60,7 +63,7 @@ const ITEMS = {
     { code: "53", name_zh: "雞排拌飯(加飯)", name_ko: "볶음밥 추가", name_en: "Fried Rice Add-on (for 辣炒雞排)", price: 80, spice_options: "基本,小辣" },
     { code: "54", name_zh: "生烤五花肉", name_ko: "삼겹살", name_en: "Grilled Pork Belly", price: 310, price_note: "首次點餐低消2份 / min 2 on 1st order", min_first_order_qty: 2 },
   ],
-  other: [
+  traditional: [
     // takeout_options: 사장님 메모(2026-09-07) — 부대찌개 포장주문은 조리
     // 여부를 물어야 한다(不煮外帶=조리하지 않은 포장 / 煮熟外帶=조리한
     // 포장). 매장 식사에는 없는 선택이라 order.js가 포장(外帶) 선택 시에만

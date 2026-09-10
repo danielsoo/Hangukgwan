@@ -15,6 +15,7 @@ const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-o
 const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
 const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
 const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-hours");
+const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
 
 const app = express();
 
@@ -143,6 +144,9 @@ app.use(async (req, res, next) => {
       // 영업시간 밖에는 손님이 QR 로 주문하지 못하게 — 직원은 그대로 된다
       // (src/openHours.js).
       await applyOrderHours20260910(store, { save });
+      // 구이류와 기타 사이에 "전통한식요리 經典韓式料理" — 71~83번이 그리로
+      // 옮겨가고 빈 기타는 없어진다.
+      await applyTraditionalCategory20260910(store, { save, nextId });
       migratedOnce = true;
     }
     next();
