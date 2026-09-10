@@ -522,8 +522,8 @@
       addTableToZoneEmpty: "배치할 수 있는 테이블이 없습니다.<br/>위에서 새 테이블을 먼저 추가해주세요.",
       addTableToZoneCancel: "취소",
       addTableToZoneConfirm: "확인",
-      settingsCatDisplay: "화면",
-      settingsCatDisplaySub: "글자 크기",
+      settingsCatDisplay: "화면 · 소리",
+      settingsCatDisplaySub: "글자 크기 · 알림음",
       settingsCatStore: "매장 정보",
       settingsCatStoreSub: "사진 · 로고 · 공지 · 상호/주소",
       settingsCatOrder: "주문 규칙",
@@ -824,6 +824,25 @@
       testRawbtBtn: "🖨️ RawBT 테스트 인쇄",
       rawbtTestSent: "RawBT로 테스트 인쇄를 보냈어요. 확인창 없이 조용히 인쇄됐는지 프린터를 확인해보세요 (이 기기에 RawBT 앱이 설치·설정되어 있어야 해요).",
       rawbtTestFailed: "✘ RawBT로 보내는 데 실패했어요 — 이 기기에 RawBT 앱이 설치되어 있는지 확인해주세요.",
+      alarmTitle: "🔔 주문 알림음",
+      alarmHint: "새 주문이 들어올 때 나는 소리예요. 이 컴퓨터/태블릿에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
+      alarmToneLabel: "벨소리",
+      alarmToneBeep: "기본 삐",
+      alarmToneDing: "딩동",
+      alarmToneBell: "종소리",
+      alarmToneChime: "차임 (도미솔)",
+      alarmToneTriple: "세 번 울림",
+      alarmToneAlarm: "자명종",
+      alarmToneSiren: "사이렌",
+      alarmToneArcade: "코인 (게임기)",
+      alarmVolumeLabel: "음량",
+      alarmVolNormalMark: "100% 기본",
+      alarmVolMaxMark: "1000% 최대",
+      alarmPreviewBtn: "▶ 미리듣기",
+      alarmResetBtn: "기본값",
+      alarmSavedMsg: "✔ 저장됨",
+      alarmDeviceHint: "기기 자체 볼륨이 꺼져 있으면 여기서 아무리 올려도 소리가 안 나요. 태블릿/컴퓨터 볼륨도 함께 올려주세요.",
+      alarmLoudWarn: "⚠️ 200%부터는 기기 스피커 한계를 넘어 증폭합니다. 소리가 거칠게 들릴 수 있어요.",
       uiFontScaleTitle: "화면 글자 크기",
       uiFontScaleHint: "이 관리자 화면 전체의 글자 크기를 조절해요. 이 컴퓨터/브라우저에서만 적용되고 다른 사람 화면에는 영향이 없어요.",
       uiFontScaleResetBtn: "기본값",
@@ -1087,8 +1106,8 @@
       addTableToZoneEmpty: "沒有可配置的桌號。<br/>請先在上方新增桌號。",
       addTableToZoneCancel: "取消",
       addTableToZoneConfirm: "確定",
-      settingsCatDisplay: "顯示",
-      settingsCatDisplaySub: "字級",
+      settingsCatDisplay: "顯示 · 聲音",
+      settingsCatDisplaySub: "字級 · 提示音",
       settingsCatStore: "店家資訊",
       settingsCatStoreSub: "照片 · Logo · 公告 · 店名/地址",
       settingsCatOrder: "點餐規則",
@@ -1389,6 +1408,25 @@
       testRawbtBtn: "🖨️ RawBT 測試列印",
       rawbtTestSent: "已透過 RawBT 送出測試列印，請確認印表機是否已不跳確認視窗直接列印（此裝置需已安裝並設定好 RawBT App）。",
       rawbtTestFailed: "✘ 傳送給 RawBT 失敗 — 請確認這台裝置是否已安裝 RawBT App。",
+      alarmTitle: "🔔 新訂單提示音",
+      alarmHint: "新訂單進來時發出的聲音。只影響這台電腦/平板，不會影響其他人的畫面。",
+      alarmToneLabel: "鈴聲",
+      alarmToneBeep: "基本嗶聲",
+      alarmToneDing: "叮咚",
+      alarmToneBell: "鐘聲",
+      alarmToneChime: "上行三音",
+      alarmToneTriple: "連響三聲",
+      alarmToneAlarm: "鬧鐘",
+      alarmToneSiren: "警報聲",
+      alarmToneArcade: "投幣音",
+      alarmVolumeLabel: "音量",
+      alarmVolNormalMark: "100% 預設",
+      alarmVolMaxMark: "1000% 最大",
+      alarmPreviewBtn: "▶ 試聽",
+      alarmResetBtn: "預設值",
+      alarmSavedMsg: "✔ 已儲存",
+      alarmDeviceHint: "如果裝置本身的音量是關閉的，在這裡調再大也不會有聲音。請一併調高平板/電腦的音量。",
+      alarmLoudWarn: "⚠️ 超過 200% 會超出裝置喇叭的極限進行放大，聲音可能會變得粗糙。",
       uiFontScaleTitle: "畫面文字大小",
       uiFontScaleHint: "調整整個管理後台畫面的文字大小。只影響這台電腦/瀏覽器，不會影響其他人的畫面。",
       uiFontScaleResetBtn: "預設值",
@@ -2105,22 +2143,254 @@
     }
   }
 
-  function playBeep() {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = "sine";
-      o.frequency.value = 880;
-      g.gain.setValueAtTime(0.0001, ctx.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
-      o.connect(g).connect(ctx.destination);
-      o.start();
-      o.stop(ctx.currentTime + 0.55);
-    } catch (e) {
-      /* ignore autoplay restrictions */
+  // ---------- 주문 알림음 (벨소리 · 음량) ----------
+  // 2026-09-10 사장님: "주문 들어올 때 알람이 오는데 그걸 설정에서 소리
+  // 크기랑 벨소리를 추가할 수 있게 해줘. 샘플로 너가 몇개 넣어주고 소리는
+  // 엄청 크게까지 될 수 있게 해줘."
+  //
+  // 소리를 mp3 파일로 두지 않고 Web Audio로 그 자리에서 만든다. 음원을
+  // 올리면 빌드에 따라붙고 캐시를 타는데, 알림음은 "홀이 시끄러운 순간에
+  // 반드시 나야 하는" 소리라 네트워크가 한 번이라도 끼면 안 된다. 만들어
+  // 쓰면 용량 0에 오프라인에서도 똑같이 난다.
+  //
+  // "엄청 크게": 브라우저 음량의 기본 상한(1.0)을 넘겨 최대 10배까지
+  // 증폭한다. 그냥 곱하기만 하면 파형이 잘려 찢어지는 소리가 나므로
+  // 마지막에 리미터(DynamicsCompressorNode)를 한 겹 두고 통과시킨다 —
+  // 크기는 올라가되 깨지지는 않는다. 다만 기기 자체 볼륨이 낮으면 여기서
+  // 무슨 짓을 해도 한계가 있어서, 설정 화면에 그 안내를 같이 적어뒀다.
+  const ALARM_SOUND_KEY = "hg_admin_alarmSound";
+  const ALARM_VOLUME_KEY = "hg_admin_alarmVolume";
+  const ALARM_VOLUME_MAX = 1000; // %
+  const ALARM_DEFAULT_SOUND = "beep";
+  const ALARM_DEFAULT_VOLUME = 100;
+  // 이 값을 넘어가면 기기 스피커가 낼 수 있는 크기를 넘어 증폭하는
+  // 구간이라, 설정 화면에서 경고 문구를 띄운다.
+  const ALARM_LOUD_WARN_AT = 200;
+
+  let audioCtx = null;
+  let alarmLimiter = null;
+
+  // AudioContext는 한 번만 만들어 재사용한다 — 예전 playBeep()은 주문이
+  // 들어올 때마다 새로 만들었는데, 브라우저는 탭당 열 수 있는 컨텍스트
+  // 개수가 정해져 있어서(크롬 기준 6개) 바쁜 날 주문이 몇 건 연달아 들어오면
+  // 그 뒤로는 알림음이 통째로 안 나게 된다.
+  function alarmAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+      alarmLimiter = audioCtx.createDynamicsCompressor();
+      alarmLimiter.threshold.value = -3;
+      alarmLimiter.knee.value = 0;
+      alarmLimiter.ratio.value = 20;
+      alarmLimiter.attack.value = 0.002;
+      alarmLimiter.release.value = 0.12;
+      alarmLimiter.connect(audioCtx.destination);
     }
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    return audioCtx;
+  }
+  // 브라우저는 사람이 화면을 한 번이라도 건드리기 전에는 소리를 막는다.
+  // 아침에 태블릿만 켜두고 아무도 안 눌렀는데 첫 주문이 들어오면 알림음이
+  // 아예 안 나므로, 첫 클릭/터치/키 입력에서 미리 깨워둔다.
+  ["pointerdown", "keydown", "touchstart"].forEach((ev) =>
+    document.addEventListener(ev, () => alarmAudio(), { once: true, passive: true })
+  );
+
+  // 음 하나. dur 안에서 소리가 붙었다 사라진다(exponentialRamp는 0을 못 받아서
+  // 0.0001로 대신한다 — 사람 귀에는 무음).
+  function alarmTone(ctx, dest, opt) {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = opt.type || "sine";
+    const t = ctx.currentTime + (opt.at || 0);
+    const dur = opt.dur || 0.2;
+    o.frequency.setValueAtTime(opt.freq, t);
+    if (opt.to) o.frequency.exponentialRampToValueAtTime(opt.to, t + dur);
+    const peak = opt.gain === undefined ? 0.3 : opt.gain;
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + (opt.attack || 0.008));
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(dest);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  // 벨소리 샘플. 새 소리를 넣으려면 여기에 한 줄 추가하고 admin.html의
+  // .alarm-tone-grid에 같은 value로 라디오 하나, i18n에 이름만 넣으면 된다.
+  const ALARM_SOUNDS = {
+    // 기존에 쓰던 소리 그대로 — 설정을 안 건드린 매장은 소리가 안 바뀐다.
+    beep: (c, d) => {
+      alarmTone(c, d, { freq: 880, dur: 0.5, attack: 0.02 });
+    },
+    ding: (c, d) => {
+      alarmTone(c, d, { freq: 987.77, dur: 0.45, type: "triangle" });
+      alarmTone(c, d, { freq: 783.99, dur: 0.9, at: 0.16, type: "triangle" });
+    },
+    // 종은 배음이 정수배가 아니다(2.76, 5.4) — 그래서 "딩"이 아니라 "뎅"으로 들린다.
+    bell: (c, d) => {
+      [1, 2.76, 5.4].forEach((m, i) =>
+        alarmTone(c, d, { freq: 523.25 * m, dur: 1.6 - i * 0.35, gain: 0.3 / (i + 1.4) })
+      );
+    },
+    chime: (c, d) => {
+      [523.25, 659.25, 783.99].forEach((f, i) =>
+        alarmTone(c, d, { freq: f, dur: 0.5, at: i * 0.14, type: "triangle", gain: 0.28 })
+      );
+    },
+    triple: (c, d) => {
+      for (let i = 0; i < 3; i++)
+        alarmTone(c, d, { freq: 1046.5, dur: 0.12, at: i * 0.2, type: "square", gain: 0.22 });
+    },
+    alarm: (c, d) => {
+      for (let i = 0; i < 8; i++)
+        alarmTone(c, d, { freq: i % 2 ? 784 : 1046.5, dur: 0.13, at: i * 0.15, type: "square", gain: 0.22 });
+    },
+    siren: (c, d) => {
+      for (let i = 0; i < 3; i++) {
+        alarmTone(c, d, { freq: 620, to: 1240, dur: 0.35, at: i * 0.7, type: "sawtooth", gain: 0.26 });
+        alarmTone(c, d, { freq: 1240, to: 620, dur: 0.35, at: i * 0.7 + 0.35, type: "sawtooth", gain: 0.26 });
+      }
+    },
+    arcade: (c, d) => {
+      alarmTone(c, d, { freq: 987.77, dur: 0.08, type: "square", gain: 0.22 });
+      alarmTone(c, d, { freq: 1318.5, dur: 0.35, at: 0.08, type: "square", gain: 0.22 });
+    },
+  };
+
+  function readStoredNumber(key, fallback, min, max) {
+    let v;
+    try {
+      v = parseInt(localStorage.getItem(key), 10);
+    } catch (e) {
+      v = NaN;
+    }
+    if (!Number.isFinite(v)) return fallback;
+    return Math.min(max, Math.max(min, v));
+  }
+  function getAlarmVolume() {
+    return readStoredNumber(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME, 0, ALARM_VOLUME_MAX);
+  }
+  // 슬라이더 손잡이 위치(0~100)와 실제 음량(%)의 환산. 그냥 0~1000%를 자로
+  // 재듯 늘어놓으면 평소에 쓰는 100% 근처가 맨 왼쪽 10% 안에 다 몰려서
+  // 손가락으로는 조절이 안 된다. 그래서 왼쪽 절반에 0~100%를, 오른쪽 절반에
+  // 100~1000%를 로그로 펼쳐 놓았다 — 가운데가 정확히 기본값(100%)이다.
+  function alarmVolToPos(v) {
+    if (v <= 100) return Math.round(v / 2);
+    return Math.round(50 + (50 * Math.log10(v / 100)) / Math.log10(ALARM_VOLUME_MAX / 100));
+  }
+  function alarmPosToVol(p) {
+    if (p <= 50) return Math.round(p * 2);
+    const v = 100 * Math.pow(ALARM_VOLUME_MAX / 100, (p - 50) / 50);
+    return Math.min(ALARM_VOLUME_MAX, Math.round(v / 10) * 10);
+  }
+  function getAlarmSound() {
+    let v = null;
+    try {
+      v = localStorage.getItem(ALARM_SOUND_KEY);
+    } catch (e) {
+      /* private browsing */
+    }
+    return ALARM_SOUNDS[v] ? v : ALARM_DEFAULT_SOUND;
+  }
+  function storeAlarmPref(key, value) {
+    try {
+      localStorage.setItem(key, String(value));
+    } catch (e) {
+      /* 저장이 막혀도 이번 화면에서는 그대로 적용된다 — 다음 새로고침에만 잊힌다 */
+    }
+  }
+
+  function playAlarm(soundId, volumePercent) {
+    try {
+      const ctx = alarmAudio();
+      if (!ctx) return;
+      const id = ALARM_SOUNDS[soundId] ? soundId : getAlarmSound();
+      const vol = volumePercent === undefined ? getAlarmVolume() : volumePercent;
+      if (vol <= 0) return;
+      const g = ctx.createGain();
+      g.gain.value = vol / 100;
+      g.connect(alarmLimiter);
+      ALARM_SOUNDS[id](ctx, g);
+      // 소리가 끝난 뒤 노드를 떼어낸다. 안 떼면 주문 한 건마다 게인 노드가
+      // 하나씩 쌓여서 하루 종일 켜두는 홀 태블릿에서 조금씩 무거워진다.
+      setTimeout(() => {
+        try {
+          g.disconnect();
+        } catch (e) {
+          /* 이미 정리됨 */
+        }
+      }, 4000);
+    } catch (e) {
+      /* 자동재생 차단 등 — 알림음 때문에 주문 화면이 멈추면 안 된다 */
+    }
+  }
+
+  // 기존 호출부(신규 주문 감지)는 그대로 playBeep()을 부른다.
+  function playBeep() {
+    playAlarm();
+  }
+
+  // ---------- 알림음 설정 화면 ----------
+  let alarmSavedMsgTimer = null;
+  let alarmSliding = false;
+  function flashAlarmSaved() {
+    const el = $("#alarmSavedMsg");
+    if (!el) return;
+    el.hidden = false;
+    clearTimeout(alarmSavedMsgTimer);
+    alarmSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
+  }
+  function applyAlarmUi() {
+    const vol = getAlarmVolume();
+    const slider = $("#alarmVolume");
+    // 손잡이를 끌고 있는 중이라면 위치를 다시 써넣지 않는다 — 반올림 때문에
+    // 손가락 밑에서 손잡이가 되튀는 것처럼 보인다.
+    if (slider && !alarmSliding) slider.value = String(alarmVolToPos(vol));
+    const label = $("#alarmVolumeValue");
+    if (label) label.textContent = vol + "%";
+    const warn = $("#alarmLoudWarn");
+    if (warn) warn.hidden = vol < ALARM_LOUD_WARN_AT;
+    const sound = getAlarmSound();
+    $$("input[name='alarmTone']").forEach((r) => {
+      r.checked = r.value === sound;
+      if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
+    });
+  }
+  if ($("#alarmVolume")) {
+    // 슬라이더를 끄는 동안에는 숫자만 따라 움직이고(소리는 안 낸다),
+    // 손을 뗀 순간 그 크기로 한 번 들려준다 — 끄는 내내 소리가 나면
+    // 시끄럽기만 하고 정작 어느 크기인지 판단이 안 된다.
+    $("#alarmVolume").addEventListener("input", (e) => {
+      alarmSliding = true;
+      const pos = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
+      storeAlarmPref(ALARM_VOLUME_KEY, alarmPosToVol(pos));
+      applyAlarmUi();
+    });
+    $("#alarmVolume").addEventListener("change", () => {
+      alarmSliding = false;
+      flashAlarmSaved();
+      playAlarm();
+    });
+    if ($("#alarmResetBtn"))
+      $("#alarmResetBtn").onclick = () => {
+        storeAlarmPref(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME);
+        storeAlarmPref(ALARM_SOUND_KEY, ALARM_DEFAULT_SOUND);
+        applyAlarmUi();
+        flashAlarmSaved();
+        playAlarm();
+      };
+    $$("input[name='alarmTone']").forEach((r) =>
+      r.addEventListener("change", () => {
+        if (!r.checked) return;
+        storeAlarmPref(ALARM_SOUND_KEY, r.value);
+        applyAlarmUi();
+        flashAlarmSaved();
+        playAlarm(); // 고른 소리를 바로 들려준다
+      })
+    );
+    if ($("#alarmPreviewBtn")) $("#alarmPreviewBtn").onclick = () => playAlarm();
+    applyAlarmUi();
   }
 
   // 2026-09-06 피드백: "저장 되었으면 저장되었다고도 알려주고. 저렇게

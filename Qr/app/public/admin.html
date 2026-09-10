@@ -417,7 +417,7 @@
 
       <div class="settings-shell">
         <nav class="settings-nav">
-          <button data-category="display" class="settings-nav-btn active"><span class="nav-name" data-i18n="settingsCatDisplay">화면</span><span class="nav-sub" data-i18n="settingsCatDisplaySub">글자 크기</span></button>
+          <button data-category="display" class="settings-nav-btn active"><span class="nav-name" data-i18n="settingsCatDisplay">화면 · 소리</span><span class="nav-sub" data-i18n="settingsCatDisplaySub">글자 크기 · 알림음</span></button>
           <button data-category="store" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatStore">매장 정보</span><span class="nav-sub" data-i18n="settingsCatStoreSub">사진 · 로고 · 공지 · 상호/주소</span></button>
           <button data-category="order" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatOrder">주문 규칙</span><span class="nav-sub" data-i18n="settingsCatOrderSub">주문 받는 시간 · 위치 제한</span></button>
           <button data-category="account" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatAccount">계정</span><span class="nav-sub" data-i18n="settingsCatAccountSub">비밀번호 · 직원 권한</span></button>
@@ -438,6 +438,46 @@
             <button type="button" id="uiFontScaleIncBtn" class="ui-font-scale-btn">＋</button>
             <button type="button" id="uiFontScaleResetBtn" class="ui-font-scale-reset" data-i18n="uiFontScaleResetBtn">기본값</button>
           </div>
+        </div>
+        <!-- 주문 알림음 — 2026-09-10 사장님: "주문 들어올 때 알람이 오는데
+             그걸 설정에서 소리 크기랑 벨소리를 추가할 수 있게 해줘 … 소리는 엄청
+             크게까지 될 수 있게" — 소리 자체는 admin.js의 ALARM_SOUNDS가
+             그 자리에서 만들어 쓴다(음원 파일 없음). -->
+        <div class="settings-card" id="alarmSoundCard">
+          <h3 data-i18n="alarmTitle">🔔 주문 알림음</h3>
+          <p class="settings-hint" data-i18n="alarmHint">새 주문이 들어올 때 나는 소리예요. 이 컴퓨터/태블릿에서만 적용되고 다른 사람 화면에는 영향이 없어요.</p>
+
+          <div class="alarm-field-label" data-i18n="alarmToneLabel">벨소리</div>
+          <div class="alarm-tone-grid">
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="beep" /><span data-i18n="alarmToneBeep">기본 삐</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="ding" /><span data-i18n="alarmToneDing">딩동</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="bell" /><span data-i18n="alarmToneBell">종소리</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="chime" /><span data-i18n="alarmToneChime">차임 (도미솔)</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="triple" /><span data-i18n="alarmToneTriple">세 번 울림</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="alarm" /><span data-i18n="alarmToneAlarm">자명종</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="siren" /><span data-i18n="alarmToneSiren">사이렌</span></label>
+            <label class="alarm-tone"><input type="radio" name="alarmTone" value="arcade" /><span data-i18n="alarmToneArcade">코인 (게임기)</span></label>
+          </div>
+
+          <div class="alarm-field-label" data-i18n="alarmVolumeLabel">음량</div>
+          <div class="alarm-volume-row">
+            <input type="range" id="alarmVolume" min="0" max="100" step="1" value="50" />
+            <span id="alarmVolumeValue" class="alarm-volume-value">100%</span>
+          </div>
+          <div class="alarm-volume-marks">
+            <span>0%</span>
+            <span data-i18n="alarmVolNormalMark">100% 기본</span>
+            <span data-i18n="alarmVolMaxMark">1000% 최대</span>
+          </div>
+
+          <div class="alarm-actions">
+            <button type="button" id="alarmPreviewBtn" class="alarm-preview-btn" data-i18n="alarmPreviewBtn">▶ 미리듣기</button>
+            <button type="button" id="alarmResetBtn" class="alarm-reset-btn" data-i18n="alarmResetBtn">기본값</button>
+            <span class="save-msg alarm-saved-msg" id="alarmSavedMsg" hidden data-i18n="alarmSavedMsg">✔ 저장됨</span>
+          </div>
+
+          <p class="settings-hint alarm-note" data-i18n="alarmDeviceHint">기기 자체 볼륨이 꺼져 있으면 여기서 아무리 올려도 소리가 안 나요. 태블릿/컴퓨터 볼륨도 함께 올려주세요.</p>
+          <p class="settings-hint alarm-note alarm-loud-warn" id="alarmLoudWarn" hidden data-i18n="alarmLoudWarn">⚠️ 200%부터는 기기 스피커 한계를 넘어 증폭합니다. 소리가 거칠게 들릴 수 있어요.</p>
         </div>
         </div>
 

@@ -696,6 +696,56 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .ui-font-scale-reset:hover { background: #f3f3f3; }
 
+/* 주문 알림음 (설정 > 화면 · 소리) — playAlarm()/ALARM_SOUNDS in admin.js.
+   벨소리는 라디오 버튼이지만 동그라미를 숨기고 알약 모양으로 보여준다.
+   홀에서 장갑 낀 손으로도 누르는 자리라 터치 면적을 넉넉히 잡았다. */
+.alarm-field-label {
+  font-weight: 700; font-size: 15px; color: var(--ink);
+  margin: 14px 0 8px;
+}
+.alarm-tone-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.alarm-tone {
+  display: inline-flex; align-items: center; margin: 0 !important;
+  padding: 10px 16px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--ink); font-size: 15px; font-weight: 600;
+  cursor: pointer; user-select: none; min-height: 44px;
+}
+.alarm-tone input { position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; margin: 0; }
+.alarm-tone:hover { background: #f3f3f3; }
+.alarm-tone.is-on {
+  background: var(--red); border-color: var(--red); color: #fff;
+}
+.alarm-tone.is-on::before { content: "▶ "; font-size: 12px; }
+
+.alarm-volume-row { display: flex; align-items: center; gap: 14px; }
+.alarm-volume-row input[type="range"] {
+  flex: 1; min-width: 200px; margin: 0; height: 32px; accent-color: var(--red); cursor: pointer;
+}
+.alarm-volume-value {
+  min-width: 72px; text-align: right; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.alarm-volume-marks {
+  display: flex; justify-content: space-between; margin: 2px 86px 0 0;
+  font-size: 13px; color: var(--muted);
+}
+.alarm-actions { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.alarm-preview-btn {
+  padding: 12px 20px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: var(--ink); font-size: 16px; font-weight: 700; cursor: pointer;
+  min-height: 44px;
+}
+.alarm-preview-btn:hover { background: #f3f3f3; }
+.alarm-preview-btn:active { transform: translateY(1px); }
+.alarm-reset-btn {
+  padding: 12px 18px; border: 1px solid var(--line); border-radius: 10px;
+  background: #fff; color: var(--muted); font-size: 15px; font-weight: 700; cursor: pointer;
+  min-height: 44px;
+}
+.alarm-reset-btn:hover { background: #f3f3f3; }
+.alarm-saved-msg { margin: 0 !important; }
+.alarm-note { margin: 12px 0 0 !important; }
+.alarm-loud-warn { color: var(--orange); }
+
 /* Per-component kitchen-ticket font size editor (settings > 관리자 전용) —
    fields on the left, an actual-size (1x, not zoomed) live preview of the
    real ticket HTML on the right, same "실제 크기" idea as .phone-preview-wrap
