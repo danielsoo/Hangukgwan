@@ -421,6 +421,14 @@ button.is-closed:hover {
 .sheet-desc { font-size: 13px; color: var(--ink); margin: 0 0 12px; }
 .sheet-price-info { font-size: 15px; font-weight: 700; margin: 0 0 12px; color: var(--red); }
 .options-label { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+/* 매운맛을 안 고르고 담기를 눌렀을 때. 빨간색을 쓰는 몇 안 되는 자리다 —
+   손님이 뭘 해야 하는지 바로 알아야 다음 줄로 넘어간다. */
+.options-required-msg {
+  margin: 6px 0 0;
+  color: #c0272d;
+  font-size: 13px;
+  font-weight: 600;
+}
 .options-list { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .options-list button {
   padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: 13px;

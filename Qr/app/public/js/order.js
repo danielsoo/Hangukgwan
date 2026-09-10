@@ -186,6 +186,12 @@
     en: (n) => `On your first order, this dish needs at least ${n} servings total (mix the ratio however you like)`,
   };
 
+  const SPICE_REQUIRED_MSG = {
+    zh: "請先選擇辣度",
+    ko: "매운 정도를 선택해 주세요",
+    en: "Please choose a spice level",
+  };
+
   const $ = (sel) => document.querySelector(sel);
   const t = (key) => (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
   const LANG_PILL_LABEL = { zh: "中文", ko: "한국어", en: "English" };
@@ -704,7 +710,16 @@
   function openItemSheet(item) {
     currentItem = item;
     currentOption = item.options ? item.options.split(",")[0].trim() : null;
-    currentSpiceOption = item.spice_options ? item.spice_options.split(",")[0].trim() : null;
+    // 매운맛은 처음에 아무것도 안 골라 둔다.
+    //
+    // 2026-09-10 사장님: "매운맛 선택이 무조건 첫번째거로 선택되어있어.
+    // 메뉴 들어가면 매운정도에 아무것도 선택이 안되어있게. 내가 눌러야
+    // 선택되게."
+    //
+    // 첫 칸을 미리 켜두면 손님은 「이미 고른 것」으로 보고 그냥 담는다.
+    // 안 매운 것을 원하던 손님에게 中辣가 나가고, 그 접시는 주방이 다시
+    // 만든다. 고기 선택(options)과 달리 매운맛은 잘못 나가면 못 먹는다.
+    currentSpiceOption = null;
     currentTakeoutOption = item.takeout_options ? item.takeout_options.split(",")[0].trim() : null;
     // A counter/takeout QR has no dine-in seat to speak of, so every item
     // defaults to 포장 there instead of the usual 매장 default — the toggle
@@ -765,16 +780,19 @@
     const spiceWrap = $("#itemSpiceOptions");
     const spiceList = $("#spiceOptionsList");
     spiceList.innerHTML = "";
+    const spiceMsg = $("#spiceRequiredMsg");
+    if (spiceMsg) spiceMsg.hidden = true;
     if (item.spice_options) {
       spiceWrap.hidden = false;
       item.spice_options.split(",").forEach((opt, i) => {
         const b = document.createElement("button");
         b.textContent = opt.trim();
-        if (i === 0) b.classList.add("active");
+        // 미리 켜두지 않는다 — 손님이 직접 눌러야 켜진다.
         b.onclick = () => {
           currentSpiceOption = opt.trim();
           spiceList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
           b.classList.add("active");
+          $("#spiceRequiredMsg").hidden = true;
         };
         spiceList.appendChild(b);
       });
@@ -952,6 +970,20 @@
     // 버튼은 이미 disabled 지만, 키보드나 스크립트로도 눌릴 수 있다.
     if (orderingClosed()) {
       showToast(t("closedTitle"));
+      return;
+    }
+    // 매운맛이 있는 메뉴는 고르기 전에는 담을 수 없다. 미리 골라두지
+    // 않기로 한 이상(openItemSheet 참고), 안 고른 채로 담기면 주방에
+    // 매운맛이 비어 도착한다 — 그건 화면이 손님에게 물어보지 않은 것이지
+    // 손님이 「상관없다」고 답한 것이 아니다.
+    if (currentItem.spice_options && !currentSpiceOption) {
+      const msg = $("#spiceRequiredMsg");
+      if (msg) {
+        msg.textContent = SPICE_REQUIRED_MSG[lang] || SPICE_REQUIRED_MSG.zh;
+        msg.hidden = false;
+      }
+      $("#itemSpiceOptions").scrollIntoView({ behavior: "smooth", block: "center" });
+      showToast(SPICE_REQUIRED_MSG[lang] || SPICE_REQUIRED_MSG.zh);
       return;
     }
     if (currentItem.mix_options) {
