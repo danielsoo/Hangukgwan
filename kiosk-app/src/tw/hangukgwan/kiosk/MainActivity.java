@@ -78,6 +78,8 @@ public class MainActivity extends Activity {
     private FrameLayout root;
     private WebView web;
     private View settingsOverlay;
+    // 왼쪽 아래에 잠깐 떴다 사라지는 톱니 단추(showSettingsHint).
+    private TextView hintButton;
     private ValueCallback<Uri[]> pendingFileCallback;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
@@ -107,6 +109,18 @@ public class MainActivity extends Activity {
             showSettings(true);
         } else {
             web.loadUrl(url);
+            showSettingsHint();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // 앱을 다시 앞으로 가져올 때도 한 번 보여준다 — 직원이 설정을
+        // 찾아야 하는 순간은 보통 「프린터가 안 나올 때」 이고, 그때 제일
+        // 먼저 하는 일이 앱을 껐다 켜는 것이다.
+        if (settingsOverlay == null && adminUrl().length() > 0) {
+            showSettingsHint();
         }
     }
 
@@ -452,6 +466,81 @@ public class MainActivity extends Activity {
         toast("페이지를 불러오지 못했습니다: " + description);
     }
 
+    /**
+     * 설정으로 들어가는 길을 보여준다.
+     *
+     * 2026-09-10 사장님: "지금 한 번 등록하면 포트 번호나 사이트 이런 걸
+     * 수정을 못하게 되어있는 거 같아."
+     *
+     * 수정은 되고 있었다. 다만 여는 방법(손가락 세 개 길게 누르기)이 설정
+     * 화면 「안에만」 적혀 있었다. 처음 설치할 때 그 문장을 보고 저장하면
+     * 그 뒤로는 볼 일이 없으니, 설정을 열어야 안내를 보고 안내를 봐야
+     * 설정을 여는 순환이 된다.
+     *
+     * 그래서 두 가지를 같이 둔다.
+     *   · 켤 때 짧은 안내 한 줄 — 제스처를 아예 모르는 사람을 위해
+     *   · 왼쪽 아래 톱니 단추 — 제스처가 손에 안 잡히는 사람을 위해
+     *
+     * 단추는 6초 뒤 사라지고 화면에서 아예 빠진다(투명하게만 두면 그
+     * 자리의 터치를 먹는다). 장사 중에는 없는 것과 같고, 필요할 때는 앱을
+     * 껐다 켜면 다시 나온다.
+     */
+    private void showSettingsHint() {
+        toast("설정: 화면을 손가락 세 개로 길게 누르세요");
+        if (hintButton != null) {
+            // 이미 떠 있으면(사라지는 중이어도) 다시 또렷하게 하고 시간을 늘린다.
+            hintButton.animate().cancel();
+            hintButton.setAlpha(1f);
+            ui.removeCallbacks(fadeHint);
+            ui.postDelayed(fadeHint, 6000);
+            return;
+        }
+        final TextView gear = new TextView(this);
+        gear.setText("⚙");
+        gear.setTextSize(24);
+        gear.setTextColor(Color.WHITE);
+        gear.setGravity(Gravity.CENTER);
+        gear.setBackgroundColor(Color.parseColor("#B3000000"));
+        gear.setContentDescription("설정");
+        gear.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                hideSettingsHint();
+                showSettings(false);
+            }
+        });
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(dp(52), dp(52));
+        lp.gravity = Gravity.BOTTOM | Gravity.START;
+        lp.leftMargin = dp(16);
+        lp.bottomMargin = dp(16);
+        hintButton = gear;
+        root.addView(gear, lp);
+        ui.postDelayed(fadeHint, 6000);
+    }
+
+    private final Runnable fadeHint = new Runnable() {
+        @Override
+        public void run() {
+            if (hintButton == null) {
+                return;
+            }
+            hintButton.animate().alpha(0f).setDuration(500).withEndAction(new Runnable() {
+                @Override
+                public void run() {
+                    hideSettingsHint();
+                }
+            });
+        }
+    };
+
+    private void hideSettingsHint() {
+        ui.removeCallbacks(fadeHint);
+        if (hintButton != null) {
+            root.removeView(hintButton);
+            hintButton = null;
+        }
+    }
+
     private void hideSettings() {
         if (settingsOverlay != null) {
             root.removeView(settingsOverlay);
@@ -464,6 +553,7 @@ public class MainActivity extends Activity {
         if (settingsOverlay != null) {
             return;
         }
+        hideSettingsHint();
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(Color.WHITE);
         scroll.setClickable(true); // swallow taps so they don't reach the page
@@ -475,8 +565,9 @@ public class MainActivity extends Activity {
         scroll.addView(box);
 
         box.addView(heading("한국관 POS 설정"));
-        box.addView(note("관리자 페이지 주소와 주방 프린터 정보를 입력해주세요. "
-                + "설정을 다시 열려면 화면을 손가락 세 개로 길게 누르세요."));
+        box.addView(note("관리자 페이지 주소와 주방 프린터 정보를 입력해주세요.\n\n"
+                + "설정을 다시 열려면 화면을 손가락 세 개로 길게 누르세요. "
+                + "앱을 켜고 몇 초 동안은 왼쪽 아래 ⚙ 단추로도 들어올 수 있어요."));
 
         box.addView(label("관리자 페이지 주소"));
         final EditText urlInput = input(adminUrl().length() > 0 ? adminUrl() : "https://",
@@ -626,13 +717,42 @@ public class MainActivity extends Activity {
      * It only observes - every touch still reaches the page underneath - so
      * there is no invisible dead zone on the order board, and no realistic way
      * for staff to open this by accident mid-service.
+     *
+     * 2026-09-10 사장님: "이미 3개 꾸욱 대고 있으면 설정이 떠?" — 안 떴다.
+     *
+     * 처음에는 터치 이벤트가 들어올 때마다 「셋째 손가락이 닿은 뒤 얼마나
+     * 지났나」를 재고 있었다. 그런데 안드로이드는 손가락이 실제로 움직일
+     * 때만 다음 이벤트를 보낸다. 세 손가락을 대고 가만히 있으면 셋째
+     * 손가락이 닿는 그 이벤트 뒤로 아무것도 안 오고, 그래서 1초가 지나도
+     * 시간을 재는 줄에 도달하지 못한다 — 영영 안 열린다.
+     *
+     * 손가락이 미세하게 떨리면 우연히 열리기도 해서 더 나빴다. 될 때도
+     * 있고 안 될 때도 있으면 사람은 「이 앱은 설정을 못 연다」로 배운다.
+     *
+     * 그래서 시간을 이벤트로 재지 않고 타이머로 예약한다. 셋째 손가락이
+     * 닿는 순간 「0.9초 뒤에 열기」를 걸어두고, 손가락을 떼거나 개수가
+     * 줄면 취소한다. 가만히 눌러도 열린다.
      */
     private class TouchWatchingLayout extends FrameLayout {
         private static final long HOLD_MS = 900;
-        private long threeFingerStart = 0;
+        private final Runnable open = new Runnable() {
+            @Override
+            public void run() {
+                armed = false;
+                showSettings(false);
+            }
+        };
+        private boolean armed = false;
 
         TouchWatchingLayout(Context context) {
             super(context);
+        }
+
+        private void cancel() {
+            if (armed) {
+                armed = false;
+                ui.removeCallbacks(open);
+            }
         }
 
         @Override
@@ -640,17 +760,19 @@ public class MainActivity extends Activity {
             if (settingsOverlay == null) {
                 int fingers = ev.getPointerCount();
                 int action = ev.getActionMasked();
-                if (fingers >= 3 && action != MotionEvent.ACTION_UP
-                        && action != MotionEvent.ACTION_CANCEL) {
-                    if (threeFingerStart == 0) {
-                        threeFingerStart = System.currentTimeMillis();
-                    } else if (System.currentTimeMillis() - threeFingerStart > HOLD_MS) {
-                        threeFingerStart = 0;
-                        showSettings(false);
+                boolean lifting = action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL
+                        || action == MotionEvent.ACTION_POINTER_UP;
+                if (fingers >= 3 && !lifting) {
+                    if (!armed) {
+                        armed = true;
+                        ui.postDelayed(open, HOLD_MS);
                     }
-                } else if (fingers < 3) {
-                    threeFingerStart = 0;
+                } else {
+                    cancel();
                 }
+            } else {
+                cancel();
             }
             return super.dispatchTouchEvent(ev);
         }

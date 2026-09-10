@@ -24,8 +24,8 @@ ECJ_JAR="$TOOLS/ecj.jar"
 PKG=tw.hangukgwan.kiosk
 MIN_SDK=21
 TARGET_SDK=36
-VERSION_CODE="${VERSION_CODE:-1}"
-VERSION_NAME="${VERSION_NAME:-1.0}"
+VERSION_CODE="${VERSION_CODE:-3}"
+VERSION_NAME="${VERSION_NAME:-1.2}"
 
 KEYSTORE="$HERE/keystore/hangukgwan.jks"
 KS_PASS="${KS_PASS:-hangukgwan}"
