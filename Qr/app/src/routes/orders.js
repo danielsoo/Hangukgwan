@@ -606,6 +606,24 @@ router.post("/move", requireAdmin, async (req, res) => {
   // 조용히 무너진다.
   movePartySize(store, from, to);
 
+  // 옛 자리에 「어디로 갔는지」를 남긴다.
+  //
+  // 2026-09-10 사장님: "이미 손님이 해당 qr 코드로 되어있잖아. 그럼 qr 코드
+  // 이미 들어가있다면 이동을 도와드리겠다고 하고 확인 버튼만 있게 해줘."
+  //
+  // 손님 폰에는 아직 옛 자리 화면이 떠 있다. 직원이 말로 알려주지 않으면
+  // 손님은 그대로 옛 자리에 주문을 넣는다 — 그러면 그 주문만 혼자 떨어져
+  // 나가고, 주방은 빈 자리로 음식을 낸다.
+  //
+  // order_ids 를 같이 남기는 이유: 이 안내는 「아까 여기서 시킨 그 손님」
+  // 에게만 보여야 한다. 5분 뒤 그 자리에 새로 앉은 손님에게 "자리가
+  // 옮겨졌어요" 가 뜨면 그게 더 큰 혼란이다. 손님 폰은 자기가 넣은 주문
+  // 번호를 들고 있으므로(localStorage), 겹치는 게 있을 때만 안내한다.
+  fromTable.moved_to = { to, at: now, order_ids: moving.map((o) => o.id) };
+  // 옮겨 간 자리에 예전 안내가 남아 있으면 안 된다 — 5번에서 8번으로 갔다가
+  // 8번에서 또 옮기는 경우, 8번의 옛 안내가 되살아난다.
+  delete toTable.moved_to;
+
   await saveOrders(moving);
   await save();
   broadcastOrdersChanged();

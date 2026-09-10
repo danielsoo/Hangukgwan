@@ -148,6 +148,19 @@ router.patch("/:id", canEditTables, async (req, res) => {
 // Asked once per fresh page load (see public/js/order.js) and kept on the
 // table itself, since until payment everyone ordering from that table is
 // treated as the same party.
+// 자리 이동 안내를 얼마나 오래 보여줄지. 한 끼 식사보다 넉넉하되, 그날을
+// 넘기지는 않는 길이 — 저녁에 옮긴 안내가 다음 날 점심 손님에게 뜨면 안 된다.
+const MOVED_NOTICE_MS = 3 * 60 * 60 * 1000;
+
+function movedToFor(table) {
+  const m = table && table.moved_to;
+  if (!m || !m.to) return null;
+  const at = new Date(String(m.at || "").replace(" ", "T") + "+08:00");
+  if (Number.isNaN(at.getTime())) return null;
+  if (Date.now() - at.getTime() > MOVED_NOTICE_MS) return null;
+  return { to: m.to, at: m.at, order_ids: m.order_ids || [] };
+}
+
 router.put("/:tableNumber/party-size", async (req, res) => {
   const size = parseInt((req.body || {}).partySize, 10);
   if (!size || size < 1 || size > 50) return res.status(400).json({ error: "invalid_party_size" });
@@ -155,6 +168,9 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   if (!table) return res.status(404).json({ error: "table_not_found" });
   table.party_size = size;
   table.party_size_updated_at = new Date().toISOString();
+  // 새 손님이 앉았다 — 「자리가 옮겨졌어요」 안내는 여기서 끝난다.
+  // 안 지우면 오늘 저녁 내내 그 자리 손님마다 옮겨가라는 말을 듣는다.
+  delete table.moved_to;
   await save();
   res.json({ party_size: table.party_size });
 });
@@ -169,7 +185,18 @@ router.get("/:tableNumber/party-size", (req, res) => {
   // is_counter tells the customer page (see initPartySize in public/js/order.js)
   // this QR is the 포장 카운터, not a real table — it skips the headcount
   // prompt entirely rather than treating a missing party_size as "not asked yet".
-  res.json({ party_size: table.party_size || null, is_counter: !!table.is_counter });
+  // moved_to — 이 자리 손님이 다른 자리로 옮겨졌는가(src/routes/orders.js
+  // 의 POST /move). 손님 폰에는 아직 이 자리 화면이 떠 있어서, 그대로
+  // 주문하면 그 주문만 빈 자리로 들어간다.
+  //
+  // 오래된 안내는 내려보내지 않는다. 새 손님이 앉으면 위 PUT 이 지우지만,
+  // 아무도 안 앉은 채로 하루가 지나면 그대로 남아 있게 된다.
+  const moved = movedToFor(table);
+  res.json({
+    party_size: table.party_size || null,
+    is_counter: !!table.is_counter,
+    moved_to: moved,
+  });
 });
 
 // Clears the registered party size — called once a table is fully settled

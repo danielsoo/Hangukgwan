@@ -1534,10 +1534,54 @@
     $("#counterNameBackdrop").hidden = false;
     setTimeout(() => $("#counterNameInput").focus(), 50);
   }
+  /**
+   * 이 자리 손님이 다른 자리로 옮겨졌는가 — 옮겨졌으면 새 자리로 데려다준다.
+   *
+   * 2026-09-10 사장님: "이미 손님이 해당 qr 코드로 되어있잖아. 그럼 qr 코드
+   * 이미 들어가있다면 이동을 도와드리겠다고 하고 확인 버튼만 있게 해줘."
+   *
+   * 「아까 여기서 시킨 그 손님」에게만 보여준다. 5분 뒤 이 자리에 새로 앉은
+   * 손님에게 "자리가 옮겨졌어요" 가 뜨면 그게 더 큰 혼란이다. 이 폰은 자기가
+   * 넣은 주문 번호를 들고 있으니(localStorage), 서버가 알려준 옮긴 주문
+   * 번호와 겹치는 게 있을 때만 뜬다.
+   */
+  function checkMovedTable(moved) {
+    if (!moved || !moved.to) return false;
+    let myIds = [];
+    try {
+      myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
+    } catch (e) {
+      myIds = [];
+    }
+    const ids = moved.order_ids || [];
+    if (!myIds.some((id) => ids.includes(id))) return false;
+
+    $("#movedMsg").innerHTML = `${t("movedFrom")} <b>${escapeHtml(moved.to)}</b>`;
+    const btn = $("#movedGoBtn");
+    btn.textContent = `${moved.to} ${t("movedGoBtn")}`;
+    btn.onclick = () => {
+      // 주문 내역도 새 자리로 옮겨준다 — 안 그러면 새 자리에서 「내 주문」이
+      // 비어 있고, 손님은 자기 주문이 사라진 줄 안다.
+      try {
+        const key = `hgk_orders_${moved.to}`;
+        const existing = JSON.parse(localStorage.getItem(key) || "[]");
+        localStorage.setItem(key, JSON.stringify([...new Set([...existing, ...ids])].slice(-10)));
+      } catch (e) {
+        /* 저장이 안 돼도 이동 자체는 되어야 한다 */
+      }
+      location.href = `/t/${encodeURIComponent(moved.to)}`;
+    };
+    $("#movedBackdrop").hidden = false;
+    return true;
+  }
+
   async function initPartySize() {
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
       const data = await res.json();
+      // 인원수를 묻기 전에 확인한다. 옮겨간 손님에게 이 자리 인원수를
+      // 물어보면, 그 손님은 옮긴 줄도 모르고 여기에 다시 자리를 잡는다.
+      if (res.ok && checkMovedTable(data.moved_to)) return;
       if (res.ok && data.is_counter) {
         // No headcount at all for the counter — skip that modal entirely,
         // and set a dummy partySize so the belt-and-suspenders check in

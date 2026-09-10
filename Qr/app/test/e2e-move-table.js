@@ -25,6 +25,8 @@ process.env.SESSION_SECRET = "e2e-move-table";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 process.env.OWNER_EMAIL = "boss@hangukgwan.tw";
 
+const path = require("path");
+const fs = require("fs");
 const { chromium } = require("playwright");
 const app = require("../server");
 const { store } = require("../src/db");
@@ -280,6 +282,74 @@ function check(name, cond, extra = "") {
     check("새 QR 안내가 들어간다", printed.includes("새 자리 QR"));
   }
 
+  out.push("\n[옮겨진 손님 폰이 새 자리로 데려다준다]");
+  // 2026-09-10 사장님: "이미 손님이 해당 qr 코드로 되어있잖아. 그럼 qr 코드
+  // 이미 들어가있다면 이동을 도와드리겠다고 하고 확인 버튼만 있게 해줘."
+  //
+  // 손님 폰에는 아직 옛 자리 화면이 떠 있다. 그대로 주문하면 그 주문만 빈
+  // 자리로 들어가고, 주방은 아무도 없는 자리로 음식을 낸다.
+  {
+    const J = tabless[9].number;
+    const K = tabless[10].number;
+    await put(`/api/tables/${J}/party-size`, { partySize: 2 });
+    const mine = await post("/api/orders", { tableNumber: J, items: [{ itemId, qty: 1 }] });
+
+    const guest = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    const gp = await guest.newPage();
+    gp.on("dialog", (d) => d.dismiss());
+    // 손님 폰이 그 자리에서 주문한 적이 있다는 흔적 — 실제로는 주문할 때
+    // 저장된다(saveOrderToHistory).
+    await gp.goto(`${base}/t/${J}`, { waitUntil: "networkidle" });
+    await gp.evaluate(([t, id]) => localStorage.setItem(`hgk_orders_${t}`, JSON.stringify([id])), [String(J), mine.body.id]);
+
+    await post("/api/orders/move", { from: J, to: K });
+
+    await gp.reload({ waitUntil: "networkidle" });
+    await gp.waitForTimeout(600);
+    check("옛 자리를 열면 안내가 뜬다", await gp.locator("#movedBackdrop").isVisible());
+    {
+      const text = await gp.locator("#movedBackdrop").innerText();
+      check("어느 자리로 갔는지 알려준다", text.includes(String(K)), text);
+      check("QR 을 다시 찍어도 된다고 알려준다", /QR/.test(text), text);
+    }
+    // 확인 하나면 새 자리로 간다.
+    await gp.locator("#movedGoBtn").click();
+    await gp.waitForURL(`**/t/${K}`, { timeout: 5000 });
+    check("확인을 누르면 새 자리로 간다", gp.url().endsWith(`/t/${K}`), gp.url());
+    {
+      // 사장님이 배포 전에 눈으로 확인할 수 있게 찍어둔다 — 확인 버튼
+      // 하나뿐인 화면인지가 여기서 보인다.
+      await gp.goBack({ waitUntil: "networkidle" });
+      await gp.waitForTimeout(600);
+      const shots = path.join(__dirname, "..", "..", "..", "_screens");
+      fs.mkdirSync(shots, { recursive: true });
+      await gp.screenshot({ path: path.join(shots, "moved-customer.png") });
+      await gp.goto(`${base}/t/${K}`, { waitUntil: "networkidle" });
+    }
+    // 새 자리에서 「내 주문」이 비어 있으면 손님은 주문이 사라진 줄 안다.
+    const carried = await gp.evaluate((t) => JSON.parse(localStorage.getItem(`hgk_orders_${t}`) || "[]"), String(K));
+    check("주문 내역도 새 자리로 옮겨진다", carried.includes(mine.body.id), JSON.stringify(carried));
+    check("새 자리에서는 안내가 안 뜬다", await gp.locator("#movedBackdrop").isHidden());
+
+    // 그 자리에 새로 앉은 다른 손님에게는 뜨면 안 된다 — 그게 더 큰 혼란이다.
+    const other = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    const op = await other.newPage();
+    op.on("dialog", (d) => d.dismiss());
+    await op.goto(`${base}/t/${J}`, { waitUntil: "networkidle" });
+    await op.waitForTimeout(600);
+    check("아무 상관 없는 손님에게는 안 뜬다", await op.locator("#movedBackdrop").isHidden());
+    check("그 손님에게는 인원수를 묻는다", await op.locator("#partySizeBackdrop").isVisible());
+
+    // 새 손님이 인원수를 찍으면 안내는 거기서 끝난다.
+    await put(`/api/tables/${J}/party-size`, { partySize: 3 });
+    await gp.goto(`${base}/t/${J}`, { waitUntil: "networkidle" });
+    await gp.waitForTimeout(600);
+    check("새 손님이 앉으면 안내가 사라진다", await gp.locator("#movedBackdrop").isHidden());
+
+    await guest.close();
+    await other.close();
+  }
+
   out.push("\n[설정 > 인쇄에서 고칠 수 있다]");
   // 2026-09-10 사장님: "이것도 설정 -> 인쇄 에서 수정할 수 있게 해줘."
   {
@@ -337,8 +407,6 @@ function check(name, cond, extra = "") {
     check("끌 수 있다", off.enabled === false, JSON.stringify(off));
     {
       // 사장님이 배포 전에 눈으로 확인할 수 있게 찍어둔다.
-      const path = require("path");
-      const fs = require("fs");
       const shots = path.join(__dirname, "..", "..", "..", "_screens");
       fs.mkdirSync(shots, { recursive: true });
       await page.locator("#moveSlipEnabledToggle").locator("xpath=../..").screenshot({ path: path.join(shots, "move-slip-settings.png") });

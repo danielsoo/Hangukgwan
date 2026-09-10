@@ -278,6 +278,20 @@
     </div>
   </div>
 
+  <!-- 자리가 옮겨졌을 때 — 2026-09-10 사장님: "이미 손님이 해당 qr 코드로
+       되어있잖아. 그럼 qr 코드 이미 들어가있다면 이동을 도와드리겠다고 하고
+       확인 버튼만 있게 해줘."
+       아까 여기서 주문한 손님에게만 뜬다(order.js checkMovedTable). -->
+  <div class="sheet-backdrop lock-backdrop" id="movedBackdrop" hidden>
+    <div class="lock-card">
+      <div class="lock-icon">🔀</div>
+      <h2 data-i18n="movedTitle">자리가 옮겨졌어요</h2>
+      <p class="moved-msg" id="movedMsg"></p>
+      <button class="add-btn" id="movedGoBtn"></button>
+      <p class="moved-sub" data-i18n="movedRescan">또는 새 자리에 있는 QR 코드를 카메라로 찍어주세요</p>
+    </div>
+  </div>
+
   <!-- Counter/takeout pickup name (asked once per fresh page load instead of
        the party-size prompt above, only when this QR is the 포장 카운터 — see
        initPartySize()'s is_counter branch in order.js). Required so staff

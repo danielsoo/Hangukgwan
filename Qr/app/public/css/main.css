@@ -190,6 +190,11 @@ body {
 /* 직원 모드 — 잠기지는 않았고, 지금이 영업시간 밖이라는 알림일 뿐이다.
    손님에게 보이는 붉은 띠와 같은 색이면 직원이 "막혔다" 로 읽는다. */
 .closed-banner.staff-mode { background: #34506e; }
+
+/* 자리가 옮겨졌을 때의 안내 — 확인 버튼 하나면 새 자리로 간다. */
+.moved-msg { font-size: 16px; line-height: 1.6; margin: 6px 0 18px; }
+.moved-msg b { font-size: 22px; }
+.moved-sub { font-size: 13px; opacity: 0.75; margin: 12px 0 0; }
 .closed-banner .closed-sub {
   opacity: 0.9;
   font-size: 12px;
