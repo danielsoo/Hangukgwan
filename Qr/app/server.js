@@ -22,6 +22,7 @@ const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
 const { applyRemoveTable020260910 } = require("./src/migrations/2026-09-10-remove-table-0");
 const { applySpiceBasic20260910 } = require("./src/migrations/2026-09-10-spice-basic");
+const { applyServicePeriodBackfill20260910 } = require("./src/migrations/2026-09-10-service-period-backfill");
 
 const app = express();
 
@@ -159,6 +160,7 @@ app.use(async (req, res, next) => {
       // 때만 지우고, 아니면 다음 부팅에 다시 본다.
       await applyRemoveTable020260910(store, { save, refreshAndSave, hasUnpaidOrder });
       await applySpiceBasic20260910(store, { save });
+      await applyServicePeriodBackfill20260910(store, { getDb, connectDB, save });
       migratedOnce = true;
     }
     next();

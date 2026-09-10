@@ -521,6 +521,7 @@
       settlementAmUntil: "{t} 까지",
       settlementPmFrom: "{t} 부터",
       settlementHalvesGap: "⚠ 오전 정산을 누르지 않은 날이 {n}일 있어 그 날의 매출 {amt} 은 오전·오후 어느 쪽에도 들어가지 않았습니다. 위의 합산에는 들어 있습니다.",
+      settlementHalvesNone: "오전·오후를 가를 수 없는 기간이에요 ({amt}). 주문에 장사 구분이 찍히기 전이거나, 영업시간이 한 타임뿐인 날입니다. 위의 합산은 정확합니다.",
       labelLocationCheckEnabled: "위치 확인 사용",
       locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
@@ -1184,6 +1185,7 @@
       settlementAmUntil: "至 {t}",
       settlementPmFrom: "{t} 起",
       settlementHalvesGap: "⚠ 有 {n} 天沒有按上午結算，那幾天的 {amt} 沒有分到上午或下午。上方合計仍包含這筆金額。",
+      settlementHalvesNone: "這段期間無法分上午／下午（{amt}）。可能是訂單尚未標記時段，或當天只有一個營業時段。上方合計仍然正確。",
       labelLocationCheckEnabled: "啟用位置確認",
       locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
@@ -2182,7 +2184,17 @@
     if (badge) badge.hidden = !usable;
     const noteEl = $("#settlementHalvesNote");
     if (noteEl) noteEl.hidden = true;
-    if (!usable) return;
+
+    // 가를 수 없을 때 아무 말도 안 하면, 사장님은 「오전 오후가 사라졌네」로
+    // 보게 된다(2026-09-10 실제로 그랬다). 칸은 감추되 왜 없는지는 적는다.
+    if (!usable) {
+      const un = ((half && half.unsplit_dates) || []).length;
+      if (un > 0 && noteEl) {
+        noteEl.textContent = T("settlementHalvesNone").replace("{amt}", nt((half && half.unsplit_revenue) || 0));
+        noteEl.hidden = false;
+      }
+      return;
+    }
 
     const put = (id, text) => {
       const el = $(id);
