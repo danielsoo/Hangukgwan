@@ -116,6 +116,34 @@ function check(name, cond, extra = "") {
   }
 
   out.push("");
+  out.push("[관리자 화면에서도 번호가 라벨에 가려지지 않는다]");
+  {
+    // 「外帶」 라는 이름의 0번 테이블이 포장 카운터 행세를 하던 자리다.
+    // 목록에도 수기 주문 창에도 번호가 같이 보여야 두 개를 구분할 수 있다.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.locator('.admin-tabs button[data-tab="tables"]').click();
+    await page.waitForTimeout(1200);
+    const chips = await page.evaluate(() =>
+      [...document.querySelectorAll("#tableChips .num, .table-chip .num")].map((el) => el.textContent.trim())
+    );
+    check("목록 칩이 「포장 0」 처럼 번호까지 적는다", chips.some((c) => /포장\s*0$/.test(c)), JSON.stringify(chips.slice(0, 40)));
+
+    // 수기 주문 버튼은 실시간 주문 탭 툴바에 있다.
+    await page.locator('.admin-tabs button[data-tab="orders"]').click();
+    await page.waitForTimeout(600);
+    await page.locator("#manualOrderBtn").click();
+    await page.waitForTimeout(600);
+    const picker = await page.evaluate(() =>
+      [...document.querySelectorAll("#manualOrderGrid button")].map((el) => el.textContent.trim())
+    );
+    check("수기 주문 창도 번호까지 적는다", picker.some((c) => /포장\s*0$/.test(c)), JSON.stringify(picker.slice(0, 40)));
+    // 포장 카운터는 번호가 없다 — 자리가 아니다.
+    check("포장 카운터에는 번호를 안 붙인다", picker.some((c) => /^포장 카운터$/.test(c)), JSON.stringify(picker));
+    await page.locator("#manualOrderClose").click();
+    await page.waitForTimeout(300);
+  }
+
+  out.push("");
   out.push("[정리가 끝난 자리는 지워진다]");
   await del("/api/tables/0/party-size"); // 손님 나감
   {

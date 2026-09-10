@@ -245,6 +245,26 @@
   // 정한 문자열"(계정 이름·이메일)이 관리자 화면에 그려지게 됐다.
   // 그대로 innerHTML에 넣으면 손님이 이름을 <img onerror=...> 같은 걸로
   // 지어두는 것만으로 사장님 관리자 세션에서 스크립트가 실행된다.
+  /**
+   * 자리를 화면에 어떻게 부를 것인가.
+   *
+   * 2026-09-10 사장님: "테이블 0은 대체 뭐야. 포장으로 해야지."
+   *
+   * 「外帶」라는 이름이 붙은 0번 테이블이 포장 카운터 행세를 하고 있었다.
+   * 목록에도, 수기 주문 고르는 창에도, QR 인쇄물에도 `라벨 있으면 라벨,
+   * 없으면 번호` 로만 적어서 **번호 0 이 어디에도 안 보였다.** 그래서
+   * 카운터 카드와 겉보기가 똑같았고, 포장 손님이 몇 달을 그 자리로
+   * 들어왔는데 아무도 못 알아챘다.
+   *
+   * 라벨을 붙였으면 번호를 같이 보여준다. 포장 카운터만 예외다 — 그건
+   * 자리가 아니라 번호를 가진 적이 없다(src/routes/tables.js 의
+   * getOrCreateCounterTable).
+   */
+  function tableDisplayName(t) {
+    if (!t || !t.label) return (t && t.number) || "";
+    if (t.is_counter) return t.label;
+    return `${t.label} ${t.number}`;
+  }
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -571,6 +591,10 @@
       counterCreateBtn: "포장 카운터 QR 만들기",
       counterQrBtn: "🖨️ 포장 QR 코드 보기/인쇄",
       tableDelTitle: "삭제",
+      tableDelUnpaidMsg: "이 자리에 아직 결제되지 않은 주문이 있어요. 결제를 마친 뒤에 지울 수 있어요.",
+      tableDelSeatedMsg: "이 자리에 손님이 앉아 계신 걸로 되어 있어요. 「손님 나감」으로 먼저 비운 뒤에 지울 수 있어요.",
+      tableDelCounterMsg: "포장 카운터는 지울 수 없어요. 포장 주문이 들어오는 길목이라 지우면 포장 QR이 전부 멈춰요.",
+      tableDelFailedMsg: "자리를 지우지 못했어요. 잠시 후 다시 시도해주세요.",
       noOrdersYetAdmin: "아직 주문이 없습니다.",
       unpaidTotalLabel: "현재 미결제 합계:",
       clearPartySizeBtn: "👥 손님 나감 (인원수 비우기)",
@@ -1196,6 +1220,10 @@
       counterCreateBtn: "建立外帶櫃檯 QR Code",
       counterQrBtn: "🖨️ 查看/列印外帶 QR Code",
       tableDelTitle: "刪除",
+      tableDelUnpaidMsg: "這桌還有尚未結帳的訂單，結完帳後才能刪除。",
+      tableDelSeatedMsg: "這桌目前記錄為有客人入座，請先用「客人離開」清空後再刪除。",
+      tableDelCounterMsg: "外帶櫃檯無法刪除。那是外帶訂單的入口，刪掉的話所有外帶 QR 都會失效。",
+      tableDelFailedMsg: "刪除失敗，請稍後再試一次。",
       noOrdersYetAdmin: "目前尚無訂單。",
       unpaidTotalLabel: "目前未結帳金額：",
       clearPartySizeBtn: "👥 客人已離開（清除人數）",
@@ -5329,12 +5357,31 @@
       const partyBadge = t.party_size ? `<div class="table-party-badge">${fmtPartySeat(t)}</div>` : "";
       const delBtn = canTableEdit() && !mergePayMode && tableEditMode ? `<button class="del-btn" title="${T("tableDelTitle")}">✕</button>` : "";
       const mergeCheckbox = mergePayMode && unpaid.length > 0 ? `<div class="merge-checkbox">${mergePaySelected.has(t.number) ? "✓" : ""}</div>` : "";
-      chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${t.label || t.number}</div>${partyBadge}${badge}`;
+      chip.innerHTML = `${delBtn}${mergeCheckbox}<div class="num">${escapeHtml(tableDisplayName(t))}</div>${partyBadge}${badge}`;
       if (canTableEdit() && !mergePayMode && tableEditMode) {
         chip.querySelector(".del-btn").onclick = async (e) => {
           e.stopPropagation();
           if (!(await showConfirm(fmtConfirmDeleteTable(t.number)))) return;
-          await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
+          // 서버가 거절할 수 있다 — 못 받은 돈이 남았거나, 손님이 앉아
+          // 계시거나, 포장 카운터이거나(src/routes/tables.js 의 DELETE).
+          // 예전에는 응답을 안 보고 그냥 다시 그려서, 사장님 눈에는
+          // "안 지워지네" 로만 보였다. 이유를 그 자리에서 말해준다.
+          const res = await fetch(`/api/tables/${t.id}`, { method: "DELETE" });
+          if (!res.ok) {
+            let error = "";
+            try {
+              error = (await res.json()).error || "";
+            } catch (err) {
+              /* 본문이 없을 수도 있다 — 아래 기본 문구로 간다 */
+            }
+            const msg =
+              {
+                table_has_unpaid_orders: T("tableDelUnpaidMsg"),
+                table_seated: T("tableDelSeatedMsg"),
+                counter_not_deletable: T("tableDelCounterMsg"),
+              }[error] || T("tableDelFailedMsg");
+            await showAlert(msg);
+          }
           loadTables();
         };
       }
@@ -7203,7 +7250,7 @@
         .forEach((t) => {
           const btn = document.createElement("button");
           btn.className = "table-picker-btn";
-          btn.textContent = t.label || t.number;
+          btn.textContent = tableDisplayName(t);
           btn.onclick = () => {
             if (selected.has(t.id)) {
               selected.delete(t.id);
@@ -7569,7 +7616,7 @@
       const occupied = activeOrdersForTable(t.number).some((o) => o.status !== "paid");
       const btn = document.createElement("button");
       btn.className = "table-picker-btn" + (occupied ? " occupied" : "");
-      btn.innerHTML = `<span>${t.label || t.number}</span>${occupied ? `<span class="picker-sub">${T("moveTableOccupied")}</span>` : ""}`;
+      btn.innerHTML = `<span>${escapeHtml(tableDisplayName(t))}</span>${occupied ? `<span class="picker-sub">${T("moveTableOccupied")}</span>` : ""}`;
       btn.onclick = async () => {
         const msg = occupied
           ? fmtConfirmMoveMerge(fromLabel || fromNumber, t.label || t.number)
@@ -7667,7 +7714,10 @@
       .forEach((t) => {
         const btn = document.createElement("button");
         btn.className = "table-picker-btn";
-        btn.textContent = t.label || t.number;
+        // 「外帶」 라는 이름의 0번 테이블과 진짜 포장 카운터가 이 창에서
+        // 나란히 똑같이 보였다 — 라벨이 번호를 가렸기 때문이다
+        // (위 tableDisplayName).
+        btn.textContent = tableDisplayName(t);
         btn.onclick = () => {
           // 한국관 POS 키오스크 앱(태블릿 전용 네이티브 WebView 앱) 안에서는
           // window.open()이 전부 막혀 있다 — MainActivity.java의
