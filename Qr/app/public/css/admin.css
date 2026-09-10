@@ -1568,3 +1568,58 @@ body:not(.role-staff) .staff-only { display: none !important; }
   color: var(--muted, #777);
   font-weight: 600;
 }
+
+/* ── 오전 / 오후 (2026-09-10) ─────────────────────────────────────────
+   사장님: "그 밑에 박스를 넣어주고 똑같은 크기로 그리고 좌우를 나눠서
+   좌는 오전 매출 우는 오후 매출... 합산은 합산이라는 걸 누가봐도 알 수
+   있게 되어쓰면 좋겠어. 예를 들어 오전 오후 매출은 다른 색으로."
+
+   합산(위 hero)은 남색, 오전은 주황(🌅), 오후는 보라(🌙). 정산 버튼의
+   아이콘과 같은 짝이라 새로 외울 것이 없다. 두 칸은 1fr 1fr 로 정확히
+   같은 크기다 — 한쪽이 커 보이면 그날 매출이 그런 줄 안다. */
+.stl-halves {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+.stl-half {
+  border: 2px solid;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: #fff;
+}
+.stl-half-am { border-color: #e08a1e; background: #fffaf2; }
+.stl-half-pm { border-color: #6a4fb3; background: #f8f6fd; }
+.stl-half-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.stl-half-title { font-size: 15px; font-weight: 800; }
+.stl-half-am .stl-half-title { color: #b8690a; }
+.stl-half-pm .stl-half-title { color: #533a95; }
+.stl-half-range { font-size: 12px; color: #777; }
+.stl-half-value { font-size: 28px; font-weight: 800; margin: 6px 0 10px; letter-spacing: -0.5px; }
+.stl-half-am .stl-half-value { color: #b8690a; }
+.stl-half-pm .stl-half-value { color: #533a95; }
+.stl-half-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 0; }
+.stl-half-stats > div { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.stl-half-stats dt { font-size: 12px; color: #666; margin: 0; }
+.stl-half-stats dd { font-size: 14px; font-weight: 700; margin: 0; }
+.stl-halves-note { margin: 8px 0 0; font-size: 12px; color: #b5232c; font-weight: 600; }
+
+/* 위의 큰 숫자가 합산이라는 표. 아래 두 칸과 색이 다른 이유다. */
+.stl-total-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #16213e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* 폰에서는 좌우가 아니라 위아래로. 좁은 화면에서 억지로 반씩 나누면
+   숫자가 줄바꿈되어 오히려 안 읽힌다. */
+@media (max-width: 640px) {
+  .stl-halves { grid-template-columns: 1fr; }
+  .stl-half-stats { grid-template-columns: 1fr 1fr; }
+}

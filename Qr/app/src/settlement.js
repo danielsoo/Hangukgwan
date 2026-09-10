@@ -51,7 +51,65 @@ function splitParty(o) {
   return { size, adults, children };
 }
 
-function computeSettlement(orders, startDate, endDate = startDate) {
+/**
+ * 한 주문이 실제로 결제된 시각.
+ *
+ * 부분 결제(품목별)로 나눠 낸 라운드는 마지막 품목이 결제된 때를 그 주문의
+ * 결제 시각으로 본다 — 그 전에는 아직 받을 돈이 남아 있었다.
+ */
+function paidAtOf(order) {
+  const stamps = (order.items || []).map((it) => it.paid_at).filter(Boolean);
+  if (stamps.length) return stamps.sort().pop();
+  return order.updated_at || order.created_at;
+}
+
+/**
+ * 오전과 오후를 가르는 시각. 날짜별로 다르다.
+ *
+ * 사장님(2026-09-10): "결산 매출에 오전 매출 오후 매출을 따로 나눴으면 좋겠어."
+ *
+ * 기준은 두 가지이고, 정확한 쪽을 먼저 쓴다.
+ *
+ *   1. 그날 **오전 정산을 누른 시각**(am_closed_at). 직원이 실제로 서랍을
+ *      맞춘 순간이라, 14시 20분에 눌렀으면 14시 10분 결제는 오전 몫이다.
+ *      하루 정산 문자가 이미 이 기준으로 나가고 있다(routes/settlements.js).
+ *   2. 안 눌렀으면 **저녁 영업이 시작하는 시각**. 이 가게는 11:00~13:35 와
+ *      16:30~20:35 로 두 타임이라, 그 사이 공백이 자연스러운 경계다.
+ *      점심 손님이 늦게까지 앉아 계셔도 저녁이 열리기 전이면 오전 몫이다.
+ *
+ * 둘 다 없으면 가르지 않는다. 없는 경계를 지어내면 그 숫자를 아무도 못 믿는다.
+ */
+function halfBoundaryFor(dateStr, opts) {
+  const closed = opts && opts.amClosedAt && opts.amClosedAt[dateStr];
+  if (closed) return closed;
+  const hint = opts && opts.eveningStartsAt;
+  return hint ? `${dateStr} ${hint}:00` : null;
+}
+
+function summarize(paid) {
+  const revenue = paid.reduce((sum, o) => sum + (o.total || 0), 0);
+  const byTableDay = new Map();
+  for (const o of paid) {
+    if (!o.party_size) continue;
+    const key = `${o.table_number}|${o.created_at.slice(0, 10)}`;
+    const prev = byTableDay.get(key);
+    if (prev && prev.size >= o.party_size) continue;
+    byTableDay.set(key, splitParty(o));
+  }
+  const parties = [...byTableDay.values()];
+  const guests = parties.reduce((a, p) => a + p.size, 0);
+  return {
+    revenue,
+    paid_order_count: paid.length,
+    guest_count: guests,
+    adult_count: parties.reduce((a, p) => a + p.adults, 0),
+    child_count: parties.reduce((a, p) => a + p.children, 0),
+    avg_per_order: paid.length ? Math.round(revenue / paid.length) : 0,
+    avg_per_guest: guests ? Math.round(revenue / guests) : 0,
+  };
+}
+
+function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const rangeOrders = (orders || []).filter((o) => {
     const d = o.created_at.slice(0, 10);
     return d >= startDate && d <= endDate;
@@ -257,6 +315,36 @@ function computeSettlement(orders, startDate, endDate = startDate) {
 
   // 취소와 미결제는 지금까지 "몇 건"만 보였다. 금액이 있어야 얼마나 아까운
   // 일인지, 얼마를 놓치고 있는지 알 수 있다.
+  // 오전 / 오후.
+  const amPaid = [];
+  const pmPaid = [];
+  const unsplitDates = new Set();
+  const cuts = new Set();
+  for (const o of paidOrders) {
+    const date = o.created_at.slice(0, 10);
+    const boundary = halfBoundaryFor(date, opts);
+    if (!boundary) {
+      unsplitDates.add(date);
+      continue;
+    }
+    cuts.add(String(boundary).slice(11, 16));
+    (paidAtOf(o) <= boundary ? amPaid : pmPaid).push(o);
+  }
+  const halfSplit = {
+    am: summarize(amPaid),
+    pm: summarize(pmPaid),
+    // 경계를 못 정해 어느 쪽에도 못 넣은 날들. 비어 있으면 두 몫의 합이
+    // 총 매출과 정확히 같다.
+    unsplit_dates: [...unsplitDates].sort(),
+    // 어디서 갈랐는지. 여러 날을 한 번에 보면 날마다 다를 수 있어서, 하나로
+    // 딱 떨어질 때만 적는다 — 「14:20 까지」라고 적어놓고 실제로는 날마다
+    // 달랐다면 그 말이 거짓말이 된다.
+    boundary_label: cuts.size === 1 ? [...cuts][0] : null,
+    unsplit_revenue: paidOrders
+      .filter((o) => unsplitDates.has(o.created_at.slice(0, 10)))
+      .reduce((sum, o) => sum + (o.total || 0), 0),
+  };
+
   const cancelledAmount = cancelledOrders.reduce((sum, o) => sum + (o.total || 0), 0);
   const problemAmount = problemOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
@@ -383,6 +471,9 @@ function computeSettlement(orders, startDate, endDate = startDate) {
     // 어른·아이. 둘의 합은 언제나 guest_count 와 같다(splitParty 주석).
     adult_count: adultCount,
     child_count: childCount,
+    // 오전/오후 (halfBoundaryFor 주석). 경계를 못 정한 날이 하나라도 있으면
+    // 두 몫의 합이 위의 총계와 달라진다 — 화면이 그 말을 해야 한다.
+    half_split: halfSplit,
     avg_per_order: avgPerOrder,
     avg_per_guest: avgPerGuest,
     cancelled_amount: cancelledAmount,
@@ -404,4 +495,4 @@ function computeSettlement(orders, startDate, endDate = startDate) {
   };
 }
 
-module.exports = { computeSettlement, taipeiDateString };
+module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor };

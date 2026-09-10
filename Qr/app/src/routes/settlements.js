@@ -2,6 +2,7 @@ const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
 const { requireOwner, requireAdmin } = require("../auth");
 const { computeSettlement, taipeiDateString } = require("../settlement");
+const { rangesForDate, orderHours } = require("../openHours");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
 const { clearIdleSeats } = require("../partySize");
@@ -48,8 +49,36 @@ router.get("/", requireOwner, async (req, res) => {
   // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
   // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
   const orders = await ordersInRange(start, end, req);
-  res.json(computeSettlement(orders, start, end));
+  res.json(computeSettlement(orders, start, end, await halfOpts(start, end, req)));
 });
+
+/**
+ * 오전/오후를 가르는 데 필요한 것들 (src/settlement.js halfBoundaryFor).
+ *
+ * 날짜마다 「그날 오전 정산을 누른 시각」을 모아 넘긴다. 안 누른 날을 위해
+ * 저녁 영업이 시작하는 시각도 같이 넘긴다 — 이 가게는 점심·저녁 두 타임이라
+ * 그 사이 공백이 자연스러운 경계다.
+ */
+async function halfOpts(start, end, req) {
+  const testId = testMode.currentId(req, store);
+  const snaps = await findDocs("daily_settlements", {
+    date: { $gte: start, $lte: end },
+    ...(testId ? { test_session: testId } : { test_session: { $exists: false } }),
+  });
+  const amClosedAt = {};
+  for (const d of snaps || []) if (d && d.date && d.am_closed_at) amClosedAt[d.date] = d.am_closed_at;
+  return { amClosedAt, eveningStartsAt: eveningStartHm() };
+}
+
+/**
+ * 저녁 영업이 시작하는 시각 "HH:MM". 두 타임 이상이면 마지막 타임의 시작이다.
+ * 한 타임뿐이면 가를 기준이 없으므로 null — 없는 경계를 지어내지 않는다.
+ */
+function eveningStartHm() {
+  const ranges = rangesForDate(orderHours(store.settings), taipeiDateString()) || [];
+  if (ranges.length < 2) return null;
+  return ranges[ranges.length - 1].start || null;
+}
 
 // 결산이 볼 주문을 날짜 범위로 가져온다. 인덱스는 created_at 에 걸려 있다
 // (src/migrations/2026-09-10-orders-collection.js).
@@ -142,7 +171,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   const date = taipeiDateString();
   const closedAt = nowLocal();
   const orders = await ordersInRange(date, date, req);
-  const snapshot = computeSettlement(orders, date);
+  const snapshot = computeSettlement(orders, date, date, await halfOpts(date, date, req));
 
   // 오전 정산이 누른 시각을 그날 스냅샷에 남긴다. 하루 정산이 오전/오후를
   // 가르는 기준이 이것이다 — 영업시간표를 보고 "오전은 14시까지" 라고

@@ -268,7 +268,12 @@
           <!-- 1. 오늘 한눈에 — 큰 숫자 하나와 그것을 설명하는 작은 줄들 -->
           <div class="stl-hero">
             <div class="stl-hero-main">
-              <div class="stl-hero-label" data-i18n="settlementRevenue">매출 (결제 완료)</div>
+              <div class="stl-hero-label">
+                <span data-i18n="settlementRevenue">매출 (결제 완료)</span>
+                <!-- 이 숫자가 오전+오후를 더한 것이라는 표. 아래 두 칸과
+                     색이 다른 이유이기도 하다. -->
+                <span class="stl-total-badge" id="settlementTotalBadge" data-i18n="settlementTotalBadge" hidden>합산</span>
+              </div>
               <div class="stl-hero-value" id="settlementRevenue">NT$0</div>
               <div class="stl-hero-sub" id="settlementHeroSub"></div>
             </div>
@@ -294,6 +299,46 @@
               </div>
             </div>
           </div>
+
+          <!-- 1-1. 오전 / 오후 (2026-09-10 사장님: "결산 매출에 오전 매출
+               오후 매출을 따로 나눴으면 좋겠어... 좌우를 나눠서 좌는 오전
+               매출 우는 오후 매출... 합산은 합산이라는 걸 누가봐도 알 수
+               있게").
+
+               위의 큰 숫자가 합산이고, 이 두 칸이 그것을 가른 것이다.
+               색으로 갈라 둔다 — 합산은 남색, 오전은 주황(🌅), 오후는
+               보라(🌙). 정산 버튼의 아이콘과 같은 짝이라 새로 외울 것이 없다. -->
+          <div class="stl-halves" id="settlementHalves" hidden>
+            <div class="stl-half stl-half-am">
+              <div class="stl-half-head">
+                <span class="stl-half-title" data-i18n="settlementAmTitle">🌅 오전</span>
+                <span class="stl-half-range" id="settlementAmRange"></span>
+              </div>
+              <div class="stl-half-value" id="settlementAmRevenue">NT$0</div>
+              <dl class="stl-half-stats">
+                <div><dt data-i18n="settlementHalfOrders">결제</dt><dd id="settlementAmOrders">0</dd></div>
+                <div><dt data-i18n="settlementGuests">손님 수</dt><dd id="settlementAmGuests">0</dd></div>
+                <div><dt data-i18n="settlementAvgPerGuest">1인당 평균</dt><dd id="settlementAmPerGuest">NT$0</dd></div>
+                <div><dt data-i18n="settlementAvgPerOrder">주문당 평균</dt><dd id="settlementAmPerOrder">NT$0</dd></div>
+              </dl>
+            </div>
+            <div class="stl-half stl-half-pm">
+              <div class="stl-half-head">
+                <span class="stl-half-title" data-i18n="settlementPmTitle">🌙 오후</span>
+                <span class="stl-half-range" id="settlementPmRange"></span>
+              </div>
+              <div class="stl-half-value" id="settlementPmRevenue">NT$0</div>
+              <dl class="stl-half-stats">
+                <div><dt data-i18n="settlementHalfOrders">결제</dt><dd id="settlementPmOrders">0</dd></div>
+                <div><dt data-i18n="settlementGuests">손님 수</dt><dd id="settlementPmGuests">0</dd></div>
+                <div><dt data-i18n="settlementAvgPerGuest">1인당 평균</dt><dd id="settlementPmPerGuest">NT$0</dd></div>
+                <div><dt data-i18n="settlementAvgPerOrder">주문당 평균</dt><dd id="settlementPmPerOrder">NT$0</dd></div>
+              </dl>
+            </div>
+          </div>
+          <!-- 경계를 못 정한 날이 섞여 있으면 두 칸의 합이 위 합산과 다르다.
+               조용히 두면 사장님이 더하다가 안 맞는 것을 발견하게 된다. -->
+          <p class="stl-halves-note" id="settlementHalvesNote" hidden></p>
 
           <!-- 챙겨야 할 것만 띠로. 아무 문제가 없으면 통째로 사라진다 —
                "0건"을 매일 보여주면 그 자리가 배경이 되어, 정작 숫자가

@@ -513,6 +513,14 @@
       orderCardMixedBadge: "혼합",
       printFailedCardMsg: "⚠️ 인쇄 실패 — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도",
       orderCardLocUnverified: "📍 위치 미확인",
+      settlementAmTitle: "🌅 오전",
+      settlementPmTitle: "🌙 오후",
+      settlementTotalBadge: "합산",
+      settlementHalfOrders: "결제",
+      settlementHalfOrdersUnit: "건",
+      settlementAmUntil: "{t} 까지",
+      settlementPmFrom: "{t} 부터",
+      settlementHalvesGap: "⚠ 오전 정산을 누르지 않은 날이 {n}일 있어 그 날의 매출 {amt} 은 오전·오후 어느 쪽에도 들어가지 않았습니다. 위의 합산에는 들어 있습니다.",
       labelLocationCheckEnabled: "위치 확인 사용",
       locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
@@ -1158,6 +1166,14 @@
       orderCardMixedBadge: "混合",
       printFailedCardMsg: "⚠️ 列印失敗 — 請確認廚房是否收到，或用下方列印按鈕重試",
       orderCardLocUnverified: "📍 位置未確認",
+      settlementAmTitle: "🌅 上午",
+      settlementPmTitle: "🌙 下午",
+      settlementTotalBadge: "合計",
+      settlementHalfOrders: "結帳",
+      settlementHalfOrdersUnit: "筆",
+      settlementAmUntil: "至 {t}",
+      settlementPmFrom: "{t} 起",
+      settlementHalvesGap: "⚠ 有 {n} 天沒有按上午結算，那幾天的 {amt} 沒有分到上午或下午。上方合計仍包含這筆金額。",
       labelLocationCheckEnabled: "啟用位置確認",
       locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
@@ -2105,6 +2121,54 @@
       ? `\n\n＋ VIP卡 NT$${cardAmount}（一律現金）\n= 向客人收 NT$${sum}\n下面選的付款方式只套用在餐點 NT$${foodPayable}`
       : `\n\n＋ VIP 카드 NT$${cardAmount} (무조건 현금)\n= 손님께 받을 돈 NT$${sum}\n아래에서 고르는 결제수단은 밥값 NT$${foodPayable}에만 적용됩니다`;
   }
+  // 오전 / 오후 (2026-09-10 사장님 요청). 위의 큰 숫자가 합산이고 이 두 칸이
+  // 그것을 가른 것이다 — 색으로 갈라 두고(css .stl-half-am/.stl-half-pm),
+  // 합산에는 「합산」 표를 붙인다.
+  function renderSettlementHalves(data) {
+    const box = $("#settlementHalves");
+    if (!box) return;
+    const half = data.half_split;
+    const badge = $("#settlementTotalBadge");
+    // 가를 기준이 아예 없으면(오전 정산도 안 눌렀고 영업시간도 한 타임뿐)
+    // 두 칸을 통째로 감춘다. 0 만 적힌 칸을 보여주면 그날 오전 매출이
+    // 정말 0 인 줄 안다.
+    const usable = !!half && (half.am.paid_order_count > 0 || half.pm.paid_order_count > 0);
+    box.hidden = !usable;
+    if (badge) badge.hidden = !usable;
+    $("#settlementHalvesNote").hidden = true;
+    if (!usable) return;
+
+    const fill = (side, part) => {
+      $(`#settlement${side}Revenue`).textContent = nt(part.revenue);
+      $(`#settlement${side}Orders`).textContent = `${Number(part.paid_order_count || 0).toLocaleString()}${T("settlementHalfOrdersUnit")}`;
+      const g = Number(part.guest_count || 0);
+      const kids = Number(part.child_count || 0);
+      $(`#settlement${side}Guests`).textContent =
+        kids > 0 ? `${g} (${fmtGuestSplit(Number(part.adult_count || 0), kids)})` : String(g);
+      $(`#settlement${side}PerGuest`).textContent = nt(part.avg_per_guest);
+      $(`#settlement${side}PerOrder`).textContent = nt(part.avg_per_order);
+    };
+    fill("Am", half.am);
+    fill("Pm", half.pm);
+
+    // 어디서 갈랐는지 적어 둔다. 안 적으면 「내 기억보다 오전이 적은데」가
+    // 됐을 때 확인할 방법이 없다.
+    const cut = half.boundary_label || "";
+    $("#settlementAmRange").textContent = cut ? T("settlementAmUntil").replace("{t}", cut) : "";
+    $("#settlementPmRange").textContent = cut ? T("settlementPmFrom").replace("{t}", cut) : "";
+
+    // 경계를 못 정한 날이 섞여 있으면 두 칸의 합이 위 합산과 다르다.
+    // 조용히 두면 사장님이 더하다가 안 맞는 것을 발견하게 된다.
+    const un = (half.unsplit_dates || []).length;
+    if (un > 0) {
+      const note = $("#settlementHalvesNote");
+      note.textContent = T("settlementHalvesGap")
+        .replace("{n}", String(un))
+        .replace("{amt}", nt(half.unsplit_revenue || 0));
+      note.hidden = false;
+    }
+  }
+
   const fmtGuestSplit = (adults, children) =>
     adminLang === "zh" ? `大人 ${adults} · 小孩 ${children}` : `어른 ${adults} · 아이 ${children}`;
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
@@ -10799,6 +10863,7 @@
     // 어른·아이 (2026-09-10 사장님: "결산에 들어가는 인원 성인 아이 따로
     // 구분해서 집계해줘"). 손님 수 아래에 한 줄로 붙인다 — 칸을 따로 만들면
     // 「결산 탭 보는 게 너무 복잡해」로 되돌아간다.
+    renderSettlementHalves(data);
     const guestSplit = $("#settlementGuestSplit");
     if (guestSplit) {
       const a = Number(data.adult_count || 0);
