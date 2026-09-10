@@ -49,7 +49,14 @@ router.get("/", requireOwner, async (req, res) => {
   // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
   // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
   const orders = await ordersInRange(start, end, req);
-  res.json(computeSettlement(orders, start, end, await halfOpts(start, end, req)));
+  // 「오전만 보기」 / 「오후만 보기」. 없으면 하루 전체(합산)다.
+  //
+  // 화면에서 거르지 않고 여기서 거른다 — 결제수단, 분류별, 시간대, 테이블별,
+  // 차트가 전부 이 한 번의 거르기를 따라간다. 화면에서 조각조각 거르면 어느
+  // 하나를 빠뜨리고, 그 칸만 조용히 하루치를 보여준다.
+  const shift = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
+  const opts = await halfOpts(start, end, req);
+  res.json(computeSettlement(orders, start, end, { ...opts, shift }));
 });
 
 /**
@@ -428,3 +435,7 @@ router.get("/cron-close", async (req, res) => {
 module.exports = router;
 module.exports.maybeAutoCloseAm = maybeAutoCloseAm;
 module.exports.autoAmCutFor = autoAmCutFor;
+// 주문 목록도 결산과 **같은 기준**으로 갈라야 한다 (src/routes/orders.js
+// GET /history). 위의 오전 매출과 아래 오전 목록이 다른 규칙으로 갈리면
+// 둘 중 어느 쪽이 맞는지 알 방법이 없다.
+module.exports.halfOpts = halfOpts;

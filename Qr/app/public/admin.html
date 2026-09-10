@@ -273,6 +273,11 @@
                 <!-- 이 숫자가 오전+오후를 더한 것이라는 표. 아래 두 칸과
                      색이 다른 이유이기도 하다. -->
                 <span class="stl-total-badge" id="settlementTotalBadge" data-i18n="settlementTotalBadge" hidden>합산</span>
+                <!-- 오전/오후 칸을 눌러 그 시간대만 보고 있을 때. 큰 숫자가
+                     하루치가 아니라는 것을 여기서 말해준다 — 안 적어두면
+                     걸러놓은 숫자를 하루 매출로 읽게 된다. -->
+                <span class="stl-shift-badge" id="settlementShiftBadge" hidden></span>
+                <button type="button" class="stl-shift-reset" id="settlementShiftReset" data-i18n="settlementViewAll" hidden>합산 보기</button>
               </div>
               <div class="stl-hero-value" id="settlementRevenue">NT$0</div>
               <div class="stl-hero-sub" id="settlementHeroSub"></div>
@@ -309,10 +314,13 @@
                색으로 갈라 둔다 — 합산은 남색, 오전은 주황(🌅), 오후는
                보라(🌙). 정산 버튼의 아이콘과 같은 짝이라 새로 외울 것이 없다. -->
           <div class="stl-halves" id="settlementHalves" hidden>
-            <div class="stl-half stl-half-am">
+            <div class="stl-half stl-half-am" id="settlementAmBox" role="button" tabindex="0" aria-pressed="false">
               <div class="stl-half-head">
                 <span class="stl-half-title" data-i18n="settlementAmTitle">🌅 오전</span>
                 <span class="stl-half-range" id="settlementAmRange"></span>
+                <!-- 「눌러서 이 시간대만 보기」. 머리줄에 붙인다 — 아래에
+                     한 줄로 두면 결산 화면이 그만큼 더 길어진다. -->
+                <span class="stl-half-cta" id="settlementAmCta"></span>
               </div>
               <div class="stl-half-value" id="settlementAmRevenue">NT$0</div>
               <dl class="stl-half-stats">
@@ -322,10 +330,11 @@
                 <div><dt data-i18n="settlementAvgPerOrder">주문당 평균</dt><dd id="settlementAmPerOrder">NT$0</dd></div>
               </dl>
             </div>
-            <div class="stl-half stl-half-pm">
+            <div class="stl-half stl-half-pm" id="settlementPmBox" role="button" tabindex="0" aria-pressed="false">
               <div class="stl-half-head">
                 <span class="stl-half-title" data-i18n="settlementPmTitle">🌙 오후</span>
                 <span class="stl-half-range" id="settlementPmRange"></span>
+                <span class="stl-half-cta" id="settlementPmCta"></span>
               </div>
               <div class="stl-half-value" id="settlementPmRevenue">NT$0</div>
               <dl class="stl-half-stats">
@@ -339,6 +348,8 @@
           <!-- 경계를 못 정한 날이 섞여 있으면 두 칸의 합이 위 합산과 다르다.
                조용히 두면 사장님이 더하다가 안 맞는 것을 발견하게 된다. -->
           <p class="stl-halves-note" id="settlementHalvesNote" hidden></p>
+          <!-- 이 시간대만 보고 있는 동안, 아래 전부가 그 시간대의 것이라는 말. -->
+          <p class="stl-shift-note" id="settlementShiftNote" hidden></p>
 
           <!-- 챙겨야 할 것만 띠로. 아무 문제가 없으면 통째로 사라진다 —
                "0건"을 매일 보여주면 그 자리가 배경이 되어, 정작 숫자가

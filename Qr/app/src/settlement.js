@@ -113,6 +113,31 @@ function partyKeyOf(o, half) {
   return `${o.table_number}|${party}|${h}`;
 }
 
+/**
+ * 주문 하나가 오전 몫인지 오후 몫인지. "am" | "pm" | null.
+ *
+ * **가르는 규칙은 여기 한 곳뿐이다.** 결산의 오전/오후 칸도, 「오전만 보기」로
+ * 걸러낸 화면도, 아래 주문 목록도 전부 이 함수를 부른다. 규칙이 두 군데에
+ * 있으면 언젠가 한쪽만 고쳐지고, 그러면 위의 오전 매출과 아래 오전 목록이
+ * 서로 다른 이야기를 한다 — 그건 숫자가 틀린 것보다 나쁘다.
+ *
+ * null 은 "못 가른다"는 뜻이다. 0 이나 오전으로 떠넘기지 않는다 — 없는
+ * 경계를 지어내면 그 숫자를 아무도 못 믿는다.
+ */
+function halfOf(order, opts) {
+  if (!order) return null;
+  // 주문에 박혀 있는 표를 먼저 믿는다 (src/servicePeriod.js).
+  //
+  // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
+  // 같이 저장하면 되는 거 아니야?" — 그 표가 있으면 정산을 눌렀는지,
+  // 그 뒤에 영업시간이 바뀌었는지와 무관하게 언제나 같은 답이 나온다.
+  if (order.service_period === "am" || order.service_period === "pm") return order.service_period;
+  // 표가 없는 옛 주문은 경계 시각으로 가른다.
+  const boundary = halfBoundaryFor(String(order.created_at || "").slice(0, 10), opts);
+  if (!boundary) return null;
+  return paidAtOf(order) <= boundary ? "am" : "pm";
+}
+
 function summarize(paid, half) {
   const revenue = paid.reduce((sum, o) => sum + (o.total || 0), 0);
   const byTableDay = new Map();
@@ -137,12 +162,29 @@ function summarize(paid, half) {
 }
 
 function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
-  const rangeOrders = (orders || []).filter((o) => {
+  const rangeAll = (orders || []).filter((o) => {
     const d = o.created_at.slice(0, 10);
     return d >= startDate && d <= endDate;
   });
 
+  // 「오전만 보기」 / 「오후만 보기」 (2026-09-10 사장님: "오전, 오후 정산을
+  // 클릭해서 해당 내용을 볼 수 있으면 좋겠어... Shift 별로 클릭하면 해당
+  // Shift만 볼 수 있으면 더 디테일할거야").
+  //
+  // 여기서 한 번 걸러내면 아래가 전부 따라온다 — 결제수단도, 분류별 매출도,
+  // 시간대 그래프도, 테이블별도. 화면에서 조각조각 거르면 어느 하나를 빠뜨리고,
+  // 빠뜨린 그 칸만 조용히 하루치를 보여준다.
+  //
+  // 못 가르는 주문(halfOf 가 null)은 어느 쪽에도 안 들어간다. 그 몫이
+  // 얼마인지는 아래 half_split.unsplit_revenue 로 화면에 그대로 나간다.
+  const shift = opts.shift === "am" || opts.shift === "pm" ? opts.shift : null;
+  const rangeOrders = shift ? rangeAll.filter((o) => halfOf(o, opts) === shift) : rangeAll;
+
   const paidOrders = rangeOrders.filter((o) => o.status === "paid");
+  // 오전/오후 두 칸은 **거르기 전 것**으로 센다. 「오전만 보기」로 들어가도
+  // 두 칸이 다 보여야 거기서 오후로 건너갈 수 있다. 거른 것으로 세면 반대편
+  // 칸이 0 이 되어, 그날 오후 매출이 정말 0 인 줄 안다.
+  const paidOrdersAll = shift ? rangeAll.filter((o) => o.status === "paid") : paidOrders;
   const cancelledOrders = rangeOrders.filter((o) => o.status === "cancelled");
   // Both timestamps below come from nowLocal() (see src/time.js) — a plain
   // "YYYY-MM-DD HH:MM:SS" Taipei wall-clock string with no timezone
@@ -319,28 +361,20 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // 주문 하나하나가 어느 쪽 몫인지. 아래 손님 수 묶음이 이 표를 그대로 써야
   // 오전 몫 + 오후 몫 + 못 가른 몫 = 합계 가 성립한다.
   const halfByOrder = new Map();
-  for (const o of paidOrders) {
-    // 주문에 박혀 있는 표를 먼저 믿는다 (src/servicePeriod.js).
-    //
-    // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
-    // 같이 저장하면 되는 거 아니야?" — 그 표가 있으면 정산을 눌렀는지,
-    // 그 뒤에 영업시간이 바뀌었는지와 무관하게 언제나 같은 답이 나온다.
-    if (o.service_period === "am" || o.service_period === "pm") {
-      halfByOrder.set(o, o.service_period);
-      (o.service_period === "am" ? amPaid : pmPaid).push(o);
+  for (const o of paidOrdersAll) {
+    const h = halfOf(o, opts);
+    if (!h) {
+      unsplitDates.add(o.created_at.slice(0, 10));
       continue;
     }
-    // 표가 없는 옛 주문은 예전처럼 경계 시각으로 가른다.
-    const date = o.created_at.slice(0, 10);
-    const boundary = halfBoundaryFor(date, opts);
-    if (!boundary) {
-      unsplitDates.add(date);
-      continue;
+    // 어디서 갈랐는지 화면에 적어주기 위한 것. 표가 박힌 주문은 시각으로
+    // 가른 게 아니라서 여기 안 들어간다.
+    if (o.service_period !== "am" && o.service_period !== "pm") {
+      const boundary = halfBoundaryFor(o.created_at.slice(0, 10), opts);
+      if (boundary) cuts.add(String(boundary).slice(11, 16));
     }
-    cuts.add(String(boundary).slice(11, 16));
-    const half = paidAtOf(o) <= boundary ? "am" : "pm";
-    halfByOrder.set(o, half);
-    (half === "am" ? amPaid : pmPaid).push(o);
+    halfByOrder.set(o, h);
+    (h === "am" ? amPaid : pmPaid).push(o);
   }
   // 손님 수와 객단가. party_size 는 테이블에서 손님이 직접 답한 인원수이고,
   // 주문할 때 그 주문에 함께 찍힌다. 같은 테이블이 여러 번 주문하면 같은
@@ -381,13 +415,8 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     // 딱 떨어질 때만 적는다 — 「14:20 까지」라고 적어놓고 실제로는 날마다
     // 달랐다면 그 말이 거짓말이 된다.
     boundary_label: cuts.size === 1 ? [...cuts][0] : null,
-    unsplit_revenue: paidOrders
-      .filter(
-        (o) =>
-          o.service_period !== "am" &&
-          o.service_period !== "pm" &&
-          unsplitDates.has(o.created_at.slice(0, 10))
-      )
+    unsplit_revenue: paidOrdersAll
+      .filter((o) => !halfOf(o, opts) && unsplitDates.has(o.created_at.slice(0, 10)))
       .reduce((sum, o) => sum + (o.total || 0), 0),
   };
 
@@ -504,6 +533,10 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     date: startDate === endDate ? startDate : null,
     start_date: startDate,
     end_date: endDate,
+    // 이 보고서가 하루 전체인지, 오전만인지, 오후만인지. 화면이 큰 숫자 옆의
+    // 표를 「합산 / 오전 / 오후」로 바꾸는 데 쓴다 — 무엇을 보고 있는지가
+    // 화면에 안 적혀 있으면, 걸러놓은 것을 하루치로 읽게 된다.
+    shift: shift,
     generated_at: new Date().toISOString(),
     total_revenue: totalRevenue,
     paid_order_count: paidOrders.length,
@@ -547,4 +580,4 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   };
 }
 
-module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor };
+module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor, halfOf };

@@ -185,7 +185,12 @@ function device() {
 
   out.push("\n[6] 결산 — 테스트 기기는 테스트만, 평소 기기는 진짜만");
   {
-    const today = new Date().toISOString().slice(0, 10);
+    // 대만 날짜로 물어야 한다. UTC 날짜를 쓰면 대만이 자정을 넘긴 뒤
+    // (UTC 16:00~24:00, 대만 새벽) 어제 날짜로 결산을 물어보게 되고, 방금
+    // 넣은 주문이 없는 날이라 매출이 0 으로 나온다 — 코드가 아니라 이
+    // 테스트가 하루에 여덟 시간씩 틀리던 자리다(2026-09-11 새벽에 걸렸다).
+    // e2e-vip-sale.js 도 같은 이유로 +8시간을 더한다.
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
     // 매출이 잡히려면 결제가 돼 있어야 한다. 테스트 주문 하나를 결제한다.
     const paid = await boss.patch(`/api/orders/${testOrderId}`).send({ status: "paid", paymentMethod: "cash" });

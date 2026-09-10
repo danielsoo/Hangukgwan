@@ -1695,6 +1695,52 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-half-stats dd { font-size: 14px; font-weight: 700; margin: 0; }
 .stl-halves-note { margin: 8px 0 0; font-size: 12px; color: #b5232c; font-weight: 600; }
 
+/* 눌러서 그 시간대만 보기 (2026-09-10 사장님: "Shift 별로 클릭하면 해당
+   Shift만 볼 수 있으면 더 디테일할거야").
+
+   누를 수 있다는 것이 보여야 누른다. 손가락 커서와 살짝 뜨는 그림자로
+   「이건 버튼이다」를 말하고, 고른 칸은 테두리를 굵혀 남긴다 — 고른 표시가
+   약하면 아래 숫자가 왜 작아졌는지 모르게 된다. */
+.stl-half { cursor: pointer; transition: box-shadow .12s, transform .12s; }
+.stl-half:hover { box-shadow: 0 2px 10px rgba(0, 0, 0, .10); transform: translateY(-1px); }
+.stl-half:focus-visible { outline: 3px solid #16213e; outline-offset: 2px; }
+.stl-half.is-active { box-shadow: 0 0 0 3px rgba(22, 33, 62, .18); }
+.stl-half-am.is-active { background: #fff2dd; }
+.stl-half-pm.is-active { background: #efeafc; }
+/* 고르지 않은 반대편 칸은 한 발 물러난다. 두 칸이 똑같이 진하면 지금
+   무엇을 보고 있는지가 안 보인다. */
+.stl-halves.has-shift .stl-half:not(.is-active) { opacity: .55; }
+.stl-half-cta { margin-left: auto; font-size: 11px; font-weight: 700; color: #888; white-space: nowrap; }
+.stl-half-am.is-active .stl-half-cta { color: #b8690a; }
+.stl-half-pm.is-active .stl-half-cta { color: #533a95; }
+
+/* 지금 오전만/오후만 보고 있다는 표와, 합산으로 돌아가는 버튼. */
+.stl-shift-badge {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  vertical-align: middle;
+  color: #fff;
+}
+.stl-shift-badge.am { background: #b8690a; }
+.stl-shift-badge.pm { background: #533a95; }
+.stl-shift-reset {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border: 1px solid #c9cede;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  color: #16213e;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.stl-shift-reset:hover { background: #eef1f8; }
+.stl-shift-note { margin: 8px 0 0; font-size: 12px; color: #555; font-weight: 600; }
+
 /* 위의 큰 숫자가 합산이라는 표. 아래 두 칸과 색이 다른 이유다. */
 .stl-total-badge {
   margin-left: 8px;

@@ -522,6 +522,12 @@
       settlementPmFrom: "{t} 부터",
       settlementHalvesGap: "⚠ 오전 정산을 누르지 않은 날이 {n}일 있어 그 날의 매출 {amt} 은 오전·오후 어느 쪽에도 들어가지 않았습니다. 위의 합산에는 들어 있습니다.",
       settlementHalvesNone: "오전·오후를 가를 수 없는 기간이에요 ({amt}). 주문에 장사 구분이 찍히기 전이거나, 영업시간이 한 타임뿐인 날입니다. 위의 합산은 정확합니다.",
+      settlementShiftHint: "눌러서 이 시간대만 보기",
+      settlementShiftHintActive: "눌러서 합산으로 돌아가기",
+      settlementViewingAm: "🌅 오전만",
+      settlementViewingPm: "🌙 오후만",
+      settlementViewAll: "합산 보기",
+      settlementShiftNote: "아래 내용이 전부 이 시간대의 것입니다.",
       labelLocationCheckEnabled: "위치 확인 사용",
       locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
@@ -1195,6 +1201,12 @@
       settlementPmFrom: "{t} 起",
       settlementHalvesGap: "⚠ 有 {n} 天沒有按上午結算，那幾天的 {amt} 沒有分到上午或下午。上方合計仍包含這筆金額。",
       settlementHalvesNone: "這段期間無法分上午／下午（{amt}）。可能是訂單尚未標記時段，或當天只有一個營業時段。上方合計仍然正確。",
+      settlementShiftHint: "點一下只看這個時段",
+      settlementShiftHintActive: "點一下回到合計",
+      settlementViewingAm: "🌅 只看上午",
+      settlementViewingPm: "🌙 只看下午",
+      settlementViewAll: "看合計",
+      settlementShiftNote: "以下內容全部只包含這個時段。",
       labelLocationCheckEnabled: "啟用位置確認",
       locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
@@ -2170,6 +2182,25 @@
   // 자리에 있어야 한다.
   const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
 
+  // 지금 어느 시간대만 보고 있나. null 이면 하루 전체(합산)다.
+  //
+  // 사장님(2026-09-10): "오전, 오후 정산을 클릭해서 해당 내용을 볼 수
+  // 있으면 좋겠어. 현재는 Total 내용만 보여지는데, Shift 별로 클릭하면 해당
+  // Shift만 볼 수 있으면 더 디테일할거야."
+  //
+  // 거르는 일은 **서버가 한다**(GET /api/settlements?shift=am). 화면에서
+  // 거르면 결제수단·분류별·시간대·테이블별·차트를 하나하나 걸러야 하고,
+  // 언젠가 하나를 빠뜨린다 — 빠뜨린 그 칸만 조용히 하루치를 보여준다.
+  let settlementShift = null;
+
+  // 같은 칸을 다시 누르면 합산으로 돌아온다. 「돌아가는 길」이 누르던 그
+  // 자리에 있어야 헤매지 않는다 — 위의 「합산 보기」 버튼은 그걸 못 찾은
+  // 분을 위한 두 번째 길이다.
+  function toggleSettlementShift(which) {
+    settlementShift = settlementShift === which ? null : which;
+    loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
+  }
+
   // 오전 / 오후 (2026-09-10 사장님 요청). 위의 큰 숫자가 합산이고 이 두 칸이
   // 그것을 가른 것이다 — 색으로 갈라 두고(css .stl-half-am/.stl-half-pm),
   // 합산에는 「합산」 표를 붙인다.
@@ -2215,6 +2246,10 @@
     // 가를 수 없을 때 아무 말도 안 하면, 사장님은 「오전 오후가 사라졌네」로
     // 보게 된다(2026-09-10 실제로 그랬다). 칸은 감추되 왜 없는지는 적는다.
     if (!usable) {
+      // 가를 수 없으면 「오전만 보기」도 없다. 상태만 남겨두면 다음 날짜로
+      // 옮겼을 때 아무것도 없는 화면이 뜬다.
+      settlementShift = null;
+      box.classList.remove("has-shift");
       const un = ((half && half.unsplit_dates) || []).length;
       if (un > 0 && noteEl) {
         noteEl.textContent = T("settlementHalvesNone").replace("{amt}", nt((half && half.unsplit_revenue) || 0));
@@ -2239,6 +2274,22 @@
     fill("Am", am);
     fill("Pm", pm);
 
+    // 지금 고른 칸을 눈에 남긴다. 고른 표시가 약하면 아래 숫자가 왜
+    // 작아졌는지 모른 채로 보게 된다.
+    const active = data && data.shift === "am" ? "am" : data && data.shift === "pm" ? "pm" : null;
+    box.classList.toggle("has-shift", !!active);
+    const markBox = (side, key) => {
+      const el = $(`#settlement${side}Box`);
+      if (!el) return;
+      const on = active === key;
+      el.classList.toggle("is-active", on);
+      el.setAttribute("aria-pressed", on ? "true" : "false");
+      const cta = $(`#settlement${side}Cta`);
+      if (cta) cta.textContent = on ? T("settlementShiftHintActive") : T("settlementShiftHint");
+    };
+    markBox("Am", "am");
+    markBox("Pm", "pm");
+
     // 어디서 갈랐는지 적어 둔다. 안 적으면 「내 기억보다 오전이 적은데」가
     // 됐을 때 확인할 방법이 없다.
     const cut = (half && half.boundary_label) || "";
@@ -2256,6 +2307,30 @@
         .replace("{n}", String(un))
         .replace("{amt}", nt(half.unsplit_revenue || 0));
       note.hidden = false;
+    }
+  }
+
+  // 큰 숫자 옆의 표. 「합산」이거나 「🌅 오전만」이거나 「🌙 오후만」이다.
+  //
+  // 걸러놓은 화면에서 이 표가 없으면, 사장님은 그 숫자를 하루 매출로 읽는다.
+  // 그건 화면이 거짓말을 하는 것이다.
+  function renderSettlementShiftBadge(data) {
+    const shift = data && (data.shift === "am" || data.shift === "pm") ? data.shift : null;
+    const total = $("#settlementTotalBadge");
+    const badge = $("#settlementShiftBadge");
+    const reset = $("#settlementShiftReset");
+    const note = $("#settlementShiftNote");
+    const halvesUsable = !!(data && data.half_split && data.half_split.am && data.half_split.pm);
+    if (total) total.hidden = !halvesUsable || !!shift;
+    if (badge) {
+      badge.hidden = !shift;
+      badge.className = `stl-shift-badge ${shift || ""}`.trim();
+      badge.textContent = shift === "am" ? T("settlementViewingAm") : shift === "pm" ? T("settlementViewingPm") : "";
+    }
+    if (reset) reset.hidden = !shift;
+    if (note) {
+      note.hidden = !shift;
+      note.textContent = shift ? T("settlementShiftNote") : "";
     }
   }
 
@@ -11094,6 +11169,12 @@
     // 구분해서 집계해줘"). 손님 수 아래에 한 줄로 붙인다 — 칸을 따로 만들면
     // 「결산 탭 보는 게 너무 복잡해」로 되돌아간다.
     renderSettlementHalves(data);
+    // 곁가지 하나가 본체를 끌고 내려가지 않게 (위 renderSettlementHalves 주석).
+    try {
+      renderSettlementShiftBadge(data);
+    } catch (e) {
+      console.warn("시간대 표를 그리지 못했습니다:", e);
+    }
     const guestSplit = $("#settlementGuestSplit");
     if (guestSplit) {
       const a = Number(data.adult_count || 0);
@@ -11264,6 +11345,10 @@
     const params = new URLSearchParams();
     if (start) params.set("start", start);
     if (end) params.set("end", end);
+    // 「오전만 보기」를 켜둔 채 새로고침해도 그대로 남는다. 날짜를 바꿀
+    // 때만 합산으로 되돌린다(settlementDateRangeChanged) — 어제 오후를 보다
+    // 오늘로 넘어왔는데 여전히 오후만 보이면 그게 더 헷갈린다.
+    if (settlementShift) params.set("shift", settlementShift);
     const qs = params.toString();
     const res = await fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
     if (!res.ok) return;
@@ -11370,7 +11455,10 @@
     });
     $$(".settlement-history-row").forEach((row) => {
       row.classList.toggle("active", row.dataset.date === activeSettlementHistoryDate);
-      row.onclick = () => loadSettlement(row.dataset.date, row.dataset.date);
+      row.onclick = () => {
+        settlementShift = null;
+        loadSettlement(row.dataset.date, row.dataset.date);
+      };
     });
   }
 
@@ -11477,6 +11565,9 @@
     const params = new URLSearchParams();
     const start = $("#settlementStartDate").value;
     const end = $("#settlementEndDate").value;
+    // 위에서 오전만 보고 있으면 이 목록도 오전만. 위는 오전 매출인데 아래
+    // 목록만 하루치면, 목록을 세어보다가 위 숫자를 의심하게 된다.
+    if (settlementShift) params.set("shift", settlementShift);
     if (start) params.set("start", start);
     if (end) params.set("end", end);
     const q = $("#settlementOrderSearch").value.trim();
@@ -11586,24 +11677,52 @@
   });
   $("#settlementOrderStatus").onchange = loadSettlementOrders;
 
+  // 오전/오후 칸을 눌러 그 시간대만 보기 (2026-09-10 사장님 요청).
+  //
+  // <div> 에 role="button" 을 붙인 이유: 이 칸 안에 <dl> 이 들어 있어서
+  // <button> 으로는 못 감싼다(버튼 안에 목록은 유효하지 않은 HTML이다).
+  // 그 대신 키보드도 되게 Enter/Space 를 직접 받는다 — 태블릿 옆에 키보드를
+  // 꽂아 쓰시는 날이 온다.
+  [["#settlementAmBox", "am"], ["#settlementPmBox", "pm"]].forEach(([sel, which]) => {
+    const el = $(sel);
+    if (!el) return;
+    el.onclick = () => toggleSettlementShift(which);
+    el.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+      e.preventDefault(); // Space 가 화면을 굴려버리지 않게
+      toggleSettlementShift(which);
+    };
+  });
+  const shiftReset = $("#settlementShiftReset");
+  if (shiftReset) {
+    shiftReset.onclick = () => {
+      settlementShift = null;
+      loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
+    };
+  }
+
   function settlementDateRangeChanged() {
     const start = $("#settlementStartDate").value;
     const end = $("#settlementEndDate").value;
     if (!start || !end) return;
+    settlementShift = null;
     loadSettlement(start, end);
   }
   $("#settlementStartDate").onchange = settlementDateRangeChanged;
   $("#settlementEndDate").onchange = settlementDateRangeChanged;
   $("#settlementTodayBtn").onclick = () => {
     const today = taipeiTodayString();
+    settlementShift = null;
     loadSettlement(today, today);
   };
   $("#settlementWeekBtn").onclick = () => {
     const today = taipeiTodayString();
+    settlementShift = null;
     loadSettlement(addDaysToDateString(today, -6), today);
   };
   $("#settlementMonthBtn").onclick = () => {
     const today = taipeiTodayString();
+    settlementShift = null;
     loadSettlement(addDaysToDateString(today, -29), today);
   };
   // Builds a spreadsheet-friendly CSV from whatever's currently loaded

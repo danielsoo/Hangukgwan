@@ -10,6 +10,8 @@ const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 const testMode = require("../testMode");
 const seating = require("../seating");
 const { serviceOf } = require("../servicePeriod");
+// 오전/오후를 가르는 규칙. 결산과 같은 함수를 쓴다.
+const { halfOf } = require("../settlement");
 // 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
 const { maybeAutoCloseAm } = require("./settlements");
 
@@ -531,6 +533,10 @@ router.get("/history", requireOwner, async (req, res) => {
   }
   if (q.table) filter.table_number = String(q.table);
   if (q.status) filter.status = String(q.status);
+  // 「오전만 보기」 / 「오후만 보기」. 결산 화면에서 오전 칸을 누르면 이
+  // 목록도 같이 따라간다 — 위에서는 오전 매출을 보고 있는데 아래 목록만
+  // 하루치면, 사장님이 목록을 세어보다가 위 숫자를 의심하게 된다.
+  const shift = q.shift === "am" || q.shift === "pm" ? q.shift : null;
 
   // 최근 것부터. 한 번에 200건까지 — 그보다 많이 필요하면 날짜를 좁히는
   // 편이 화면에서도 찾기 쉽다.
@@ -540,6 +546,14 @@ router.get("/history", requireOwner, async (req, res) => {
   // 메뉴 이름·손님 이름·픽업 번호로 훑기. 몇 백 건 안에서 찾는 것이라
   // 여기서 걸러도 충분하고, 이름이 세 언어로 나뉘어 있어 데이터베이스
   // 질의로 만들면 오히려 복잡해진다.
+  // 결산과 **같은 함수**로 가른다 (src/settlement.js halfOf). 규칙이 두
+  // 군데 있으면 언젠가 한쪽만 고쳐진다.
+  if (shift && start) {
+    const { halfOpts } = require("./settlements");
+    const opts = await halfOpts(start, end, req);
+    list = list.filter((o) => halfOf(o, opts) === shift);
+  }
+
   const needle = String(q.q || "").trim().toLowerCase();
   if (needle) {
     list = list.filter((o) => {
