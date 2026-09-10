@@ -8,6 +8,7 @@ const { isActive: isVipActive, cardBelongsTo } = require("../vip");
 const { parseAddons } = require("../addons");
 const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 const testMode = require("../testMode");
+const seating = require("../seating");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -149,6 +150,10 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
 // regardless. Returns null if OK, or an error code string if it should be
 // rejected.
 function checkLocation(lat, lng) {
+  // 사장님이 끌 수 있다 (2026-09-10: "위치 기반을 on off 할 수 있게도 해줘").
+  // 꺼두면 손님 폰에 위치 권한을 묻지도 않는다(public/js/order.js) — 주문
+  // 화면이 그만큼 빨라지고, 권한 창 때문에 멈칫하는 손님도 없어진다.
+  if (store.settings.location_check_enabled === false) return null;
   const storeLat = parseFloat(store.settings.store_lat);
   const storeLng = parseFloat(store.settings.store_lng);
   if (Number.isNaN(storeLat) || Number.isNaN(storeLng)) return null; // feature not configured yet
@@ -234,7 +239,34 @@ router.post("/", async (req, res) => {
   // 그래서 좌표가 아예 없는 주문은 받되 표를 달아 둔다. 자리에 손님이
   // 앉아 있는지는 직원이 눈으로 안다 — 화면이 그 판단에 필요한 사실만
   // 넘겨주면 된다.
-  const locationError = isTestDevice ? null : checkLocation(lat, lng);
+  // 이 기기가 지금 이 자리에 앉아 계신 손님의 것인가 (src/seating.js).
+  //
+  // 벽의 QR 은 누구나 가져갈 수 있는 열쇠라 이것이 가게 밖 사람을 막지는
+  // 못한다. 막는 것은 「앞 손님 세션이 다음 손님 자리에 섞이는 것」과
+  // 「며칠 전에 열어둔 채 살아 있는 페이지」다. 손님은 자리 화면을 열 때
+  // 자동으로 묶이므로 아무것도 더 하지 않는다.
+  //
+  // 직원과 테스트 기기는 지나간다. 직원은 수기 주문으로 아무 자리에나 넣을
+  // 수 있어야 하고(전화 주문, 대신 주문), 그건 이 검사가 막으려는 것이 아니다.
+  const isStaff = !!(req.session && req.session.isAdmin);
+  if (!isTestDevice && !isStaff && seating.isStale(req, orderingTable)) {
+    return res.status(409).json({ error: "seating_stale" });
+  }
+
+  // 직원 주문에는 위치를 묻지 않는다.
+  //
+  // 2026-09-10 사장님: "아빠 노트북 웹에서는 수동 포장주문이 가능한데,
+  // 태블릿에서는 저 메세지가 동일하게 떠서 주문이 안됐어."
+  //
+  // 가게 태블릿은 앱(WebView) 안에서 돈다. 안드로이드 WebView 는
+  // onGeolocationPermissionsShowPrompt 를 구현하지 않으면 위치 요청을
+  // **조용히 거부한다** — 앱에 그 콜백이 없으니 거기서는 좌표가 잡힐 수가
+  // 없다. 노트북 브라우저는 잡히고 태블릿은 안 잡히던 이유가 이것이다.
+  //
+  // 애초에 직원 주문을 위치로 막을 이유가 없다. 이 검사는 손님이 QR 사진을
+  // 들고 멀리서 주문하는 것을 막으려는 것이고, 직원은 가게 안에서 대신
+  // 넣어주는 사람이다. 전화 주문도 이 길로 들어온다.
+  const locationError = isTestDevice || isStaff ? null : checkLocation(lat, lng);
   if (locationError === "out_of_range") return res.status(403).json({ error: locationError });
   const locationUnverified = locationError === "location_required";
 
@@ -407,10 +439,16 @@ router.post("/", async (req, res) => {
     // 앉아 있는지 눈으로 보고 판단한다. 확인된 주문에는 이 칸을 안 만든다
     // (칸이 없다 = 정상, testMode.tag 와 같은 규칙).
     ...(locationUnverified ? { location_unverified: true } : {}),
+    // 어느 착석의 주문인가. 나중에 「이 주문이 그때 그 손님 것이었나」를
+    // 따질 수 있는 유일한 근거다 (src/seating.js).
+    ...(seating.seatingOf(orderingTable) ? { seating: seating.seatingOf(orderingTable) } : {}),
     // 테스트 기기가 넣은 것이면 표를 남긴다. 이 한 칸이 있는 주문만
     // 「테스터 모드 종료」때 지워진다 — 없으면 진짜 주문이다.
     ...testMode.tag(req, store),
   };
+  // 이 기기를 이 착석에 묶어 둔다. 자리 화면을 거치지 않고 들어온 기기도
+  // 이 순간부터는 「이 착석의 기기」가 되고, 다음 손님이 앉으면 걸린다.
+  if (!isStaff) seating.bind(req, orderingTable.number, seating.seatingOf(orderingTable));
   store.orders.push(order);
   // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
   // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이

@@ -36,6 +36,12 @@ out.push("[1] 서버 — 멀 때만 막는다");
   check("확인 못 한 주문에 표를 단다", /location_unverified: true/.test(orders), "");
   check("확인된 주문에는 그 칸을 안 만든다", /\.\.\.\(locationUnverified \? \{ location_unverified: true \} : \{\}\)/.test(orders), "");
   check("먼 것을 재는 계산은 그대로다", /dist > radius \? "out_of_range" : null/.test(orders), "");
+  // 가게 태블릿은 앱(WebView) 안에서 돈다. 안드로이드 WebView 는
+  // onGeolocationPermissionsShowPrompt 가 없으면 위치 요청을 조용히
+  // 거부하므로, 거기서는 좌표가 잡힐 수가 없다. 직원을 위치로 막을 이유도
+  // 애초에 없다 — 이 검사는 손님이 QR 사진을 들고 멀리서 주문하는 것을
+  // 막으려는 것이다.
+  check("★ 직원 주문에는 위치를 묻지 않는다", /const locationError = isTestDevice \|\| isStaff \? null : checkLocation\(lat, lng\);/.test(orders), "");
 }
 
 out.push("\n[2] 손님 화면 — 위치를 못 잡아도 주문이 나간다");

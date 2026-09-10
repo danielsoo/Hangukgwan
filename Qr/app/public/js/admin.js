@@ -513,6 +513,8 @@
       orderCardMixedBadge: "혼합",
       printFailedCardMsg: "⚠️ 인쇄 실패 — 주방에 전달됐는지 확인, 아래 인쇄 버튼으로 재시도",
       orderCardLocUnverified: "📍 위치 미확인",
+      labelLocationCheckEnabled: "위치 확인 사용",
+      locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
       printFailReasonOff: "자동 인쇄가 꺼져 있어요",
       printFailReasonElsewhere: "이 기기는 인쇄 담당이 아니에요",
@@ -1156,6 +1158,8 @@
       orderCardMixedBadge: "混合",
       printFailedCardMsg: "⚠️ 列印失敗 — 請確認廚房是否收到，或用下方列印按鈕重試",
       orderCardLocUnverified: "📍 位置未確認",
+      labelLocationCheckEnabled: "啟用位置確認",
+      locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
       printFailReasonOff: "自動列印已關閉",
       printFailReasonElsewhere: "這台裝置不是列印裝置",
@@ -8771,6 +8775,15 @@
     $("#s_store_min_spend").value = s.store_min_spend || "";
     $("#s_store_notice").value = s.store_notice || "";
     $("#s_order_radius_m").value = s.order_radius_m || "200";
+    // 저장된 적이 없으면 켜진 것으로 본다 — 지금까지 쓰던 대로다.
+    const locOn = s.location_check_enabled !== false && s.location_check_enabled !== "false";
+    $("#s_location_check_enabled").checked = locOn;
+    $("#locationOffHint").hidden = locOn;
+    // 껐다는 것이 저장 전에도 바로 보여야 한다 — 「저장을 눌러야 아는」
+    // 스위치는 켜둔 줄 알고 나가게 만든다.
+    $("#s_location_check_enabled").onchange = (e) => {
+      $("#locationOffHint").hidden = e.target.checked;
+    };
     currentStoreLat = s.store_lat || "";
     currentStoreLng = s.store_lng || "";
     renderLocationStatus();
@@ -9308,6 +9321,7 @@
       store_hours: $("#s_store_hours").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
       order_radius_m: $("#s_order_radius_m").value.trim(),
+      location_check_enabled: $("#s_location_check_enabled").checked,
       taegeuk_season_mode: $("#s_taegeuk_season_mode").value,
     };
     await fetch("/api/settings", {
@@ -9370,6 +9384,7 @@
             store_lat: String(lat),
             store_lng: String(lng),
             order_radius_m: $("#s_order_radius_m").value.trim() || "200",
+            location_check_enabled: $("#s_location_check_enabled").checked,
           }),
         });
         currentStoreLat = String(lat);

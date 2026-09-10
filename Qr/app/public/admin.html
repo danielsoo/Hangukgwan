@@ -705,6 +705,16 @@
         </div>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsLocationTitle">위치 기반 주문 제한</h3>
+          <!-- 2026-09-10 사장님: "위치 기반을 on off 할 수 있게도 해줘."
+               끄면 손님 폰에 위치 권한을 묻지도 않는다 — 주문 화면이 그만큼
+               빨라지고, 권한 창 때문에 멈칫하는 손님도 없어진다. -->
+          <label class="settings-switch">
+            <input id="s_location_check_enabled" type="checkbox" />
+            <span data-i18n="labelLocationCheckEnabled">위치 확인 사용</span>
+          </label>
+          <p class="settings-hint" id="locationOffHint" data-i18n="locationOffHint" hidden>
+            꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.
+          </p>
           <p class="settings-hint" data-i18n="settingsLocationHint">
             매장 위치를 설정하면, 설정한 반경 밖에서는 주문이 접수되지 않습니다.
             QR 코드를 사진으로 찍어 다른 곳에서 사용하는 것을 막기 위한 기능입니다.

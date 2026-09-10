@@ -26,6 +26,10 @@ const PUBLIC_KEYS = [
   "store_lat",
   "store_lng",
   "order_radius_m",
+  // 위치 확인을 쓸 것인가 (2026-09-10 사장님: "위치 기반을 on off 할 수
+  // 있게도 해줘"). 손님 화면이 이 값을 보고 위치를 물을지 말지 정하므로
+  // 공개 목록에 있어야 한다 — 꺼져 있으면 권한 창을 아예 안 띄운다.
+  "location_check_enabled",
   // The Firebase web app config snippet (apiKey/authDomain/projectId/etc.)
   // Admin > 설정 > 회원(VIP) 로그인 설정 lets the owner paste in, straight
   // from their Firebase Console. Not a secret — Firebase's own docs note
@@ -43,6 +47,9 @@ function publicSettings() {
   // Whether the customer-facing "온라인 결제" button should show at all —
   // see /payment routes below and public/js/order.js.
   map.online_payment_enabled = !!store.settings.online_payment_enabled;
+  // 저장된 적이 없으면 켜진 것으로 본다 — 지금까지 쓰던 대로다. 끄는 것은
+  // 사장님이 직접 끈 경우뿐이어야 한다.
+  map.location_check_enabled = store.settings.location_check_enabled !== false;
   // Header logo mode (order.html store-avatar, and this settings page's own
   // live preview) — see public/js/season.js. "auto" (default) picks the
   // season from today's date; it can also be forced to one specific season

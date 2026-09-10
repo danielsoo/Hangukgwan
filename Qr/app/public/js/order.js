@@ -186,6 +186,12 @@
     en: (n) => `On your first order, this dish needs at least ${n} servings total (mix the ratio however you like)`,
   };
 
+  const SEATING_STALE_MSG = {
+    zh: "這個畫面是上一位客人開啟的。已為您重新整理，請再點一次餐。",
+    ko: "이 화면은 앞 손님이 열어두신 것이에요. 새로 불러올게요. 다시 주문해 주세요.",
+    en: "This page was opened by a previous guest. Reloading — please order again.",
+  };
+
   const SPICE_REQUIRED_MSG = {
     zh: "請先選擇辣度",
     ko: "매운 정도를 선택해 주세요",
@@ -417,6 +423,27 @@
    * 연결이 끊겼을 때, 그리고 폰을 다시 집어들었을 때(잠겨 있는 동안 온
    * 이벤트는 놓쳤을 수 있으니 그 한 번은 물어보는 게 맞다).
    */
+  // 이 기기를 이 자리의 지금 착석에 묶어 달라고 서버에 알린다.
+  //
+  // **화면을 새로 열 때 딱 한 번만 부른다.** 주기적으로 도는
+  // refreshTableState 안에서 부르면 안 된다 — 앞 손님이 열어둔 채 떠 있는
+  // 페이지가 다음 폴링 때 스스로 새 착석으로 다시 묶여서, 막으려던 그
+  // 페이지가 통과권을 받아간다. (2026-09-10 사장님이 「이건 누구한테
+  // 띄운다는거야」라고 물으신 덕분에 발견했다. 처음 구현이 그랬다.)
+  //
+  // 새로 여는 것은 손님이 QR 을 찍는 순간이고, 그때는 그 자리에 있다.
+  // 떠 있는 페이지는 새로 열지 않는다 — 그 둘의 차이가 이 기능의 전부다.
+  //
+  // 실패해도 아무 말 하지 않는다. 주문할 때 서버가 다시 가린다.
+  async function bindSeat() {
+    if (isCounterTable) return;
+    try {
+      await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/seat`, { method: "POST" });
+    } catch (e) {
+      /* 다음 기회에 */
+    }
+  }
+
   async function refreshTableState() {
     if (movedNoticeShown) return;
     if (document.visibilityState !== "visible") return;
@@ -501,6 +528,10 @@
     document.head.appendChild(el);
   }
 
+  // 화면을 새로 여는 그 한 번. 여기서만 이 기기를 지금 착석에 묶는다
+  // (bindSeat 주석 참고 — 폴링 안에서 부르면 보호가 통째로 무너진다).
+  bindSeat();
+
   setInterval(() => {
     refreshOrderingState();
     // push 가 붙어 있으면 물어보지 않는다.
@@ -518,8 +549,12 @@
     const s = await res.json();
     const lat = parseFloat(s.store_lat);
     const lng = parseFloat(s.store_lng);
-    storeLat = Number.isNaN(lat) ? null : lat;
-    storeLng = Number.isNaN(lng) ? null : lng;
+    // 사장님이 위치 확인을 꺼두셨으면 좌표를 아예 안 들고 온다. 그러면
+    // 아래 주문 흐름에서 위치를 묻는 단계 자체가 사라진다 — 권한 창도 안
+    // 뜨고, 잡히기를 기다리는 시간도 없다.
+    const locationOn = s.location_check_enabled !== false;
+    storeLat = !locationOn || Number.isNaN(lat) ? null : lat;
+    storeLng = !locationOn || Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;
     // 자리 이동을 즉시 받기 위한 연결 정보(key/cluster 는 공개해도 되는 값
     // 이다 — src/routes/settings.js 주석). 채널 이름은 initPartySize 가
@@ -1277,6 +1312,7 @@
           if (body.ordering) ordering = body.ordering;
           throw new Error("closed_now");
         }
+        if (body.error === "seating_stale") throw new Error("seating_stale");
         if (body.error === "party_size_required") throw new Error("party_size_required");
         if (body.error === "customer_name_required") throw new Error("customer_name_required");
         if (body.error === "customer_phone_required") throw new Error("customer_phone_required");
@@ -1298,7 +1334,19 @@
       if (e.message === "closed_now") alert(closedMessage());
       else if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
-      else if (e.message === "party_size_required") showPartySizeModal();
+      else if (e.message === "seating_stale") {
+        // 이 페이지가 앞 손님 때 열린 것이다. 화면만 남아 있고 자리에는
+        // 다른 분이 앉으셨다 — 그대로 담아둔 것을 보내면 그 분 계산서에
+        // 붙는다. 담긴 것을 비우고 지금 자리 상태로 다시 연다.
+        cart = [];
+        try {
+          localStorage.removeItem(`hgk_orders_${tableNumber}`);
+        } catch (err) {
+          /* 저장이 막힌 기기 */
+        }
+        alert(SEATING_STALE_MSG[lang] || SEATING_STALE_MSG.zh);
+        location.reload();
+      } else if (e.message === "party_size_required") showPartySizeModal();
       else if (e.message === "customer_name_required" || e.message === "customer_phone_required") {
         counterCustomerName = null;
         counterCustomerPhone = null;

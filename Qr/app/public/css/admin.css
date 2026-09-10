@@ -1548,3 +1548,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-size: 12px;
   white-space: nowrap;
 }
+
+/* 설정 카드 안의 켜기/끄기 한 줄. */
+.settings-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  font-weight: 600;
+}
+.settings-switch input { width: 18px; height: 18px; }

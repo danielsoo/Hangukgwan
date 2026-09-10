@@ -3,6 +3,7 @@ const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = requir
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf } = require("../partySize");
+const seating = require("../seating");
 const { channelForTable } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
 
@@ -230,6 +231,18 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   if (!size || size < 1 || size > 50) return res.status(400).json({ error: "invalid_party_size" });
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
+  // 이미 다른 손님이 앉아 계신 자리의 인원수를, 그 손님이 아닌 기기가
+  // 바꿀 수는 없다 (src/seating.js).
+  //
+  // 여기를 안 막으면 착석 토큰이 통째로 무의미해진다 — 앞 손님 폰이 인원수를
+  // 다시 답하는 것만으로 지금 착석을 자기 것으로 가져가고, 그 순간부터
+  // 주문도 된다. 게다가 앉아 계신 분들의 인원수가 조용히 덮어써진다.
+  //
+  // 직원은 지나간다. 대신 넣어주는 일이 실제로 있다.
+  const isStaff = !!(req.session && req.session.isAdmin);
+  if (!isStaff && seating.isStale(req, table)) {
+    return res.status(409).json({ error: "seating_stale" });
+  }
   table.party_size = size;
   table.party_adults = adults;
   table.party_children = children;
@@ -237,6 +250,14 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   // 새 손님이 앉았다 — 「자리가 옮겨졌어요」 안내는 여기서 끝난다.
   // 안 지우면 오늘 저녁 내내 그 자리 손님마다 옮겨가라는 말을 듣는다.
   delete table.moved_to;
+  // 인원을 답한 그 기기가 이 착석의 첫 손님이다. 바로 묶는다 — 여기서 안
+  // 묶으면 답하자마자 주문할 때 「새 손님이 앉으셨어요」를 자기가 듣는다.
+  //
+  // force 로 묶는다. 결제를 마치고 「더 시킬게요」 하는 손님이 정확히 이
+  // 길로 다시 들어온다 — 그때 그 폰은 방금 끝난 착석에 묶여 있다. 위에서
+  // 이미 「살아 있는 다른 착석」은 걸러냈으므로, 여기 오는 것은 빈 자리에
+  // 앉아 인원을 답하는 경우뿐이다.
+  seating.bind(req, table.number, seating.seatingOf(table), { force: true });
   await save();
   res.json({ party_size: table.party_size, party_adults: table.party_adults, party_children: table.party_children });
 });
@@ -245,6 +266,21 @@ router.put("/:tableNumber/party-size", async (req, res) => {
 // party size registered — so a page refresh (or re-scanning the QR code
 // mid-visit) doesn't ask again for the same party. Only exposes the one
 // field (not the rest of the table record).
+// 이 기기를 이 자리의 지금 착석에 묶는다 (src/seating.js).
+//
+// 손님 폰이 자리 화면을 열 때 한 번 부른다. 아직 아무도 안 앉은 자리면
+// 묶을 착석이 없으므로 아무 일도 하지 않는다 — 인원수를 답하는 순간
+// 위 PUT 이 묶는다.
+//
+// 손님은 아무것도 더 하지 않는다. 이 요청이 오갔다는 것조차 모른다.
+router.post("/:tableNumber/seat", (req, res) => {
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  const cur = seating.seatingOf(table);
+  if (cur) seating.bind(req, table.number, cur);
+  res.json({ seating: cur });
+});
+
 router.get("/:tableNumber/party-size", (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
