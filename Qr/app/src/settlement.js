@@ -86,12 +86,39 @@ function halfBoundaryFor(dateStr, opts) {
   return hint ? `${dateStr} ${hint}:00` : null;
 }
 
-function summarize(paid) {
+/**
+ * 한 팀 — 한 번 앉았다 일어나는 손님 한 무리 — 을 가리키는 열쇠.
+ *
+ * 인원은 주문마다 찍히므로 같은 팀이 세 번 주문하면 세 번 세어진다. 그래서
+ * 팀마다 한 번만 세야 하는데, 그 「팀」을 (테이블, 날짜)로 잡으면 **점심
+ * 손님과 저녁 손님이 한 팀으로 뭉친다.** 2026-09-10 사장님: "인원이 오전
+ * 오후 합치면 총 72명인데 합계는 51이야" — 오전·오후는 각자 안에서 세니까
+ * 맞고, 합계만 자리마다 큰 쪽 하나로 눌려서 21명이 사라진 것이다.
+ *
+ * 그래서 두 가지를 열쇠에 같이 넣는다.
+ *
+ *   1. o.seating — 그 손님이 그 자리에 앉은 시각(src/seating.js). 자리를
+ *      옮겨도 따라오고 결제하면 지워지니, 같은 자리에 새로 앉은 다음 팀과
+ *      절대 겹치지 않는다. 가장 정확한 기준이라 있으면 이걸 쓴다.
+ *   2. 오전/오후. 이 표가 열쇠에 들어가야 **오전 몫 + 오후 몫 + 못 가른 몫
+ *      = 합계** 가 언제나 성립한다. 합계 쪽이 더 굵게 묶이는 순간 두 숫자가
+ *      어긋나고, 사장님은 어느 쪽도 못 믿게 된다.
+ *
+ * seating 이 없는 옛 주문(2026-09-10 이전)은 날짜+반나절로 묶는다. 예전보다
+ * 잘게 갈리므로 옛 날짜의 손님 수가 늘어 보일 수 있는데, 늘어난 쪽이 맞다.
+ */
+function partyKeyOf(o, half) {
+  const h = half || "?";
+  const party = o.seating || `${o.created_at.slice(0, 10)}`;
+  return `${o.table_number}|${party}|${h}`;
+}
+
+function summarize(paid, half) {
   const revenue = paid.reduce((sum, o) => sum + (o.total || 0), 0);
   const byTableDay = new Map();
   for (const o of paid) {
     if (!o.party_size) continue;
-    const key = `${o.table_number}|${o.created_at.slice(0, 10)}`;
+    const key = partyKeyOf(o, half);
     const prev = byTableDay.get(key);
     if (prev && prev.size >= o.party_size) continue;
     byTableDay.set(key, splitParty(o));
@@ -284,10 +311,41 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     net: cardSaleOrders.reduce((sum, o) => sum + (o.total || 0), 0) - vipCardDiscountTotal,
   };
 
+  // 오전 / 오후.
+  const amPaid = [];
+  const pmPaid = [];
+  const unsplitDates = new Set();
+  const cuts = new Set();
+  // 주문 하나하나가 어느 쪽 몫인지. 아래 손님 수 묶음이 이 표를 그대로 써야
+  // 오전 몫 + 오후 몫 + 못 가른 몫 = 합계 가 성립한다.
+  const halfByOrder = new Map();
+  for (const o of paidOrders) {
+    // 주문에 박혀 있는 표를 먼저 믿는다 (src/servicePeriod.js).
+    //
+    // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
+    // 같이 저장하면 되는 거 아니야?" — 그 표가 있으면 정산을 눌렀는지,
+    // 그 뒤에 영업시간이 바뀌었는지와 무관하게 언제나 같은 답이 나온다.
+    if (o.service_period === "am" || o.service_period === "pm") {
+      halfByOrder.set(o, o.service_period);
+      (o.service_period === "am" ? amPaid : pmPaid).push(o);
+      continue;
+    }
+    // 표가 없는 옛 주문은 예전처럼 경계 시각으로 가른다.
+    const date = o.created_at.slice(0, 10);
+    const boundary = halfBoundaryFor(date, opts);
+    if (!boundary) {
+      unsplitDates.add(date);
+      continue;
+    }
+    cuts.add(String(boundary).slice(11, 16));
+    const half = paidAtOf(o) <= boundary ? "am" : "pm";
+    halfByOrder.set(o, half);
+    (half === "am" ? amPaid : pmPaid).push(o);
+  }
   // 손님 수와 객단가. party_size 는 테이블에서 손님이 직접 답한 인원수이고,
   // 주문할 때 그 주문에 함께 찍힌다. 같은 테이블이 여러 번 주문하면 같은
-  // 인원이 여러 번 세어지므로, (테이블, 날짜)마다 한 번만 센다 — 아래
-  // 회전 시간 계산이 쓰는 것과 같은 묶음 기준이다.
+  // 인원이 여러 번 세어지므로, 한 팀마다 한 번만 센다 — 그 「한 팀」이
+  // 무엇인지는 partyKeyOf 주석에 있다.
   //
   // 어른과 아이를 따로 센다 (2026-09-10 사장님: "결산에 들어가는 인원 성인
   // 아이 따로 구분해서 집계해줘").
@@ -300,7 +358,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const partyByTableDay = new Map();
   for (const o of paidOrders) {
     if (!o.party_size) continue;
-    const key = `${o.table_number}|${o.created_at.slice(0, 10)}`;
+    const key = partyKeyOf(o, halfByOrder.get(o));
     // 한 자리에서 인원이 달라졌다면 큰 쪽을 쓴다(중간에 일행이 합류한 경우).
     const prev = partyByTableDay.get(key);
     if (prev && prev.size >= o.party_size) continue;
@@ -313,36 +371,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const avgPerOrder = paidOrders.length ? Math.round(totalRevenue / paidOrders.length) : 0;
   const avgPerGuest = guestCount ? Math.round(totalRevenue / guestCount) : 0;
 
-  // 취소와 미결제는 지금까지 "몇 건"만 보였다. 금액이 있어야 얼마나 아까운
-  // 일인지, 얼마를 놓치고 있는지 알 수 있다.
-  // 오전 / 오후.
-  const amPaid = [];
-  const pmPaid = [];
-  const unsplitDates = new Set();
-  const cuts = new Set();
-  for (const o of paidOrders) {
-    // 주문에 박혀 있는 표를 먼저 믿는다 (src/servicePeriod.js).
-    //
-    // 사장님(2026-09-10): "주문이 들어온 시간을 몽고디비에 오전인지 오후인지
-    // 같이 저장하면 되는 거 아니야?" — 그 표가 있으면 정산을 눌렀는지,
-    // 그 뒤에 영업시간이 바뀌었는지와 무관하게 언제나 같은 답이 나온다.
-    if (o.service_period === "am" || o.service_period === "pm") {
-      (o.service_period === "am" ? amPaid : pmPaid).push(o);
-      continue;
-    }
-    // 표가 없는 옛 주문은 예전처럼 경계 시각으로 가른다.
-    const date = o.created_at.slice(0, 10);
-    const boundary = halfBoundaryFor(date, opts);
-    if (!boundary) {
-      unsplitDates.add(date);
-      continue;
-    }
-    cuts.add(String(boundary).slice(11, 16));
-    (paidAtOf(o) <= boundary ? amPaid : pmPaid).push(o);
-  }
   const halfSplit = {
-    am: summarize(amPaid),
-    pm: summarize(pmPaid),
+    am: summarize(amPaid, "am"),
+    pm: summarize(pmPaid, "pm"),
     // 경계를 못 정해 어느 쪽에도 못 넣은 날들. 비어 있으면 두 몫의 합이
     // 총 매출과 정확히 같다.
     unsplit_dates: [...unsplitDates].sort(),
@@ -360,6 +391,8 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
       .reduce((sum, o) => sum + (o.total || 0), 0),
   };
 
+  // 취소와 미결제는 지금까지 "몇 건"만 보였다. 금액이 있어야 얼마나 아까운
+  // 일인지, 얼마를 놓치고 있는지 알 수 있다.
   const cancelledAmount = cancelledOrders.reduce((sum, o) => sum + (o.total || 0), 0);
   const problemAmount = problemOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
@@ -431,17 +464,21 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     }))
     .sort((a, b) => a.hour - b.hour);
 
-  // Rough table-turnover estimate: for each (table, calendar day) that had
-  // at least one paid order in range, minutes from its first order to its
-  // last order being marked paid. This is an approximation — the data model
-  // has no explicit "party seated/left" event, so a table that gets a second
-  // unrelated party later the same day would still be treated as one block.
-  // Good enough for a general "how long do tables usually take" read, not
-  // meant to be exact to the second.
+  // 회전 시간 — 한 팀이 앉아 있던 시간(첫 주문 ~ 마지막 결제)의 평균.
+  //
+  // 묶는 기준은 손님 수와 똑같다(partyKeyOf). 예전에는 (테이블, 날짜)로
+  // 묶어서 **점심 팀과 저녁 팀이 한 덩어리**가 됐고, 점심 첫 주문부터 저녁
+  // 마지막 결제까지를 한 팀이 앉아 있던 시간으로 셌다. 2026-09-10 화면에
+  // 뜬 「평균 337분」이 그것이다 — 다섯 시간 반을 앉아 계신 손님은 없다.
+  //
+  // 여전히 어림값이다. "손님이 앉았다/일어났다"는 사건이 데이터에 없어서,
+  // 앉자마자 주문하지 않은 시간은 빠진다. 「대충 얼마나 걸리나」를 보는
+  // 숫자이지 분 단위로 맞는 숫자가 아니다.
   const tableDayMap = new Map();
   for (const o of rangeOrders) {
-    const day = o.created_at.slice(0, 10);
-    const key = `${o.table_number}|${day}`;
+    // 여기서는 halfByOrder 를 쓰지 않는다 — 그 표는 결제된 주문만 담고 있어서,
+    // 아직 안 낸 주문이 같은 팀인데도 다른 열쇠로 갈라진다.
+    const key = partyKeyOf(o, o.service_period);
     const entry = tableDayMap.get(key) || { minCreated: o.created_at, maxPaidUpdated: null };
     if (o.created_at < entry.minCreated) entry.minCreated = o.created_at;
     if (o.status === "paid" && (!entry.maxPaidUpdated || o.updated_at > entry.maxPaidUpdated)) {
