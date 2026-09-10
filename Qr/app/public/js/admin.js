@@ -844,6 +844,16 @@
       uploadFailed: "업로드 실패. 다시 시도해주세요",
       logoUpdated: "로고가 업데이트되었습니다",
       coverUpdated: "사진이 업데이트되었습니다",
+      itemPaneBasic: "기본",
+      itemPaneBasicSub: "분류 · 코드 · 이름",
+      itemPanePrice: "가격",
+      itemPanePriceSub: "가격 · 정가 · 최소 수량",
+      itemPaneOptions: "옵션",
+      itemPaneOptionsSub: "고기 · 맵기 · 추가",
+      itemPaneDisplay: "손님 화면",
+      itemPaneDisplaySub: "배지 · 알러지 · 사진",
+      itemPaneSoldOut: "품절",
+      itemPaneSoldOutSub: "판매 중 · 기간",
       itemCategoryLabel: "카테고리",
       itemCodeLabel: "코드 (선택사항)",
       itemNameZh: "이름 (중국어)",
@@ -1497,6 +1507,16 @@
       uploadFailed: "上傳失敗，請再試一次",
       logoUpdated: "標誌已更新",
       coverUpdated: "照片已更新",
+      itemPaneBasic: "基本",
+      itemPaneBasicSub: "分類 · 編號 · 名稱",
+      itemPanePrice: "價格",
+      itemPanePriceSub: "價格 · 原價 · 最低份數",
+      itemPaneOptions: "選項",
+      itemPaneOptionsSub: "肉類 · 辣度 · 加點",
+      itemPaneDisplay: "顧客畫面",
+      itemPaneDisplaySub: "標記 · 過敏原 · 照片",
+      itemPaneSoldOut: "售完",
+      itemPaneSoldOutSub: "販售中 · 期間",
       itemCategoryLabel: "分類",
       itemCodeLabel: "代號（選填）",
       itemNameZh: "名稱（中文）",
@@ -5455,7 +5475,26 @@
 
   $("#addItemBtn").onclick = () => openItemModal(null);
 
+  /**
+   * 메뉴 수정 폼의 왼쪽 탭 — 사장님(2026-09-10): "메뉴 관리 폼이 너무 이것
+   * 저것 다 섞여 있어서 엄청 헷갈려 ... 왼쪽에 탭을 둬서 설정처럼 구분하면서
+   * 보는 게 좋을 것 같아."
+   *
+   * 보여주고 감추기만 한다. 입력칸은 전부 DOM 에 그대로 남아 있으므로 저장은
+   * 예전과 똑같이 한 번에 다 나간다 — 지금 안 보이는 탭의 값도 같이 저장된다.
+   */
+  function showItemPane(name) {
+    $$(".item-form-nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.itemPane === name));
+    $$(".item-form-pane").forEach((p) => (p.hidden = p.dataset.itemPane !== name));
+  }
+  $$(".item-form-nav-btn").forEach((btn) => {
+    btn.onclick = () => showItemPane(btn.dataset.itemPane);
+  });
+
   function openItemModal(item) {
+    // 열 때마다 「기본」부터. 지난번에 보던 탭이 그대로 열려 있으면, 다른
+    // 메뉴를 고치러 들어왔는데 이름이 안 보이는 화면에서 시작하게 된다.
+    showItemPane("basic");
     editingItemId = item ? item.id : null;
     editingItemPhotoUrl = item ? item.photo_url : null;
     selectedPhotoFile = null;
