@@ -2125,43 +2125,74 @@
   // 그것을 가른 것이다 — 색으로 갈라 두고(css .stl-half-am/.stl-half-pm),
   // 합산에는 「합산」 표를 붙인다.
   function renderSettlementHalves(data) {
+    // 이 칸 하나 때문에 결산 화면 전체가 멈추면 안 된다.
+    //
+    // 2026-09-10 사장님: "근데 지금 데이터가 싹다 날라간 것 같은데?" —
+    // 매출·손님 수는 멀쩡히 떠 있는데 그 아래가 전부 0 이었다. 데이터가
+    // 사라진 게 아니라 여기서 예외가 나서 **그 뒤의 렌더가 통째로 멈춘**
+    // 것이었다. 1인당 평균도, 결제수단도, 분류별 매출도 전부 그 뒤에 있다.
+    //
+    // 곁가지 하나가 본체를 끌고 내려가지 않게 통째로 감싼다. 여기서 무슨
+    // 일이 나든 나머지는 그려져야 한다.
+    try {
+      renderSettlementHalvesInner(data);
+    } catch (e) {
+      console.warn("오전/오후 칸을 그리지 못했습니다:", e);
+      const box = $("#settlementHalves");
+      if (box) box.hidden = true;
+      const badge = $("#settlementTotalBadge");
+      if (badge) badge.hidden = true;
+    }
+  }
+
+  function renderSettlementHalvesInner(data) {
     const box = $("#settlementHalves");
     if (!box) return;
-    const half = data.half_split;
+    const half = data && data.half_split;
     const badge = $("#settlementTotalBadge");
     // 가를 기준이 아예 없으면(오전 정산도 안 눌렀고 영업시간도 한 타임뿐)
     // 두 칸을 통째로 감춘다. 0 만 적힌 칸을 보여주면 그날 오전 매출이
     // 정말 0 인 줄 안다.
-    const usable = !!half && (half.am.paid_order_count > 0 || half.pm.paid_order_count > 0);
+    // 옛 날짜의 저장된 정산 기록에는 이 칸이 아예 없다(그때는 없던 기능이다).
+    // 한 쪽만 있는 경우도 없다고 본다 — 반쪽짜리를 그리면 그게 더 헷갈린다.
+    const am = half && half.am;
+    const pm = half && half.pm;
+    const usable = !!am && !!pm && ((am.paid_order_count || 0) > 0 || (pm.paid_order_count || 0) > 0);
     box.hidden = !usable;
     if (badge) badge.hidden = !usable;
-    $("#settlementHalvesNote").hidden = true;
+    const noteEl = $("#settlementHalvesNote");
+    if (noteEl) noteEl.hidden = true;
     if (!usable) return;
 
+    const put = (id, text) => {
+      const el = $(id);
+      if (el) el.textContent = text;
+    };
     const fill = (side, part) => {
-      $(`#settlement${side}Revenue`).textContent = nt(part.revenue);
-      $(`#settlement${side}Orders`).textContent = `${Number(part.paid_order_count || 0).toLocaleString()}${T("settlementHalfOrdersUnit")}`;
       const g = Number(part.guest_count || 0);
       const kids = Number(part.child_count || 0);
-      $(`#settlement${side}Guests`).textContent =
-        kids > 0 ? `${g} (${fmtGuestSplit(Number(part.adult_count || 0), kids)})` : String(g);
-      $(`#settlement${side}PerGuest`).textContent = nt(part.avg_per_guest);
-      $(`#settlement${side}PerOrder`).textContent = nt(part.avg_per_order);
+      put(`#settlement${side}Revenue`, nt(part.revenue || 0));
+      put(`#settlement${side}Orders`, `${Number(part.paid_order_count || 0).toLocaleString()}${T("settlementHalfOrdersUnit")}`);
+      put(`#settlement${side}Guests`, kids > 0 ? `${g} (${fmtGuestSplit(Number(part.adult_count || 0), kids)})` : String(g));
+      put(`#settlement${side}PerGuest`, nt(part.avg_per_guest || 0));
+      put(`#settlement${side}PerOrder`, nt(part.avg_per_order || 0));
     };
-    fill("Am", half.am);
-    fill("Pm", half.pm);
+    fill("Am", am);
+    fill("Pm", pm);
 
     // 어디서 갈랐는지 적어 둔다. 안 적으면 「내 기억보다 오전이 적은데」가
     // 됐을 때 확인할 방법이 없다.
-    const cut = half.boundary_label || "";
-    $("#settlementAmRange").textContent = cut ? T("settlementAmUntil").replace("{t}", cut) : "";
-    $("#settlementPmRange").textContent = cut ? T("settlementPmFrom").replace("{t}", cut) : "";
+    const cut = (half && half.boundary_label) || "";
+    const amRange = $("#settlementAmRange");
+    const pmRange = $("#settlementPmRange");
+    if (amRange) amRange.textContent = cut ? T("settlementAmUntil").replace("{t}", cut) : "";
+    if (pmRange) pmRange.textContent = cut ? T("settlementPmFrom").replace("{t}", cut) : "";
 
     // 경계를 못 정한 날이 섞여 있으면 두 칸의 합이 위 합산과 다르다.
     // 조용히 두면 사장님이 더하다가 안 맞는 것을 발견하게 된다.
-    const un = (half.unsplit_dates || []).length;
-    if (un > 0) {
-      const note = $("#settlementHalvesNote");
+    const un = ((half && half.unsplit_dates) || []).length;
+    if (un > 0 && noteEl) {
+      const note = noteEl;
       note.textContent = T("settlementHalvesGap")
         .replace("{n}", String(un))
         .replace("{amt}", nt(half.unsplit_revenue || 0));
