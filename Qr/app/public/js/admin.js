@@ -981,6 +981,9 @@
       vipSaleDiscountLabel: "판매하면서 등록할 때 붙는 할인율 (%)",
       vipSaleDiscountHint: "카드마다 다르게 주고 싶으면, 등록된 뒤 회원(VIP) 탭에서 그 카드만 고치면 돼요.",
       vipSellBtn: "💳 VIP卡販售",
+      vipSellPendingBtn: "💳 VIP 카드 빼기",
+      vipSellPendingNote: "카드값은 현금으로 따로 받습니다",
+      vipSellFailedAfterPay: "밥값 결제는 끝났는데 VIP 카드가 팔리지 않았어요.\n손님께 카드를 드리기 전에 VIP 탭에서 다시 판매해 주세요.",
       vipSellTitle: "VIP卡販售",
       vipSellCashOnly: "현금으로만 판매합니다.",
       vipSellCardNumberLabel: "카드번호 (선택 — 나중에 회원(VIP) 탭에서 넣어도 돼요)",
@@ -1618,6 +1621,9 @@
       vipSaleDiscountLabel: "販售時一併登記的折扣率 (%)",
       vipSaleDiscountHint: "想給某張卡不同折扣的話，登記後到會員(VIP)分頁單獨修改那張卡即可。",
       vipSellBtn: "💳 VIP卡販售",
+      vipSellPendingBtn: "💳 取消 VIP卡",
+      vipSellPendingNote: "卡費一律以現金收取",
+      vipSellFailedAfterPay: "餐點已結帳，但 VIP 卡沒有售出。\n請先到 VIP 分頁重新販售，再把卡交給客人。",
       vipSellTitle: "VIP卡販售",
       vipSellCashOnly: "僅接受現金。",
       vipSellCardNumberLabel: "卡號（選填 — 也可以之後在會員(VIP)分頁補登）",
@@ -2083,6 +2089,15 @@
     const payable = total - breakdown.total;
     const tail = zh ? `實收 NT$${payable}` : `실수령 NT$${payable}`;
     return [head, ...steps, tail].join(" → ");
+  }
+  // 밥값과 VIP 카드값을 갈라 보여준다. 고르는 결제수단은 밥값 것이고
+  // 카드값은 언제나 현금이다 — 그 사실을 고르기 전에 읽어야 한다.
+  function fmtPaymentVipCardPart(foodPayable, cardAmount) {
+    const zh = adminLang === "zh";
+    const sum = foodPayable + cardAmount;
+    return zh
+      ? `\n\n＋ VIP卡 NT$${cardAmount}（一律現金）\n= 向客人收 NT$${sum}\n下面選的付款方式只套用在餐點 NT$${foodPayable}`
+      : `\n\n＋ VIP 카드 NT$${cardAmount} (무조건 현금)\n= 손님께 받을 돈 NT$${sum}\n아래에서 고르는 결제수단은 밥값 NT$${foodPayable}에만 적용됩니다`;
   }
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
@@ -5636,6 +5651,11 @@
   }
 
   function openTableDetail(tableNumber, label, focusOrderId) {
+    // 다른 자리로 넘어가면 얹어 둔 카드는 따라가지 않는다. 5번 손님이
+    // 사기로 한 카드가 8번 결제창에 얹혀 있으면 엉뚱한 사람이 낸다.
+    if (pendingVipCardSale && String(pendingVipCardSale.tableNumber) !== String(tableNumber)) {
+      clearPendingVipCardSale();
+    }
     // A previous round's paid order used to sit in the same undivided,
     // continuously-scrolling list as whatever the table ordered next —
     // fine right after paying, confusing once a new order comes in.
@@ -5837,10 +5857,14 @@
     const isCounterTable = !!(table && table.is_counter);
     const footerSelections = isCounterTable ? [] : collectSelectedItemsByOrder(unpaidOrders);
     const footerSelectedTotal = footerSelections.reduce((s, x) => s + x.total, 0);
+    // 얹어 둔 VIP 카드값은 결제 버튼 금액에 더해진다 — 직원이 손님에게
+    // 부르는 숫자가 하나여야 한다.
+    const pendingCardAmount = pendingVipCardAmountFor(tableNumber);
+    const footerPayTotal = footerSelectedTotal + pendingCardAmount;
     const footerPayBtn = isCounterTable
       ? ""
       : footerSelections.length > 0
-      ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerSelectedTotal})</button>`
+      ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerPayTotal})</button>`
       : `<button class="primary-btn" disabled style="padding:8px 16px;font-size:15px;opacity:0.4;cursor:not-allowed;">${T("paySelectedBtn")}</button>`;
     // 特約95折/VIP9折 토글 — 처음엔 여기 footer에 따로 한 줄로 뒀는데,
     // 사장님 피드백(2026-09-06, 스크린샷과 함께): "할인 위치를 가장 아래
@@ -5857,7 +5881,13 @@
     // 나가면서 "카드 하나 주세요" 하는 게 오히려 흔한 순간이고, 그때
     // 이 버튼이 없으면 직원이 살 길을 못 찾는다. 그래서 아래 footer 는
     // 이제 「받을 돈이 있을 때」가 아니라 「현재 주문 탭일 때」 나온다.
-    const vipSellBtnHtml = `<button type="button" id="vipSellBtn" class="vip-sell-btn">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${vipSalePrice}`}</button>`;
+    // 얹어 둔 상태면 버튼이 「빼기」로 바뀌고, 그 옆에 현금이라는 것을
+    // 적어 둔다 — 결제수단을 고르는 팝업에서 「LINE」을 눌러도 이 300은
+    // 현금이라는 것을 그 전에 알아야 한다.
+    const vipSellBtnHtml = pendingCardAmount
+      ? `<button type="button" id="vipSellBtn" class="vip-sell-btn is-pending">${T("vipSellPendingBtn")} NT$${pendingCardAmount}</button>` +
+        `<span class="vip-sell-pending-note">${T("vipSellPendingNote")}</span>`
+      : `<button type="button" id="vipSellBtn" class="vip-sell-btn">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${vipSalePrice}`}</button>`;
     const footer = tableDetailView === "active"
       ? `
         <div class="table-detail-footer">
@@ -5919,11 +5949,28 @@
     if (moveBtn) moveBtn.onclick = () => openMoveTable(tableNumber, label || openTableLabel);
     const sellBtn = $("#vipSellBtn");
     if (sellBtn) {
-      sellBtn.onclick = () =>
-        openVipSellModal(tableNumber, () => {
-          // 판 기록이 바로 「결제 완료」 탭에 보이게 다시 그린다.
+      sellBtn.onclick = () => {
+        // 이미 얹어 둔 게 있으면 한 번 더 누르는 것은 「빼기」다.
+        if (pendingVipCardAmountFor(tableNumber) > 0) {
+          clearPendingVipCardSale();
           openTableDetail(tableNumber, label, focusOrderId);
-        });
+          return;
+        }
+        openVipSellModal(
+          tableNumber,
+          () => {
+            // 판 기록이 바로 「결제 완료」 탭에 보이게 다시 그린다.
+            openTableDetail(tableNumber, label, focusOrderId);
+          },
+          // 받을 돈이 남아 있으면 지금 팔지 않고 이번 결제에 얹는다.
+          (cardNumber) => {
+            if (!unpaidOrders.length) return false;
+            pendingVipCardSale = { tableNumber: String(tableNumber), cardNumber: cardNumber || "" };
+            openTableDetail(tableNumber, label, focusOrderId);
+            return true;
+          }
+        );
+      };
     }
 
     $("#tableDetailBody")
@@ -6145,10 +6192,13 @@
           const fullTotalAll = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
           const vipEligibleAll = selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0);
           const breakdown = computeCombinedDiscountClient(discountType, manualValue, fullTotalAll, vipEligibleAll);
-          const method = await showPaymentMethodPopup(
-            fmtPaymentSummary(total, discountType, manualValue, breakdown),
-            discountRequiresCashOnly(discountType)
-          );
+          // 얹어 둔 VIP 카드가 있으면 팝업이 두 몫을 갈라 보여준다.
+          // 고르는 결제수단은 밥값 것이고, 카드값은 언제나 현금이다.
+          const cardAmount = pendingVipCardAmountFor(tableNumber);
+          const summary =
+            fmtPaymentSummary(total, discountType, manualValue, breakdown) +
+            (cardAmount ? fmtPaymentVipCardPart(total - breakdown.total, cardAmount) : "");
+          const method = await showPaymentMethodPopup(summary, discountRequiresCashOnly(discountType));
           if (!method) return;
           // 사장님 피드백(2026-09-07, 스크린샷과 함께): "직접 숫자 로직
           // 이상해" — 정액(금액) 직접 할인은 特約95折/VIP9折(비율)와 달리
@@ -6178,6 +6228,21 @@
           );
           if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
+          }
+          // 밥값이 실제로 결제된 뒤에 카드를 판다. 순서가 반대면, 밥값
+          // 결제가 실패했는데 카드만 팔려 있는 상태가 된다 — 손님은 아직
+          // 아무것도 안 냈는데 장부에는 300이 들어와 있다.
+          if (cardAmount && !results.some((r) => !r.ok)) {
+            const sold = await sellVipCard(tableNumber, pendingVipCardSale.cardNumber);
+            if (sold.ok) {
+              clearPendingVipCardSale();
+            } else {
+              // 조용히 넘기지 않는다. 밥값은 받았고 카드만 안 팔린 상태라,
+              // 직원이 그것을 모르면 손님은 돈을 내고 카드를 못 받는다.
+              await showAlert(
+                sold.body && sold.body.error === "card_exists" ? T("vipCardNumberTaken") : T("vipSellFailedAfterPay")
+              );
+            }
           }
           tableVipDiscountType = null; // 결제가 끝났으니 다음 결제를 위해 리셋
           tableManualDiscountValue = null;
@@ -8927,7 +8992,51 @@
    * 비워도 된다(사장님이 고른 쪽: "번호는 선택 입력"). 바쁠 때 돈만 받고
    * 번호는 나중에 회원(VIP) 탭에서 넣으면 된다.
    */
-  function openVipSellModal(tableNumber, onDone) {
+  // 결제와 함께 팔리기를 기다리는 VIP 카드.
+  //
+  // 사장님(2026-09-10): "현재 vip 카드 구매 버튼이 있는데 그게 총 결제
+  // 금액이랑 더해지게 해줘. 그리고 vip 카드는 무조건 현금으로 결제할
+  // 거라서 나머지 금액은 line, 카드, 현금 으로 선택할 수 있게 해줘."
+  //
+  // 전에는 버튼을 누르는 순간 카드가 따로 팔렸다. 그러면 직원이 손님에게
+  // 금액을 두 번 부른다 — "밥값 1340이요, 그리고 카드 300이요". 손님은
+  // 한 번에 내고 싶어 한다.
+  //
+  // 그래서 「지금 판다」가 아니라 「이번 결제에 얹는다」로 바꾼다. 결제
+  // 버튼의 금액이 밥값+카드값이 되고, 결제수단을 고르면 밥값만 그 수단으로
+  // 가고 카드값은 언제나 현금으로 따로 찍힌다.
+  //
+  // 카드 판매는 여전히 자기 주문(kind: "vip_card_sale")으로 남는다 —
+  // 결산이 「카드 판매」를 밥값과 갈라 보는 근거가 그것이고, 결제수단
+  // 집계도 품목마다 보기 때문에 현금 칸에 300이 정확히 들어간다.
+  let pendingVipCardSale = null; // { tableNumber, cardNumber }
+
+  function clearPendingVipCardSale() {
+    pendingVipCardSale = null;
+  }
+
+  function pendingVipCardAmountFor(tableNumber) {
+    if (!pendingVipCardSale) return 0;
+    if (String(pendingVipCardSale.tableNumber) !== String(tableNumber)) return 0;
+    return vipSalePrice == null ? 0 : vipSalePrice;
+  }
+
+  /** 카드 한 장을 실제로 판다. 성공하면 서버가 만든 주문을 돌려준다. */
+  async function sellVipCard(tableNumber, cardNumber) {
+    try {
+      const res = await fetch("/api/vip-cards/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tableNumber, cardNumber: cardNumber || undefined }),
+      });
+      const body = await res.json().catch(() => null);
+      return { ok: res.ok, body };
+    } catch (e) {
+      return { ok: false, body: null };
+    }
+  }
+
+  function openVipSellModal(tableNumber, onDone, onPend) {
     const backdrop = $("#vipSellBackdrop");
     if (!backdrop) return;
     const input = $("#vipSellCardNumber");
@@ -8955,19 +9064,17 @@
       // 두 번 눌러서 두 장이 팔리는 일이 없게 잠근다. 돈이 걸린 버튼이다.
       confirmBtn.disabled = true;
       err.hidden = true;
-      let body = null;
-      let ok = false;
-      try {
-        const res = await fetch("/api/vip-cards/sell", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tableNumber, cardNumber: number || undefined }),
-        });
-        body = await res.json().catch(() => null);
-        ok = res.ok;
-      } catch (e) {
-        ok = false;
+
+      // 아직 받을 돈이 남아 있으면 지금 팔지 않는다 — 이번 결제에 얹는다.
+      // 결제 버튼 금액이 밥값+카드값이 되고, 결제가 끝나는 순간에 팔린다.
+      // 결제할 게 없는 자리(밥값을 이미 다 낸 손님이 나가면서 카드만 사는
+      // 경우)는 얹을 결제가 없으므로 예전처럼 그 자리에서 판다.
+      if (typeof onPend === "function" && onPend(number)) {
+        close();
+        return;
       }
+
+      const { ok, body } = await sellVipCard(tableNumber, number);
       if (!ok) {
         confirmBtn.disabled = false;
         err.textContent =

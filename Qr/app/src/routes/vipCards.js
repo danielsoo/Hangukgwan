@@ -288,7 +288,11 @@ router.post("/sell", requireAdmin, async (req, res) => {
   };
   item.paid_at = now;
   store.orders.push(order);
-  await Promise.all([saveOrder(order), save()]);
+  // 주문 줄 하나만 쓴다. 예전에는 save() 로 store 문서를 통째로 같이 썼는데,
+  // 그 순간 다른 요청이 넣은 주문이나 지운 인원수가 되살아난다
+  // (CLAUDE.md 「store 문서를 통째로 쓰지 않는다」). 카드 자체는 위
+  // refreshAndSave 에서 이미 저장됐다.
+  await saveOrder(order);
   broadcastOrdersChanged(req);
   res.status(201).json({ order, card: card ? serialize(card) : null, price });
 });

@@ -1523,3 +1523,16 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-weight: 700;
   margin-left: 6px;
 }
+
+/* 이번 결제에 얹어 둔 VIP 카드 — 눌러 둔 상태라는 것이 한눈에 보여야
+   한다. 결제 금액이 이미 그만큼 커져 있기 때문이다. */
+.vip-sell-btn.is-pending {
+  background: #1f7a3d;
+  border-color: #1f7a3d;
+  color: #fff;
+}
+.vip-sell-pending-note {
+  margin-left: 8px;
+  font-size: 13px;
+  color: var(--muted, #777);
+}
