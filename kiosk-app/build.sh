@@ -20,8 +20,8 @@ fetch_tools
 PKG=tw.hangukgwan.kiosk
 MIN_SDK=21
 TARGET_SDK=36
-VERSION_CODE="${VERSION_CODE:-4}"
-VERSION_NAME="${VERSION_NAME:-1.3}"
+VERSION_CODE="${VERSION_CODE:-5}"
+VERSION_NAME="${VERSION_NAME:-1.4}"
 
 KEYSTORE="$HERE/keystore/hangukgwan.jks"
 KS_PASS="${KS_PASS:-hangukgwan}"
