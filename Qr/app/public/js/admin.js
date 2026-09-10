@@ -44,6 +44,56 @@
   }
   let soundOn = readStoredToggle("hg_admin_soundOn", true);
   let autoPrintOn = readStoredToggle("hg_admin_autoPrintOn", false);
+
+  // ── 이 기기가 이미 처리한 주문 ──────────────────────────────────────
+  //
+  // 2026-09-10 사장님(장사 중): "지금까지 4건 주문됐거든. 3건은 주문시
+  // 2장씩. 9번테이블 1건은 아예 안나왔어 ㅋㅋ 강제 인쇄했지." — 화면에는
+  // 떴는데 빌지만 안 나왔고, 인쇄 실패 표시도 없었다.
+  //
+  // 원인은 「새 주문」의 뜻이었다. 예전 코드는 화면을 켠 뒤 목록이 바뀐
+  // 것만 새 주문으로 봤고(메모리에만 있는 목록), 페이지를 켠 첫 번째
+  // 응답은 통째로 건너뛰었다(isFirstLoad) — 이미 밀린 주문을 몰아 찍지
+  // 않으려던 것이다. 그런데 그 두 가지가 겹치면 주문 하나가 조용히 샌다:
+  // 손님이 주문한 그 순간 태블릿이 새로고침 중이었으면(배포, 앱 재시작,
+  // 네트워크가 끊겼다 붙는 것 — 전부 장사 중에 실제로 일어난다) 그
+  // 주문은 「켤 때 이미 있던 주문」으로 분류돼 영영 안 찍힌다. 화면에는
+  // 멀쩡히 떠 있으니 아무도 모른다. 정확히 9번 테이블에서 일어난 일이다.
+  //
+  // 그래서 「새로 온 주문」이 아니라 「이 기기가 아직 판단하지 않은 주문」
+  // 으로 기준을 바꾼다. 판단한 주문 번호를 기기에 남겨두면, 새로고침을
+  // 몇 번 하든 그 기억이 남아서 빠지는 주문이 없다.
+  //
+  // 「판단했다」는 「찍었다」가 아니다. 자동 인쇄가 꺼져 있어서 안 찍은
+  // 것도 판단이다 — 안 그러면 나중에 자동 인쇄를 켜는 순간 그동안 쌓인
+  // 신규 주문이 한꺼번에 쏟아진다.
+  const DECIDED_KEY = "hg_admin_decidedOrderIds";
+  const DECIDED_KEEP = 300; // 주문 번호는 계속 커진다 — 최근 것만 들고 있으면 된다
+  let decidedStorageOk = true;
+  function readDecidedIds() {
+    try {
+      const raw = localStorage.getItem(DECIDED_KEY);
+      if (raw === null) return null; // 이 기기에서 처음 켠 것
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.filter((n) => typeof n === "number") : []);
+    } catch (e) {
+      // 저장이 막혀 있는 기기(시크릿 모드 등). 예전처럼 메모리로만 돈다 —
+      // 새로고침 때마다 잊어버리지만, 안 찍히는 것보다는 낫다.
+      decidedStorageOk = false;
+      return null;
+    }
+  }
+  function writeDecidedIds() {
+    if (!decidedStorageOk) return;
+    try {
+      const arr = [...decidedOrderIds].sort((a, b) => a - b).slice(-DECIDED_KEEP);
+      decidedOrderIds = new Set(arr);
+      localStorage.setItem(DECIDED_KEY, JSON.stringify(arr));
+    } catch (e) {
+      decidedStorageOk = false;
+    }
+  }
+  let decidedOrderIds = readDecidedIds();
   let storeSettings = {};
   let pollTimer = null;
   // 실시간 주문 알림(Pusher) 연결 상태 — startPolling()이 폴링 주기를
@@ -90,7 +140,6 @@
       return nativeFetch(input, init);
     }
   };
-  let knownOrderIds = new Set();
   let openTableNumber = null;
   // 포장 카운터는 서로 무관한 손님 주문이 여러 건 동시에 쌓일 수 있어서,
   // 결제탭에서 그 중 특정 주문 하나를 눌러 들어갔을 때는 그 주문 하나로만
@@ -362,6 +411,16 @@
       logoutBtn: "로그아웃",
       soundToggleLabel: "🔔 신규 주문 알림음",
       autoPrintToggleLabel: "🖨️ 신규 주문 자동 인쇄",
+      // 인쇄를 맡은 기기 — 2026-09-10 사장님: "하나에 고정으로 되거나
+      // 다른 곳에서 못 키게 막아줘."
+      printDeviceHere: "🖨️ 이 기기에서 인쇄합니다",
+      printDeviceElsewhere: "🖨️ 지금은 {name}에서 인쇄해요",
+      printDeviceUnknown: "다른 기기",
+      printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
+      printDeviceKindPos: "주방 POS 앱",
+      printDeviceKindTablet: "태블릿",
+      printDeviceKindPhone: "폰",
+      printDeviceKindPc: "PC",
       toggleSavedMsg: "✔ 저장됨",
       refreshBtn: "새로고침",
       refreshingBtn: "⏳ 새로고침 중...",
@@ -964,6 +1023,14 @@
       logoutBtn: "登出",
       soundToggleLabel: "🔔 新訂單提示音",
       autoPrintToggleLabel: "🖨️ 新訂單自動列印",
+      printDeviceHere: "🖨️ 由這台裝置列印",
+      printDeviceElsewhere: "🖨️ 目前由{name}列印",
+      printDeviceUnknown: "其他裝置",
+      printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
+      printDeviceKindPos: "廚房 POS App",
+      printDeviceKindTablet: "平板",
+      printDeviceKindPhone: "手機",
+      printDeviceKindPc: "電腦",
       toggleSavedMsg: "✔ 已儲存",
       refreshBtn: "重新整理",
       refreshingBtn: "⏳ 重新整理中...",
@@ -2054,6 +2121,13 @@
       loadPaymentSettings();
       loadEscposSettings();
     }
+    await syncPrintDevice();
+    // 다른 기기가 인쇄를 가져갔는지 가끔 본다. 자주 볼 이유는 없다 —
+    // 사람이 토글을 누를 때나 바뀌는 값이다.
+    setInterval(async () => {
+      await refreshPrintDevice();
+      renderPrintDeviceNote();
+    }, 60000);
     startPolling();
   }
 
@@ -2574,14 +2648,163 @@
     clearTimeout(toggleSavedMsgTimer);
     toggleSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
   }
+  // ── 인쇄를 맡은 기기 ──────────────────────────────────────────────
+  //
+  // 2026-09-10 사장님: "한 대만 켜져있을텐데 그게 큰 의미가 있는거야?
+  // 그렇다면 하나에 고정으로 되거나 다른 곳에서 못 키게 막아줘."
+  //
+  // 크다. 자동 인쇄는 브라우저마다 따로 켜는 것이라 태블릿과 폰에서 둘 다
+  // 켜져 있으면 주문 하나에 빌지가 두 벌 나오고, 지금까지는 그게 켜져
+  // 있다는 사실조차 다른 기기에서 볼 수 없었다.
+  //
+  // 서버에 「지금 인쇄하는 기기」를 한 대만 적어두고(GET/PUT
+  // /api/settings/print-device), 다른 기기에서 켜려고 하면 누가 맡고
+  // 있는지 알려준 뒤 확인을 받는다.
+  //
+  // 자물쇠가 아니라 표지판이다. 이 값을 못 읽었으면(네트워크가 잠깐
+  // 끊겼다든가) 그냥 찍는다 — 빌지가 두 장 나오는 것보다 안 나오는 게
+  // 훨씬 비싸다. 오늘 9번 테이블에서 그 값을 치렀다.
+  const DEVICE_ID_KEY = "hg_admin_deviceId";
+  let printDevice = { id: null, name: null, known: false };
+
+  function myDeviceId() {
+    try {
+      let id = localStorage.getItem(DEVICE_ID_KEY);
+      if (!id) {
+        id = `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    } catch (e) {
+      // 저장이 막힌 기기. 이 창이 살아 있는 동안만 유효한 번호를 쓴다 —
+      // 새로고침하면 남의 기기처럼 보이지만, 못 켜는 것보다는 낫다.
+      if (!window.__hgDeviceId) window.__hgDeviceId = `t${Math.random().toString(36).slice(2, 10)}`;
+      return window.__hgDeviceId;
+    }
+  }
+
+  // 사장님이 「어느 기기였더라」를 떠올릴 수 있을 만큼만. 기기 이름을
+  // 정확히 알 방법은 없으니 종류만 적는다.
+  function myDeviceName() {
+    const ua = navigator.userAgent || "";
+    if (appPrintBridge()) return T("printDeviceKindPos");
+    if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return T("printDeviceKindTablet");
+    if (/Mobile|iPhone|Android/i.test(ua)) return T("printDeviceKindPhone");
+    return T("printDeviceKindPc");
+  }
+
+  async function refreshPrintDevice() {
+    try {
+      const res = await fetch("/api/settings/print-device");
+      if (!res.ok) return;
+      const d = await res.json();
+      printDevice = { id: d.id || null, name: d.name || null, known: true };
+    } catch (e) {
+      /* 못 읽었으면 마지막으로 알던 값을 그대로 둔다 */
+    }
+  }
+
+  async function claimPrintDevice() {
+    try {
+      const res = await fetch("/api/settings/print-device", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: myDeviceId(), name: myDeviceName() }),
+      });
+      if (res.ok) printDevice = { id: myDeviceId(), name: myDeviceName(), known: true };
+    } catch (e) {}
+  }
+
+  async function releasePrintDevice() {
+    if (printDevice.id && printDevice.id !== myDeviceId()) return; // 내 것이 아니면 놓을 것도 없다
+    try {
+      await fetch("/api/settings/print-device", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: null, releaseId: myDeviceId() }),
+      });
+      printDevice = { id: null, name: null, known: true };
+    } catch (e) {}
+  }
+
+  /**
+   * 이 기기가 지금 찍어도 되는가.
+   *
+   * 「아무도 안 맡았다」와 「못 읽었다」는 둘 다 찍는 쪽이다. 막는 건
+   * 「다른 기기가 분명히 맡고 있다」 하나뿐이다.
+   */
+  function printHereAllowed() {
+    if (!printDevice.known) return true;
+    if (!printDevice.id) return true;
+    return printDevice.id === myDeviceId();
+  }
+
+  function renderPrintDeviceNote() {
+    const el = $("#printDeviceNote");
+    if (!el) return;
+    if (!printDevice.known || !printDevice.id) {
+      el.hidden = true;
+      return;
+    }
+    const mine = printDevice.id === myDeviceId();
+    el.textContent = mine
+      ? T("printDeviceHere")
+      : T("printDeviceElsewhere").replace("{name}", printDevice.name || T("printDeviceUnknown"));
+    el.classList.toggle("is-elsewhere", !mine);
+    el.hidden = false;
+    // 다른 기기가 가져갔는데 이 기기의 토글이 켜져 있으면, 켜져 있다고
+    // 믿고 있는 쪽이 틀린 것이다 — 조용히 안 찍히느니 꺼진 걸 보여준다.
+    if (!mine && autoPrintOn) {
+      autoPrintOn = false;
+      writeStoredToggle("hg_admin_autoPrintOn", false);
+      $("#autoPrintToggle").checked = false;
+    }
+  }
+
+  /**
+   * 화면을 켤 때 한 번 — 누가 인쇄를 맡고 있는지 맞춰본다.
+   *
+   * 아무도 안 맡았고 이 기기의 토글이 켜져 있으면 내가 맡는다. 다른
+   * 기기가 이미 맡고 있으면 뺏지 않는다 — 먼저 켠 쪽이 계속 맡는 게
+   * 맞고, 켤 때마다 서로 뺏으면 주방 프린터가 오늘은 태블릿, 내일은
+   * 폰이 된다. 이 기기 토글은 renderPrintDeviceNote 가 꺼준다.
+   */
+  async function syncPrintDevice() {
+    await refreshPrintDevice();
+    if (autoPrintOn && !printDevice.id) await claimPrintDevice();
+    renderPrintDeviceNote();
+  }
+
   $("#soundToggle").onchange = (e) => {
     soundOn = e.target.checked;
     writeStoredToggle("hg_admin_soundOn", soundOn);
     flashToggleSaved();
   };
-  $("#autoPrintToggle").onchange = (e) => {
-    autoPrintOn = e.target.checked;
-    writeStoredToggle("hg_admin_autoPrintOn", autoPrintOn);
+  $("#autoPrintToggle").onchange = async (e) => {
+    const want = e.target.checked;
+    if (want) {
+      // 다른 기기가 인쇄를 맡고 있으면 물어본다 — 그냥 켜면 빌지가 두 벌
+      // 나온다(2026-09-10 사장님: "다른 곳에서 못 키게 막아줘").
+      await refreshPrintDevice();
+      if (printDevice.id && printDevice.id !== myDeviceId()) {
+        const ok = await showConfirm(T("printDeviceTakeoverConfirm").replace("{name}", printDevice.name || T("printDeviceUnknown")));
+        if (!ok) {
+          e.target.checked = false;
+          autoPrintOn = false;
+          writeStoredToggle("hg_admin_autoPrintOn", false);
+          renderPrintDeviceNote();
+          return;
+        }
+      }
+      autoPrintOn = true;
+      writeStoredToggle("hg_admin_autoPrintOn", true);
+      await claimPrintDevice();
+    } else {
+      autoPrintOn = false;
+      writeStoredToggle("hg_admin_autoPrintOn", false);
+      await releasePrintDevice();
+    }
+    renderPrintDeviceNote();
     flashToggleSaved();
   };
   // Reflect whatever was restored from localStorage above back onto the
@@ -2636,11 +2859,14 @@
     const fresh = await res.json();
     if (seq !== ordersRequestSeq) return; // a newer request has since been sent — this response is stale, discard it
 
-    const isFirstLoad = orders.length === 0 && knownOrderIds.size === 0;
-    const newlyArrived = fresh.filter((o) => !knownOrderIds.has(o.id) && o.status === "new");
+    // 이 기기가 아직 판단하지 않은 신규 주문. 기준은 메모리가 아니라
+    // 기기에 남는 기록이라(decidedOrderIds), 새로고침 중에 들어온 주문도
+    // 여기에 잡힌다 — 그게 9번 테이블 빌지가 안 나온 이유였다.
+    const firstEverOnThisDevice = decidedOrderIds === null;
+    if (firstEverOnThisDevice) decidedOrderIds = new Set();
+    const pending = fresh.filter((o) => o.status === "new" && !decidedOrderIds.has(o.id));
 
     orders = fresh;
-    knownOrderIds = new Set(fresh.map((o) => o.id));
     // An order only needs the "인쇄 실패" flag while it's still sitting in
     // 신규 waiting on a ticket — once staff have moved it along (or
     // cancelled it) they've clearly already noticed it some other way, so
@@ -2661,11 +2887,21 @@
     if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
     if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
 
-    if (!isFirstLoad && newlyArrived.length > 0) {
-      newlyArrived.forEach((o) => flashNewOrder(o.id));
-      if (soundOn) playBeep();
-      if (autoPrintOn) {
-        Promise.all(newlyArrived.map((o) => printKitchenTicket(o))).then(renderOrders);
+    if (pending.length > 0) {
+      // 판단했다는 표시를 먼저 남긴다. 인쇄가 끝나기를 기다렸다가 남기면,
+      // 그 사이에 도착한 다음 응답이 같은 주문을 또 찍는다.
+      pending.forEach((o) => decidedOrderIds.add(o.id));
+      writeDecidedIds();
+      // 이 기기에서 처음 켠 것이면 소리도 인쇄도 하지 않는다 — 화면을
+      // 켠 순간 밀려 있던 신규 주문을 몰아 찍지 않으려는 것이다. 두 번째
+      // 부터는(=새로고침을 포함해) 이 조건이 다시는 참이 되지 않으므로,
+      // 새로고침 중에 들어온 주문이 여기서 빠지지 않는다.
+      if (!firstEverOnThisDevice) {
+        pending.forEach((o) => flashNewOrder(o.id));
+        if (soundOn) playBeep();
+        if (autoPrintOn && printHereAllowed()) {
+          Promise.all(pending.map((o) => printKitchenTicket(o))).then(renderOrders);
+        }
       }
     }
   }
@@ -3937,7 +4173,6 @@
     const i = orders.findIndex((o) => o.id === updated.id);
     if (i === -1) orders.push(updated);
     else orders[i] = updated;
-    knownOrderIds.add(updated.id);
     // 신규에서 벗어난 주문은 "인쇄 실패" 표시를 달고 있을 이유가 없다 —
     // 직원이 이미 다른 방법으로 알아챘다는 뜻이다(loadOrders() 와 같은 규칙).
     if (updated.status !== "new") printFailedOrderIds.delete(updated.id);

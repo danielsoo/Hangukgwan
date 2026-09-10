@@ -124,6 +124,51 @@ router.put("/order-hours", canEditSettings, async (req, res) => {
   res.json(Object.assign({}, store.settings.order_hours, { ordering: orderingState(store.settings) }));
 });
 
+// ── 인쇄를 맡을 기기 하나 ────────────────────────────────────────────
+//
+// 2026-09-10 사장님: "한 대만 켜져있을텐데 그게 큰 의미가 있는거야?
+// 그렇다면 하나에 고정으로 되거나 다른 곳에서 못 키게 막아줘."
+//
+// 크다. 자동 인쇄는 기기마다 따로 켜는 것이라(브라우저 localStorage),
+// 태블릿과 폰에서 둘 다 켜져 있으면 주문 하나에 빌지가 두 벌 나온다.
+// 지금까지는 그걸 알아챌 방법도, 막을 방법도 없었다.
+//
+// 그래서 「지금 인쇄하는 기기」를 서버에 한 대만 적어둔다. 다른 기기에서
+// 자동 인쇄를 켜려고 하면 누가 맡고 있는지 알려주고, 사장님이 확인해야
+// 넘어온다.
+//
+// 이건 자물쇠가 아니라 표지판이다. 서버가 인쇄를 막는 게 아니라 화면이
+// 스스로 양보하는 것이고, 이 값을 못 읽으면 화면은 그냥 찍는다
+// (public/js/admin.js 의 printHereAllowed). 빌지가 두 장 나오는 것보다
+// 안 나오는 게 훨씬 비싸다 — 오늘 9번 테이블에서 그 값을 치렀다.
+router.get("/print-device", requireAdmin, (req, res) => {
+  const d = store.settings.print_device || {};
+  res.json({ id: d.id || null, name: d.name || null, updated_at: d.updated_at || null });
+});
+
+router.put("/print-device", requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const id = String(b.id == null ? "" : b.id).trim().slice(0, 64);
+  if (!id) {
+    // 놓기. 자기가 들고 있을 때만 놓을 수 있다 — 안 그러면 폰에서 토글을
+    // 끄는 것만으로 태블릿의 인쇄가 풀린다.
+    const holder = (store.settings.print_device || {}).id || null;
+    if (holder && String(b.releaseId || "") !== holder) {
+      return res.status(409).json({ error: "not_holder", print_device: store.settings.print_device });
+    }
+    store.settings.print_device = null;
+    await save();
+    return res.json({ id: null, name: null, updated_at: null });
+  }
+  store.settings.print_device = {
+    id,
+    name: String(b.name == null ? "" : b.name).trim().slice(0, 40) || null,
+    updated_at: nowLocal(),
+  };
+  await save();
+  res.json(store.settings.print_device);
+});
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 8 * 1024 * 1024 },

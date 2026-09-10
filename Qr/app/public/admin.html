@@ -67,6 +67,10 @@
         <label><input type="checkbox" id="soundToggle" checked /> <span data-i18n="soundToggleLabel">🔔 신규 주문 알림음</span></label>
         <label><input type="checkbox" id="autoPrintToggle" /> <span data-i18n="autoPrintToggleLabel">🖨️ 신규 주문 자동 인쇄</span></label>
         <span id="toggleSavedMsg" class="toggle-saved-msg" hidden data-i18n="toggleSavedMsg">✔ 저장됨</span>
+        <!-- 지금 어느 기기가 빌지를 뽑고 있는지. 자동 인쇄는 기기마다 따로
+             켜는 것이라, 두 대에서 켜져 있으면 주문 하나에 빌지가 두 벌
+             나온다(2026-09-10 사장님: "다른 곳에서 못 키게 막아줘"). -->
+        <span id="printDeviceNote" class="print-device-note" hidden></span>
         <button id="manualOrderBtn" data-i18n="manualOrderBtn">📝 수기 주문</button>
         <button id="refreshOrders" data-i18n="refreshBtn">새로고침</button>
       </div>

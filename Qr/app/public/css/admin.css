@@ -514,6 +514,18 @@ button.availability-pill:hover { border-color: currentColor; }
    보여서 인라인 전용으로 따로 뺌 — 2026-09-06, "저렇게 하니까 아슬해서" 피드백
    으로 추가된 저장 확인 표시(toggleSavedMsg)에 적용. */
 .toggle-saved-msg { color: var(--green); font-size: 14px; font-weight: 600; }
+
+/* 지금 어느 기기가 빌지를 뽑고 있는가. 이 기기면 조용한 회색, 다른
+   기기면 눈에 띄게 — 「왜 안 나오지」 를 여기서 끝내야 한다. */
+.print-device-note {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.print-device-note.is-elsewhere {
+  color: var(--red);
+  font-weight: 600;
+}
 .settings-hint { font-size: 16px; color: var(--muted); margin: -6px 0 14px; }
 @media (max-width: 700px) {
   .settings-shell { flex-direction: column; gap: 14px; }
