@@ -11645,13 +11645,20 @@
     renderSettlementItems(data.item_breakdown || [], false);
 
     // ── 4. 언제, 어디서 ──────────────────────────────────────────
-    renderBars("#settlementTableBars", (data.table_breakdown || [])
-      .slice(0, 15)
-      .map((e) => ({
-        name: e.table_number === "COUNTER" ? T("counterSectionTitle").replace("📦 ", "") : fmtOrderTableTag(e.table_number),
-        value: e.revenue,
-        count: e.order_count,
-      })));
+    // 상위 15개만 보여주므로, 퍼센트는 **하루 매출 전체** 대비여야 한다.
+    // 보여준 15개의 합으로 나누면 그 안에서만 100% 가 되어, 실제로는 하루의
+    // 20% 인 테이블이 「30%」로 보인다.
+    renderBars(
+      "#settlementTableBars",
+      (data.table_breakdown || [])
+        .slice(0, 15)
+        .map((e) => ({
+          name: e.table_number === "COUNTER" ? T("counterSectionTitle").replace("📦 ", "") : fmtOrderTableTag(e.table_number),
+          value: e.revenue,
+          count: e.order_count,
+        })),
+      { total: data.total_revenue }
+    );
 
     // 날짜를 바꾸면 아래 주문 목록도 그 범위로 따라간다.
     loadSettlementOrders();
@@ -11848,24 +11855,41 @@
   // 절반쯤"을 숫자를 읽지 않고 알 수 있어서다. 그리고 CSS 막대라서 차트
   // 라이브러리가 못 뜨는 상황(네트워크가 막힌 가게 태블릿 등)에서도 그대로
   // 보인다 — 마감 숫자가 라이브러리 하나에 달려 있으면 안 된다.
-  function renderBars(selector, rows) {
+  // 막대와 그 옆의 퍼센트는 **같은 것을 말해야 한다.**
+  //
+  // 사장님(2026-09-11): "지금 결산에 퍼센트가 100%가 아닌데 바가 꽉 차있거든?
+  // 그거 왜 그런거야?"
+  //
+  // 예전에는 둘이 서로 다른 자를 썼다. 퍼센트는 「전체 중 몇 %」였는데 막대는
+  // 「1등 대비 몇 %」라서, 그 묶음의 1등은 몇 %든 늘 꽉 찼다. 현금 59% 옆에
+  // 꽉 찬 막대가, 직접 입력 47% 옆에도 꽉 찬 막대가 있었다. 눈은 숫자보다
+  // 막대를 먼저 읽으므로, 이건 「보기 불편한」 것이 아니라 **틀리게 읽히는**
+  // 것이다.
+  //
+  // 이제 막대도 전체 대비다. 작은 항목이 짧아지는 건 맞지만, 그게 사실이다.
+  // 0 이 아닌데 안 보이는 일이 없게 최소 2%만 남긴다.
+  //
+  // opts.total — 목록을 잘라서 보여줄 때(테이블별 상위 15개) 쓴다. 잘린
+  // 목록의 합으로 나누면 그 15개끼리 100% 가 되어, 하루 매출의 절반인
+  // 테이블이 「80%」로 보인다.
+  function renderBars(selector, rows, opts = {}) {
     const el = $(selector);
     if (!el) return;
     if (!rows.length) {
       el.innerHTML = `<div class="stl-bars-empty">${T("settlementNoData")}</div>`;
       return;
     }
-    const max = Math.max(...rows.map((r) => r.value)) || 1;
-    const total = rows.reduce((a, r) => a + r.value, 0);
+    const total = opts.total != null ? opts.total : rows.reduce((a, r) => a + r.value, 0);
     el.innerHTML = rows
       .map((r) => {
-        const pct = total > 0 ? Math.round((r.value / total) * 100) : 0;
-        const width = Math.max(2, Math.round((r.value / max) * 100));
+        const share = total > 0 ? (r.value / total) * 100 : 0;
+        const pct = Math.round(share);
+        const width = share <= 0 ? 0 : Math.min(100, Math.max(2, Math.round(share * 10) / 10));
         const count = r.count != null ? `<span class="stl-bar-count">${r.count}${r.countUnit || T("settlementCountSuffix")}</span>` : "";
         return `
           <div class="stl-bar-row">
             <span class="stl-bar-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}${count}</span>
-            <span class="stl-bar-track"><span class="stl-bar-fill" style="width:${width}%"></span></span>
+            <span class="stl-bar-track">${width > 0 ? `<span class="stl-bar-fill" style="width:${width}%"></span>` : ""}</span>
             <span class="stl-bar-amount">NT$${Number(r.value || 0).toLocaleString()}</span>
             <span class="stl-bar-share">${pct}%</span>
           </div>`;
