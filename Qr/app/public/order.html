@@ -252,14 +252,17 @@
     </div>
   </div>
 
-  <!-- Party-size reminder (shown at submit time when the cart has fewer
-       items than the registered headcount) — must be closed with the button
-       itself, doesn't auto-dismiss. See showPartyWarningModal() /
-       submitOrderFlow() in order.js. -->
+  <!-- 低消 안내 (2026-09-11 사장님: "1인 1메뉴였었는데 그거 제외해주고
+       최소 주문금액 인당 200 대만 달러로 해줘"). 예전에는 「메뉴 개수가
+       인원보다 적을 때」였고, 지금은 「금액이 모자랄 때」다.
+       손님이 직접 버튼을 눌러야 닫힌다 — 저절로 사라지면 못 보고 지나간다.
+       showPartyWarningModal() / submitOrderFlow() (order.js) 참고. -->
   <div class="sheet-backdrop lock-backdrop" id="partyWarningBackdrop" hidden>
     <div class="lock-card">
       <div class="lock-icon">🍽️</div>
-      <p id="partyWarningMsg" style="font-size:16px;line-height:1.5;margin:8px 0 16px;"></p>
+      <p id="partyWarningMsg" style="font-size:16px;line-height:1.5;margin:8px 0 6px;"></p>
+      <!-- 규칙만 적어두면 얼마를 더 담아야 하는지 손님이 직접 계산해야 한다. -->
+      <p id="partyWarningAmount" style="font-size:15px;line-height:1.5;margin:0 0 16px;color:#555;font-weight:700;"></p>
       <button class="add-btn" id="partyWarningConfirmBtn" data-i18n="partyWarningConfirmBtn">확인</button>
     </div>
   </div>
@@ -275,7 +278,10 @@
            결국 홀에서 다시 물어봐야 한다. -->
       <div class="party-rows">
         <div class="party-row">
-          <span class="party-label"><span data-i18n="partyAdultsLabel">어른</span><em>大</em></span>
+          <!-- 나이를 적어두는 이유: 低消가 「대인 및 13세 이상」에 걸린다.
+               그냥 「어른/아이」로 물으면 15살을 아이 칸에 넣으시고, 그러면
+               안내문이 말하는 것과 실제로 세는 것이 어긋난다. -->
+          <span class="party-label"><span data-i18n="partyAdultsLabel">어른 (13세 이상)</span><em>大</em></span>
           <div class="qty-row">
             <button type="button" id="partyAdultsMinus">−</button>
             <span id="partyAdultsVal">1</span>
@@ -283,7 +289,7 @@
           </div>
         </div>
         <div class="party-row">
-          <span class="party-label"><span data-i18n="partyChildrenLabel">아이</span><em>小</em></span>
+          <span class="party-label"><span data-i18n="partyChildrenLabel">아이 (13세 이하)</span><em>小</em></span>
           <div class="qty-row">
             <button type="button" id="partyChildrenMinus">−</button>
             <span id="partyChildrenVal">0</span>

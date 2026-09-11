@@ -2,7 +2,8 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf } = require("../partySize");
+const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf, ordersOfSeating } = require("../partySize");
+const minSpend = require("../minSpend");
 const seating = require("../seating");
 const { channelForTable } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
@@ -299,6 +300,14 @@ router.get("/:tableNumber/party-size", (req, res) => {
   // 앞 손님 밥값이 남은 자리에 새 인원이 찍힌다(2026-09-10 사장님:
   // "인원과 메뉴는 하나의 세트야").
   const party = partyOfTable(store, table);
+  // partyOfTable 은 자리와 주문을 함께 본 결과다. 低消도 같은 숫자를 봐야
+  // 한다 — 자리 쪽이 비어 있어도 살아 있는 주문이 있으면 손님은 앉아 계신다.
+  const tableForMinSpend = {
+    is_counter: !!table.is_counter,
+    party_size: party.size || 0,
+    party_adults: party.size ? party.adults : null,
+  };
+  const seatingOrders = ordersOfSeating(store, table);
   res.json({
     party_size: party.size || null,
     // 구분이 생기기 전에 앉은 손님도 같은 모양으로 내려간다(전부 어른).
@@ -315,6 +324,17 @@ router.get("/:tableNumber/party-size", (req, res) => {
     // 안 된 매장에서는 realtime.enabled 가 false 라(GET /api/settings) 폰이
     // 구독을 아예 시도하지 않는다.
     realtime_channel: channelForTable(table.number),
+    // 低消 — 이 자리가 채워야 할 금액과 지금까지 쓴 금액 (src/minSpend.js).
+    //
+    // 손님 화면이 스스로 계산하지 않고 받아 적게 하는 이유: 같은 계산이 두
+    // 군데 있으면 언젠가 한쪽만 고쳐지고, 그러면 손님 폰과 계산대가 서로
+    // 다른 금액을 말한다. 돈 이야기라 그게 제일 나쁘다.
+    //
+    // required 가 0이면 안내하지 않는다 — 설정이 비었거나, 인원을 아직 안
+    // 물었거나, 포장 카운터다.
+    min_spend_per_person: minSpend.perPerson(store.settings),
+    min_spend_required: minSpend.requiredFor(store.settings, tableForMinSpend),
+    min_spend_spent: minSpend.spentSoFar(seatingOrders),
   });
 });
 

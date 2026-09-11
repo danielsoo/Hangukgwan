@@ -161,6 +161,27 @@ function liveOrdersOf(store, tableNumber) {
   );
 }
 
+/**
+ * 지금 앉아 계신 손님이 이 자리에서 시킨 주문 전부 — **이미 결제한 라운드도**.
+ *
+ * 사장님 규칙(2026-09-10): "전체 결제를 하지 않는 이상 이 손님은 같은 손님."
+ * 경계는 「이 손님이 앉은 시각」이다. 그래야 낮에 앉았다 간 다른 손님의
+ * 주문이 딸려 나오지 않는다.
+ *
+ * 앉은 시각을 모르는 자리(인원수가 없는 자리, 포장 카운터)는 안 받은
+ * 주문만 준다 — 확실하지 않을 때 남의 주문을 끌어오는 것보다 덜 보여주는
+ * 편이 낫다. src/routes/orders.js 의 GET /table/:n 과 같은 규칙이다.
+ */
+function ordersOfSeating(store, table) {
+  if (!table) return [];
+  const num = String(table.number);
+  const seat = seatingStartOf(table);
+  return (store.orders || [])
+    .filter((o) => !o.test_session)
+    .filter((o) => String(o.table_number) === num && o.status !== "cancelled")
+    .filter((o) => (seat ? String(o.created_at || "") >= seat : o.status !== "paid"));
+}
+
 function partyFromOrder(o) {
   const children = o.party_children || 0;
   const adults = o.party_adults == null ? o.party_size : o.party_adults;
@@ -279,5 +300,6 @@ module.exports = {
   clearIdleSeats,
   liveOrdersOf,
   partyOfTable,
+  ordersOfSeating,
   partyPatchOf,
   savePartySize, hasUnpaidOrder, clearPartySizeIfSettled, movePartySize, seatingStartOf, partyBreakdownOf };

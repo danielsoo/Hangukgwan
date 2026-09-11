@@ -163,17 +163,29 @@
   // null when signed in but no card is linked yet.
   let membership = null;
   let membershipInitAttempted = false;
+  // 低消 — 이 자리가 채워야 할 금액과 지금까지 쓴 금액.
+  //
+  // **서버가 계산해서 내려보낸다**(GET /api/tables/:n/party-size,
+  // src/minSpend.js). 화면이 스스로 계산하면 같은 규칙이 두 군데 있게 되고,
+  // 언젠가 한쪽만 고쳐져서 손님 폰과 계산대가 다른 금액을 말하게 된다.
+  let minSpendPerPerson = 0;
+  let minSpendRequired = 0;
 
-  /** 1인 1메뉴 안내의 기준 인원 — 어른 수(구분이 없던 손님은 총원). */
-  function partyMinCount() {
-    if (partyAdults != null) return partyAdults;
-    return partySize || 0;
-  }
 
-  const PARTY_WARNING = {
-    zh: (n) => `您點的餐點數量少於大人 ${n} 位，需要再加點嗎？`,
-    ko: (n) => `어른 ${n}명보다 주문한 메뉴 수가 적어요. 더 담으시겠어요?`,
-    en: (n) => `Your order has fewer items than the number of adults (${n}). Feel free to add more if you'd like.`,
+  // 사장님이 주신 문구 그대로다(2026-09-11). 금액만 설정에서 가져온다 —
+  // 여기에 200을 박아두면 설정을 바꿔도 안내문만 옛 금액으로 남는다.
+  const MIN_SPEND_NOTICE = {
+    zh: (n) => `大人及13歲以上兒童，每人低消${n}元；13歲以下免低消。`,
+    ko: (n) => `어른과 13세 이상 어린이는 1인당 최소 주문 금액이 NT$${n} 입니다. 13세 이하는 해당되지 않습니다.`,
+    en: (n) => `Minimum NT$${n} per person for adults and children aged 13 and over. Under 13 exempt.`,
+  };
+
+  // 규칙만 적어두면 손님은 얼마를 더 담아야 하는지 직접 계산해야 한다.
+  // 이미 시킨 라운드까지 합친 금액과 모자란 금액을 같이 적어준다.
+  const MIN_SPEND_SHORTFALL = {
+    zh: (have, need) => `目前 NT$${have} / 需要 NT$${need}（還差 NT$${need - have}）`,
+    ko: (have, need) => `지금 NT$${have} / 필요 NT$${need} (NT$${need - have} 부족)`,
+    en: (have, need) => `Now NT$${have} of NT$${need} (NT$${need - have} to go)`,
   };
 
   // Shown when trying to add a griddle (불판) item below its
@@ -1193,13 +1205,42 @@
   // silently vanishing after 3.5s whether or not they saw it. Confirming
   // continues on to actually submit the order (this is a heads-up, not a
   // hard block on ordering less than the headcount).
-  function showPartyWarningModal(onConfirm) {
-    $("#partyWarningMsg").textContent = (PARTY_WARNING[lang] || PARTY_WARNING.zh)(partyMinCount());
+  function showPartyWarningModal(have, need, onConfirm) {
+    const notice = MIN_SPEND_NOTICE[lang] || MIN_SPEND_NOTICE.zh;
+    const short = MIN_SPEND_SHORTFALL[lang] || MIN_SPEND_SHORTFALL.zh;
+    $("#partyWarningMsg").textContent = notice(minSpendPerPerson);
+    $("#partyWarningAmount").textContent = short(have, need);
     $("#partyWarningBackdrop").hidden = false;
     $("#partyWarningConfirmBtn").onclick = () => {
       $("#partyWarningBackdrop").hidden = true;
       onConfirm();
     };
+  }
+
+  /**
+   * 이 자리의 低消를 서버에 다시 물어본다 — 필요한 금액과 **이미 시킨 금액**.
+   *
+   * 低消는 한 라운드가 아니라 그 손님이 앉아 있는 동안 전체에 걸리는
+   * 규칙이다. 두 번째 라운드에서 음료 하나를 시킬 때마다 「모자랍니다」가
+   * 뜨면 아무도 안 읽는다.
+   *
+   * 화면을 연 뒤에 라운드가 더 들어왔을 수 있어서, 주문을 보내기 직전에
+   * 한 번 더 물어본다.
+   */
+  async function refreshMinSpend() {
+    try {
+      const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`);
+      const d = await res.json();
+      if (!res.ok) return 0;
+      minSpendPerPerson = Number(d.min_spend_per_person) || 0;
+      minSpendRequired = Number(d.min_spend_required) || 0;
+      return Number(d.min_spend_spent) || 0;
+    } catch (e) {
+      // 못 물어보면 안내를 건너뛴다. 네트워크가 잠깐 끊긴 것 때문에 손님이
+      // 주문을 못 하게 되면 더 나쁘다 — 低消는 계산대에서도 확인된다.
+      minSpendRequired = 0;
+      return 0;
+    }
   }
 
   $("#submitOrderBtn").onclick = () => submitOrderFlow(false);
@@ -1222,11 +1263,21 @@
       return;
     }
 
-    // 안내 기준은 어른 수다. 아이는 나눠 먹는 경우가 많아서 총원으로 세면
-    // 어른 2 · 아이 2 가족이 3그릇을 시켜도 "적게 시켰다"는 말을 듣는다.
-    if (!skipPartyWarning && !isCounterTable && partyMinCount() > 0 && cartCount() < partyMinCount()) {
-      showPartyWarningModal(() => submitOrderFlow(true));
-      return;
+    // 低消 안내 (2026-09-11 사장님). 예전에는 「메뉴 개수 < 어른 수」였다.
+    //
+    // 막지는 않는다 — 확인을 누르면 그대로 주문된다. 低消는 가게 규칙이고
+    // 직원이 사정에 따라 넘어가 주기도 하는데, 화면이 손님을 가로막아 버리면
+    // 그 여지가 없어진다. 사장님도 「안내 문구」라고 하셨다.
+    if (!skipPartyWarning && !isCounterTable) {
+      // 물어보는 동안 버튼이 살아 있으면 두 번 눌린다.
+      btn.disabled = true;
+      const spent = await refreshMinSpend();
+      btn.disabled = false;
+      const have = spent + cartTotal();
+      if (minSpendRequired > 0 && have < minSpendRequired) {
+        showPartyWarningModal(have, minSpendRequired, () => submitOrderFlow(true));
+        return;
+      }
     }
 
     let coords = null;
