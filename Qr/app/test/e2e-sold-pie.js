@@ -125,6 +125,21 @@ const SOLD = 12; // 12가지를 판다 — 위 8가지 + 「기타」가 되는�
   check("★ 아래쪽이 위쪽보다 어둡다 (옆면)", depth.top && depth.bottom && lum(depth.bottom) < lum(depth.top) - 5,
     JSON.stringify(depth));
 
+  out.push("\n[★ 많이 팔린 조각이 더 두껍다]");
+  // 사장님(2026-09-11): "그 크기만큼 두께가 올라가게 해줘. 그래서 두께가
+  // 많이 팔리는 거가 올라가는 거지." 두께는 눈으로 재기 어려우니, 그릴 때
+  // 쓴 값을 화면에 적어 두고 그것을 본다(canvas.dataset.lifts).
+  const lifts = await page.evaluate(() => JSON.parse(document.querySelector("#settlementPie").dataset.lifts || "[]"));
+  check("조각 수만큼 두께가 있다", lifts.length === 9, JSON.stringify(lifts));
+  // 앞 8개는 12,11,10...5 로 내려간다. 두께도 그 순서를 따라야 한다.
+  const top8 = lifts.slice(0, 8);
+  check("★ 많이 팔린 순서대로 두꺼워진다", top8.every((v, i) => i === 0 || v <= top8[i - 1]), JSON.stringify(top8));
+  check("★ 1등과 8등의 두께가 실제로 다르다", top8[0] > top8[7], `${top8[0]} vs ${top8[7]}`);
+  // 그렇다고 모형처럼 치솟지는 않는다 — "너무 가짜 모형 같은 느낌이야.
+  // 좀 더 보고서 느낌으로 부드럽게."
+  check("★ 두께가 과하지 않다 (보고서 느낌)", Math.max(...lifts) <= 32, `가장 두꺼운 조각 ${Math.max(...lifts)}px`);
+  check("한 개도 안 팔린 것처럼 납작하지는 않다", Math.min(...lifts) >= 5, String(Math.min(...lifts)));
+
   out.push("\n[숫자는 범례에서 읽힌다]");
   const legend = await page.evaluate(() =>
     [...document.querySelectorAll("#settlementPieLegend .stl-pie-item")].map((el) => ({

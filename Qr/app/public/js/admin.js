@@ -640,7 +640,7 @@
       settlementAllMenuHead: "메뉴 {total}개 중 {sold}개가 팔렸어요. 한 개도 안 팔린 메뉴는 {unsold}개 — 아래로 내리면 나와요.",
       settlementAllMenuAllSold: "✓ 메뉴 {total}개가 전부 한 번씩은 팔렸어요",
       settlementPieTitle: "판매 비중",
-      settlementPieNote: "많이 팔린 {n}가지와 나머지를 묶은 「기타」예요. 조각 옆 숫자가 실제 수량이에요.",
+      settlementPieNote: "많이 팔린 {n}가지와 나머지를 묶은 「기타」예요. 많이 팔린 것일수록 조각이 넓고 두껍게 올라와요. 정확한 수는 옆의 숫자로 보세요.",
       settlementPieEmpty: "아직 팔린 것이 없어요",
       settlementPieOther: "기타",
       settlementOrdersTitle: "📋 지난 주문 불러오기",
@@ -1340,7 +1340,7 @@
       settlementAllMenuHead: "{total} 項中賣出 {sold} 項。完全沒賣出的有 {unsold} 項 — 往下捲就看得到。",
       settlementAllMenuAllSold: "✓ {total} 項菜單今天都至少賣出一份",
       settlementPieTitle: "銷售佔比",
-      settlementPieNote: "銷量前 {n} 名，其餘合併為「其他」。圓餅旁的數字是實際份數。",
+      settlementPieNote: "銷量前 {n} 名，其餘合併為「其他」。賣得越多的品項，扇形越寬、也越厚。實際份數請看右側數字。",
       settlementPieEmpty: "目前還沒有賣出任何品項",
       settlementPieOther: "其他",
       settlementOrdersTitle: "📋 查詢過往訂單",
@@ -12078,7 +12078,13 @@
    * 퍼센트를 같이 적는다. 그림은 한눈에 보는 용, 숫자는 판단하는 용이다.
    */
   const PIE_SLICES = 8;
-  const PIE_COLORS = ["#1f3864", "#c0392b", "#2e7d32", "#b8860b", "#6a4c93", "#0e7490", "#d35400", "#4e5d6c", "#9aa5b1"];
+  // 보고서에 붙이는 그림이다. 원색을 조각마다 하나씩 쓰면 눈이 먼저 색을
+  // 읽느라 순서를 못 읽는다 — 사장님(2026-09-11): "너무 가짜 모형 같은
+  // 느낌이야. 좀 더 보고서 느낌으로 부드럽게." 그래서 색을 **순서대로
+  // 이어지는 한 줄**로 둔다(짙은 남색 → 청록 → 세이지 → 모래). 위에서부터
+  // 색이 차례로 옅어지므로 색 자체가 순위를 말해준다. 마지막은 「기타」용
+  // 중립 회색이다.
+  const PIE_COLORS = ["#23415f", "#2f6076", "#3f7d85", "#5c9a92", "#87b3a3", "#b3c7b0", "#d4c9a8", "#c7ab84", "#aeb4b8"];
   function renderSoldPie(data) {
     const canvas = $("#settlementPie");
     const legend = $("#settlementPieLegend");
@@ -12117,12 +12123,44 @@
     if (note) note.textContent = T("settlementPieNote").replace("{n}", Math.min(PIE_SLICES, sorted.length));
   }
 
-  // 눕힌 원 + 옆면. 뒤쪽 반원의 옆면을 먼저 칠하고 그 위에 윗면을 얹으면
-  // 두께가 있는 것처럼 보인다.
+  /**
+   * 눕힌 원 + 두께.
+   *
+   * 사장님(2026-09-11): "그 크기만큼 두께가 올라가게 해줘. 그래서 두께가
+   * 많이 팔리는 거가 올라가는 거지."
+   *
+   * 조각마다 두께가 다르다 — 많이 팔린 것이 그만큼 높이 솟는다. 그러면
+   * 「많이 팔렸다」가 두 가지 모양으로 동시에 읽힌다: 조각이 넓고, 게다가
+   * 높다. 각도만으로는 몇 도 차이를 눈이 잘 못 가르는데 높이는 나란히 놓고
+   * 보면 바로 갈린다.
+   *
+   * 이어서: "너무 가짜 모형 같은 느낌이야. 좀 더 보고서 느낌으로 부드럽게."
+   * 맞는 지적이었다. 처음엔 두께를 반지름만큼 올리고 원색을 조각마다 박아서,
+   * 자료라기보다 장난감처럼 보였다. 세 가지를 낮췄다.
+   *   · **두께를 많이 낮춘다.** 순위가 읽힐 만큼만 차이가 나면 된다.
+   *   · **색을 한 줄로 잇는다**(PIE_COLORS 주석). 순위에 따라 옅어진다.
+   *   · **면을 그라데이션으로** 칠하고 경계선을 가늘게. 평평한 진한 색으로
+   *     옆면을 칠하면 종이에 붙인 색종이처럼 보인다.
+   *
+   * 그리는 순서가 전부다. 높이가 제각각이면 **앞의 높은 조각이 뒤의 낮은
+   * 조각을 가려야** 입체로 보인다. 그래서 뒤(화면 위)에서 앞(화면 아래)
+   * 순서로 칠한다 — 화가가 배경부터 칠하는 것과 같다.
+   *
+   * 한 조각은 세 부분이다: 바깥 옆면(앞쪽 반원에 걸친 부분만 보인다),
+   * 잘린 단면 두 장, 그리고 윗면.
+   */
   function drawPie3d(ctx, canvas, slices, totalQty) {
     const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(280, Math.min(520, canvas.parentElement.clientWidth || 420));
-    const cssH = Math.round(cssW * 0.62);
+    const cssW = Math.max(280, Math.min(460, canvas.parentElement.clientWidth || 420));
+    const rx = cssW * 0.36;
+    const ry = rx * 0.46; // 눕힌 정도 — 너무 눕히면 조각 크기를 못 읽는다
+    // 두께는 「몇 개 팔렸나」에 비례한다. 순위가 읽힐 만큼만 차이를 준다 —
+    // 크게 벌리면 자료가 아니라 모형처럼 보인다.
+    const LIFT_MIN = 7;
+    const LIFT_MAX = 26;
+    const maxQty = slices.reduce((m, sl) => Math.max(m, sl.qty), 0) || 1;
+    const liftOf = (qty) => Math.round(LIFT_MIN + (qty / maxQty) * (LIFT_MAX - LIFT_MIN));
+    const cssH = Math.round(ry * 2 + LIFT_MAX + 34);
     canvas.width = Math.round(cssW * dpr);
     canvas.height = Math.round(cssH * dpr);
     canvas.style.width = `${cssW}px`;
@@ -12130,71 +12168,111 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
 
-    const depth = Math.round(cssH * 0.14);
     const cx = cssW / 2;
-    const cy = (cssH - depth) / 2 + depth * 0.2;
-    const rx = cssW * 0.38;
-    const ry = rx * 0.52; // 눕힌 정도
+    const cy = LIFT_MAX + ry + 10; // 바닥면의 중심
     const TAU = Math.PI * 2;
 
-    const angles = [];
     let a = -Math.PI / 2; // 12시에서 시작
-    slices.forEach((sl) => {
+    const parts = slices.map((sl, i) => {
       const span = (sl.qty / totalQty) * TAU;
-      angles.push({ from: a, to: a + span });
+      const from = a;
       a += span;
+      return { i, sl, from, to: a, mid: from + span / 2, lift: liftOf(sl.qty) };
     });
+    // 테스트와 사람 눈이 같은 값을 보게 — 조각별 두께를 화면에 적어 둔다.
+    canvas.dataset.lifts = JSON.stringify(parts.map((p) => p.lift));
 
-    const shade = (hex, amount) => {
+    const rgb = (hex) => {
       const n = parseInt(hex.slice(1), 16);
-      const r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * amount)));
-      const g = Math.max(0, Math.min(255, Math.round(((n >> 8) & 255) * amount)));
-      const b = Math.max(0, Math.min(255, Math.round((n & 255) * amount)));
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    };
+    const shade = (hex, amount) => {
+      const [r, g, b] = rgb(hex).map((v) => Math.max(0, Math.min(255, Math.round(v * amount))));
       return `rgb(${r},${g},${b})`;
     };
+    const lum = (hex) => {
+      const [r, g, b] = rgb(hex);
+      return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    };
+    const at = (ang, lift) => [cx + Math.cos(ang) * rx, cy + Math.sin(ang) * ry - lift];
 
-    // 옆면 — 아래쪽(화면 앞) 반원에 걸친 부분만 보인다.
-    for (let pass = 0; pass < depth; pass++) {
-      const y = cy + depth - pass;
-      slices.forEach((sl, i) => {
-        const { from, to } = angles[i];
+    // 바닥에 옅은 그림자 — 원이 종이 위에 놓인 것처럼 보이게 하는 것뿐이다.
+    const shadow = ctx.createRadialGradient(cx, cy + ry * 0.35, rx * 0.2, cx, cy + ry * 0.35, rx * 1.12);
+    shadow.addColorStop(0, "rgba(35,45,60,0.16)");
+    shadow.addColorStop(1, "rgba(35,45,60,0)");
+    ctx.fillStyle = shadow;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy + ry * 0.4, rx * 1.12, ry * 1.05, 0, 0, TAU);
+    ctx.fill();
+
+    // 화면 아래쪽(sin > 0)이 보는 사람 쪽이다. 그쪽에 가까운 조각을 나중에
+    // 칠해서 앞에 오게 한다.
+    const order = [...parts].sort((p, q) => Math.sin(p.mid) - Math.sin(q.mid));
+
+    // 각도 구간 [from,to] 중 앞쪽 반원(0~π)에 걸친 부분. 옆면은 거기만 보인다.
+    const frontParts = (from, to) => {
+      const res = [];
+      for (let k = -1; k <= 2; k++) {
+        const lo = Math.max(from, k * TAU);
+        const hi = Math.min(to, k * TAU + Math.PI);
+        if (hi > lo) res.push([lo, hi]);
+      }
+      return res;
+    };
+
+    order.forEach((p) => {
+      const base = PIE_COLORS[p.i % PIE_COLORS.length];
+      // 옆면은 위에서 아래로 조금씩 어두워진다 — 평평하게 칠하면 색종이처럼
+      // 보이고, 세게 어둡게 하면 다시 모형처럼 보인다.
+      const wall = ctx.createLinearGradient(0, cy - p.lift, 0, cy + ry * 0.6);
+      wall.addColorStop(0, shade(base, 0.9));
+      wall.addColorStop(1, shade(base, 0.68));
+      // 1. 잘린 단면 두 장 (케이크를 자른 자리)
+      [p.from, p.to].forEach((ang) => {
+        const [ex, ey] = at(ang, p.lift);
         ctx.beginPath();
-        ctx.moveTo(cx, y);
-        ctx.ellipse(cx, y, rx, ry, 0, from, to);
+        ctx.moveTo(cx, cy - p.lift);
+        ctx.lineTo(ex, ey);
+        ctx.lineTo(ex, ey + p.lift);
+        ctx.lineTo(cx, cy);
         ctx.closePath();
-        ctx.fillStyle = shade(PIE_COLORS[i % PIE_COLORS.length], 0.62);
+        ctx.fillStyle = shade(base, 0.86);
         ctx.fill();
       });
-    }
-
-    // 윗면
-    slices.forEach((sl, i) => {
-      const { from, to } = angles[i];
+      // 2. 바깥 옆면 — 앞쪽 반원에 걸친 부분만
+      frontParts(p.from, p.to).forEach(([lo, hi]) => {
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - p.lift, rx, ry, 0, lo, hi);
+        ctx.lineTo(...at(hi, 0));
+        ctx.ellipse(cx, cy, rx, ry, 0, hi, lo, true);
+        ctx.closePath();
+        ctx.fillStyle = wall;
+        ctx.fill();
+      });
+      // 3. 윗면
       ctx.beginPath();
-      ctx.moveTo(cx, cy);
-      ctx.ellipse(cx, cy, rx, ry, 0, from, to);
+      ctx.moveTo(cx, cy - p.lift);
+      ctx.ellipse(cx, cy - p.lift, rx, ry, 0, p.from, p.to);
       ctx.closePath();
-      ctx.fillStyle = PIE_COLORS[i % PIE_COLORS.length];
+      ctx.fillStyle = base;
       ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.65)";
-      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     });
 
-    // 조각 위 숫자 — 그림이 아니라 글자로 읽게 한다(위 주석).
-    ctx.font = "700 13px system-ui, -apple-system, sans-serif";
+    // 조각 위 숫자. 범례에 수량과 퍼센트가 다 있으므로 여기는 거드는 정도만
+    // 한다 — 작은 조각까지 다 적으면 글자가 겹쳐서 도로 지저분해진다.
+    ctx.font = "600 12.5px system-ui, -apple-system, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    slices.forEach((sl, i) => {
-      const share = sl.qty / totalQty;
-      if (share < 0.05) return; // 너무 얇은 조각에는 안 적는다 — 겹쳐서 못 읽는다
-      const mid = (angles[i].from + angles[i].to) / 2;
-      const tx = cx + Math.cos(mid) * rx * 0.62;
-      const ty = cy + Math.sin(mid) * ry * 0.62;
-      ctx.fillStyle = "rgba(0,0,0,0.45)";
-      ctx.fillText(String(sl.qty), tx + 1, ty + 1);
-      ctx.fillStyle = "#fff";
-      ctx.fillText(String(sl.qty), tx, ty);
+    order.forEach((p) => {
+      if (p.sl.qty / totalQty < 0.08) return;
+      const tx = cx + Math.cos(p.mid) * rx * 0.58;
+      const ty = cy + Math.sin(p.mid) * ry * 0.58 - p.lift;
+      // 옅은 조각 위에 흰 글씨를 얹으면 안 읽힌다.
+      ctx.fillStyle = lum(PIE_COLORS[p.i % PIE_COLORS.length]) > 0.62 ? "rgba(30,40,52,0.85)" : "rgba(255,255,255,0.95)";
+      ctx.fillText(String(p.sl.qty), tx, ty);
     });
   }
 
@@ -12214,6 +12292,15 @@
           if (btn.dataset.pane === "whenHourly") renderHourlyChart(lastSettlementData.hourly_breakdown || []);
           if (btn.dataset.pane === "whenTrend") renderTrendChart(lastSettlementData.daily_breakdown || []);
           if (btn.dataset.pane === "soldItems") renderItemsChart(lastSettlementData.item_breakdown || []);
+          // 판매 비중도 마찬가지다. 숨은 채로 그리면 폭을 못 재서 기본값으로
+          // 작게 그려진다 — 보이게 된 지금 제 폭으로 다시 그린다.
+          if (btn.dataset.pane === "soldPie") {
+            try {
+              renderSoldPie(lastSettlementData);
+            } catch (e) {
+              console.warn("판매 비중 그래프를 그리지 못했습니다:", e);
+            }
+          }
         }
       };
     });
