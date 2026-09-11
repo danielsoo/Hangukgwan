@@ -3,9 +3,15 @@ const multer = require("multer");
 const { store, save, refreshAndSave, nextId, savePhoto, deletePhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { withAvailability, today } = require("../availability");
+const { broadcastOnWrite } = require("../realtime");
 const canEditMenu = requirePermission("menuEdit");
 
 const router = express.Router();
+
+// 여기서 나가는 모든 쓰기를 다른 기기에 바로 알린다 (src/realtime.js).
+// 라우트마다 한 줄씩 넣으면 다음에 새 라우트를 넣는 사람이 빠뜨리고, 그
+// 한 자리만 조용히 「새로고침해야 보이는」 곳이 된다.
+router.use(broadcastOnWrite("menu"));
 
 // Photos are kept in MongoDB (see src/db.js) instead of local disk, since
 // serverless hosts like Vercel don't have a writable disk that survives

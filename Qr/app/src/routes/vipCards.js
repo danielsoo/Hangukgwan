@@ -293,7 +293,7 @@ router.post("/sell", requireAdmin, async (req, res) => {
   // (CLAUDE.md 「store 문서를 통째로 쓰지 않는다」). 카드 자체는 위
   // refreshAndSave 에서 이미 저장됐다.
   await saveOrder(order);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   res.status(201).json({ order, card: card ? serialize(card) : null, price });
 });
 

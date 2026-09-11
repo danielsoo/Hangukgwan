@@ -131,6 +131,8 @@
   // 정할 때 이 값을 본다. Pusher 설정이 안 된 매장에서는 계속 false로
   // 남아서 기존 2초 폴링 그대로 동작한다.
   let realtimeEnabled = false;
+  // 인원수·테이블·메뉴를 가끔 다시 불러오는 안전망 타이머 (startPolling 참고)
+  let dataTimer = null;
   let pusherClient = null;
 
   // 자기가 일으킨 변경을 자기가 다시 받아오지 않게 한다.
@@ -2898,6 +2900,15 @@
       pusherClient = new Pusher(cfg.key, { cluster: cfg.cluster });
       const channel = pusherClient.subscribe("orders");
       channel.bind("changed", () => loadOrders());
+      // 주문 말고 나머지(인원수·테이블·메뉴)가 바뀐 것도 여기로 온다.
+      //
+      // 사장님(2026-09-11): "현재 뭐가 바뀌거나 인원이 추가되거나 메뉴가
+      // 추가되거나 그게 바로바로 반영이 안되고 새로고침을 해야 바뀌어있어."
+      //
+      // 지금까지 이 화면이 스스로 다시 불러오는 것은 주문뿐이었다. 테이블과
+      // 메뉴는 로그인할 때 한 번 불러오고 끝이라, 옆 태블릿에서 인원을
+      // 고치거나 품절을 켜도 이 화면은 영영 몰랐다.
+      channel.bind("data", (payload) => refreshChangedData(payload && payload.what));
       pusherClient.connection.bind("connected", () => {
         realtimeEnabled = true;
         // 폴링이 이미 빠른 주기로 돌고 있었다면 느린 안전망 주기로 다시 시작
@@ -2920,14 +2931,45 @@
       realtimeEnabled = false;
     }
   }
+  // 「무엇이 바뀌었나」를 받아서 그것만 다시 불러온다. 전부 다시 불러오면
+  // 인원 한 명 고칠 때마다 모든 기기가 메뉴까지 다시 받는다.
+  async function refreshChangedData(what) {
+    if (what === "menu") {
+      await loadMenu();
+      return;
+    }
+    // tables — 인원수, 자리, 구역. 주문 목록과 같은 자리들을 다시 그린다
+    // (loadOrders 끝부분과 같은 이유: 배치도와 열려 있는 테이블 상세가
+    // 옛날 인원수를 그대로 들고 있으면 안 된다).
+    await loadTables();
+    if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
+    if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+    if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
+  }
+
+  // 알림이 못 올 때를 위한 안전망. Pusher 연결이 조용히 끊기거나, 알림
+  // 하나가 유실되면 화면은 그 사실을 스스로 알 방법이 없다 — 그때 「새로고침
+  // 해야 보이는」 상태로 되돌아가지 않게 가끔 스스로 다시 불러온다.
+  // 주문(위 pollTimer)보다 훨씬 뜸해도 되는 것들이다.
+  const DATA_REFRESH_MS = 30000;
   function startPolling() {
     if (pollTimer) return;
     pollTimer = setInterval(loadOrders, realtimeEnabled ? 30000 : 2000);
+    if (!dataTimer) {
+      dataTimer = setInterval(() => {
+        refreshChangedData("tables");
+        refreshChangedData("menu");
+      }, DATA_REFRESH_MS);
+    }
   }
   function stopPolling() {
     if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
+    }
+    if (dataTimer) {
+      clearInterval(dataTimer);
+      dataTimer = null;
     }
   }
 

@@ -26,11 +26,11 @@ if (process.env.PUSHER_APP_ID && process.env.PUSHER_KEY && process.env.PUSHER_SE
   });
 }
 
-// Fire-and-forget, on purpose: 실제 주문 데이터는 이미 save()로 MongoDB에
-// 안전하게 저장된 뒤에 호출되는 것뿐이라, Pusher 쪽 오류(키 오타, 일시적
-// 장애 등)가 주문 처리 자체를 실패시키면 안 된다. admin.js는 이 알림을
-// 못 받아도 훨씬 느린 폴백 폴링(realtime 미설정 시와 동일한 주기)으로
-// 계속 새 주문을 찾아낸다.
+// 알림은 **응답보다 먼저** 나가고(아래 TRIGGER_TIMEOUT_MS 주석), 그래도
+// 주문 처리를 실패시키지는 않는다. 실제 주문 데이터는 이미 save()로
+// MongoDB에 안전하게 저장된 뒤에 호출되는 것뿐이라, Pusher 쪽 오류(키 오타,
+// 일시적 장애 등)는 삼키고 그냥 응답한다. admin.js는 이 알림을 못 받아도
+// 훨씬 느린 폴백 폴링으로 계속 새 주문을 찾아낸다.
 // 이 변경을 일으킨 기기에게는 알림을 되돌려 보내지 않는다.
 //
 // 2026-09-10: 직원이 「조리 시작」을 누르면 그 기기가 요청을 세 번 보내고
@@ -57,20 +57,99 @@ function socketIdFrom(req) {
   return raw && SOCKET_ID_RE.test(raw) ? raw : null;
 }
 
-function broadcastOrdersChanged(req) {
-  if (!pusher) return;
-  const socketId = socketIdFrom(req);
+// **응답을 보내기 전에 기다린다.**
+//
+// 2026-09-11 사장님: "새 주문이 들어오면 화면에 뜨기까지 한 6~7초 딜레이도
+// 있고." 예전에는 trigger 를 던져만 놓고 곧바로 res.json() 을 했다. 보통
+// 서버라면 그래도 되지만 **서버리스는 응답을 내보내는 순간 인스턴스를
+// 얼린다** — 아직 안 끝난 Pusher 요청이 그대로 멈춰 서서, 다음 요청이
+// 인스턴스를 깨울 때까지 알림이 안 나간다. 주방 화면이 몇 초씩 늦게 뜨는
+// 모양이 딱 이것이다.
+//
+// 그래서 알림이 실제로 나간 것을 보고 응답한다. 대신 **주문이 Pusher 를
+// 기다리다 실패하는 일은 없어야 한다** — 제한 시간을 두고, 넘으면 그냥
+// 응답한다(알림은 늦게라도 나가거나 안 나가고, 화면은 폴백 폴링이 잡는다).
+// 서울(함수) ↔ 도쿄(Pusher ap3) 왕복이라 평소에는 수십 ms 다.
+const TRIGGER_TIMEOUT_MS = 800;
+
+function withTimeout(promise) {
+  return new Promise((resolve) => {
+    // unref: 이 타이머 하나 때문에 테스트 프로세스가 안 끝나면 안 된다.
+    const t = setTimeout(resolve, TRIGGER_TIMEOUT_MS);
+    if (typeof t.unref === "function") t.unref();
+    promise.then(
+      () => { clearTimeout(t); resolve(); },
+      (err) => {
+        clearTimeout(t);
+        console.error("[realtime] pusher trigger failed:", err && err.message);
+        resolve();
+      }
+    );
+  });
+}
+
+function push(channel, event, payload, socketId) {
+  if (!pusher) return Promise.resolve();
   try {
-    pusher
-      .trigger("orders", "changed", {}, socketId ? { socket_id: socketId } : undefined)
-      .catch((err) => {
-        console.error("[realtime] pusher trigger failed:", err.message);
-      });
+    return withTimeout(
+      pusher.trigger(channel, event, payload || {}, socketId ? { socket_id: socketId } : undefined)
+    );
   } catch (e) {
     // 위 catch 는 비동기 실패용이다. trigger 자체가 동기적으로 던지는
     // 경우(형식 검사 등)까지 여기서 막아야 주문이 살아남는다.
     console.error("[realtime] pusher trigger threw:", e.message);
+    return Promise.resolve();
   }
+}
+
+function broadcastOrdersChanged(req) {
+  return push("orders", "changed", {}, socketIdFrom(req));
+}
+
+/**
+ * 주문 말고 **나머지가 바뀌었다**를 알린다 — 인원수, 테이블, 메뉴, 구역.
+ *
+ * 사장님(2026-09-11): "현재 뭐가 바뀌거나 인원이 추가되거나 메뉴가
+ * 추가되거나 그게 바로바로 반영이 안되고 새로고침을 해야 바뀌어있어."
+ *
+ * 그럴 만했다. 지금까지 화면이 주기적으로 다시 불러오는 것은 **주문뿐**
+ * 이었다. 테이블(인원수)과 메뉴는 로그인할 때 한 번 불러오고 끝이라, 옆
+ * 태블릿에서 인원을 고치거나 메뉴를 품절로 바꿔도 이 화면은 영영 몰랐다.
+ *
+ * `what` 은 「무엇을 다시 불러오면 되는가」다. 전부 다시 불러오게 하면
+ * 인원수 하나 고칠 때마다 모든 기기가 메뉴 22KB 를 또 받는다.
+ */
+function broadcastDataChanged(req, what) {
+  return push("orders", "data", { what }, socketIdFrom(req));
+}
+
+/**
+ * 이 라우터에서 나가는 **모든 쓰기**에 알림을 붙인다.
+ *
+ * 라우트마다 한 줄씩 넣는 방법도 있지만, 그러면 다음에 새 라우트를 넣는
+ * 사람이 빠뜨리고 그 한 자리만 조용히 「새로고침해야 보이는」 곳이 된다.
+ * 길목에 한 번 걸어두면 빠뜨릴 자리가 없다.
+ *
+ * 응답 직전에 끼워 넣는 이유는 위 TRIGGER_TIMEOUT_MS 주석과 같다 —
+ * 응답 뒤에 하면 서버리스가 얼어붙어 알림이 늦게 나간다.
+ */
+function broadcastOnWrite(what) {
+  return function broadcastOnWriteMiddleware(req, res, next) {
+    if (req.method === "GET" || req.method === "HEAD" || !pusher) return next();
+    const sendJson = res.json.bind(res);
+    res.json = function (body) {
+      // 실패한 요청은 아무것도 안 바꿨다.
+      // res.locals.skipBroadcast — 쓰기처럼 생겼지만 아무것도 안 바꾸는
+      // 라우트가 스스로 빠지는 길 (예: POST /api/tables/:n/seat 은 손님
+      // 폰에 쿠키 하나를 묶어줄 뿐이다. 손님이 QR 을 열 때마다 오므로,
+      // 여기서 알림을 쏘면 손님 한 명이 앉을 때마다 매장 모든 태블릿이
+      // 테이블 목록을 다시 받는다).
+      if (res.statusCode >= 400 || (res.locals && res.locals.skipBroadcast)) return sendJson(body);
+      broadcastDataChanged(req, what).then(() => sendJson(body));
+      return res;
+    };
+    next();
+  };
 }
 
 
@@ -109,10 +188,14 @@ function channelForTable(number) {
  * 한 번씩 물어보는 쪽으로 알아낸다(public/js/order.js).
  */
 function broadcastTableMoved(from, payload) {
-  if (!pusher) return;
-  pusher.trigger(channelForTable(from), "moved", payload || {}).catch((err) => {
-    console.error("[realtime] pusher trigger failed:", err.message);
-  });
+  return push(channelForTable(from), "moved", payload || {}, null);
 }
 
-module.exports = { broadcastOrdersChanged, broadcastTableMoved, channelForTable, socketIdFrom };
+module.exports = {
+  broadcastOrdersChanged,
+  broadcastDataChanged,
+  broadcastOnWrite,
+  broadcastTableMoved,
+  channelForTable,
+  socketIdFrom,
+};

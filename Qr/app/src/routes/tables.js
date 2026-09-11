@@ -6,10 +6,15 @@ const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf, ordersOfSeatin
 const testMode = require("../testMode");
 const minSpend = require("../minSpend");
 const seating = require("../seating");
-const { channelForTable } = require("../realtime");
+const { channelForTable, broadcastOnWrite } = require("../realtime");
 const canEditTables = requirePermission("tableEdit");
 
 const router = express.Router();
+
+// 여기서 나가는 모든 쓰기를 다른 기기에 바로 알린다 (src/realtime.js).
+// 라우트마다 한 줄씩 넣으면 다음에 새 라우트를 넣는 사람이 빠뜨리고, 그
+// 한 자리만 조용히 「새로고침해야 보이는」 곳이 된다.
+router.use(broadcastOnWrite("tables"));
 
 // The single 포장 카운터 "table" — not a real dine-in table (no floor-plan
 // spot, no headcount prompt; see is_counter checks in src/routes/orders.js
@@ -287,6 +292,10 @@ router.put("/:tableNumber/party-size", async (req, res) => {
 //
 // 손님은 아무것도 더 하지 않는다. 이 요청이 오갔다는 것조차 모른다.
 router.post("/:tableNumber/seat", (req, res) => {
+  // 이건 쓰기가 아니다 — 손님 폰에 쿠키 하나를 묶어줄 뿐이고, 손님이 QR 을
+  // 열 때마다 온다. 알림을 쏘면 손님 한 명이 앉을 때마다 매장의 모든
+  // 태블릿이 테이블 목록을 다시 받는다 (src/realtime.js broadcastOnWrite).
+  res.locals.skipBroadcast = true;
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
   const cur = seating.seatingOf(table);

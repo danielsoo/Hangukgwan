@@ -484,7 +484,7 @@ router.post("/", async (req, res) => {
   // store 문서를 여기서 다시 쓸 일이 없다 — 예전에는 카운터 하나 때문에
   // 문서 전체를 갈아끼웠고, 그게 다른 요청이 방금 한 일을 되돌렸다.
   await saveOrder(order);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
 
   res.status(201).json(order);
 });
@@ -683,7 +683,7 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   });
   // 순서를 바꾼 주문만 쓴다.
   await saveOrders(touched);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   res.json({ ok: true });
 });
 
@@ -802,7 +802,7 @@ router.post("/move", requireAdmin, async (req, res) => {
     patchArrayItem("tables", fromTable.id, Object.assign(partyPatchOf(fromTable), { moved_to: fromTable.moved_to })),
     patchArrayItem("tables", toTable.id, Object.assign(partyPatchOf(toTable), { moved_to: null })),
   ]);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   // 옛 자리 화면에 바로 알린다. 이 한 줄이 안내를 「1분 안에」 에서 「누르는
   // 즉시」 로 바꾼다 — 손님은 그 사이에 옛 자리로 주문을 한 번 더 넣을 수
   // 있고, 그러면 그 주문만 빈 자리로 떨어져 나간다.
@@ -891,7 +891,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 인원수는 그 테이블의 네 칸만 쓴다 — 문서를 통째로 쓰면 그 사이 들어온
   // 주문이 방금 지운 인원수를 되살린다(src/partySize.js savePartySize).
   if (partyCleared) await savePartySize(store, order.table_number);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   res.json(order);
 });
 
@@ -995,7 +995,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   }
 
   await saveOrder(order);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   res.json(order);
 });
 
@@ -1120,7 +1120,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
 
   await saveOrder(order);
   if (partyCleared) await savePartySize(store, order.table_number);
-  broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req);
   res.json({ updatedOrder: order });
 });
 
