@@ -66,7 +66,22 @@ out.push("\n[2] 오전/오후 칸이 쓰는 다른 도우미들");
   }
 }
 
-out.push("\n[3] 그래도 터지면 나머지는 그린다");
+out.push("\n[3] 분류 이름 categoryLabel()");
+{
+  // 2026-09-11: 「안 팔린 메뉴」를 renderSettlement **바깥** 함수에서 그리며
+  // 이걸 불렀다가, 지역 함수라 ReferenceError 로 목록이 통째로 비었다.
+  // nt() 때와 똑같은 사고다. 브라우저 테스트(e2e-unsold-items)가 잡아줬지만,
+  // 여기서 모양 자체를 막아둔다.
+  const decls = declOf("categoryLabel");
+  check("★ 딱 한 번만 선언된다", decls.length === 1, JSON.stringify(decls));
+  check("★ 모듈 자리에 있다 (들여쓰기 2칸)", decls[0] && decls[0].indent === 2, JSON.stringify(decls));
+  const uses = usesOf("categoryLabel").filter((u) => u !== (decls[0] && decls[0].line));
+  check("여러 곳에서 쓴다", uses.length >= 2, String(uses.length));
+  check("★ 쓰는 곳이 전부 선언보다 아래다", decls[0] && uses.every((u) => u > decls[0].line),
+    JSON.stringify(uses.filter((u) => decls[0] && u < decls[0].line)));
+}
+
+out.push("\n[4] 그래도 터지면 나머지는 그린다");
 {
   check("★ 통째로 감싸져 있다", /function renderSettlementHalves\(data\) \{[\s\S]{0,900}try \{[\s\S]{0,120}renderSettlementHalvesInner\(data\);[\s\S]{0,200}catch/.test(src), "");
   check("이유를 콘솔에 남긴다", /오전\/오후 칸을 그리지 못했습니다/.test(src), "");

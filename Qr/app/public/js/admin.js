@@ -635,6 +635,12 @@
       settlementQtySuffix: "개",
       settlementItemsExpand: "전체 보기",
       settlementItemsCollapse: "접기",
+      settlementUnsoldTitle: "한 개도 안 팔린 메뉴 {n}개",
+      settlementUnsoldOf: "(메뉴 {total}개 중)",
+      settlementUnsoldShow: "보기",
+      settlementUnsoldHide: "접기",
+      settlementUnsoldNone: "✓ 메뉴판에 있는 것이 전부 한 번씩은 팔렸어요",
+      settlementUnsoldSoldout: "품절",
       settlementOrdersTitle: "📋 지난 주문 불러오기",
       settlementOrdersSearchPlaceholder: "메뉴 이름, 손님 이름, 픽업 번호로 찾기",
       settlementOrdersTablePlaceholder: "테이블 번호",
@@ -1327,6 +1333,12 @@
       settlementQtySuffix: "份",
       settlementItemsExpand: "顯示全部",
       settlementItemsCollapse: "收合",
+      settlementUnsoldTitle: "完全沒賣出的品項 {n} 項",
+      settlementUnsoldOf: "（共 {total} 項）",
+      settlementUnsoldShow: "顯示",
+      settlementUnsoldHide: "收合",
+      settlementUnsoldNone: "✓ 菜單上的品項今天都至少賣出一份",
+      settlementUnsoldSoldout: "售完",
       settlementOrdersTitle: "📋 查詢過往訂單",
       settlementOrdersSearchPlaceholder: "以菜名、客人姓名或取餐號搜尋",
       settlementOrdersTablePlaceholder: "桌號",
@@ -11376,6 +11388,21 @@
   let settlementTrendChart = null;
   let settlementHourlyChart = null;
 
+  // 분류 이름. **모듈 자리에 둔다.**
+  //
+  // 예전에는 renderSettlement 안의 지역 함수였다. 2026-09-11 에 「안 팔린
+  // 메뉴」를 그 바깥 함수에서 그리면서 그대로 불렀다가 ReferenceError 로
+  // 목록이 통째로 비었다 — nt() 때 났던 사고와 똑같은 모양이다
+  // (test/settlement-render-scope.test.js 의 배경 주석 참고).
+  const categoryLabel = (key) => {
+    if (key === "uncategorized") return T("settlementCategoryNone");
+    // VIP 카드 판매는 메뉴가 아니라서 카테고리 목록에 없다 — 그대로 두면
+    // 결산에 "vip_card" 라는 날것이 찍힌다.
+    if (key === "vip_card") return T("settlementCategoryVipCard");
+    const c = (categories || []).find((x) => x.key === key);
+    return c ? catName(c) : key;
+  };
+
   function itemDisplayName(it) {
     return adminLang === "zh" ? it.name_zh || it.name_ko : it.name_ko || it.name_zh;
   }
@@ -11676,14 +11703,6 @@
     // ── 3. 무엇이 팔렸나 ─────────────────────────────────────────
     // 분류 이름은 메뉴 관리의 카테고리에서 가져온다 — 결산에만 따로 적어두면
     // 사장님이 이름을 바꿨을 때 여기만 옛 이름으로 남는다.
-    const categoryLabel = (key) => {
-      if (key === "uncategorized") return T("settlementCategoryNone");
-      // VIP 카드 판매는 메뉴가 아니라서 카테고리 목록에 없다 — 그대로 두면
-      // 결산에 "vip_card" 라는 날것이 찍힌다.
-      if (key === "vip_card") return T("settlementCategoryVipCard");
-      const c = (categories || []).find((x) => x.key === key);
-      return c ? catName(c) : key;
-    };
     renderBars("#settlementCategoryBars", (data.category_breakdown || [])
       .map((e) => ({ name: categoryLabel(e.category_key), value: e.subtotal, count: e.qty, countUnit: T("settlementQtySuffix") })));
 
@@ -11691,6 +11710,8 @@
     // 아래 것들이 전부 스크롤 밖으로 밀린다 — 위 10개만 두고, 필요할 때
     // 사장님이 펼친다.
     renderSettlementItems(data.item_breakdown || [], false);
+    // 팔린 것 바로 아래에 안 팔린 것. 둘은 같은 질문의 양쪽이다.
+    renderUnsoldItems(data);
 
     // ── 4. 언제, 어디서 ──────────────────────────────────────────
     // 상위 15개만 보여주므로, 퍼센트는 **하루 매출 전체** 대비여야 한다.
@@ -11977,6 +11998,78 @@
       ? T("settlementItemsCollapse")
       : `${T("settlementItemsExpand")} (${items.length - SETTLEMENT_ITEMS_PREVIEW})`;
     more.onclick = () => renderSettlementItems(items, !expanded);
+  }
+
+  /**
+   * 한 개도 안 팔린 메뉴.
+   *
+   * 사장님(2026-09-11): "판매항목과 수량 보는 것만큼 판매되지 않은 항목도
+   * 보였으면 좋겠어. 전혀 판매되지 않는 항목이 뭔지도 알 수 있도록."
+   *
+   * 위 표는 팔린 것만 담아서, 안 팔린 메뉴는 목록에서 **그냥 사라진다.**
+   * 없는 줄은 눈에 안 띈다 — 40줄짜리 표를 다 읽고 머릿속으로 메뉴판과
+   * 맞춰보기 전에는 무엇이 빠졌는지 알 수가 없다.
+   *
+   * 접어 두되 **개수는 항상 보이게** 한다. 펼치지 않아도 「몇 개가 안
+   * 나갔는지」는 지나가다 읽히고, 궁금할 때만 펼치면 된다. 여기를 늘 펼쳐
+   * 두면 이 화면이 다시 길어진다.
+   */
+  let unsoldExpanded = false;
+  function renderUnsoldItems(data) {
+    const box = $("#settlementUnsold");
+    if (!box) return;
+    const list = data.unsold_items;
+    // null 은 「하나도 안 팔렸다」가 아니라 **모른다**는 뜻이다(메뉴를 못 본
+    // 경우 — 저장된 마감 스냅샷 등). 0 과 같은 모양으로 보여주면 없는
+    // 사실을 지어내는 셈이라, 그럴 때는 이 칸을 아예 안 그린다.
+    if (!Array.isArray(list)) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    const toggle = $("#settlementUnsoldToggle");
+    const listEl = $("#settlementUnsoldList");
+    if (list.length === 0) {
+      toggle.hidden = true;
+      listEl.hidden = false;
+      listEl.innerHTML = `<div class="stl-unsold-none">${T("settlementUnsoldNone")}</div>`;
+      return;
+    }
+    toggle.hidden = false;
+    const total = data.menu_item_count;
+    const head = T("settlementUnsoldTitle").replace("{n}", list.length);
+    const of = total ? ` ${T("settlementUnsoldOf").replace("{total}", total)}` : "";
+    toggle.textContent = `${head}${of} · ${T(unsoldExpanded ? "settlementUnsoldHide" : "settlementUnsoldShow")}`;
+    toggle.onclick = () => {
+      unsoldExpanded = !unsoldExpanded;
+      renderUnsoldItems(data);
+    };
+    listEl.hidden = !unsoldExpanded;
+    if (!unsoldExpanded) return;
+    // 분류별로 묶는다. 46개를 한 줄로 늘어놓으면 「구이류가 통째로 안
+    // 나갔다」 같은 것이 안 보인다.
+    const groups = new Map();
+    list.forEach((m) => {
+      const key = m.category_key || "";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(m);
+    });
+    listEl.innerHTML = [...groups.entries()]
+      .map(
+        ([key, items]) => `
+          <div class="stl-unsold-cat">
+            <div class="stl-unsold-cat-name">${escapeHtml(categoryLabel(key))} (${items.length})</div>
+            <div class="stl-unsold-items">${items
+              .map(
+                (m) =>
+                  `<span class="stl-unsold-item${m.available ? "" : " is-soldout"}">${escapeHtml(itemDisplayName(m))}${
+                    m.available ? "" : `<span class="stl-unsold-soldout-tag">${T("settlementUnsoldSoldout")}</span>`
+                  }</span>`
+              )
+              .join("")}</div>
+          </div>`
+      )
+      .join("");
   }
 
   // 블록 안 탭 — 세로로 계속 쌓지 않으려는 것이다. 같은 묶음 안에서만

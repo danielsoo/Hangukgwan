@@ -449,6 +449,36 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   }
   const itemBreakdown = [...itemMap.values()].sort((a, b) => b.subtotal - a.subtotal);
 
+  /**
+   * 한 개도 안 팔린 메뉴.
+   *
+   * 사장님(2026-09-11): "판매항목과 수량 보는 것만큼 판매되지 않은 항목도
+   * 보였으면 좋겠어. 전혀 판매되지 않는 항목이 뭔지도 알 수 있도록."
+   *
+   * 위 itemBreakdown 은 팔린 것만 담는다 — 안 팔린 메뉴는 **목록에서 그냥
+   * 사라진다.** 없는 줄은 눈에 안 띄므로, 사장님은 40개짜리 표를 다 읽고
+   * 머릿속으로 메뉴판과 맞춰보기 전에는 무엇이 빠졌는지 알 수가 없다.
+   * 그래서 빠진 쪽을 따로 세어서 같이 내려보낸다.
+   *
+   * 팔린 것을 가릴 때 쓰는 열쇠는 **item_id** 다. 이름으로 맞추면 메뉴
+   * 이름을 고친 날 그 메뉴가 갑자기 「한 번도 안 팔린」 것이 된다.
+   *
+   * 메뉴를 안 넘겨주면(마감 스냅샷 등) null 이다 — 「하나도 안 팔렸다」가
+   * 아니라 **모른다**는 뜻이고, 화면은 그때 이 칸을 아예 안 그린다.
+   * 0 과 「모른다」를 같은 모양으로 보여주면 없는 사실을 지어내는 셈이다.
+   */
+  const menu = Array.isArray(opts.menu) ? opts.menu : null;
+  let unsoldItems = null;
+  if (menu) {
+    const soldIds = new Set();
+    for (const o of paidOrders) {
+      for (const it of o.items || []) {
+        if (it.item_id != null) soldIds.add(String(it.item_id));
+      }
+    }
+    unsoldItems = menu.filter((m) => !soldIds.has(String(m.id)));
+  }
+
   // Per-day revenue within the selected range, so a multi-day range can
   // still be charted as a trend rather than one flat total.
   const dayMap = new Map();
@@ -564,6 +594,10 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     cancelled_amount: cancelledAmount,
     problem_amount: problemAmount,
     table_breakdown: tableBreakdown,
+    // 안 팔린 메뉴와, 그것을 세는 데 쓴 전체 메뉴 수 (위 unsoldItems 주석).
+    // 둘 다 null 이면 「메뉴를 못 봐서 모른다」는 뜻이다.
+    unsold_items: unsoldItems,
+    menu_item_count: menu ? menu.length : null,
     daily_breakdown: dailyBreakdown,
     hourly_breakdown: hourlyBreakdown,
     avg_turnover_minutes: avgTurnoverMinutes,

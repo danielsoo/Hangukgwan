@@ -912,6 +912,27 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .settlement-toolbar .settlement-close-btn:disabled { background: var(--line); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
 /* 직원 세션의 결산 툴바 — 날짜 고르는 칸이 전부 숨겨진 자리에 「무엇을
    보고 있는지」 한 줄만 남는다 (admin.js renderSettlement, data.today_only). */
+/* 한 개도 안 팔린 메뉴 (품목별 판매 현황 표 아래) */
+.stl-unsold { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.stl-unsold-toggle {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 17px; font-weight: 700; color: var(--ink); text-align: left;
+}
+.stl-unsold-toggle:hover { text-decoration: underline; }
+.stl-unsold-none { font-size: 17px; font-weight: 700; color: var(--muted); }
+.stl-unsold-list { margin-top: 10px; }
+.stl-unsold-cat { margin-bottom: 10px; }
+.stl-unsold-cat-name { font-size: 15px; font-weight: 700; color: var(--muted); margin-bottom: 4px; }
+.stl-unsold-items { display: flex; flex-wrap: wrap; gap: 6px; }
+.stl-unsold-item {
+  font-size: 16px; background: var(--cream); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px;
+}
+/* 품절이면 「안 팔린」 것이 아니라 못 판 것이다 — 같은 줄에 섞이면 사장님이
+   메뉴를 뺄지 말지를 잘못 판단한다. */
+.stl-unsold-item.is-soldout { background: #fff; color: var(--muted); }
+.stl-unsold-soldout-tag { font-size: 13px; font-weight: 700; margin-left: 6px; }
+
 .settlement-today-only {
   font-size: 17px; font-weight: 700; color: var(--ink);
   display: inline-flex; align-items: center; gap: 8px;

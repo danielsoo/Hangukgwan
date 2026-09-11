@@ -77,7 +77,7 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
   const shift = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
   const opts = await halfOpts(start, end, req);
   res.json(
-    Object.assign(computeSettlement(orders, start, end, { ...opts, shift }), {
+    Object.assign(computeSettlement(orders, start, end, { ...opts, shift, menu: menuForSettlement() }), {
       // 화면이 「오늘 것만 보입니다」를 띄우는 데 쓴다. 화면을 믿고 막는 게
       // 아니라, 이미 막아놓고 그 사실을 알려주는 것뿐이다.
       today_only: !isOwner,
@@ -92,6 +92,44 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
  * 저녁 영업이 시작하는 시각도 같이 넘긴다 — 이 가게는 점심·저녁 두 타임이라
  * 그 사이 공백이 자연스러운 경계다.
  */
+/**
+ * 「안 팔린 메뉴」를 세려면 지금 메뉴판에 무엇이 있는지를 알아야 한다
+ * (src/settlement.js 의 unsoldItems 주석).
+ *
+ * 마감 스냅샷(POST /close, 밤 크론)에는 안 넘긴다. 스냅샷은 그날의 장부라
+ * 작고 변하지 않아야 하는데, 여기에 메뉴 40~50줄을 매일 같이 적어 넣으면
+ * 하루치가 통째로 커지고, 게다가 「그날의 메뉴」가 아니라 「저장을 누른
+ * 시점의 메뉴」가 박힌다. 안 팔린 메뉴는 지금 화면에서 보는 것으로 족하다.
+ *
+ * 화면에 그대로 쓰일 값만 골라 넘긴다 — 여기서 안 거르면 사진 URL 과 옵션
+ * 정의까지 따라가서, 결산을 열 때마다 안 쓰는 수백 KB 가 오간다.
+ */
+function menuForSettlement() {
+  const catById = new Map((store.categories || []).map((c) => [c.id, c]));
+  const orderOf = (m) => {
+    const c = catById.get(m.category_id);
+    return [(c && c.sort_order) || 999, m.sort_order || 0, m.id];
+  };
+  return [...(store.menuItems || [])]
+    .sort((a, b) => {
+      const x = orderOf(a);
+      const y = orderOf(b);
+      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    })
+    .map((m) => ({
+      id: m.id,
+      code: m.code || null,
+      name_ko: m.name_ko,
+      name_zh: m.name_zh,
+      name_en: m.name_en,
+      price: m.price,
+      category_key: (catById.get(m.category_id) || {}).key || null,
+      // 품절이면 「안 팔린」 것이 아니라 **못 판** 것이다. 화면에서 그렇게
+      // 갈라 보여줘야 사장님이 메뉴를 뺄지 말지를 제대로 판단한다.
+      available: m.available !== 0,
+    }));
+}
+
 async function halfOpts(start, end, req) {
   const testId = testMode.currentId(req, store);
   const snaps = await findDocs("daily_settlements", {

@@ -442,6 +442,19 @@
                 <tbody id="settlementItemsBody"></tbody>
               </table>
               <button type="button" class="stl-more" id="settlementItemsMore" hidden></button>
+
+              <!-- 한 개도 안 팔린 메뉴. 사장님(2026-09-11): "판매항목과 수량
+                   보는 것만큼 판매되지 않은 항목도 보였으면 좋겠어. 전혀
+                   판매되지 않는 항목이 뭔지도 알 수 있도록."
+
+                   위 표는 팔린 것만 담아서, 안 팔린 메뉴는 목록에서 그냥
+                   사라진다 — 없는 줄은 눈에 안 띈다. 접어 두되 개수는 항상
+                   보이게 해서, 펼치지 않아도 「몇 개가 안 나갔는지」는
+                   지나가다 읽힌다. -->
+              <div class="stl-unsold" id="settlementUnsold" hidden>
+                <button type="button" class="stl-unsold-toggle" id="settlementUnsoldToggle"></button>
+                <div class="stl-unsold-list" id="settlementUnsoldList" hidden></div>
+              </div>
             </div>
           </section>
 
