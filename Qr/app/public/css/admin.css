@@ -1399,6 +1399,49 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .app-dialog-modal #appDialogMessage { font-size: 16px; line-height: 1.6; margin: 4px 0 20px; white-space: pre-line; }
 .app-dialog-modal .modal-actions { justify-content: center; gap: 10px; }
 
+/* ── 결제 방식 고르는 창만 크게 (2026-09-11) ──────────────────────────
+   사장님: "결제창에서 현금, 라인페이, 신용카드 선택하는 창을 좀더 크게
+   만들어줘. 설정에서 화면을 크게하면 모든화면이 다 크게 되니까 그 창만 더
+   크면 되겠음."
+
+   설정 > 화면 글자 크기는 body 에 zoom 을 걸어 화면 전체를 키운다. 이 창
+   하나 때문에 그걸 올리면 주문판까지 커져서 한 화면에 들어오던 것이 안
+   들어온다. 그래서 크기를 여기에 따로 박는다. px 로 적어도 zoom 위에서
+   곱해지므로, 설정을 올리면 이 창은 그만큼 더 커진다 — 설정을 무시하는
+   것이 아니라 출발점만 크게 잡는 것이다.
+
+   네 칸을 2×2 로 놓는다. 한 줄로 늘어놓으면 칸마다 좁아져서, 키운 의미가
+   가장 큰 「누르기 쉬움」이 도로 사라진다. */
+.payment-method-modal { max-width: 560px; }
+.payment-method-modal h2 { font-size: 26px; }
+/* 직원이 손님에게 불러주는 금액이다. 고르는 버튼만 키우고 이건 그대로 두면
+   정작 확인해야 할 숫자가 제일 작아진다. */
+.payment-method-modal #paymentMethodSummary {
+  color: var(--muted); font-size: 20px; font-weight: 700; margin: 6px 0 0;
+}
+.payment-method-modal #paymentMethodHint {
+  color: var(--red); font-size: 17px; font-weight: 700; margin: 10px 0 0;
+}
+.pay-method-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 18px;
+}
+.pay-method-grid button {
+  min-height: 96px; padding: 14px 10px; font-size: 27px; font-weight: 800;
+  border-radius: 14px; line-height: 1.2; word-break: keep-all;
+}
+/* 못 누르는 칸(할인은 현금만)도 크기는 그대로 둔다 — 칸이 작아지면 줄이
+   흐트러져서, 「지금은 못 누른다」가 「버튼이 사라졌다」로 읽힌다. */
+.pay-method-grid button:disabled { cursor: not-allowed; }
+.payment-method-modal .modal-actions { margin-top: 16px; }
+.payment-method-modal #paymentMethodCancel { padding: 14px 34px; font-size: 20px; border-radius: 12px; }
+/* 폰처럼 좁은 화면에서도 2×2 를 지킨다. 한 줄에 하나씩 쌓으면 창이 세로로
+   길어져 「기타」가 화면 밖으로 밀린다. */
+@media (max-width: 430px) {
+  .pay-method-grid { gap: 10px; }
+  .pay-method-grid button { min-height: 80px; font-size: 21px; padding: 10px 6px; }
+  .payment-method-modal #paymentMethodSummary { font-size: 17px; }
+}
+
 /* 주문 아이템 목록 접기/펼치기 (order-card / table-detail item lines) */
 .order-items-toggle {
   display: block; width: 100%; margin-top: 6px; padding: 5px 0; background: none; border: none;
