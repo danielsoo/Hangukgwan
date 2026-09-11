@@ -2605,12 +2605,12 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
-    // 결산 탭이 열린 채라면 거기 적힌 숫자는 **이 사람의 것이 아니다.**
-    // 앞사람이 보던 것을 지우고 이 사람 몫으로 다시 부른다 (2026-09-11).
-    if (!$("#tab-settlement").hidden) {
-      blankSettlement();
-      loadSettlement();
-    }
+    // 화면에 남아 있는 결산 숫자는 **이 사람의 것이 아니다.** 로그인/로그아웃이
+    // 둘 다 화면을 새로 열므로 여기까지 올 일은 없지만, 오면 반드시 비운다 —
+    // 「올 일이 없다」에 기대서 안 지우면, 언젠가 오는 길이 생겼을 때 조용히
+    // 새어 나간다 (2026-09-11).
+    blankSettlement();
+    if (!$("#tab-settlement").hidden) loadSettlement();
     // loadVipSaleSettings 는 직원도 부른다 — 판매가는 결제창 버튼에 찍히는
     // 값이라 사장님만 보는 정보가 아니다(설정 카드 자체는 owner-only).
     await Promise.all([
@@ -2679,7 +2679,20 @@
       $("#loginError").hidden = true;
       $("#loginPassword").value = "";
       typedIntoPassword = false;
-      await checkAuth();
+      // 로그인도 **화면을 새로 열고 시작한다.**
+      //
+      // 사장님(2026-09-11): "그냥 앞 사람이 하던 말던 아예 막으면 안돼?"
+      //
+      // 로그아웃 쪽만 새로 열면, 로그아웃을 안 거치고 사람이 바뀌는 길이
+      // 남는다 — 세션이 만료돼 로그인 화면으로 떨어졌을 때, 다른 창에서
+      // 먼저 로그아웃했을 때, 새로고침이 중간에 끊겼을 때. 그 길로 들어온
+      // 사람은 앞사람의 화면을 그대로 물려받는다.
+      //
+      // 들어오는 문과 나가는 문을 **둘 다** 새 화면으로 만들면, 앞사람이
+      // 무엇을 하고 나갔든 물려받을 것이 없다. 지우는 코드를 늘려서 막는
+      // 것보다 물려받을 수 없게 만드는 편이 빠뜨릴 구석이 없다.
+      location.reload();
+      return;
     } else {
       // 실패한 값은 남겨두지 않는다. 남겨두면 다음 클릭도 같은 값이다.
       const autofilled = !typedIntoPassword;
@@ -11685,6 +11698,9 @@
     ].forEach((sel) => { const el = $(sel); if (el) el.textContent = ""; });
     [
       "#settlementPaymentMethodBars", "#settlementAlerts", "#settlementOrdersList",
+      // 지난 정산 기록 사이드바도 지운다. 직원 화면에서는 CSS 로 숨을 뿐
+      // 문서에는 그대로 남는다 — 숨은 것은 지운 것이 아니다.
+      "#settlementHistoryList",
     ].forEach((sel) => { const el = $(sel); if (el) el.innerHTML = ""; });
   }
 

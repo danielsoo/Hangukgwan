@@ -141,10 +141,53 @@ const PAST = "2026-09-05";
   const fs = require("fs");
   const path = require("path");
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "js", "admin.js"), "utf8");
-  check("★ 로그아웃은 화면을 통째로 새로 연다", /logoutBtn"\)\.onclick[\s\S]{0,900}?location\.reload\(\)/.test(js));
-  check("★ 로그인하면 열려 있던 결산을 다시 부른다", /blankSettlement\(\);\s*\n\s*loadSettlement\(\);/.test(js));
+  check("★ 로그아웃은 화면을 통째로 새로 연다", /logoutBtn"\)\.onclick[\s\S]{0,1200}?location\.reload\(\)/.test(js));
+  check("★ 로그인도 화면을 새로 열고 시작한다", /async function doLogin\(\)[\s\S]{0,1800}?location\.reload\(\)/.test(js));
+  check("★ 로그인하면 결산 화면을 비우고 시작한다", /blankSettlement\(\);\s*\n\s*if \(!\$\("#tab-settlement"\)\.hidden\) loadSettlement\(\);/.test(js));
   check("★ 못 받아오면 결산 화면을 비운다", /if \(!res\.ok\) \{\s*\n\s*blankSettlement\(\);/.test(js));
   check("★ 사장님 전용 탭이 열려 있으면 직원을 되돌린다", /OWNER_ONLY_TABS\.has\(activeTab\.dataset\.tab\)/.test(js));
+
+  out.push("\n[로그아웃 버튼을 안 거치고 사람이 바뀌어도 마찬가지다]");
+  // 세션이 만료되거나 다른 창에서 먼저 로그아웃하면, 이 화면은 새로고침
+  // 없이 로그인 칸으로 돌아온다. 그 길로 들어온 사람도 앞사람 화면을
+  // 물려받으면 안 된다 — 사장님: "그냥 앞 사람이 하던 말던 아예 막으면
+  // 안돼?" 여기서는 그 상황을 화면에서 직접 만든다.
+  await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
+  await page.evaluate(async () => {
+    await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: "ownerpass123" }) });
+  });
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1200);
+  await page.locator('.admin-tabs button[data-tab="settlement"]').click();
+  await page.waitForTimeout(1200);
+  await page.fill("#settlementStartDate", PAST);
+  await page.fill("#settlementEndDate", TODAY);
+  await page.waitForTimeout(1700);
+  check("사장님 화면에 다시 일주일치가 뜬다", /89,000/.test(await page.evaluate(() => (document.querySelector("#settlementRevenue") || {}).textContent || "")));
+  // 세션만 끊고, 화면은 로그인 칸으로 되돌린다 (로그아웃 버튼을 안 누른 상태)
+  await page.evaluate(async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    document.querySelector("#loginScreen").hidden = false;
+    document.querySelector("#dashboard").hidden = true;
+  });
+  await page.waitForTimeout(400);
+  // 이 문서에 표를 하나 붙여둔다. 로그인하고 나서도 이 표가 남아 있으면
+  // 앞사람이 쓰던 **그 화면 그대로**라는 뜻이다. 지운 자리만 세어서는
+  // 「어디를 빠뜨렸나」를 영영 알 수 없다 — 문서가 바뀌었는지를 잰다.
+  await page.evaluate(() => { document.body.dataset.hgPrevious = "사장님이-쓰던-화면"; });
+  await page.fill("#loginPassword", "staffpass123");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(2800);
+  const inherited = await page.evaluate(() => ({
+    roleStaff: document.body.classList.contains("role-staff"),
+    html: document.body.innerHTML,
+    revenue: (document.querySelector("#settlementRevenue") || {}).textContent || "",
+  }));
+  check("직원으로 들어와 있다", inherited.roleStaff === true);
+  check("★★ 앞사람 숫자를 물려받지 않는다", !inherited.html.includes("89,000"), inherited.revenue);
+  const sameDocument = await page.evaluate(() => document.body.dataset.hgPrevious || "");
+  check("★★ 앞사람이 쓰던 화면 자체가 아니다", sameDocument === "", sameDocument);
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);
