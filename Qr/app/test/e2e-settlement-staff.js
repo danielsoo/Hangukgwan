@@ -118,15 +118,32 @@ const PAST = "2026-08-01";
 
   out.push("\n[막힌 길로 돌아가지 않는다]");
   // 화면에 길이 없어도 서버가 열려 있으면 소용없다 — 직접 물어본다.
+  // 사장님(2026-09-11): "직원 로그인으로는 쳐도 안나오게 해줘."
   const direct = await page.evaluate(async (past) => {
     const r = await fetch(`/api/settlements?start=${past}&end=2026-12-31`);
     const j = await r.json();
+    const o = await fetch(`/api/orders/history?start=${past}&end=2026-12-31`);
+    const oj = await o.json();
     const h = await fetch("/api/settlements/history");
-    return { start: j.start_date, revenue: j.total_revenue, todayOnly: j.today_only, historyStatus: h.status };
+    return {
+      status: r.status, revenue: j.total_revenue, error: j.error,
+      ordersStatus: o.status, ordersIsList: Array.isArray(oj) || Array.isArray(oj.orders),
+      historyStatus: h.status,
+    };
   }, PAST);
-  check("★ 주소로 물어봐도 오늘이 온다", direct.start === TODAY, JSON.stringify(direct));
-  check("★ 지난달 매출이 안 섞인다", direct.revenue === 1000, String(direct.revenue));
+  check("★ 주소로 쳐 넣어도 거절된다", direct.status === 403, JSON.stringify(direct));
+  check("★ 숫자가 하나도 안 실려 나간다", direct.revenue === undefined, JSON.stringify(direct.revenue));
+  check("거절 이유를 알려준다", direct.error === "today_only", String(direct.error));
+  check("★ 지난 주문 목록도 거절된다", direct.ordersStatus === 403, String(direct.ordersStatus));
+  check("★ 주문이 하나도 안 실려 나간다", direct.ordersIsList === false, String(direct.ordersIsList));
   check("★ 지난 정산 기록은 막혀 있다", direct.historyStatus === 401 || direct.historyStatus === 403, String(direct.historyStatus));
+
+  // 그런데 직원 화면 자체는 멀쩡히 돌아간다 — 거절당하는 길로 아예 안 간다.
+  const netFails = await page.evaluate(async () => {
+    const r = await fetch("/api/settlements");
+    return { status: r.status, revenue: (await r.json()).total_revenue };
+  });
+  check("직원 화면이 쓰는 길은 200", netFails.status === 200 && netFails.revenue === 1000, JSON.stringify(netFails));
 
   out.push("\n[사장님 화면은 그대로다]");
   await page.evaluate(async () => {

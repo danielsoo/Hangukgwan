@@ -1,6 +1,6 @@
 const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
-const { requireOwner, requireAdmin } = require("../auth");
+const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf } = require("../settlement");
 const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
@@ -48,13 +48,19 @@ async function saveSettlementSnapshot(snapshot, testId) {
  * 결산탭에서 해당 하루만 볼 수 있게 해주고 지난 정산 추이처럼 전 데이터를
  * 읽어오는 건 직원은 못 보게 해줘."
  *
- * 직원에게는 날짜를 여기서 **못 박는다**. 화면에서 날짜 칸을 감추는 것만으로는
- * 막은 것이 아니다 — 주소창에 ?start=2026-08-01&end=2026-09-11 을 쳐 넣으면
- * 한 달치 매출이 그대로 나온다. 막는 자리는 서버 한 곳이어야 한다.
+ * 직원이 지난 날짜를 물어보면 **거절한다**(requireTodayForStaff, src/auth.js).
+ * 처음에는 조용히 오늘로 바꿔치기했는데, 그러면 어제 날짜를 쳐 넣은 사람에게
+ * 「어제 화면인 척하는 오늘 숫자」가 돌아간다 — 그걸 어제 매출로 읽으면
+ * 조용히 틀린 숫자를 믿게 된다. 사장님(2026-09-11): "직원 로그인으로는 쳐도
+ * 안나오게 해줘. 직원은 오늘 것만 알면 되지 전체적으로는 몰라야돼."
+ *
+ * 화면에서 날짜 칸을 감추는 것만으로는 막은 것이 아니다 — 주소창에
+ * ?start=2026-08-01&end=2026-09-11 을 쳐 넣으면 그만이다. 막는 자리는 서버
+ * 한 곳이어야 한다.
  *
  * 지난 정산 기록(/history)과 기록 저장(/close)은 아래에서 사장님 전용 그대로다.
  */
-router.get("/", requireAdmin, async (req, res) => {
+router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
   const today = taipeiDateString();
   const isOwner = !!(req.session && req.session.role === "owner");
   const start = isOwner ? req.query.start || req.query.date || today : today;

@@ -78,6 +78,37 @@ function requireOwner(req, res, next) {
   return res.status(401).json({ error: "owner_only" });
 }
 
+/**
+ * 직원은 **오늘 것만** 본다 — 지난 날짜는 아예 안 나온다.
+ *
+ * 사장님(2026-09-11): "직원 로그인으로는 쳐도 안나오게 해줘. 직원은 오늘
+ * 것만 알면 되지 전체적으로는 몰라야돼."
+ *
+ * 처음에는 직원이 보낸 날짜를 조용히 오늘로 바꿔치기했다. 그러면 지난달
+ * 매출이 새어 나가지는 않지만, 어제 날짜를 쳐 넣은 사람에게 **어제 화면인
+ * 척하는 오늘 숫자**가 돌아간다. 그걸 어제 매출로 읽으면 조용히 틀린 숫자를
+ * 믿게 된다. 그래서 바꿔치기하지 않고 **거절한다** — 아무것도 안 나오는
+ * 편이 틀린 것이 나오는 편보다 낫다.
+ *
+ * 날짜를 안 보내면 오늘이다(그게 직원 화면이 하는 일이다). 오늘을 명시해서
+ * 보내는 것도 통과 — 같은 것을 달라는 말이니까.
+ *
+ * 막는 자리는 여기 한 곳이다. 화면에서 날짜 칸을 감추는 것만으로는 막은
+ * 것이 아니다 — 주소창에 ?start=2026-08-01 을 쳐 넣으면 그만이다.
+ */
+function requireTodayForStaff(req, res, next) {
+  if (req.session && req.session.role === "owner") return next();
+  const { taipeiDateString } = require("./time");
+  const today = taipeiDateString();
+  const asked = [req.query.start, req.query.end, req.query.date].filter(
+    (v) => typeof v === "string" && v.trim() !== ""
+  );
+  if (asked.some((d) => d !== today)) {
+    return res.status(403).json({ error: "today_only", today });
+  }
+  next();
+}
+
 // Any signed-in account at all, INCLUDING customers — for the "my own
 // stuff" endpoints the website needs (내 계정, 내 주문 내역, VIP 카드 등록).
 // Deliberately separate from requireAdmin so the two can never be confused
@@ -87,4 +118,4 @@ function requireUser(req, res, next) {
   return res.status(401).json({ error: "not_authenticated" });
 }
 
-module.exports = { requireAdmin, requirePermission, requireOwner, requireUser, syncSessionRole };
+module.exports = { requireAdmin, requirePermission, requireOwner, requireTodayForStaff, requireUser, syncSessionRole };

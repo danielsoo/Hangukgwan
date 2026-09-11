@@ -11639,16 +11639,14 @@
   // admin.html).
   async function loadSettlement(start, end) {
     const params = new URLSearchParams();
-    // 직원 세션은 오늘 하루만 본다. 서버가 어차피 오늘로 못 박지만
-    // (GET /api/settlements), 어제 날짜를 들고 물어보고 오늘 것이 돌아오면
-    // 화면의 날짜 칸과 내용이 어긋난다 — 물어볼 때부터 오늘로 맞춘다.
-    if (currentRole !== "owner") {
-      const today = taipeiTodayString();
-      start = today;
-      end = today;
-    }
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
+    // 직원 세션은 **날짜를 아예 안 보낸다.** 서버는 직원이 보낸 날짜가
+    // 오늘이 아니면 403 으로 거절하는데(src/auth.js requireTodayForStaff),
+    // 여기서 굳이 오늘을 계산해 보내면 자정을 넘기는 순간 이 화면의 「오늘」과
+    // 서버의 「오늘」이 잠깐 어긋나 멀쩡한 직원이 거절당한다. 안 보내면
+    // 서버가 자기 시계로 오늘을 정한다 — 어긋날 자리가 없다.
+    const staffToday = currentRole !== "owner";
+    if (!staffToday && start) params.set("start", start);
+    if (!staffToday && end) params.set("end", end);
     // 「오전만 보기」를 켜둔 채 새로고침해도 그대로 남는다. 날짜를 바꿀
     // 때만 합산으로 되돌린다(settlementDateRangeChanged) — 어제 오후를 보다
     // 오늘로 넘어왔는데 여전히 오후만 보이면 그게 더 헷갈린다.
@@ -11876,8 +11874,10 @@
     // 위에서 오전만 보고 있으면 이 목록도 오전만. 위는 오전 매출인데 아래
     // 목록만 하루치면, 목록을 세어보다가 위 숫자를 의심하게 된다.
     if (settlementShift) params.set("shift", settlementShift);
-    if (start) params.set("start", start);
-    if (end) params.set("end", end);
+    // 직원은 날짜를 안 보낸다 — 위 loadSettlement() 와 같은 이유다.
+    const staffToday = currentRole !== "owner";
+    if (!staffToday && start) params.set("start", start);
+    if (!staffToday && end) params.set("end", end);
     const q = $("#settlementOrderSearch").value.trim();
     const table = $("#settlementOrderTable").value.trim();
     const status = $("#settlementOrderStatus").value;

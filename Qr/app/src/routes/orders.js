@@ -1,6 +1,6 @@
 const express = require("express");
 const { store, save, nextId, saveOrder, saveOrders, findOrders, saveNextId, patchArrayItem, reserveId } = require("../db");
-const { requireAdmin, requireOwner } = require("../auth");
+const { requireAdmin, requireOwner, requireTodayForStaff } = require("../auth");
 const { isOpenNow, orderingState } = require("../openHours");
 const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
@@ -514,7 +514,9 @@ router.post("/", async (req, res) => {
 // 지난 주문 불러오기 — 결산 탭 안에 있다. 직원도 볼 수 있지만 **오늘 것만**
 // (2026-09-11 사장님). 결산 숫자를 오늘로 못 박아 놓고 이 목록만 지난 날짜를
 // 내주면, 결산에서 막은 것이 여기로 새어 나간다.
-router.get("/history", requireAdmin, async (req, res) => {
+// requireTodayForStaff — 직원은 오늘 것만. 지난 날짜를 주소창에 쳐 넣으면
+// 403 이고 아무것도 안 나온다(src/auth.js). 결산 화면과 같은 규칙이다.
+router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
   const q = req.query || {};
   const isOwner = !!(req.session && req.session.role === "owner");
   const today = taipeiDateString();
