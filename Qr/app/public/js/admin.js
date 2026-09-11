@@ -3992,17 +3992,16 @@
     // 이전 주문에서 그대로 볼 수 있다(src/routes/settlements.js).
     cols.paid = cols.paid.filter((o) => !o.settled_at);
 
-    // 결제완료 칼럼은 같은 테이블의 과거 결제 기록이 계속 쌓이면 헷갈리므로,
-    // 테이블당 가장 최근에 결제된 주문 1건만 보여준다. 나머지 이력은
-    // 테이블 상세 > 이전 주문 탭에서 계속 확인 가능하다.
-    const latestPaidByTable = new Map();
-    cols.paid.forEach((o) => {
-      const existing = latestPaidByTable.get(o.table_number);
-      if (!existing || new Date(o.updated_at.replace(" ", "T")) > new Date(existing.updated_at.replace(" ", "T"))) {
-        latestPaidByTable.set(o.table_number, o);
-      }
-    });
-    cols.paid = [...latestPaidByTable.values()].sort(
+    // 결제된 것은 **전부 남긴다** — 한 자리에서 두 번 결제했어도 두 장이다.
+    //
+    // 2026-09-11 사장님: "실시간 주문 탭에서 결제 완료 중복 없애는 거 아예
+    // 삭제해주고 그냥 계속 남게 해주고 정산때는 전부 삭제해주면 돼."
+    //
+    // 예전에는 「테이블당 최근 1건」만 보여줬다. 그래서 결산 9건이 화면에는
+    // 7장으로 보였고, 특히 포장은 QR 하나를 모든 손님이 같이 써서 **다른
+    // 손님이 덮였다**(王緦苹 님이 陳小姐 님에게 덮인 그 건). 쌓이는 것은
+    // 위의 settled_at 필터가 정산 때 한 번에 치운다 — 그게 끊는 자리다.
+    cols.paid.sort(
       (a, b) => new Date(b.updated_at.replace(" ", "T")) - new Date(a.updated_at.replace(" ", "T"))
     );
 
@@ -11901,23 +11900,71 @@
         const open = settlementOrdersExpanded.has(o.id);
         return `
           <div class="stl-order${o.status === "cancelled" ? " cancelled" : ""}" data-order-id="${o.id}">
-            <button type="button" class="stl-order-head">
+            <div class="stl-order-head" role="button" tabindex="0">
               <span class="stl-order-time">${day} ${time}</span>
               <span class="stl-order-table">${who}</span>
               <span class="stl-order-peek">${escapeHtml(peek)}</span>
               <span class="stl-order-total">NT$${Number(o.total || 0).toLocaleString()}</span>
+              <span class="stl-order-actions">
+                <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
+                <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
+              </span>
               <span class="stl-order-caret">${open ? "▴" : "▾"}</span>
-            </button>
+            </div>
             ${open ? renderSettlementOrderBody(o) : ""}
           </div>`;
       })
       .join("");
-    listEl.querySelectorAll(".stl-order-head").forEach((btn) => {
-      btn.onclick = () => {
-        const id = parseInt(btn.closest(".stl-order").dataset.orderId, 10);
-        if (settlementOrdersExpanded.has(id)) settlementOrdersExpanded.delete(id);
-        else settlementOrdersExpanded.add(id);
-        renderSettlementOrders(data);
+
+    const toggle = (el) => {
+      const id = parseInt(el.closest(".stl-order").dataset.orderId, 10);
+      if (settlementOrdersExpanded.has(id)) settlementOrdersExpanded.delete(id);
+      else settlementOrdersExpanded.add(id);
+      renderSettlementOrders(data);
+    };
+    listEl.querySelectorAll(".stl-order-head").forEach((head) => {
+      head.onclick = (e) => {
+        // 인쇄·미리보기를 눌렀을 때 줄이 같이 펼쳐지면 안 된다.
+        if (e.target.closest(".stl-order-btn")) return;
+        toggle(head);
+      };
+      // <button> 을 <div role="button"> 으로 바꿨다 — 버튼 안에 버튼은 넣을 수
+      // 없기 때문이다. 키보드로도 되게 Enter/Space 를 직접 받는다.
+      head.onkeydown = (e) => {
+        if (e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
+        if (e.target.closest(".stl-order-btn")) return;
+        e.preventDefault();
+        toggle(head);
+      };
+    });
+
+    // 지난 주문도 언제든 다시 뽑고 미리 볼 수 있다.
+    //
+    // 2026-09-11 사장님: "결산탭에서도 인쇄랑 미리보기 그대로 가능하게 해줘.
+    // 언제든 예전 것 출력하고 싶거나 영수증 미리보기 하고 싶을 떄 할 수 있게."
+    //
+    // 실시간 주문판의 카드와 **같은 함수**를 부른다(printKitchenTicket /
+    // previewKitchenTicket). 여기만 따로 만들면 빌지 모양이 언젠가 둘로
+    // 갈라지고, 그러면 주방에 두 가지 종이가 나간다.
+    const byId = new Map(orders.map((o) => [o.id, o]));
+    listEl.querySelectorAll("[data-stl-print]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const o = byId.get(parseInt(btn.dataset.stlPrint, 10));
+        if (!o) return;
+        btn.disabled = true;
+        try {
+          await printKitchenTicket(o);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+    });
+    listEl.querySelectorAll("[data-stl-preview]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const o = byId.get(parseInt(btn.dataset.stlPreview, 10));
+        if (o) previewKitchenTicket(o);
       };
     });
   }
