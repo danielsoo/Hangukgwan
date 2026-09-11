@@ -480,6 +480,7 @@
               <button type="button" class="stl-tab active" data-pane="whenHourly" data-i18n="settlementHourlyTitle">시간대별 방문 &amp; 인기 메뉴</button>
               <button type="button" class="stl-tab" data-pane="whenTable" data-i18n="settlementTableTitle">테이블별 매출</button>
               <button type="button" class="stl-tab" data-pane="whenTrend" data-i18n="settlementTrendTitle">매출 추이 (선택한 기간)</button>
+              <button type="button" class="stl-tab owner-only" data-pane="whenItemTrend" data-i18n="settlementItemTrendTitle">메뉴별 추이</button>
             </div>
             <div class="stl-pane" data-pane="whenHourly">
               <p class="stl-note" data-i18n="settlementHourlyHint">막대에 마우스를 올리면 그 시간대에 잘 팔린 메뉴를 볼 수 있어요.</p>
@@ -493,6 +494,24 @@
             <div class="stl-pane" data-pane="whenTrend" hidden>
               <div class="settlement-chart-wrap">
                 <canvas id="settlementTrendChart"></canvas>
+              </div>
+            </div>
+
+            <!-- 메뉴 하나를 골라 날짜별 추이를 본다. 사장님(2026-09-11):
+                 "각 메뉴가 결산 날에 따라 팔리는 추이를 그래프로 라인차트를
+                 각 메뉴별로 선택하면 볼 수 있게 하면 좋을 것 같은데?"
+
+                 여러 날에 걸친 것이라 직원에게는 안 보인다(owner-only) —
+                 결산 자체가 직원에게는 오늘 하루뿐이다. -->
+            <div class="stl-pane owner-only" data-pane="whenItemTrend" hidden>
+              <div class="stl-item-trend-bar">
+                <label for="settlementItemTrendSelect" data-i18n="settlementItemTrendPick">메뉴 고르기</label>
+                <select id="settlementItemTrendSelect"></select>
+                <span class="stl-item-trend-total" id="settlementItemTrendTotal"></span>
+              </div>
+              <p class="stl-note" id="settlementItemTrendNote"></p>
+              <div class="settlement-chart-wrap">
+                <canvas id="settlementItemTrendChart"></canvas>
               </div>
             </div>
           </section>

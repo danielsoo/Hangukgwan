@@ -942,6 +942,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .stl-menu-name, .stl-menu-qty { font-size: 15px; }
 }
 
+/* 메뉴별 추이 — 고르는 줄 */
+.stl-item-trend-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 8px; }
+.stl-item-trend-bar label { font-size: 16px; color: var(--muted); }
+.stl-item-trend-bar select {
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font-size: 16px; font-family: inherit; background: #fff; color: var(--ink); max-width: 340px;
+}
+.stl-item-trend-total { font-size: 16px; font-weight: 700; }
+
 /* 판매 비중 — 입체 원 그래프 + 범례. 숫자는 그림이 아니라 범례에서 읽는다
    (admin.js drawPie3d 주석). */
 .stl-pie-wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; }

@@ -643,6 +643,13 @@
       settlementPieNote: "많이 팔린 {n}가지와 나머지를 묶은 「기타」예요. 많이 팔린 것일수록 조각이 넓고 두껍게 올라와요. 정확한 수는 옆의 숫자로 보세요.",
       settlementPieEmpty: "아직 팔린 것이 없어요",
       settlementPieOther: "기타",
+      settlementItemTrendTitle: "메뉴별 추이",
+      settlementItemTrendPick: "메뉴 고르기",
+      settlementItemTrendTotal: "이 기간 {n}개",
+      settlementItemTrendOneDay: "하루만 고르면 점 하나뿐이에요. 위에서 「최근 7일」이나 「최근 30일」을 눌러보세요.",
+      settlementItemTrendHint: "선이 0으로 내려간 날은 그날 한 개도 안 나갔다는 뜻이에요.",
+      settlementItemTrendFailed: "추이를 불러오지 못했어요.",
+      settlementItemTrendQty: "판매 수량",
       settlementOrdersTitle: "📋 지난 주문 불러오기",
       settlementOrdersSearchPlaceholder: "메뉴 이름, 손님 이름, 픽업 번호로 찾기",
       settlementOrdersTablePlaceholder: "테이블 번호",
@@ -1343,6 +1350,13 @@
       settlementPieNote: "銷量前 {n} 名，其餘合併為「其他」。賣得越多的品項，扇形越寬、也越厚。實際份數請看右側數字。",
       settlementPieEmpty: "目前還沒有賣出任何品項",
       settlementPieOther: "其他",
+      settlementItemTrendTitle: "單品趨勢",
+      settlementItemTrendPick: "選擇品項",
+      settlementItemTrendTotal: "這段期間 {n} 份",
+      settlementItemTrendOneDay: "只選一天的話只有一個點。請按上面的「最近 7 天」或「最近 30 天」。",
+      settlementItemTrendHint: "線落到 0 的那天，表示當天一份也沒賣出。",
+      settlementItemTrendFailed: "無法載入趨勢。",
+      settlementItemTrendQty: "銷售份數",
       settlementOrdersTitle: "📋 查詢過往訂單",
       settlementOrdersSearchPlaceholder: "以菜名、客人姓名或取餐號搜尋",
       settlementOrdersTablePlaceholder: "桌號",
@@ -11390,6 +11404,7 @@
   let settlementItemsChart = null;
   let settlementHistoryChart = null;
   let settlementTrendChart = null;
+  let settlementItemTrendChart = null;
   let settlementHourlyChart = null;
 
   // 분류 이름. **모듈 자리에 둔다.**
@@ -11515,6 +11530,105 @@
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: { y: { beginAtZero: true } },
+      },
+    });
+  }
+
+  /**
+   * 메뉴 하나의 날짜별 판매 추이 (선 그래프).
+   *
+   * 사장님(2026-09-11): "각 메뉴가 결산 날에 따라 팔리는 추이를 그래프로
+   * 라인차트를 각 메뉴별로 선택하면 볼 수 있게 하면 좋을 것 같은데?"
+   *
+   * 고르는 목록은 결산이 이미 내려준 menu_breakdown 을 그대로 쓴다 —
+   * 많이 팔린 순이라 자주 보는 것이 위에 온다. 자료는 고른 다음에 따로
+   * 받아온다(GET /api/settlements/item-trend): 51가지 × 30일을 결산에
+   * 얹으면 정작 매일 보는 숫자가 그만큼 늦게 뜬다.
+   */
+  let itemTrendPickedId = null;
+  function renderItemTrendPicker(data) {
+    const sel = $("#settlementItemTrendSelect");
+    if (!sel) return;
+    const rows = Array.isArray(data.menu_breakdown) ? data.menu_breakdown : [];
+    if (!rows.length) {
+      sel.innerHTML = "";
+      return;
+    }
+    // 보던 메뉴는 날짜를 바꿔도 그대로 보고 있게 한다.
+    const keep = rows.some((m) => String(m.id) === String(itemTrendPickedId)) ? itemTrendPickedId : String(rows[0].id);
+    itemTrendPickedId = keep;
+    sel.innerHTML = rows
+      .map(
+        (m) =>
+          `<option value="${m.id}"${String(m.id) === String(keep) ? " selected" : ""}>${escapeHtml(
+            itemDisplayName(m)
+          )} (${m.qty}${T("settlementQtySuffix")})</option>`
+      )
+      .join("");
+    sel.onchange = () => {
+      itemTrendPickedId = sel.value;
+      loadItemTrend();
+    };
+    // 날짜를 바꿨는데 이 탭을 열어둔 채였다면, 화면에 남은 선은 옛 기간의
+    // 것이다. 열려 있을 때만 다시 부른다 — 안 보고 있으면 부를 이유가 없다.
+    const pane = document.querySelector('.stl-pane[data-pane="whenItemTrend"]');
+    if (pane && !pane.hidden) loadItemTrend();
+  }
+
+  async function loadItemTrend() {
+    const canvas = $("#settlementItemTrendChart");
+    const note = $("#settlementItemTrendNote");
+    const totalEl = $("#settlementItemTrendTotal");
+    if (!canvas || !itemTrendPickedId) return;
+    const start = ($("#settlementStartDate") || {}).value || "";
+    const end = ($("#settlementEndDate") || {}).value || "";
+    const params = new URLSearchParams({ item_id: String(itemTrendPickedId) });
+    if (start) params.set("start", start);
+    if (end) params.set("end", end);
+    if (settlementShift) params.set("shift", settlementShift);
+    let data;
+    try {
+      const res = await fetch(`/api/settlements/item-trend?${params.toString()}`);
+      if (!res.ok) throw new Error(String(res.status));
+      data = await res.json();
+    } catch (e) {
+      if (note) note.textContent = T("settlementItemTrendFailed");
+      if (totalEl) totalEl.textContent = "";
+      return;
+    }
+    const points = data.points || [];
+    if (totalEl) totalEl.textContent = T("settlementItemTrendTotal").replace("{n}", data.total_qty || 0);
+    // 하루만 고르면 점 하나뿐이라 추이랄 것이 없다. 그 사실을 말해준다 —
+    // 빈 그래프를 놓고 고장 났나 싶게 두지 않는다.
+    if (note) note.textContent = points.length <= 1 ? T("settlementItemTrendOneDay") : T("settlementItemTrendHint");
+    if (!chartReady(canvas)) return;
+    if (settlementItemTrendChart) settlementItemTrendChart.destroy();
+    settlementItemTrendChart = new Chart(canvas.getContext("2d"), {
+      type: "line",
+      data: {
+        labels: points.map((p) => p.date.slice(5)),
+        datasets: [
+          {
+            label: T("settlementItemTrendQty"),
+            data: points.map((p) => p.qty),
+            borderColor: "#23415f",
+            backgroundColor: "rgba(35,65,95,0.12)",
+            borderWidth: 2,
+            pointRadius: points.length > 40 ? 0 : 3,
+            pointBackgroundColor: "#23415f",
+            // 곡선으로 이으면 점과 점 사이가 실제보다 높거나 낮게 그려진다 —
+            // 하루 판매 수량은 그 사이에 아무 값도 없는 것이라 곧게 잇는다.
+            tension: 0,
+            fill: true,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        // 수량은 정수다. 0.5개가 팔릴 수는 없으므로 눈금도 정수로 둔다.
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } },
       },
     });
   }
@@ -11716,6 +11830,7 @@
     renderSettlementItems(data.item_breakdown || [], false);
     // 전체 메뉴(많이 팔린 순)와 판매 비중. 둘은 별개의 탭이다.
     renderAllMenuBars(data);
+    renderItemTrendPicker(data);
     try {
       renderSoldPie(data);
     } catch (e) {
@@ -12291,6 +12406,9 @@
         if (lastSettlementData) {
           if (btn.dataset.pane === "whenHourly") renderHourlyChart(lastSettlementData.hourly_breakdown || []);
           if (btn.dataset.pane === "whenTrend") renderTrendChart(lastSettlementData.daily_breakdown || []);
+          // 메뉴별 추이는 고른 다음에 따로 받아오는 것이라, 탭을 열 때
+          // 비로소 부른다 — 안 열어보는 사람에게 요청을 보낼 이유가 없다.
+          if (btn.dataset.pane === "whenItemTrend") loadItemTrend();
           if (btn.dataset.pane === "soldItems") renderItemsChart(lastSettlementData.item_breakdown || []);
           // 판매 비중도 마찬가지다. 숨은 채로 그리면 폭을 못 재서 기본값으로
           // 작게 그려진다 — 보이게 된 지금 제 폭으로 다시 그린다.

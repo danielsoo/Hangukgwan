@@ -1,7 +1,7 @@
 const express = require("express");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
-const { computeSettlement, taipeiDateString, paidAtOf } = require("../settlement");
+const { computeSettlement, taipeiDateString, paidAtOf, halfOf } = require("../settlement");
 const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
@@ -172,6 +172,76 @@ function ordersInRange(start, end, req) {
     test_session: testId ? testId : { $exists: false },
     created_at: { $gte: started && started > from ? started : from, $lte: `${end} 23:59:59` },
   });
+}
+
+/**
+ * 메뉴 하나가 날마다 몇 개씩 팔렸나.
+ *
+ * 사장님(2026-09-11): "각 메뉴가 결산 날에 따라 팔리는 추이를 그래프로
+ * 라인차트를 각 메뉴별로 선택하면 볼 수 있게 하면 좋을 것 같은데?"
+ *
+ * 결산 응답에 끼워 넣지 않고 **따로 받아온다.** 51가지 × 30일이면 1,500줄인데,
+ * 결산 화면을 열 때마다 그걸 같이 보내면 정작 매일 보는 숫자들이 그만큼
+ * 늦게 뜬다. 한 가지를 골랐을 때만 그 한 줄을 가져오는 편이 싸다.
+ *
+ * **날짜를 빠짐없이 채워 보낸다.** 안 팔린 날을 빼고 보내면 선이 그 구간을
+ * 건너뛰어서, 「그날은 0개」가 「그날은 없던 날」처럼 그려진다. 추이를 보는
+ * 이유가 바로 안 팔린 구간을 찾는 것인데 그게 안 보이면 소용이 없다.
+ *
+ * requireOwner — 여러 날에 걸친 것이라 직원에게는 애초에 열 수 없는 화면이다
+ * (src/auth.js requireTodayForStaff 와 같은 이유).
+ */
+router.get("/item-trend", requireOwner, async (req, res) => {
+  const q = req.query || {};
+  const valid = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+  const today = taipeiDateString();
+  const start = valid(q.start) ? q.start : today;
+  const end = valid(q.end) && q.end >= start ? q.end : start;
+  const itemId = String(q.item_id == null ? "" : q.item_id);
+  if (!itemId) return res.status(400).json({ error: "item_id_required" });
+  // 너무 긴 범위는 막는다 — 선이 촘촘해져서 읽지도 못하고, 몽고만 오래 돈다.
+  if (dayCount(start, end) > 400) return res.status(400).json({ error: "range_too_long" });
+
+  const orders = await ordersInRange(start, end, req);
+  const shift = q.shift === "am" || q.shift === "pm" ? q.shift : null;
+  const opts = shift ? await halfOpts(start, end, req) : null;
+  const byDate = new Map();
+  for (const o of orders) {
+    if (o.status !== "paid") continue;
+    if (shift && halfOf(o, opts) !== shift) continue;
+    for (const it of o.items || []) {
+      if (String(it.item_id) !== itemId) continue;
+      const d = String(o.created_at).slice(0, 10);
+      const prev = byDate.get(d) || { qty: 0, subtotal: 0 };
+      prev.qty += it.qty;
+      prev.subtotal += it.unit_price * it.qty;
+      byDate.set(d, prev);
+    }
+  }
+  const points = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) {
+    const hit = byDate.get(d) || { qty: 0, subtotal: 0 };
+    points.push({ date: d, qty: hit.qty, subtotal: hit.subtotal });
+  }
+  const item = (store.menuItems || []).find((m) => String(m.id) === itemId) || null;
+  res.json({
+    item_id: itemId,
+    name_ko: item ? item.name_ko : null,
+    name_zh: item ? item.name_zh : null,
+    start_date: start,
+    end_date: end,
+    total_qty: points.reduce((s, p) => s + p.qty, 0),
+    points,
+  });
+});
+
+function addDays(dateStr, n) {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function dayCount(start, end) {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86400000) + 1;
 }
 
 // Permanent nightly snapshots (written by the cron job below, or manually
