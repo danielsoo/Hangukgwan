@@ -563,6 +563,8 @@
       settingsSoldOutReleaseHint: "「9/10까지 품절」처럼 끝 날짜를 정해두면, 그 다음 날 이 시각에 자동으로 다시 팔립니다. 비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 — 밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.",
       labelSoldOutReleaseTime: "해제 시각 (비우면 영업 시작)",
       settingsUnsaved: "● 저장 안 된 변경이 있어요 — 아래 「설정 저장」을 눌러주세요",
+      resetToDefaultBtn: "기본값",
+      clearBtn: "비우기",
       logoPicked: "고른 파일: {name} — 「설정 저장」을 눌러야 올라갑니다",
       logoNonePicked: "올릴 파일을 먼저 골라주세요",
       soldOutReleaseFollowsHours: "지금은 영업 시작 시각({t})을 따릅니다.",
@@ -1252,6 +1254,8 @@
       settingsSoldOutReleaseHint: "設定了結束日期（例如「售完至 9/10」）時，隔天的這個時間會自動恢復販售。留空則使用開始營業時間。設為 00:00 表示跨日就恢復 — 營業到深夜時，可能會賣出廚房已經沒有的餐點，請留意。",
       labelSoldOutReleaseTime: "恢復時間（留空＝開始營業時間）",
       settingsUnsaved: "● 有尚未儲存的變更 — 請按下方的「儲存設定」",
+      resetToDefaultBtn: "預設值",
+      clearBtn: "清除",
       logoPicked: "已選擇：{name} — 按「儲存設定」才會上傳",
       logoNonePicked: "請先選擇要上傳的檔案",
       soldOutReleaseFollowsHours: "目前依照開始營業時間（{t}）。",
@@ -1972,6 +1976,22 @@
 
   // 이 카드만 저장한다. PUT /api/settings 는 보낸 칸만 바꾸므로, 다른 설정을
   // 건드리지 않는다.
+  // 시각을 한 번 넣으면 <input type="time"> 은 다시 비우기가 어렵다 — 가게
+  // 태블릿에서는 방법이 아예 없다시피 하다 (2026-09-11 사장님: "시간 넣었다가
+  // 변경하려고 할 때 방법이 없어서"). 비우는 것이 곧 기본값(영업 시작)이다.
+  const soldOutReleaseResetBtn = $("#soldOutReleaseResetBtn");
+  if (soldOutReleaseResetBtn) {
+    soldOutReleaseResetBtn.onclick = () => {
+      $("#s_soldout_release_time").value = "";
+      // 비우는 것만으로는 아직 저장이 아니다. 눌러야 한다는 것을 말해준다.
+      markSettingDirty("saveSoldOutReleaseBtn", true);
+    };
+  }
+  const soldOutReleaseInput = $("#s_soldout_release_time");
+  if (soldOutReleaseInput) {
+    soldOutReleaseInput.onchange = () => markSettingDirty("saveSoldOutReleaseBtn", true);
+  }
+
   const saveSoldOutReleaseBtn = $("#saveSoldOutReleaseBtn");
   if (saveSoldOutReleaseBtn) {
     saveSoldOutReleaseBtn.onclick = async () => {
@@ -1991,11 +2011,7 @@
       }
       // 품절 배지의 「언제 풀림」도 이 시각을 쓴다. 같이 새로 불러온다.
       await loadMenu().catch(() => {});
-      const msg = $("#soldOutReleaseMsg");
-      if (msg) {
-        msg.hidden = false;
-        setTimeout(() => (msg.hidden = true), 2000);
-      }
+      flashSettingSaved("soldOutReleaseMsg", "saveSoldOutReleaseBtn");
     };
   }
 
@@ -2025,7 +2041,19 @@
   // 모듈 하나짜리 값으로 충분하다.
   let itemFormSoldOutMode = "on_sale";
   function paintItemFormSoldOut() {
-    document.querySelectorAll("#f_soldout_modes .soldout-mode").forEach((b) => {
+    // 날짜도 한 번 넣으면 다시 비우기가 어렵다 — 시각과 같은 문제다.
+  // 「비우면 오늘부터 / 비우면 직접 풀 때까지」가 각 칸의 기본값이다.
+  [
+    ["#soldOutFromClearBtn", "#f_soldout_from"],
+    ["#soldOutUntilClearBtn", "#f_soldout_until"],
+    ["#soldOutModalFromClearBtn", "#soldOutFrom"],
+    ["#soldOutModalUntilClearBtn", "#soldOutUntil"],
+  ].forEach(([btnSel, inputSel]) => {
+    const btn = $(btnSel);
+    if (btn) btn.onclick = () => { const el = $(inputSel); if (el) el.value = ""; };
+  });
+
+  document.querySelectorAll("#f_soldout_modes .soldout-mode").forEach((b) => {
       b.classList.toggle("on", b.dataset.mode === itemFormSoldOutMode);
     });
     $("#f_soldout_range").hidden = itemFormSoldOutMode !== "range";

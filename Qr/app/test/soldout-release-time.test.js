@@ -124,6 +124,13 @@ out.push("\n[7] 화면 배선");
 
   check("설정에 칸이 있다", /id="s_soldout_release_time"/.test(html), "");
   check("★ 그 카드에 저장 버튼이 있다", /id="saveSoldOutReleaseBtn"/.test(html) && /#saveSoldOutReleaseBtn/.test(js), "");
+  // 시각을 한 번 넣으면 <input type="time"> 은 다시 비우기가 어렵다 — 가게
+  // 태블릿에서는 방법이 아예 없다시피 하다(2026-09-11 사장님). 비우는 것이
+  // 곧 기본값(영업 시작)이라, 그 길이 화면에 있어야 한다.
+  check("★ 기본값(비우기) 버튼이 있다", /id="soldOutReleaseResetBtn"/.test(html) && /#soldOutReleaseResetBtn/.test(js), "");
+  check("★ 누르면 칸이 비워진다", /\$\("#s_soldout_release_time"\)\.value = ""/.test(js), "");
+  check("비운 것도 저장 안 됨으로 잡힌다", /markSettingDirty\("saveSoldOutReleaseBtn", true\)/.test(js), "");
+  check("두 언어 모두 있다", (js.match(/resetToDefaultBtn:/g) || []).length === 2, "");
   check("설정을 열 때 채운다", /\$\("#s_soldout_release_time"\)\.value = s\.soldout_release_time/.test(js), "");
   // 이 카드의 저장 버튼이 빈 칸도 그대로 보내야 한다 — 「비웠다」가
   // 「영업 시작을 따른다」는 뜻이라, 안 보내면 예전 값이 남는다.

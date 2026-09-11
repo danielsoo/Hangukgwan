@@ -785,12 +785,22 @@
             비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 —
             밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.
           </p>
-          <label><span data-i18n="labelSoldOutReleaseTime">해제 시각 (비우면 영업 시작)</span><input id="s_soldout_release_time" type="time" /></label>
+          <!-- 시각을 한 번 넣으면 <input type="time"> 은 다시 비우기가 어렵다.
+               브라우저마다 지우는 방법이 다르고, 가게 태블릿에서는 방법이
+               아예 없다시피 하다 (2026-09-11 사장님: "기본값 버튼을 만들어서
+               디폴트로 다시 되돌리게 해줘. 시간 넣었다가 변경하려고 할 때
+               방법이 없어서"). 비우는 것이 곧 기본값이라 버튼 하나면 된다. -->
+          <label><span data-i18n="labelSoldOutReleaseTime">해제 시각 (비우면 영업 시작)</span></label>
+          <div class="field-with-reset">
+            <input id="s_soldout_release_time" type="time" style="margin-top:0;" />
+            <button type="button" id="soldOutReleaseResetBtn" class="field-reset-btn" data-i18n="resetToDefaultBtn">기본값</button>
+          </div>
           <p class="settings-hint" id="soldOutReleaseEffective"></p>
           <!-- 이 카드만의 저장 버튼. 매장 정보 카드의 「설정 저장」은 여기서
                보이지도 않는다 — 고쳐놓고 저장할 곳이 없으면 안 고친 것과 같다.
                위 「주문 받는 시간」 카드도 같은 방식이다. -->
           <button id="saveSoldOutReleaseBtn" data-i18n="saveSettingsBtn">설정 저장</button>
+          <div class="settings-dirty" id="saveSoldOutReleaseBtnDirty" hidden data-i18n="settingsUnsaved">저장 안 된 변경이 있어요</div>
           <div class="save-msg" id="soldOutReleaseMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
         <div class="settings-card need-settingsEdit">
@@ -1215,8 +1225,8 @@
               <button type="button" class="soldout-mode" data-mode="always" data-i18n="soldOutModeAlways">계속 품절 (직접 풀 때까지)</button>
             </div>
             <div class="form-row" id="f_soldout_range" hidden style="margin-bottom:12px;">
-              <label><span data-i18n="soldOutFromLabel">시작일 (비우면 오늘부터)</span><input type="date" id="f_soldout_from" /></label>
-              <label><span data-i18n="soldOutUntilLabel">종료일 (비우면 직접 풀 때까지)</span><input type="date" id="f_soldout_until" /></label>
+              <label><span data-i18n="soldOutFromLabel">시작일 (비우면 오늘부터)</span><input type="date" id="f_soldout_from" /></label><button type="button" id="soldOutFromClearBtn" class="field-reset-btn" data-i18n="clearBtn">비우기</button>
+              <label><span data-i18n="soldOutUntilLabel">종료일 (비우면 직접 풀 때까지)</span><input type="date" id="f_soldout_until" /></label><button type="button" id="soldOutUntilClearBtn" class="field-reset-btn" data-i18n="clearBtn">비우기</button>
             </div>
           </section>
         </div>
@@ -1393,10 +1403,12 @@
       <label style="display:block;font-size:14px;color:var(--muted);margin-bottom:10px;">
         <span data-i18n="soldOutFromLabel">시작일 (비우면 오늘부터)</span>
         <input type="date" id="soldOutFrom" style="width:100%;box-sizing:border-box;font-size:17px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:4px;" />
+        <button type="button" id="soldOutModalFromClearBtn" class="field-reset-btn" data-i18n="clearBtn">비우기</button>
       </label>
       <label style="display:block;font-size:14px;color:var(--muted);">
         <span data-i18n="soldOutUntilLabel">종료일 (비우면 직접 풀 때까지)</span>
         <input type="date" id="soldOutUntil" style="width:100%;box-sizing:border-box;font-size:17px;padding:9px;border:1px solid var(--line);border-radius:8px;margin-top:4px;" />
+        <button type="button" id="soldOutModalUntilClearBtn" class="field-reset-btn" data-i18n="clearBtn">비우기</button>
       </label>
     </div>
     <p id="soldOutError" style="color:var(--red);font-size:14px;margin:12px 0 0;" hidden></p>

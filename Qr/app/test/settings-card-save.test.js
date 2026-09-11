@@ -94,6 +94,12 @@ out.push("\n[1] ★★ 고칠 수 있으면 그 자리에서 저장할 수 있�
     loc ? JSON.stringify(loc.buttons) : "카드를 못 찾음");
   const soldout = cards.find((c) => c.inputs.includes("s_soldout_release_time"));
   check("품절 해제 카드에도 있다", !!soldout && soldout.buttons.includes("saveSoldOutReleaseBtn"), "");
+  // 값을 넣었다가 되돌릴 길도 그 자리에 있어야 한다 — time/date 칸은 브라우저
+  // 기본 기능만으로는 다시 비우기가 어렵다(2026-09-11 사장님).
+  check("★ 되돌릴 버튼도 그 카드에", !!soldout && soldout.buttons.includes("soldOutReleaseResetBtn"), "");
+  check("품절 날짜 칸에도 비우기가 있다",
+    ["soldOutFromClearBtn", "soldOutUntilClearBtn", "soldOutModalFromClearBtn", "soldOutModalUntilClearBtn"]
+      .every((id) => new RegExp(`id="${id}"`).test(html) && js.includes(`#${id}`)), "");
 }
 
 out.push("\n[2] 저장 버튼이 없는 카드는 버튼 자체가 그 동작인 카드뿐이다");

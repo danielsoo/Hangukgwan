@@ -133,6 +133,31 @@ function check(name, cond, extra = "") {
     check("★ 파일을 안 골랐으면 그렇게 말한다", /골라|選擇/.test(msg), msg);
   }
 
+  out.push("\n[★★ 넣은 시각을 기본값으로 되돌릴 수 있다]");
+  {
+    // <input type="time"> 은 한 번 값이 들어가면 다시 비우는 방법이 브라우저
+    // 마다 다르고, 가게 태블릿에서는 아예 없다시피 하다.
+    await page.locator('.settings-nav-btn[data-category="order"]').click();
+    await page.waitForTimeout(600);
+    await page.locator("#s_soldout_release_time").fill("06:00");
+    await page.locator("#saveSoldOutReleaseBtn").click();
+    await page.waitForTimeout(800);
+    const saved = await page.evaluate(async () => (await fetch("/api/settings").then((r) => r.json())).soldout_release_time);
+    check("시각을 넣어 저장했다", saved === "06:00", String(saved));
+
+    check("★ 기본값 버튼이 보인다", await page.locator("#soldOutReleaseResetBtn").isVisible(), "");
+    await page.locator("#soldOutReleaseResetBtn").click();
+    await page.waitForTimeout(300);
+    check("★ 누르면 칸이 비워진다", (await page.locator("#s_soldout_release_time").inputValue()) === "", "");
+    check("★ 저장 안 됐다고 말해준다", await dirty("saveSoldOutReleaseBtn"), "");
+
+    await page.locator("#saveSoldOutReleaseBtn").click();
+    await page.waitForTimeout(900);
+    const cleared = await page.evaluate(async () => (await fetch("/api/settings").then((r) => r.json())).soldout_release_time);
+    check("★ 저장하면 기본값(영업 시작)으로 돌아간다", cleared == null, String(cleared));
+    check("안내도 영업 시작을 가리킨다", /11:00/.test(await page.locator("#soldOutReleaseEffective").textContent()), "");
+  }
+
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);
   await browser.close();

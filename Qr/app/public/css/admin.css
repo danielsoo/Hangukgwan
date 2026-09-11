@@ -271,6 +271,34 @@ button.availability-pill:hover { border-color: currentColor; }
   font-weight: 700;
   color: var(--red);
 }
+/* 칸 옆의 작은 되돌리기 버튼 (2026-09-11 사장님: "기본값 버튼을 만들어서
+   디폴트로 다시 되돌리게 해줘. 시간 넣었다가 변경하려고 할 때 방법이 없어서").
+
+   <input type="time"> 과 <input type="date"> 는 한 번 값을 넣으면 다시
+   비우는 방법이 브라우저마다 다르고, 가게 태블릿에서는 아예 없다시피 하다.
+   그래서 비우는 길을 화면에 직접 둔다. */
+.field-with-reset { display: flex; align-items: center; gap: 8px; }
+.field-with-reset input { flex: 1; min-width: 0; }
+.field-reset-btn {
+  flex: 0 0 auto;
+  margin-top: 4px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--muted);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.field-reset-btn:hover { background: #f3f3f3; color: var(--ink); }
+/* .settings-hint 는 제목에 붙으라고 margin-top 이 -6px 이다. 칸 줄 바로 뒤에
+   오는 안내는 그 음수를 걷어내야 글자가 안 겹친다. */
+.field-with-reset + .settings-hint { margin-top: 8px; }
+/* 세로로 쌓인 칸(품절 날짜)에서는 칸 바로 아래 오른쪽에 붙인다. */
+label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
+
 .settings-card button.is-dirty {
   background: var(--red);
   border-color: var(--red);
