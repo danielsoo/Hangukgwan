@@ -57,3 +57,7 @@ kiosk-app/build/
 # admin.js 사본이 저장소에 들어가면 나중에 누가 진짜 파일로 착각한다.
 * [0-9].*
 * [0-9][0-9].*
+
+# 비밀키 백업 묶음 - 절대 커밋 금지
+Hangukgwan-secrets.zip
+secrets-backup/
