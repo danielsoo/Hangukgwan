@@ -46,10 +46,7 @@ function clearPartySizeIfSettled(store, tableNumber) {
   if (hasUnpaidOrder(store, tableNumber)) return false;
   const table = store.tables.find((t) => String(t.number) === String(tableNumber));
   if (!table || !table.party_size) return false;
-  table.party_size = null;
-  table.party_size_updated_at = null;
-  table.party_adults = null;
-  table.party_children = null;
+  clearPartyFields(table);
   return true;
 }
 
@@ -86,10 +83,10 @@ function movePartySize(store, fromNumber, toNumber) {
   // 두 자리를 합칠 때는 더 이른 쪽이 이 자리의 시작이다.
   const starts = [to.party_size_updated_at, from.party_size_updated_at].filter(Boolean).sort();
   to.party_size_updated_at = starts[0] || new Date().toISOString();
-  from.party_size = null;
-  from.party_size_updated_at = null;
-  from.party_adults = null;
-  from.party_children = null;
+  // 테스트 착석이면 그 표시도 따라간다 — 안 따라가면 옮긴 뒤에 테스터
+  // 모드를 종료해도 그 자리 인원수가 남는다(src/testMode.js).
+  if (from.party_test_session) to.party_test_session = from.party_test_session;
+  clearPartyFields(from);
   return true;
 }
 
@@ -223,7 +220,30 @@ function partyOfTable(store, table) {
 // store 문서를 통째로 쓰면 다른 요청이 같은 순간에 한 일을 지운다
 // (src/db.js 의 saveFields 주석: 2026-09-10 "결제완료를 했는데 인원이
 // 안 사라져있어").
-const PARTY_KEYS = ["party_size", "party_adults", "party_children", "party_size_updated_at"];
+// party_test_session — 이 착석을 테스터 모드가 만들었는가(src/testMode.js).
+//
+// 2026-09-11 사장님: "테스터 모드가 지워지도록 되어있는데 인원은 그대로
+// 남아있어. 인원이랑 메뉴 이런 건 하나라고 보고 같이 움직이고 같이 지워지고
+// 같이 추가되어야 한다고 분명히 말했는데 여전히 남아있네."
+//
+// 테스터 모드 종료가 주문은 지우면서 자리의 인원수는 두고 갔다. 규칙은
+// 「인원과 메뉴는 하나의 세트」(claude/party-and-orders-are-one-set.md)인데
+// 테스터 모드만 예외로 남아 있었다. 어느 착석이 테스트 것인지 알아야
+// 종료할 때 그것만 골라 지울 수 있다 — 그 사이 벽에 붙은 QR 로 들어온
+// 진짜 손님의 인원수까지 지우면 안 되니까.
+const PARTY_KEYS = ["party_size", "party_adults", "party_children", "party_size_updated_at", "party_test_session"];
+
+/**
+ * 이 자리를 비운다. 손님이 나갔다는 뜻이다.
+ *
+ * 인원수 칸을 한 곳에서만 비우기 위한 함수다 — 여기저기서 손으로 네 줄씩
+ * 쓰면 칸이 하나 늘어날 때(party_test_session 이 그랬다) 빠뜨리는 자리가
+ * 반드시 생긴다.
+ */
+function clearPartyFields(table) {
+  if (!table) return;
+  for (const k of PARTY_KEYS) table[k] = null;
+}
 
 function partyPatchOf(table) {
   const patch = {};
@@ -285,10 +305,7 @@ async function clearIdleSeats(store) {
     if (table.is_counter) continue;
     if (!table.party_size) continue;
     if (hasUnpaidOrder(store, table.number)) continue;
-    table.party_size = null;
-    table.party_size_updated_at = null;
-    table.party_adults = null;
-    table.party_children = null;
+    clearPartyFields(table);
     await savePartySize(store, table.number);
     cleared.push(String(table.number));
   }
@@ -297,6 +314,7 @@ async function clearIdleSeats(store) {
 
 module.exports = {
   PARTY_KEYS,
+  clearPartyFields,
   clearIdleSeats,
   liveOrdersOf,
   partyOfTable,

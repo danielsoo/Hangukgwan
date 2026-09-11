@@ -2,7 +2,8 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf, ordersOfSeating } = require("../partySize");
+const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf, ordersOfSeating, clearPartyFields } = require("../partySize");
+const testMode = require("../testMode");
 const minSpend = require("../minSpend");
 const seating = require("../seating");
 const { channelForTable } = require("../realtime");
@@ -248,6 +249,17 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   table.party_adults = adults;
   table.party_children = children;
   table.party_size_updated_at = new Date().toISOString();
+  // 이 착석이 테스터 모드에서 만들어진 것인가(src/testMode.js).
+  //
+  // 2026-09-11 사장님: "테스터 모드가 지워지도록 되어있는데 인원은 그대로
+  // 남아있어." 종료할 때 테스트가 만든 착석만 골라 지우려면 표시가 있어야
+  // 한다 — 그 사이 벽의 QR 로 들어온 진짜 손님의 인원수까지 지우면 안 된다.
+  //
+  // 진짜 기기에서 답했으면 표시를 지운다. 테스트가 앉혔던 자리에 진짜
+  // 손님이 새로 앉는 경우가 있고, 그때부터 그 착석은 진짜다.
+  const testId = testMode.currentId(req, store);
+  if (testId) table.party_test_session = testId;
+  else delete table.party_test_session;
   // 새 손님이 앉았다 — 「자리가 옮겨졌어요」 안내는 여기서 끝난다.
   // 안 지우면 오늘 저녁 내내 그 자리 손님마다 옮겨가라는 말을 듣는다.
   delete table.moved_to;
@@ -375,10 +387,7 @@ router.post("/:tableNumber/moved-ack", async (req, res) => {
 router.delete("/:tableNumber/party-size", requireAdmin, async (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
-  table.party_size = null;
-  table.party_size_updated_at = null;
-  table.party_adults = null;
-  table.party_children = null;
+  clearPartyFields(table);
   await save();
   res.json({ ok: true });
 });

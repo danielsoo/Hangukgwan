@@ -9340,6 +9340,12 @@
     for (const [k, v] of Object.entries(rows)) if (v > 0) lines.push(`· ${label[k] || k} ${v}건`);
     if (pv.vipCards > 0) lines.push(`· VIP 카드 ${pv.vipCards}장`);
     if (pv.photos > 0) lines.push(`· 테스트 중 올린 사진 ${pv.photos}장`);
+    // 인원과 메뉴는 하나의 세트다 — 주문이 사라지면 그 손님도 자리에서
+    // 일어난다(2026-09-11 사장님). 몇 자리가 비워지는지 여기서 같이 보여준다.
+    if ((pv.seats || []).length) {
+      const seatNames = pv.seats.map((x) => `${x.number}번`).slice(0, 10).join(", ");
+      lines.push(`· 테스트로 앉힌 자리 ${pv.seats.length}곳의 인원수 (${seatNames}${pv.seats.length > 10 ? " 외" : ""})`);
+    }
 
     const menu = pv.menu || {};
     const menuChanged = (menu.added || []).length + (menu.removed || []).length + (menu.modified || []).length;

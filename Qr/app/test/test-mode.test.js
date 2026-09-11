@@ -82,6 +82,12 @@ function device() {
 
   const T = store.tables.find((t) => !t.is_counter).number;
   const T2 = store.tables.filter((t) => !t.is_counter)[1].number;
+  // [9-2] 가 쓰는 자리들 — 테스트가 앉힌 자리, 진짜 손님이 앉은 자리,
+  // 테스트가 앉혔는데 그 뒤에 진짜 주문이 들어온 자리.
+  const T3 = store.tables.filter((t) => !t.is_counter)[2].number;
+  const T4 = store.tables.filter((t) => !t.is_counter)[3].number;
+  const T5 = store.tables.filter((t) => !t.is_counter)[4].number;
+  const seatOf = (n) => store.tables.find((t) => String(t.number) === String(n));
   const itemId = store.menuItems[0].id;
   const soldOutId = store.menuItems[1].id;
 
@@ -272,6 +278,31 @@ function device() {
     check("지워질 주문 수를 알려준다", pv.body.rows.orders >= 3, JSON.stringify(pv.body.rows));
   }
 
+  out.push("\n[9-1] 인원과 메뉴는 하나의 세트 — 테스트가 앉힌 자리에 표가 붙는다");
+  {
+    // 2026-09-11 사장님: "테스터 모드가 지워지도록 되어있는데 인원은 그대로
+    // 남아있어. 인원이랑 메뉴 이런 건 하나라고 보고 같이 움직이고 같이
+    // 지워지고 같이 추가되어야 한다고 분명히 말했는데 여전히 남아있네."
+    //
+    // 종료가 주문만 지우고 자리의 인원수는 두고 갔다. 어느 착석이 테스트
+    // 것인지 표가 있어야 그것만 골라 지울 수 있다.
+    const a = await boss.put(`/api/tables/${T3}/party-size`).send({ adults: 2, children: 0 });
+    check("테스트 기기가 인원수를 넣는다", a.status === 200, JSON.stringify(a.body));
+    check("그 자리에 테스트 표가 붙는다", seatOf(T3).party_test_session === session.id, String(seatOf(T3).party_test_session));
+
+    // 테스터 모드를 켜둔 사이에도 벽의 QR 로 진짜 손님은 들어온다.
+    const b = await staff.put(`/api/tables/${T4}/party-size`).send({ adults: 3, children: 1 });
+    check("진짜 기기도 인원수를 넣는다", b.status === 200, JSON.stringify(b.body));
+    check("★ 진짜 손님 자리에는 표가 안 붙는다", !seatOf(T4).party_test_session, String(seatOf(T4).party_test_session));
+
+    // 테스트가 앉힌 자리에 진짜 주문이 들어오면, 그 착석은 이제 진짜다.
+    await boss.put(`/api/tables/${T5}/party-size`).send({ adults: 2, children: 0 });
+    check("이 자리에도 표가 붙는다", seatOf(T5).party_test_session === session.id);
+    const realHere = await staff.post("/api/orders").send({ tableNumber: T5, items: [{ itemId, qty: 1 }] });
+    check("그 자리에 진짜 주문이 들어간다", realHere.status === 201, JSON.stringify(realHere.body));
+    check("그 주문에는 테스트 표가 없다", !realHere.body.test_session);
+  }
+
   out.push("\n[9] ★★ 종료 — 테스트만 사라지고 진짜는 남는다");
   {
     // 테스트 중에 인쇄 담당을 가게 태블릿으로 옮긴다. [11] 이 이 값을 본다.
@@ -291,6 +322,19 @@ function device() {
     check("메뉴 가격이 되돌아왔다", store.menuItems.find((m) => m.id === itemId).price !== 99999);
     check("활성 세션이 사라졌다", !store.settings.test_session);
     check("테스트 마감도 지워졌다", (r.body.deleted.daily_settlements || 0) >= 1, JSON.stringify(r.body.deleted));
+
+    // ★★ 사장님이 두 번 말씀하신 그 자리다. 주문이 사라지면 그 손님도
+    // 자리에서 일어난다.
+    check("★★ 테스트가 앉힌 자리의 인원수가 지워졌다", !seatOf(T3).party_size, String(seatOf(T3).party_size));
+    check("★★ 테스트 표도 같이 지워졌다", !seatOf(T3).party_test_session, String(seatOf(T3).party_test_session));
+    check("★★ 어른·아이 수도 남지 않았다",
+      !seatOf(T3).party_adults && !seatOf(T3).party_children,
+      JSON.stringify({ a: seatOf(T3).party_adults, c: seatOf(T3).party_children }));
+    check("응답이 몇 자리를 비웠는지 알려준다", (r.body.deleted.seats || 0) >= 1, JSON.stringify(r.body.deleted));
+
+    // 여기를 잘못하면 앉아 계신 손님이 화면에서 사라진다.
+    check("★ 진짜 손님 자리의 인원수는 그대로다", seatOf(T4).party_size === 4, String(seatOf(T4).party_size));
+    check("★ 진짜 주문이 남은 자리의 인원수도 그대로다", seatOf(T5).party_size === 2, String(seatOf(T5).party_size));
 
     const hist = await boss.get("/api/settlements/history");
     check("★ 진짜 마감은 그대로 있다", (hist.body || []).length >= 1, JSON.stringify((hist.body || []).map((x) => x.date)));

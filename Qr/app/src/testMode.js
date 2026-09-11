@@ -209,6 +209,35 @@ function menuDiff(store, before) {
   return { added, removed, modified, catsChanged };
 }
 
+/**
+ * 테스트가 앉혀놓은 자리들.
+ *
+ * 2026-09-11 사장님: "테스터 모드가 지워지도록 되어있는데 인원은 그대로
+ * 남아있어. 인원이랑 메뉴 이런 건 하나라고 보고 같이 움직이고 같이 지워지고
+ * 같이 추가되어야 한다고 분명히 말했는데 여전히 남아있네."
+ *
+ * 규칙은 claude/party-and-orders-are-one-set.md 에 적혀 있다 — 인원과 메뉴는
+ * 하나의 세트다. 그런데 종료가 주문만 지우고 인원수는 두고 갔다. 그러면
+ * 다음 장사 때 빈 자리가 손님 있는 자리로 보이고, 사장님이 자리마다
+ * 「손님 나감」을 눌러 치워야 한다.
+ *
+ * 고르는 기준은 두 가지다.
+ *   1. 그 착석을 이 테스트 세션이 만들었는가(party_test_session).
+ *      표시가 없는 자리는 진짜 손님 것이다 — 테스터 모드를 켜둔 사이에도
+ *      벽에 붙은 QR 로 손님은 계속 들어온다. 그 인원수를 지우면 앉아 계신
+ *      손님이 화면에서 사라진다.
+ *   2. 그 자리에 아직 못 받은 진짜 주문이 남아 있지 않은가.
+ *      hasUnpaidOrder 는 테스트 주문을 세지 않으므로(src/partySize.js),
+ *      여기서 걸리는 것은 진짜 주문뿐이다. 테스트로 앉힌 자리에 진짜
+ *      주문이 들어온 자리라면 그 착석은 이제 진짜다.
+ */
+function testSeats(store, sessionId) {
+  const { hasUnpaidOrder } = require("./partySize");
+  return (store.tables || []).filter(
+    (t) => t.party_test_session === sessionId && t.party_size && !hasUnpaidOrder(store, t.number)
+  );
+}
+
 /** 사진: 지금은 쓰이는데 스냅샷에는 없던 것 = 테스트 중에 올린 것. */
 function orphanPhotoIds(store, before) {
   const ids = (list) =>
@@ -236,6 +265,8 @@ async function previewEnd(db, store) {
     settings: settingsDiff(store, before.settings_before),
     menu: menuDiff(store, before.menu_before),
     photos: orphanPhotoIds(store, before.menu_before).length,
+    // 테스트가 앉혀놓은 자리 — 종료하면 인원수가 같이 지워진다.
+    seats: testSeats(store, cur.id).map((t) => ({ number: t.number, party_size: t.party_size })),
   };
 }
 
@@ -265,6 +296,15 @@ async function end(db, store, { save, deletePhoto }, opts = {}) {
   deleted.vipCards = (store.vipCards || []).filter(isTestRow).length;
   store.vipCards = (store.vipCards || []).filter((c) => !isTestRow(c));
   store.orders = (store.orders || []).filter((o) => !isTestRow(o));
+
+  // 주문을 지웠으면 그 손님도 자리에서 일어난다 — 인원과 메뉴는 하나의
+  // 세트다(claude/party-and-orders-are-one-set.md). 주문을 먼저 턴 뒤에
+  // 고른다: 그래야 hasUnpaidOrder 가 남은 진짜 주문만 보고, 테스트 주문
+  // 때문에 자리가 남는 일이 없다.
+  const { clearPartyFields } = require("./partySize");
+  const seats = testSeats(store, cur.id);
+  seats.forEach(clearPartyFields);
+  deleted.seats = seats.length;
 
   let photosDeleted = 0;
   if (revertMenu) {
@@ -311,6 +351,7 @@ async function end(db, store, { save, deletePhoto }, opts = {}) {
 
 module.exports = {
   TAGGED_COLLECTIONS,
+  testSeats,
   previewEnd,
   end,
   settingsDiff,

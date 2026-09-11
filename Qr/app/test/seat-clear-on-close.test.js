@@ -109,9 +109,16 @@ require.cache[require.resolve("../src/db")] = {
     await clearIdleSeats(store);
     check("자리마다 한 번씩만 쓴다", writes.length === 1, JSON.stringify(writes));
     check("tables 컬렉션의 그 행에만", writes[0].col === "tables" && writes[0].id === 10, JSON.stringify(writes[0]));
+    // 인원수 칸만 쓴다 — store 문서를 통째로 쓰지 않는다. 칸 목록은
+    // src/partySize.js 의 PARTY_KEYS 가 정한다(2026-09-11 에
+    // party_test_session 이 하나 늘었다). 여기서 목록을 다시 적으면 칸이
+    // 늘 때마다 두 곳을 고쳐야 하므로, 그쪽을 가져다 쓴다.
+    const { PARTY_KEYS } = require("../src/partySize");
     const keys = Object.keys(writes[0].patch).sort().join(",");
-    check("인원수 네 칸만 쓴다",
-      keys === "party_adults,party_children,party_size,party_size_updated_at", keys);
+    check("인원수 칸만 쓴다 (PARTY_KEYS 그대로)",
+      keys === [...PARTY_KEYS].sort().join(","), `${keys} vs ${[...PARTY_KEYS].sort().join(",")}`);
+    check("다른 칸은 건드리지 않는다",
+      Object.keys(writes[0].patch).every((k) => k.startsWith("party_")), keys);
   }
 
   console.log(out.join("\n"));
