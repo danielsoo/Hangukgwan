@@ -49,7 +49,7 @@
       <button data-tab="reservations" data-i18n="tabReservations">예약</button>
       <button data-tab="vip" class="owner-only" data-i18n="tabVip">회원(VIP)</button>
       <button data-tab="accounts" class="owner-only" data-i18n="tabAccounts">계정</button>
-      <button data-tab="settlement" class="owner-only" data-i18n="tabSettlement">결산</button>
+      <button data-tab="settlement" data-i18n="tabSettlement">결산</button>
       <button data-tab="settings" data-i18n="tabSettings">설정</button>
     </nav>
     <div class="admin-lang-switch">
@@ -214,8 +214,13 @@
       <div id="accountsList" class="accounts-list"></div>
     </section>
 
-    <!-- SETTLEMENT (결산) TAB — owner-only, shows sales/revenue -->
-    <section id="tab-settlement" class="tab-panel owner-only" hidden>
+    <!-- SETTLEMENT (결산) TAB — 매출을 보여준다.
+         2026-09-11 사장님: "결산은 현재 사장만 볼 수 있는데 직원이 볼 수 있는
+         건 결산탭에서 해당 하루만 볼 수 있게 해주고 지난 정산 추이처럼 전
+         데이터를 읽어오는 건 직원은 못 보게 해줘."
+         그래서 탭 자체는 열고, 지난 날짜로 가는 길만 owner-only 로 남긴다.
+         진짜로 막는 자리는 서버다(src/routes/settlements.js). -->
+    <section id="tab-settlement" class="tab-panel" hidden>
       <div class="settlement-shell">
         <!-- 지난 정산 기록을 왼쪽 탭 형태로 — 예전엔 이 목록이 페이지 맨
              아래에 있어서, 날짜를 누르면 위쪽 요약 카드가 바뀌는 게 화면
@@ -226,26 +231,29 @@
              바로 바뀜 — 스크롤 이동이 전혀 필요 없음. #settlementHistoryList
              안의 마크업/렌더링 로직(년/월 폴더 그룹핑 등)은 admin.js
              loadSettlementHistory() 그대로, 이 nav 안으로 위치만 옮김. -->
-        <nav class="settlement-nav">
+        <nav class="settlement-nav owner-only">
           <div id="settlementHistoryList"></div>
         </nav>
 
         <div class="settlement-content">
           <div class="settlement-toolbar">
-            <label class="settlement-date-label">
+            <label class="settlement-date-label owner-only">
               <span data-i18n="settlementStartLabel">시작일</span>
               <input type="date" id="settlementStartDate" />
             </label>
-            <span class="settlement-date-sep">~</span>
-            <label class="settlement-date-label">
+            <span class="settlement-date-sep owner-only">~</span>
+            <label class="settlement-date-label owner-only">
               <span data-i18n="settlementEndLabel">종료일</span>
               <input type="date" id="settlementEndDate" />
             </label>
-            <button id="settlementTodayBtn" type="button" data-i18n="settlementTodayBtn">오늘</button>
-            <button id="settlementWeekBtn" type="button" data-i18n="settlementWeekBtn">최근 7일</button>
-            <button id="settlementMonthBtn" type="button" data-i18n="settlementMonthBtn">최근 30일</button>
-            <button id="settlementCsvBtn" type="button" data-i18n="settlementCsvBtn">⬇️ CSV 다운로드</button>
-            <button id="settlementCloseBtn" type="button" class="settlement-close-btn" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
+            <button id="settlementTodayBtn" type="button" class="owner-only" data-i18n="settlementTodayBtn">오늘</button>
+            <button id="settlementWeekBtn" type="button" class="owner-only" data-i18n="settlementWeekBtn">최근 7일</button>
+            <button id="settlementMonthBtn" type="button" class="owner-only" data-i18n="settlementMonthBtn">최근 30일</button>
+            <button id="settlementCsvBtn" type="button" class="owner-only" data-i18n="settlementCsvBtn">⬇️ CSV 다운로드</button>
+            <button id="settlementCloseBtn" type="button" class="settlement-close-btn owner-only" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
+            <!-- 직원 계정에는 날짜를 고르는 길이 없다. 그러면 지금 무엇을 보고
+                 있는지도 알 수 없으니, 그 자리에 날짜를 적어준다. -->
+            <span class="settlement-today-only staff-only" id="settlementTodayOnly"></span>
           </div>
 
           <!-- ── 결산 화면 다시 짜기 (2026-09-10) ───────────────────────
@@ -483,7 +491,7 @@
             <div id="settlementOrdersList" class="stl-orders"></div>
           </section>
 
-          <div class="settlement-wide-card settlement-chart-card settlement-history-card">
+          <div class="settlement-wide-card settlement-chart-card settlement-history-card owner-only">
             <h3 data-i18n="settlementHistoryTitle">지난 정산 기록 추이</h3>
             <p class="settings-hint" data-i18n="settlementHistoryHint">매일 마감 시간 이후 자동으로 저장되는 기록입니다 (수동 저장도 가능). 왼쪽에서 날짜를 골라 들어가 보세요.</p>
             <div class="settlement-chart-wrap">

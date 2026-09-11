@@ -910,6 +910,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .settlement-toolbar #settlementMonthBtn { background: var(--cream); }
 .settlement-toolbar .settlement-close-btn { margin-left: auto; background: var(--navy); border-color: var(--navy); color: #fff; }
 .settlement-toolbar .settlement-close-btn:disabled { background: var(--line); border-color: var(--line); color: var(--muted); cursor: not-allowed; }
+/* 직원 세션의 결산 툴바 — 날짜 고르는 칸이 전부 숨겨진 자리에 「무엇을
+   보고 있는지」 한 줄만 남는다 (admin.js renderSettlement, data.today_only). */
+.settlement-today-only {
+  font-size: 17px; font-weight: 700; color: var(--ink);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+/* 정산 기록 사이드바가 없는 직원 화면에서는 본문이 가로를 다 쓴다. */
+.role-staff .settlement-shell { display: block; }
 
 .settlement-summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; max-width: 1560px; margin: 0 auto 20px; }
 .settlement-card {

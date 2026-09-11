@@ -781,6 +781,7 @@
       settlementCsvBtn: "⬇️ CSV 다운로드",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
       settlementCloseRangeHint: "하루를 선택했을 때만 저장할 수 있어요 (시작일 = 종료일).",
+      settlementTodayOnlyNote: "오늘 하루만 보여요",
       settlementSavedMsg: "✔ 저장됨",
       settlementRevenue: "매출 (결제 완료)",
       settlementPaidCount: "결제 완료 주문",
@@ -1472,6 +1473,7 @@
       settlementCsvBtn: "⬇️ 下載 CSV",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
       settlementCloseRangeHint: "只有選擇單一天（開始日期＝結束日期）時才能儲存。",
+      settlementTodayOnlyNote: "僅顯示今日",
       settlementSavedMsg: "✔ 已儲存",
       settlementRevenue: "營業額（已結帳）",
       settlementPaidCount: "已結帳訂單",
@@ -2584,15 +2586,6 @@
       if (activeNav && activeNav.classList.contains("owner-only")) {
         selectSettingsCategory("display");
       }
-      // Same for the owner-only 결산 탭 — bounce staff back to 실시간 주문.
-      const settlementTab = $('.admin-tabs button[data-tab="settlement"]');
-      if (settlementTab && settlementTab.classList.contains("active")) {
-        settlementTab.classList.remove("active");
-        const ordersBtn = $('.admin-tabs button[data-tab="orders"]');
-        if (ordersBtn) ordersBtn.classList.add("active");
-        $$(".tab-panel").forEach((p) => (p.hidden = true));
-        $("#tab-orders").hidden = false;
-      }
     }
   }
 
@@ -2687,7 +2680,12 @@
   };
 
   // ---------- Tabs ----------
-  const OWNER_ONLY_TABS = new Set(["settlement", "vip", "accounts"]);
+  // 결산은 직원도 연다 — 다만 「오늘 하루」만이다 (사장님 2026-09-11:
+  // "직원이 볼 수 있는 건 결산탭에서 해당 하루만 볼 수 있게 해주고 지난
+  // 정산 추이처럼 전 데이터를 읽어오는 건 직원은 못 보게 해줘"). 날짜를
+  // 못 박는 일은 서버가 한다(GET /api/settlements) — 화면에서 날짜 칸을
+  // 감추는 것만으로는 막은 것이 아니다.
+  const OWNER_ONLY_TABS = new Set(["vip", "accounts"]);
 
   $$(".admin-tabs button").forEach((btn) => {
     btn.onclick = () => {
@@ -11446,6 +11444,15 @@
     const closeBtn = $("#settlementCloseBtn");
     closeBtn.disabled = !data.date;
     closeBtn.title = data.date ? "" : T("settlementCloseRangeHint");
+    // 직원 계정에는 날짜를 고르는 길이 없다(.settlement-date-label 은 owner-only).
+    // 그러면 지금 무엇을 보고 있는지도 알 수 없으니, 그 자리에 날짜를 적어준다.
+    // 서버가 today_only 를 붙여 보낸다 — 「오늘만 보인다」를 정하는 쪽은 서버다.
+    const todayOnly = $("#settlementTodayOnly");
+    if (todayOnly) {
+      todayOnly.textContent = data.today_only
+        ? `${data.start_date} · ${T("settlementTodayOnlyNote")}`
+        : "";
+    }
     const share = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
 
     // ── 1. 오늘 한눈에 ────────────────────────────────────────────
@@ -11632,6 +11639,14 @@
   // admin.html).
   async function loadSettlement(start, end) {
     const params = new URLSearchParams();
+    // 직원 세션은 오늘 하루만 본다. 서버가 어차피 오늘로 못 박지만
+    // (GET /api/settlements), 어제 날짜를 들고 물어보고 오늘 것이 돌아오면
+    // 화면의 날짜 칸과 내용이 어긋난다 — 물어볼 때부터 오늘로 맞춘다.
+    if (currentRole !== "owner") {
+      const today = taipeiTodayString();
+      start = today;
+      end = today;
+    }
     if (start) params.set("start", start);
     if (end) params.set("end", end);
     // 「오전만 보기」를 켜둔 채 새로고침해도 그대로 남는다. 날짜를 바꿀
@@ -11643,7 +11658,10 @@
     if (!res.ok) return;
     renderSettlement(await res.json());
     activeSettlementHistoryDate = start && end && start === end ? start : null;
-    loadSettlementHistory();
+    // 지난 정산 기록(추이·월별 폴더)은 사장님 것이다. 직원 세션에서는
+    // 부르지 않는다 — 서버가 403 으로 막고 있어 화면은 비지만, 매번 막힐
+    // 요청을 보내는 것 자체가 콘솔을 더럽히고 「왜 빈칸이지」를 만든다.
+    if (currentRole === "owner") loadSettlementHistory();
   }
 
   function taipeiTodayString() {
@@ -11670,6 +11688,7 @@
   };
 
   async function loadSettlementHistory() {
+    if (currentRole !== "owner") return;
     const res = await fetch("/api/settlements/history");
     if (!res.ok) return;
     const list = await res.json();

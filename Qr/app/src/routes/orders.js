@@ -511,10 +511,15 @@ router.post("/", async (req, res) => {
 // 찾는 방법은 세 가지다 — 날짜 범위, 테이블 번호, 그리고 메뉴 이름이나
 // 손님 이름으로 훑기. "지난주 금요일 7번 테이블" 이 가장 흔한 물음이라
 // 날짜와 테이블을 같이 걸 수 있게 했다.
-router.get("/history", requireOwner, async (req, res) => {
+// 지난 주문 불러오기 — 결산 탭 안에 있다. 직원도 볼 수 있지만 **오늘 것만**
+// (2026-09-11 사장님). 결산 숫자를 오늘로 못 박아 놓고 이 목록만 지난 날짜를
+// 내주면, 결산에서 막은 것이 여기로 새어 나간다.
+router.get("/history", requireAdmin, async (req, res) => {
   const q = req.query || {};
-  const start = /^\d{4}-\d{2}-\d{2}$/.test(q.start || "") ? q.start : null;
-  const end = /^\d{4}-\d{2}-\d{2}$/.test(q.end || "") ? q.end : start;
+  const isOwner = !!(req.session && req.session.role === "owner");
+  const today = taipeiDateString();
+  const start = isOwner ? (/^\d{4}-\d{2}-\d{2}$/.test(q.start || "") ? q.start : null) : today;
+  const end = isOwner ? (/^\d{4}-\d{2}-\d{2}$/.test(q.end || "") ? q.end : start) : today;
   const filter = {};
   // 지난 기록에는 테스트가 섞이면 안 된다. 여기는 사장님이 매출을 되짚는
   // 자리라 테스트 기기에서 보더라도 진짜만 보여준다.

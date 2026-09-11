@@ -32,19 +32,33 @@ async function saveSettlementSnapshot(snapshot, testId) {
   return row;
 }
 
-// Settlement shows real revenue numbers, so — like 주문 취소 — it's treated
-// as sensitive business data and kept owner-only rather than gated behind a
-// staff-permission toggle.
+// Settlement shows real revenue numbers, so it's treated as sensitive
+// business data: 직원은 오늘 하루만, 지난 기록(/history)과 마감 저장(/close)은
+// 사장님만. 역할로 가르고 staff-permission 스위치로는 열지 않는다.
 
 // Live view for a single date or a date range (defaults to today, Taipei
 // time). Always computed fresh from current orders — this is what the 결산
 // tab shows when opened, so the owner never has to press a button to "do"
 // the settlement. Accepts either ?date=YYYY-MM-DD (single day) or
 // ?start=YYYY-MM-DD&end=YYYY-MM-DD (inclusive range, e.g. "이번 주").
-router.get("/", requireOwner, async (req, res) => {
+/**
+ * 결산 — 직원도 볼 수 있다. 다만 **오늘 하루만**.
+ *
+ * 사장님(2026-09-11): "결산은 현재 사장만 볼 수 있는데 직원이 볼 수 있는 건
+ * 결산탭에서 해당 하루만 볼 수 있게 해주고 지난 정산 추이처럼 전 데이터를
+ * 읽어오는 건 직원은 못 보게 해줘."
+ *
+ * 직원에게는 날짜를 여기서 **못 박는다**. 화면에서 날짜 칸을 감추는 것만으로는
+ * 막은 것이 아니다 — 주소창에 ?start=2026-08-01&end=2026-09-11 을 쳐 넣으면
+ * 한 달치 매출이 그대로 나온다. 막는 자리는 서버 한 곳이어야 한다.
+ *
+ * 지난 정산 기록(/history)과 기록 저장(/close)은 아래에서 사장님 전용 그대로다.
+ */
+router.get("/", requireAdmin, async (req, res) => {
   const today = taipeiDateString();
-  const start = req.query.start || req.query.date || today;
-  const end = req.query.end || req.query.date || start;
+  const isOwner = !!(req.session && req.session.role === "owner");
+  const start = isOwner ? req.query.start || req.query.date || today : today;
+  const end = isOwner ? req.query.end || req.query.date || start : today;
   // 메모리의 store.orders 는 최근 며칠치뿐이다(src/db.js) — 지난 달 결산을
   // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
   // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
@@ -56,7 +70,13 @@ router.get("/", requireOwner, async (req, res) => {
   // 하나를 빠뜨리고, 그 칸만 조용히 하루치를 보여준다.
   const shift = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
   const opts = await halfOpts(start, end, req);
-  res.json(computeSettlement(orders, start, end, { ...opts, shift }));
+  res.json(
+    Object.assign(computeSettlement(orders, start, end, { ...opts, shift }), {
+      // 화면이 「오늘 것만 보입니다」를 띄우는 데 쓴다. 화면을 믿고 막는 게
+      // 아니라, 이미 막아놓고 그 사실을 알려주는 것뿐이다.
+      today_only: !isOwner,
+    })
+  );
 });
 
 /**
