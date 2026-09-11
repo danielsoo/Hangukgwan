@@ -2586,6 +2586,18 @@
       if (activeNav && activeNav.classList.contains("owner-only")) {
         selectSettingsCategory("display");
       }
+      // 사장님 전용 탭(회원·계정)이 열린 채로 직원이 로그인하면, 탭 버튼은
+      // CSS 로 숨어도 **열려 있던 내용은 그대로 남는다.** 로그아웃이 화면을
+      // 새로 열어주지만(위 logoutBtn), 세션이 다른 창에서 바뀌는 길도 있다 —
+      // 여기서 한 번 더 되돌린다.
+      const activeTab = $(".admin-tabs button.active");
+      if (activeTab && OWNER_ONLY_TABS.has(activeTab.dataset.tab)) {
+        activeTab.classList.remove("active");
+        const ordersBtn = $('.admin-tabs button[data-tab="orders"]');
+        if (ordersBtn) ordersBtn.classList.add("active");
+        $$(".tab-panel").forEach((p) => (p.hidden = true));
+        $("#tab-orders").hidden = false;
+      }
     }
   }
 
@@ -2593,6 +2605,12 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
+    // 결산 탭이 열린 채라면 거기 적힌 숫자는 **이 사람의 것이 아니다.**
+    // 앞사람이 보던 것을 지우고 이 사람 몫으로 다시 부른다 (2026-09-11).
+    if (!$("#tab-settlement").hidden) {
+      blankSettlement();
+      loadSettlement();
+    }
     // loadVipSaleSettings 는 직원도 부른다 — 판매가는 결제창 버튼에 찍히는
     // 값이라 사장님만 보는 정보가 아니다(설정 카드 자체는 owner-only).
     await Promise.all([
@@ -2676,7 +2694,18 @@
   $("#logoutBtn").onclick = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     stopPolling();
-    showLogin();
+    // 화면을 **통째로 새로 연다.** showLogin() 만 부르면 앞사람이 보던 것이
+    // DOM 에 그대로 남고, 다음 사람이 로그인하면 그 화면을 그대로 물려받는다.
+    //
+    // 사장님(2026-09-11): "사장이 날짜 설정하는대로 같이 보는 거 같은데?
+    // 지금 보면 1주일 치잖아." 서버는 직원에게 오늘 것만 내주고 있었는데,
+    // 화면에는 사장님이 조금 전까지 보던 일주일치 매출이 남아 있었다 —
+    // 직원이 로그인해도 아무것도 다시 불러오지 않으니 그 숫자가 그대로
+    // 앉아 있었던 것이다. 새어 나간 곳은 API 가 아니라 화면이다.
+    //
+    // 결산만 지우는 것으로는 모자란다. 회원(VIP)·계정·이전 주문도 같은
+    // 자리에 남는다. 통째로 새로 여는 것이 빠뜨릴 구석이 없다.
+    location.reload();
   };
 
   // ---------- Tabs ----------
@@ -11637,6 +11666,28 @@
   // view a single day (e.g. from clicking a row in 지난 정산 기록 — the
   // sidebar to the left of this tab's content, see settlement-shell in
   // admin.html).
+  // 결산 화면에 적힌 숫자를 전부 지운다. 「비어 있다」와 「앞사람 것이
+  // 남아 있다」는 화면에서 똑같이 생겼지만, 뒤쪽은 틀린 숫자를 믿게 만든다.
+  function blankSettlement() {
+    lastSettlementData = null;
+    currentSettlementDate = null;
+    const dash = "—";
+    [
+      "#settlementRevenue", "#settlementGuests", "#settlementAvgPerGuest",
+      "#settlementAvgPerOrder", "#settlementTurnover",
+      "#settlementAmRevenue", "#settlementPmRevenue",
+    ].forEach((sel) => { const el = $(sel); if (el) el.textContent = dash; });
+    [
+      "#settlementHeroSub", "#settlementGuestSplit", "#settlementTodayOnly",
+      "#settlementAmOrders", "#settlementAmGuests", "#settlementAmPerGuest", "#settlementAmPerOrder",
+      "#settlementPmOrders", "#settlementPmGuests", "#settlementPmPerGuest", "#settlementPmPerOrder",
+      "#settlementOrdersCount",
+    ].forEach((sel) => { const el = $(sel); if (el) el.textContent = ""; });
+    [
+      "#settlementPaymentMethodBars", "#settlementAlerts", "#settlementOrdersList",
+    ].forEach((sel) => { const el = $(sel); if (el) el.innerHTML = ""; });
+  }
+
   async function loadSettlement(start, end) {
     const params = new URLSearchParams();
     // 직원 세션은 **날짜를 아예 안 보낸다.** 서버는 직원이 보낸 날짜가
@@ -11653,7 +11704,13 @@
     if (settlementShift) params.set("shift", settlementShift);
     const qs = params.toString();
     const res = await fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
-    if (!res.ok) return;
+    // 못 받아왔으면 **비운다.** 그냥 돌아가면 조금 전 숫자가 그대로 남아,
+    // 못 받아온 것을 「지금 값」으로 읽게 된다 (2026-09-11 사장님 화면에
+    // 사장님의 일주일치가 남아 있던 것과 같은 종류의 사고다).
+    if (!res.ok) {
+      blankSettlement();
+      return;
+    }
     renderSettlement(await res.json());
     activeSettlementHistoryDate = start && end && start === end ? start : null;
     // 지난 정산 기록(추이·월별 폴더)은 사장님 것이다. 직원 세션에서는
