@@ -154,6 +154,31 @@ const PLAN = [
   }
   check("★ 꽉 찬 막대는 전부 100% 짜리다", overfull.length === 0, overfull.join(" | "));
 
+  out.push("\n[막대가 전부 같은 자리에서 출발한다]");
+  // 사장님(2026-09-11): "그래프 바가 시작이 다 같았으면 좋겠어. 지금은 글
+  // 길이에 따라 시작 위치가 다르잖아." 줄마다 자기 혼자 grid 라서 이름 칸이
+  // 그 줄의 글자 길이에 맞춰졌었다. 시작이 들쭉날쭉하면 막대 길이를 서로
+  // 견줄 수가 없다 — 막대를 쓰는 이유가 그건데.
+  const starts = await page.evaluate(() => {
+    const ids = ["settlementPaymentMethodBars", "settlementOrderTypeBars", "settlementDiscountBars",
+      "settlementCategoryBars", "settlementTableBars"];
+    return ids.map((gid) => {
+      const el = document.getElementById(gid);
+      const tracks = el ? [...el.querySelectorAll(".stl-bar-track")] : [];
+      const names = el ? [...el.querySelectorAll(".stl-bar-name")].map((n) => n.textContent.trim()) : [];
+      return { id: gid, lefts: tracks.map((t) => Math.round(t.getBoundingClientRect().left)), names };
+    }).filter((g) => g.lefts.length >= 2);
+  });
+  check("견줄 묶음이 있다 (이름 길이가 서로 다른)", starts.length >= 1, JSON.stringify(starts.map((g) => g.id)));
+  for (const g of starts) {
+    const uniq = [...new Set(g.lefts)];
+    const lens = g.names.map((n) => n.length);
+    check(`★ ${g.id} — ${g.lefts.length}줄이 같은 x 에서 시작 (${uniq.join(", ")})`, uniq.length === 1,
+      `${JSON.stringify(g.lefts)} / 이름 길이 ${JSON.stringify(lens)}`);
+    // 이름 길이가 다 같으면 이 검사는 아무것도 안 재는 것이다.
+    check(`${g.id} — 이름 길이가 서로 다르다 (검사가 헛돌지 않게)`, new Set(lens).size > 1, JSON.stringify(g.names));
+  }
+
   out.push("\n[정해둔 배치대로 나왔는가 — 테스트가 헛돌지 않게]");
   const payRows = shown.find((g) => g.id === "settlementPaymentMethodBars").rows;
   const top = payRows.find((r) => r.label === 60);

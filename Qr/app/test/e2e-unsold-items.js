@@ -119,6 +119,20 @@ const D = "2026-09-09";
   check("★ 4개짜리는 그만큼만", Math.abs(m.rows[1].fill - 40) <= 3, `${m.rows[1].fill}% (기대 40%)`);
   check("★ 1개짜리는 더 짧게", m.rows[2].fill > 0 && m.rows[2].fill < 20, String(m.rows[2].fill));
 
+  out.push("\n[막대가 전부 같은 자리에서 출발한다]");
+  // 사장님(2026-09-11): "그래프 바가 시작이 다 같았으면 좋겠어." 이름 길이에
+  // 따라 시작이 밀리면 막대 길이를 서로 견줄 수가 없다.
+  const startX = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll("#settlementAllMenu .stl-menu-row")];
+    return {
+      lefts: [...new Set([...document.querySelectorAll("#settlementAllMenu .stl-menu-track")].map((t) => Math.round(t.getBoundingClientRect().left)))],
+      nameLens: [...new Set([...document.querySelectorAll("#settlementAllMenu .stl-menu-name")].map((n) => n.textContent.trim().length))],
+      rowCount: rows.length,
+    };
+  });
+  check(`★ ${startX.rowCount}줄이 전부 같은 x 에서 시작한다`, startX.lefts.length === 1, JSON.stringify(startX.lefts));
+  check("이름 길이가 서로 다르다 (검사가 헛돌지 않게)", startX.nameLens.length > 1, JSON.stringify(startX.nameLens));
+
   out.push("\n[스크롤을 내리면 안 팔린 것들이 있다]");
   check("★ 맨 아래는 0 이다", m.rows[m.rows.length - 1].zero === true && /^0/.test(m.rows[m.rows.length - 1].qty),
     JSON.stringify(m.rows[m.rows.length - 1]));

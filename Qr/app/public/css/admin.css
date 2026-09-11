@@ -916,11 +916,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
    높이를 못 박고 그 안에서 굴린다. 51줄을 그대로 펼치면 결산 화면이 다시
    길어져서, 이 화면을 갈아엎은 이유로 도로 돌아간다. */
 .stl-allmenu-head { font-size: 16px; color: var(--muted); margin-bottom: 10px; }
-.stl-allmenu { max-height: 520px; overflow-y: auto; padding-right: 6px; }
-.stl-menu-row {
-  display: grid; grid-template-columns: minmax(120px, 210px) minmax(0, 1fr) 64px;
-  align-items: center; gap: 12px; padding: 5px 0;
+/* 여기도 막대 시작을 맞춘다 — 위 .stl-bars 주석과 같은 이유. */
+.stl-allmenu {
+  max-height: 520px; overflow-y: auto; padding-right: 6px;
+  display: grid; grid-template-columns: minmax(120px, 230px) minmax(0, 1fr) 64px;
+  align-items: center; column-gap: 12px; row-gap: 10px;
 }
+.stl-menu-row { display: contents; }
 .stl-menu-name {
   font-size: 16px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
@@ -936,7 +938,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
   border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; margin-left: 6px;
 }
 @media (max-width: 700px) {
-  .stl-menu-row { grid-template-columns: minmax(90px, 130px) minmax(0, 1fr) 52px; gap: 8px; }
+  .stl-allmenu { grid-template-columns: minmax(90px, 140px) minmax(0, 1fr) 52px; column-gap: 8px; }
   .stl-menu-name, .stl-menu-qty { font-size: 15px; }
 }
 
@@ -1689,9 +1691,27 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 줄 하나에 이름·금액·막대. 표 대신 막대를 쓰는 이유는 "현금이 절반쯤"
    같은 걸 숫자를 읽지 않고 알 수 있어서다. 그리고 이 막대는 CSS 라서
    차트 라이브러리가 안 뜨는 상황에서도 그대로 보인다. */
-.stl-bars { display: flex; flex-direction: column; gap: 9px; }
-.stl-bar-row { display: grid; grid-template-columns: minmax(88px, auto) 1fr minmax(96px, auto) 44px; align-items: center; gap: 10px; font-size: 15px; }
+/* 막대는 **전부 같은 자리에서 출발한다.**
+   사장님(2026-09-11): "그래프 바가 시작이 다 같았으면 좋겠어. 지금은 글
+   길이에 따라 시작 위치가 다르잖아."
+   그럴 수밖에 없었다 — 줄마다 자기 혼자 grid 라서, 이름 칸이 그 줄의 글자
+   길이에 맞춰졌다. 「전통한식요리 76개」가 있는 줄은 막대가 오른쪽에서,
+   「음료 11개」가 있는 줄은 왼쪽에서 시작했다. 들쭉날쭉하면 막대 길이를
+   서로 견줄 수가 없다 — 막대를 쓰는 이유가 그거인데.
+   이제 **묶음 전체가 하나의 grid** 다(줄은 display:contents 로 칸만
+   내어준다). 이름 칸이 그 묶음에서 제일 긴 이름 하나로 정해지고, 모든
+   줄이 그 자를 같이 쓴다. */
+.stl-bars {
+  display: grid;
+  grid-template-columns: minmax(88px, 220px) 1fr minmax(96px, max-content) 44px;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 9px;
+  font-size: 15px;
+}
+.stl-bar-row { display: contents; }
 .stl-bar-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
 /* span 은 인라인이라 height/width 가 먹지 않는다 — block 으로 바꿔야
    막대가 실제로 그려진다. 처음엔 이걸 빠뜨려서 회색 트랙만 보였다. */
 .stl-bar-track { display: block; height: 10px; background: #efeae1; border-radius: 999px; overflow: hidden; }
@@ -1699,7 +1719,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-bar-amount { text-align: right; font-weight: 700; white-space: nowrap; }
 .stl-bar-share { text-align: right; color: var(--muted); font-size: 13.5px; white-space: nowrap; }
 .stl-bar-count { color: var(--muted); font-size: 13px; margin-left: 6px; }
-.stl-bars-empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+/* 안내 문구는 칸 하나가 아니라 한 줄을 통째로 쓴다(위 .stl-bars 는 grid). */
+.stl-bars-empty { color: var(--muted); font-size: 14px; padding: 6px 0; grid-column: 1 / -1; }
 .stl-total-row {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-top: 12px; padding-top: 10px; border-top: 2px solid var(--ink);
