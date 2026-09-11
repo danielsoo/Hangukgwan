@@ -125,7 +125,10 @@ out.push("\n[7] 화면 배선");
   check("설정에 칸이 있다", /id="s_soldout_release_time"/.test(html), "");
   check("★ 그 카드에 저장 버튼이 있다", /id="saveSoldOutReleaseBtn"/.test(html) && /#saveSoldOutReleaseBtn/.test(js), "");
   check("설정을 열 때 채운다", /\$\("#s_soldout_release_time"\)\.value = s\.soldout_release_time/.test(js), "");
-  check("★ 비워서 저장하면 비운 채로 간다", /soldout_release_time: \$\("#s_soldout_release_time"\)\.value\.trim\(\)/.test(js), "");
+  // 이 카드의 저장 버튼이 빈 칸도 그대로 보내야 한다 — 「비웠다」가
+  // 「영업 시작을 따른다」는 뜻이라, 안 보내면 예전 값이 남는다.
+  check("★ 비워서 저장하면 비운 채로 간다",
+    /const value = \$\("#s_soldout_release_time"\)\.value\.trim\(\)[\s\S]{0,400}soldout_release_time: value/.test(js), "");
   check("지금 몇 시에 풀리는지 말해준다", /renderSoldOutReleaseNote/.test(js) && /id="soldOutReleaseEffective"/.test(html), "");
 
   check("★ 배지가 풀리는 시각을 적는다", /soldOutReleaseNote\(item\)/.test(js), "");

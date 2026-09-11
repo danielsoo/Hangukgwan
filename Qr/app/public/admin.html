@@ -566,6 +566,7 @@
             <button type="button" id="uiFontScaleIncBtn" class="ui-font-scale-btn">＋</button>
             <button type="button" id="uiFontScaleResetBtn" class="ui-font-scale-reset" data-i18n="uiFontScaleResetBtn">기본값</button>
           </div>
+          <p class="settings-hint settings-instant" data-i18n="settingsInstantDevice">누르는 즉시 적용되고 이 기기에 저장돼요. 따로 저장할 것이 없습니다.</p>
         </div>
         <!-- 주문 알림음 — 2026-09-10 사장님: "주문 들어올 때 알람이 오는데
              그걸 설정에서 소리 크기랑 벨소리를 추가할 수 있게 해줘 … 소리는 엄청
@@ -636,6 +637,7 @@
 
           <p class="settings-hint alarm-note" data-i18n="alarmDeviceHint">기기 자체 볼륨이 꺼져 있으면 여기서 아무리 올려도 소리가 안 나요. 태블릿/컴퓨터 볼륨도 함께 올려주세요.</p>
           <p class="settings-hint alarm-note alarm-loud-warn" id="alarmLoudWarn" hidden data-i18n="alarmLoudWarn">⚠️ 200%부터는 기기 스피커 한계를 넘어 증폭합니다. 소리가 거칠게 들릴 수 있어요.</p>
+          <p class="settings-hint settings-instant" data-i18n="settingsInstantDevice">누르는 즉시 적용되고 이 기기에 저장돼요. 따로 저장할 것이 없습니다.</p>
         </div>
         </div>
 
@@ -685,6 +687,7 @@
               <img id="logoQrPreview" class="logo-qr-preview" alt="QR preview" />
             </div>
           </div>
+          <p class="settings-hint settings-instant" data-i18n="settingsInstantUpload">파일을 고르면 바로 올라가요. 따로 저장할 것이 없습니다.</p>
         </div>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsNoticeTitle">공지 배너</h3>
@@ -806,6 +809,14 @@
           <div class="save-msg" id="locationMsg" hidden></div>
           <label><span data-i18n="labelRadius">허용 반경 (미터)</span><input id="s_order_radius_m" type="number" min="20" step="10" /></label>
           <p class="settings-hint" id="locationStatusText" data-i18n="locationNotSet">아직 매장 위치가 설정되지 않았습니다 (위치 제한 꺼짐)</p>
+          <!-- 이 카드만의 저장 버튼 (2026-09-11 사장님: "전체적으로 설정에서
+               변경하고 저장하는 부분들이 각 부분에 있어야 할 것 같아").
+
+               이 두 칸은 지금까지 「매장 정보」 카드의 저장 버튼으로만
+               저장됐다. 그 카드는 다른 분류(매장 정보)에 있어서 여기서는
+               보이지도 않는다 — 반경을 고쳐놓고 저장할 길이 없었다. -->
+          <button id="saveLocationSettingsBtn" data-i18n="saveSettingsBtn">설정 저장</button>
+          <div class="save-msg" id="locationSettingsMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
         </div>
 
@@ -834,6 +845,7 @@
           <label class="perm-toggle-row"><span data-i18n="permOrderEdit">주문 내용 수정 (메뉴/수량/옵션)</span><input type="checkbox" id="perm_orderEdit" /></label>
           <label class="perm-toggle-row"><span data-i18n="permReservationManage">예약 추가/수정/삭제</span><input type="checkbox" id="perm_reservationManage" /></label>
           <div class="save-msg" id="staffPermMsg" hidden></div>
+          <p class="settings-hint settings-instant" data-i18n="settingsInstantSaved">스위치를 누르면 바로 저장돼요. 따로 저장할 것이 없습니다.</p>
           <hr style="margin:16px 0;border:none;border-top:1px solid var(--line);" />
           <label><span data-i18n="staffPasswordLabel">직원 로그인 비밀번호 재설정 (6자 이상)</span><input id="staff_new_password" type="password" /></label>
           <div id="staffPwStatus" class="settings-hint"></div>

@@ -532,6 +532,9 @@
       settingsSoldOutReleaseTitle: "품절 자동 해제 시각",
       settingsSoldOutReleaseHint: "「9/10까지 품절」처럼 끝 날짜를 정해두면, 그 다음 날 이 시각에 자동으로 다시 팔립니다. 비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 — 밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.",
       labelSoldOutReleaseTime: "해제 시각 (비우면 영업 시작)",
+      settingsInstantDevice: "누르는 즉시 적용되고 이 기기에 저장돼요. 따로 저장할 것이 없습니다.",
+      settingsInstantUpload: "파일을 고르면 바로 올라가요. 따로 저장할 것이 없습니다.",
+      settingsInstantSaved: "스위치를 누르면 바로 저장돼요. 따로 저장할 것이 없습니다.",
       soldOutReleaseFollowsHours: "지금은 영업 시작 시각({t})을 따릅니다.",
       soldOutReleaseFixed: "매일 {t}에 풀립니다.",
       soldOutReleasesAt: "{d} {t} 풀림",
@@ -1218,6 +1221,9 @@
       settingsSoldOutReleaseTitle: "售完自動恢復時間",
       settingsSoldOutReleaseHint: "設定了結束日期（例如「售完至 9/10」）時，隔天的這個時間會自動恢復販售。留空則使用開始營業時間。設為 00:00 表示跨日就恢復 — 營業到深夜時，可能會賣出廚房已經沒有的餐點，請留意。",
       labelSoldOutReleaseTime: "恢復時間（留空＝開始營業時間）",
+      settingsInstantDevice: "按下就立即套用並存在這台裝置。不需要另外儲存。",
+      settingsInstantUpload: "選好檔案就會直接上傳。不需要另外儲存。",
+      settingsInstantSaved: "切換開關就會直接儲存。不需要另外儲存。",
       soldOutReleaseFollowsHours: "目前依照開始營業時間（{t}）。",
       soldOutReleaseFixed: "每天 {t} 恢復。",
       soldOutReleasesAt: "{d} {t} 恢復",
@@ -9805,6 +9811,16 @@
     img.src = `/api/settings/logo-preview?t=${Date.now()}`;
   }
 
+  // 「매장 정보」 카드의 저장. **이 카드 안의 칸만 보낸다.**
+  //
+  // 사장님(2026-09-11): "전체적으로 설정에서 변경하고 저장하는 부분들이 각
+  // 부분에 있어야 할 것 같아."
+  //
+  // 예전에는 여기서 허용 반경·위치 확인 스위치·계절 설정까지 같이 보냈다.
+  // 그 칸들은 다른 카드(어떤 건 다른 분류)에 있어서, 두 가지가 어긋났다.
+  //   1. 그 카드에서 고쳐놓고 저장할 버튼이 거기 없었다.
+  //   2. 여기서 저장하면 안 건드린 남의 칸까지 화면 값으로 덮어썼다.
+  // 이제 카드마다 자기 칸만 저장한다.
   $("#saveSettingsBtn").onclick = async () => {
     const payload = {
       store_name_zh: $("#s_store_name_zh").value.trim(),
@@ -9815,13 +9831,7 @@
       store_address_ko: $("#s_store_address_ko").value.trim(),
       store_address_en: $("#s_store_address_en").value.trim(),
       store_hours: $("#s_store_hours").value.trim(),
-      // 빈 문자열도 보낸다 — 「비웠다」가 「영업 시작을 따른다」는 뜻이라,
-      // 안 보내면 예전에 고른 값이 그대로 남는다.
-      soldout_release_time: $("#s_soldout_release_time").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
-      order_radius_m: $("#s_order_radius_m").value.trim(),
-      location_check_enabled: $("#s_location_check_enabled").checked,
-      taegeuk_season_mode: $("#s_taegeuk_season_mode").value,
     };
     await fetch("/api/settings", {
       method: "PUT",
@@ -9829,12 +9839,28 @@
       body: JSON.stringify(payload),
     });
     // 영업 시작 시각은 사장님 전용 라우트라 따로 보낸다 — 매출 숫자가
-    // 달라지는 설정이라 직원이 바꾸면 안 된다.
+    // 달라지는 설정이라 직원이 바꾸면 안 된다. (이 칸도 이 카드 안에 있다)
     await saveServiceStart();
-    if (window.applyTaegeukSeason) window.applyTaegeukSeason(payload.taegeuk_season_mode);
     const msg = $("#settingsMsg");
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2000);
+  };
+
+  // 「위치 기반 주문 제한」 카드의 저장. 이 카드 안의 두 칸만 보낸다.
+  $("#saveLocationSettingsBtn").onclick = async () => {
+    await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        order_radius_m: $("#s_order_radius_m").value.trim(),
+        location_check_enabled: $("#s_location_check_enabled").checked,
+      }),
+    });
+    const msg = $("#locationSettingsMsg");
+    if (msg) {
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2000);
+    }
   };
 
   $("#saveOrderHoursBtn").onclick = async () => {

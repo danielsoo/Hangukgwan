@@ -1,0 +1,163 @@
+// 설정 카드는 **자기 안에서** 저장할 수 있어야 한다.
+//
+// 사장님(2026-09-11): "전체적으로 설정에서 변경하고 저장하는 부분들이 각
+// 부분에 있어야 할 것 같아. 먼저 저장이 없는 애들부터 분류후에 저장 버튼을
+// 넣고 저장되게 하는 기능 넣어주면 될 것 같아."
+//
+// ── 무슨 일이 있었나 ────────────────────────────────────────────────
+//
+// 「위치 기반 주문 제한」 카드에는 허용 반경과 위치 확인 스위치가 있는데,
+// 저장은 「매장 정보」 카드의 버튼이 하고 있었다. 그 카드는 다른 분류에
+// 있어서 화면에 보이지도 않는다 — 고쳐놓고 저장할 길이 없었다.
+// 「품절 자동 해제 시각」도 만들 때 같은 실수를 할 뻔했다.
+//
+// ── 이 파일이 지키는 두 가지 ────────────────────────────────────────
+//
+//   1. **고칠 수 있으면 그 자리에서 저장할 수 있다.** 입력 칸이 있는 카드는
+//      저장 버튼이든, 그 카드의 동작 버튼이든, 「바로 저장돼요」라는 말이든
+//      카드 안에 있어야 한다.
+//   2. **한 카드의 저장이 남의 칸을 건드리지 않는다.** 예전에는 매장 정보를
+//      저장하면 안 건드린 위치 반경·계절 설정까지 화면 값으로 덮어썼다.
+const fs = require("fs");
+const path = require("path");
+
+let pass = 0;
+let fail = 0;
+const out = [];
+function check(name, cond, extra = "") {
+  if (cond) { pass++; out.push(`  ok   ${name}`); }
+  else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
+}
+
+const html = fs.readFileSync(path.join(__dirname, "../public/admin.html"), "utf8");
+const js = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
+
+// ── 설정 영역을 카드 단위로 자른다 ──────────────────────────────────
+const start = html.indexOf('<div id="settings-cat-display"');
+const after = html.slice(start + 50);
+const endRel = after.search(/<section id="tab-|<div id="tab-|<\/main>/);
+const seg = html.slice(start, start + 50 + (endRel === -1 ? after.length : endRel));
+
+const marks = [];
+const re = /<div id="settings-cat-([a-z]+)"|<div class="settings-card([^"]*)"/g;
+let m;
+while ((m = re.exec(seg))) marks.push({ at: m.index, cat: m[1], card: m[2] });
+marks.push({ at: seg.length, cat: null, card: null });
+
+const cards = [];
+let cat = null;
+for (let i = 0; i < marks.length - 1; i++) {
+  if (marks[i].cat) { cat = marks[i].cat; continue; }
+  const body = seg.slice(marks[i].at, marks[i + 1].at);
+  const h3 = /<h3[^>]*>([\s\S]*?)<\/h3>/.exec(body);
+  cards.push({
+    cat,
+    title: (h3 ? h3[1].replace(/<[^>]+>/g, "") : "(제목 없음)").trim(),
+    inputs: [...body.matchAll(/<(?:input|select|textarea)[^>]*id="([^"]+)"/g)].map((x) => x[1]),
+    buttons: [...body.matchAll(/<button[^>]*id="([^"]+)"/g)].map((x) => x[1]),
+    instant: /class="[^"]*settings-instant/.test(body),
+  });
+}
+
+out.push(`[설정 카드 ${cards.length}개를 찾았다]`);
+check("카드가 실제로 여러 개 잡힌다", cards.length >= 15, String(cards.length));
+
+out.push("\n[1] ★★ 고칠 수 있으면 그 자리에서 저장할 수 있다");
+{
+  // 입력 칸이 있는데 카드 안에 버튼도 없고 「바로 저장돼요」도 없으면,
+  // 사장님은 고쳐놓고 저장할 방법이 없다.
+  const stranded = cards.filter((c) => c.inputs.length > 0 && c.buttons.length === 0 && !c.instant);
+  check(
+    "★ 저장할 길이 없는 카드가 하나도 없다",
+    stranded.length === 0,
+    stranded.map((c) => `[${c.cat}] ${c.title}`).join(" / ")
+  );
+
+  // 위치 카드는 이 일이 실제로 났던 자리다. 이름을 박아 둔다.
+  const loc = cards.find((c) => c.inputs.includes("s_order_radius_m"));
+  check("★ 위치 카드에 저장 버튼이 있다", !!loc && loc.buttons.includes("saveLocationSettingsBtn"),
+    loc ? JSON.stringify(loc.buttons) : "카드를 못 찾음");
+  const soldout = cards.find((c) => c.inputs.includes("s_soldout_release_time"));
+  check("품절 해제 카드에도 있다", !!soldout && soldout.buttons.includes("saveSoldOutReleaseBtn"), "");
+}
+
+out.push("\n[2] 저장 버튼이 없는 카드는 「바로 저장돼요」라고 적혀 있다");
+{
+  // 버튼이 없으면 사장님은 저장이 안 된 줄 안다. 필요 없다면 필요 없다는
+  // 말이 그 자리에 있어야 한다.
+  const noSave = cards.filter((c) => !c.buttons.some((b) => /[Ss]ave/.test(b)));
+  for (const c of noSave) {
+    const ok = c.instant || c.buttons.length > 0;
+    check(`[${c.cat}] ${c.title}`, ok, JSON.stringify({ inputs: c.inputs.length, buttons: c.buttons }));
+  }
+  check("★ 로고 카드는 「바로 올라가요」", cards.find((c) => c.inputs.includes("logoPhotoInput")).instant, "");
+  check("★ 직원 권한은 「바로 저장돼요」", cards.find((c) => c.inputs.includes("perm_menuEdit")).instant, "");
+  check("★ 글자 크기도", cards.find((c) => c.buttons.includes("uiFontScaleResetBtn")).instant, "");
+  check("★ 알림음도", cards.find((c) => c.inputs.includes("alarmVolume")).instant, "");
+  check("세 가지 문구가 두 언어 모두 있다",
+    ["settingsInstantDevice", "settingsInstantUpload", "settingsInstantSaved"]
+      .every((k) => (js.match(new RegExp(`${k}:`, "g")) || []).length === 2), "");
+}
+
+out.push("\n[3] ★★ 한 카드의 저장이 남의 칸을 건드리지 않는다");
+{
+  // 어느 칸이 어느 카드에 있는지.
+  const cardOf = new Map();
+  cards.forEach((c, i) => c.inputs.forEach((id) => cardOf.set(id, i)));
+
+  // 저장 버튼의 onclick 안에서 읽는 $("#...") 들을 모은다.
+  // 괄호를 세어 그 핸들러의 몸통만 정확히 잘라낸다.
+  //
+  // 「다음 핸들러 전까지」로 대충 자르면 뒤에 붙은 loadX() 같은 함수까지
+  // 딸려 들어와서, 멀쩡한 저장 버튼이 남의 칸을 만지는 것처럼 보인다.
+  // 처음에 그렇게 만들었다가 네 개가 거짓으로 실패했다.
+  const handlerOf = (btnId) => {
+    const at = js.indexOf(`$("#${btnId}").onclick`);
+    if (at === -1) return null;
+    const open = js.indexOf("{", at);
+    if (open === -1) return null;
+    let depth = 0;
+    for (let i = open; i < js.length; i++) {
+      const ch = js[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) return js.slice(at, i + 1);
+      }
+    }
+    return js.slice(at);
+  };
+
+  const saveButtons = cards.flatMap((c, i) =>
+    c.buttons.filter((b) => /[Ss]ave/.test(b)).map((b) => ({ btn: b, card: i, title: c.title, cat: c.cat }))
+  );
+  check("저장 버튼을 여러 개 찾았다", saveButtons.length >= 8, String(saveButtons.length));
+
+  for (const { btn, card, title } of saveButtons) {
+    const body = handlerOf(btn);
+    if (!body) continue; // 핸들러를 못 찾으면 여기서 판단하지 않는다
+    const touched = [...body.matchAll(/\$\("#([A-Za-z0-9_]+)"\)/g)].map((x) => x[1]);
+    // 다른 카드에 있는 **입력 칸**을 읽었는가. (메시지 칸·버튼은 상관없다)
+    const foreign = touched.filter((id) => cardOf.has(id) && cardOf.get(id) !== card);
+    check(`★ ${title} 저장은 자기 칸만`, foreign.length === 0, `남의 칸: ${[...new Set(foreign)].join(", ")}`);
+  }
+}
+
+out.push("\n[4] 매장 정보 저장에서 빠진 것들");
+{
+  // 이 셋은 각자 자기 카드가 저장한다. 여기서 같이 보내면 안 건드린 값을
+  // 화면 값으로 덮어쓴다.
+  const at = js.indexOf('$("#saveSettingsBtn").onclick');
+  const body = js.slice(at, js.indexOf("\n  $(\"#", at + 10));
+  check("★ 위치 반경을 안 보낸다", !/order_radius_m/.test(body), "");
+  check("★ 위치 스위치를 안 보낸다", !/location_check_enabled/.test(body), "");
+  check("★ 계절 설정을 안 보낸다", !/taegeuk_season_mode/.test(body), "");
+  check("★ 품절 해제 시각을 안 보낸다", !/soldout_release_time/.test(body), "");
+  // 자기 칸은 그대로 보낸다.
+  check("매장 이름은 보낸다", /store_name_zh/.test(body), "");
+  check("1인당 최소 금액도 보낸다 (이 카드 안에 있다)", /store_min_spend/.test(body), "");
+}
+
+console.log(out.join("\n"));
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail === 0 ? 0 : 1);
