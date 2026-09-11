@@ -395,27 +395,57 @@
     if (!Number.isFinite(v)) v = 1;
     return Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, v));
   }
+  // 저장 버튼이 있는 카드에서 「아직 저장 안 했다」를 말해준다.
+  //
+  // 사장님(2026-09-11): "누르는 즉시 저장되는 카드 — 이것도 그냥 저장 누르게
+  // 만들어줘." 눌러야 저장되게 바꾸면 **안 누르고 나가서 잃을 수 있다.**
+  // 즉시 저장은 그 위험이 없던 대신 저장한 티가 안 났다. 둘 다 챙기려면,
+  // 아직 안 눌렀다는 것이 그 자리에 보여야 한다.
+  function markSettingDirty(btnId, dirty) {
+    const el = $(`#${btnId}Dirty`);
+    if (el) el.hidden = !dirty;
+    const btn = $(`#${btnId}`);
+    if (btn) btn.classList.toggle("is-dirty", !!dirty);
+  }
+  function flashSettingSaved(msgId, btnId) {
+    if (btnId) markSettingDirty(btnId, false);
+    const msg = $(`#${msgId}`);
+    if (!msg) return;
+    msg.hidden = false;
+    setTimeout(() => (msg.hidden = true), 2000);
+  }
+
   function applyUiFontScale(v) {
     document.body.style.zoom = v;
     const label = $("#uiFontScaleValue");
     if (label) label.textContent = Math.round(v * 100) + "%";
   }
-  function setUiFontScale(v) {
+  // 고른 크기는 바로 화면에 보여주되, **저장은 버튼을 눌러야** 한다.
+  // 크기는 눈으로 보고 고르는 것이라 미리보기를 없애면 고를 수가 없다.
+  let uiFontScaleDraft = getUiFontScale();
+  function previewUiFontScale(v) {
     v = Math.round(v * 10) / 10;
     v = Math.min(UI_FONT_SCALE_MAX, Math.max(UI_FONT_SCALE_MIN, v));
-    try {
-      localStorage.setItem(UI_FONT_SCALE_KEY, String(v));
-    } catch (e) {
-      // Private browsing / storage blocked — still applies for this page
-      // view, it just won't be remembered on the next visit.
-    }
+    uiFontScaleDraft = v;
     applyUiFontScale(v);
+    markSettingDirty("saveUiFontScaleBtn", v !== getUiFontScale());
   }
   applyUiFontScale(getUiFontScale());
   if ($("#uiFontScaleDecBtn")) {
-    $("#uiFontScaleDecBtn").onclick = () => setUiFontScale(getUiFontScale() - UI_FONT_SCALE_STEP);
-    $("#uiFontScaleIncBtn").onclick = () => setUiFontScale(getUiFontScale() + UI_FONT_SCALE_STEP);
-    $("#uiFontScaleResetBtn").onclick = () => setUiFontScale(1);
+    $("#uiFontScaleDecBtn").onclick = () => previewUiFontScale(uiFontScaleDraft - UI_FONT_SCALE_STEP);
+    $("#uiFontScaleIncBtn").onclick = () => previewUiFontScale(uiFontScaleDraft + UI_FONT_SCALE_STEP);
+    $("#uiFontScaleResetBtn").onclick = () => previewUiFontScale(1);
+  }
+  if ($("#saveUiFontScaleBtn")) {
+    $("#saveUiFontScaleBtn").onclick = () => {
+      try {
+        localStorage.setItem(UI_FONT_SCALE_KEY, String(uiFontScaleDraft));
+      } catch (e) {
+        // 사생활 보호 모드 등으로 저장이 막혀도 이번 화면에는 그대로 적용돼
+        // 있다 — 다음에 열 때만 잊힌다.
+      }
+      flashSettingSaved("uiFontScaleMsg", "saveUiFontScaleBtn");
+    };
   }
 
   // ---------- Role / permissions ----------
@@ -532,9 +562,9 @@
       settingsSoldOutReleaseTitle: "품절 자동 해제 시각",
       settingsSoldOutReleaseHint: "「9/10까지 품절」처럼 끝 날짜를 정해두면, 그 다음 날 이 시각에 자동으로 다시 팔립니다. 비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 — 밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.",
       labelSoldOutReleaseTime: "해제 시각 (비우면 영업 시작)",
-      settingsInstantDevice: "누르는 즉시 적용되고 이 기기에 저장돼요. 따로 저장할 것이 없습니다.",
-      settingsInstantUpload: "파일을 고르면 바로 올라가요. 따로 저장할 것이 없습니다.",
-      settingsInstantSaved: "스위치를 누르면 바로 저장돼요. 따로 저장할 것이 없습니다.",
+      settingsUnsaved: "● 저장 안 된 변경이 있어요 — 아래 「설정 저장」을 눌러주세요",
+      logoPicked: "고른 파일: {name} — 「설정 저장」을 눌러야 올라갑니다",
+      logoNonePicked: "올릴 파일을 먼저 골라주세요",
       soldOutReleaseFollowsHours: "지금은 영업 시작 시각({t})을 따릅니다.",
       soldOutReleaseFixed: "매일 {t}에 풀립니다.",
       soldOutReleasesAt: "{d} {t} 풀림",
@@ -1221,9 +1251,9 @@
       settingsSoldOutReleaseTitle: "售完自動恢復時間",
       settingsSoldOutReleaseHint: "設定了結束日期（例如「售完至 9/10」）時，隔天的這個時間會自動恢復販售。留空則使用開始營業時間。設為 00:00 表示跨日就恢復 — 營業到深夜時，可能會賣出廚房已經沒有的餐點，請留意。",
       labelSoldOutReleaseTime: "恢復時間（留空＝開始營業時間）",
-      settingsInstantDevice: "按下就立即套用並存在這台裝置。不需要另外儲存。",
-      settingsInstantUpload: "選好檔案就會直接上傳。不需要另外儲存。",
-      settingsInstantSaved: "切換開關就會直接儲存。不需要另外儲存。",
+      settingsUnsaved: "● 有尚未儲存的變更 — 請按下方的「儲存設定」",
+      logoPicked: "已選擇：{name} — 按「儲存設定」才會上傳",
+      logoNonePicked: "請先選擇要上傳的檔案",
       soldOutReleaseFollowsHours: "目前依照開始營業時間（{t}）。",
       soldOutReleaseFixed: "每天 {t} 恢復。",
       soldOutReleasesAt: "{d} {t} 恢復",
@@ -3280,18 +3310,29 @@
   }
 
   // ---------- 알림음 설정 화면 ----------
-  let alarmSavedMsgTimer = null;
   let alarmSliding = false;
-  function flashAlarmSaved() {
-    const el = $("#alarmSavedMsg");
-    if (!el) return;
-    el.hidden = false;
-    clearTimeout(alarmSavedMsgTimer);
-    alarmSavedMsgTimer = setTimeout(() => (el.hidden = true), 1800);
+  // 고르는 동안에는 여기에만 담아둔다. **저장 버튼을 눌러야** 기기에 적힌다
+  // (2026-09-11 사장님). 그래서 새 주문이 실제로 울릴 때 쓰는 값
+  // (getAlarmSound/Volume/Repeat 은 기기에 적힌 것을 읽는다)은 저장 전까지
+  // 안 바뀐다 — 고르는 중에 손님 주문이 들어와도 아까 그 소리로 울린다.
+  const alarmDraft = { volume: null, sound: null, repeat: null };
+  const draftVolume = () => (alarmDraft.volume == null ? getAlarmVolume() : alarmDraft.volume);
+  const draftSound = () => (alarmDraft.sound == null ? getAlarmSound() : alarmDraft.sound);
+  const draftRepeat = () => (alarmDraft.repeat == null ? getAlarmRepeat() : alarmDraft.repeat);
+  function alarmDirty() {
+    return (
+      draftVolume() !== getAlarmVolume() ||
+      draftSound() !== getAlarmSound() ||
+      draftRepeat() !== getAlarmRepeat()
+    );
+  }
+  function setAlarmDraft(patch) {
+    Object.assign(alarmDraft, patch);
+    markSettingDirty("saveAlarmBtn", alarmDirty());
   }
   function applyAlarmUi() {
     updateAlarmUiState();
-    const rep = getAlarmRepeat();
+    const rep = draftRepeat();
     $$("input[name='alarmRepeat']").forEach((r) => {
       r.checked = parseInt(r.value, 10) === rep;
       if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
@@ -3299,8 +3340,8 @@
     // 긴 벨소리를 고르면 반복 칸을 숨긴다. 곡 자체가 3~4초라 반복하지 않으므로,
     // 그대로 두면 아무 일도 하지 않는 설정이 켜져 있는 것처럼 보인다.
     const repRow = $("#alarmRepeatRow");
-    if (repRow) repRow.hidden = isLongAlarmSound(getAlarmSound());
-    const vol = getAlarmVolume();
+    if (repRow) repRow.hidden = isLongAlarmSound(draftSound());
+    const vol = draftVolume();
     const slider = $("#alarmVolume");
     // 손잡이를 끌고 있는 중이라면 위치를 다시 써넣지 않는다 — 반올림 때문에
     // 손가락 밑에서 손잡이가 되튀는 것처럼 보인다.
@@ -3309,7 +3350,7 @@
     if (label) label.textContent = vol + "%";
     const warn = $("#alarmLoudWarn");
     if (warn) warn.hidden = vol < ALARM_LOUD_WARN_AT;
-    const sound = getAlarmSound();
+    const sound = draftSound();
     $$("input[name='alarmTone']").forEach((r) => {
       r.checked = r.value === sound;
       if (r.parentElement) r.parentElement.classList.toggle("is-on", r.checked);
@@ -3322,15 +3363,14 @@
     $("#alarmVolume").addEventListener("input", (e) => {
       alarmSliding = true;
       const pos = Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0));
-      storeAlarmPref(ALARM_VOLUME_KEY, alarmPosToVol(pos));
+      setAlarmDraft({ volume: alarmPosToVol(pos) });
       applyAlarmUi();
     });
     // 음량은 짧은 소리로 재본다. 크기를 맞추는 중인데 8초짜리 곡이 돌면
     // 다음 칸으로 넘어갈 수가 없다 — 여기서 듣고 싶은 건 크기지 곡이 아니다.
     $("#alarmVolume").addEventListener("change", () => {
       alarmSliding = false;
-      flashAlarmSaved();
-      startAlarm({ sound: "beep", repeat: 1 });
+      startAlarm({ sound: "beep", repeat: 1, volume: draftVolume() });
     });
     // 횟수를 고를 때는 그 횟수로 실제 소리를 들려준다 — 고르는 게 횟수니까.
     // 긴 벨소리가 골라져 있으면 반복이 없으니 짧은 「기본 삐」로 들려준다.
@@ -3338,40 +3378,47 @@
       r.addEventListener("change", () => {
         if (!r.checked) return;
         const times = parseInt(r.value, 10);
-        storeAlarmPref(ALARM_REPEAT_KEY, times);
+        setAlarmDraft({ repeat: times });
         applyAlarmUi();
-        flashAlarmSaved();
-        const cur = getAlarmSound();
-        startAlarm({ sound: isLongAlarmSound(cur) ? "beep" : cur, repeat: times });
+        const cur = draftSound();
+        startAlarm({ sound: isLongAlarmSound(cur) ? "beep" : cur, repeat: times, volume: draftVolume() });
       })
     );
     if ($("#alarmResetBtn"))
       $("#alarmResetBtn").onclick = () => {
-        storeAlarmPref(ALARM_VOLUME_KEY, ALARM_DEFAULT_VOLUME);
-        storeAlarmPref(ALARM_SOUND_KEY, ALARM_DEFAULT_SOUND);
-        storeAlarmPref(ALARM_REPEAT_KEY, ALARM_DEFAULT_REPEAT);
+        setAlarmDraft({ volume: ALARM_DEFAULT_VOLUME, sound: ALARM_DEFAULT_SOUND, repeat: ALARM_DEFAULT_REPEAT });
         applyAlarmUi();
-        flashAlarmSaved();
-        startAlarm();
+        startAlarm({ sound: ALARM_DEFAULT_SOUND, repeat: ALARM_DEFAULT_REPEAT, volume: ALARM_DEFAULT_VOLUME });
       };
     $$("input[name='alarmTone']").forEach((r) =>
       r.addEventListener("change", () => {
         if (!r.checked) return;
-        storeAlarmPref(ALARM_SOUND_KEY, r.value);
+        setAlarmDraft({ sound: r.value });
         applyAlarmUi();
-        flashAlarmSaved();
         // 고른 소리를 통째로 들려준다. 긴 벨소리는 길이도 골라야 할 대상이라
         // 앞부분만 들려주면 무엇을 고른 건지 알 수가 없다. 길면 「정지」로 끊는다.
         startAlarm();
       })
     );
+    if ($("#saveAlarmBtn"))
+      $("#saveAlarmBtn").onclick = () => {
+        // 여기서 처음으로 기기에 적힌다. 이 순간부터 새 주문이 이 소리로 운다.
+        storeAlarmPref(ALARM_VOLUME_KEY, draftVolume());
+        storeAlarmPref(ALARM_SOUND_KEY, draftSound());
+        storeAlarmPref(ALARM_REPEAT_KEY, draftRepeat());
+        alarmDraft.volume = null;
+        alarmDraft.sound = null;
+        alarmDraft.repeat = null;
+        applyAlarmUi();
+        flashSettingSaved("alarmSettingsMsg", "saveAlarmBtn");
+      };
     if ($("#alarmPreviewBtn"))
       $("#alarmPreviewBtn").onclick = () => {
         // 울리는 중이면 같은 버튼이 정지가 된다. 8초짜리 곡을 끝까지 듣고
         // 있을 이유는 없고, 「알림 끄기」 버튼은 실시간 주문 화면에 있어서
         // 여기서는 안 보인다.
         if (alarmActive) stopAlarm();
-        else startAlarm();
+        else startAlarm({ sound: draftSound(), repeat: draftRepeat(), volume: draftVolume() });
       };
     applyAlarmUi();
   }
@@ -9955,17 +10002,43 @@
     setTimeout(() => (msg.hidden = true), 2000);
   };
 
-  $("#logoPhotoInput").onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const fd = new FormData();
-    fd.append("photo", file);
+  // 고른 파일은 들고만 있다가 **저장을 눌러야** 올라간다 (2026-09-11 사장님).
+  // 예전에는 고르는 순간 바로 올라가서, 잘못 고른 사진이 곧장 손님 화면의
+  // QR 코드 한가운데로 갔다. 되돌리려면 옛 파일을 다시 찾아야 했다.
+  let logoDraftFile = null;
+  $("#logoPhotoInput").onchange = (e) => {
+    logoDraftFile = e.target.files[0] || null;
     const msg = $("#logoMsg");
+    if (logoDraftFile) {
+      msg.style.color = "";
+      msg.textContent = T("logoPicked").replace("{name}", logoDraftFile.name);
+      msg.hidden = false;
+    } else {
+      msg.hidden = true;
+    }
+    markSettingDirty("saveLogoBtn", !!logoDraftFile);
+  };
+  $("#saveLogoBtn").onclick = async () => {
+    const msg = $("#logoMsg");
+    if (!logoDraftFile) {
+      // 고른 파일이 없으면 올릴 것도 없다. 아무 말 없이 성공한 척하면
+      // 사장님은 바뀐 줄 안다.
+      msg.style.color = "#b5232c";
+      msg.textContent = T("logoNonePicked");
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 2000);
+      return;
+    }
+    const fd = new FormData();
+    fd.append("photo", logoDraftFile);
     const res = await fetch("/api/settings/logo", { method: "POST", body: fd });
     if (res.ok) {
       refreshLogoPreview();
+      logoDraftFile = null;
+      $("#logoPhotoInput").value = "";
       msg.style.color = "#1a8a44";
       msg.textContent = T("logoUpdated");
+      markSettingDirty("saveLogoBtn", false);
     } else {
       msg.style.color = "#b5232c";
       msg.textContent = T("uploadFailed");
@@ -11117,7 +11190,14 @@
   PERMISSION_KEYS.forEach((k) => {
     const box = $(`#perm_${k}`);
     if (!box) return;
-    box.onchange = async () => {
+    // 스위치를 만지면 「저장 안 됨」만 켠다. 실제 저장은 아래 버튼이 한다
+    // (2026-09-11 사장님). 여러 개를 한꺼번에 고쳐놓고 한 번에 저장하는 쪽이
+    // 권한처럼 서로 엮인 설정에는 맞다 — 하나씩 저장되면 그 사이에 직원이
+    // 반쯤 열린 권한으로 들어온다.
+    box.onchange = () => markSettingDirty("saveStaffPermsBtn", true);
+  });
+  if ($("#saveStaffPermsBtn")) {
+    $("#saveStaffPermsBtn").onclick = async () => {
       const payload = {};
       PERMISSION_KEYS.forEach((key) => {
         const b = $(`#perm_${key}`);
@@ -11128,13 +11208,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const msg = $("#staffPermMsg");
-      msg.style.color = "#1a8a44";
-      msg.textContent = T("staffPermSaved");
-      msg.hidden = false;
-      setTimeout(() => (msg.hidden = true), 2000);
+      flashSettingSaved("staffPermSavedMsg", "saveStaffPermsBtn");
     };
-  });
+  }
 
   // 직원 비밀번호는 사장이 여기서 정할 때까지 아예 없는 상태다(직원 로그인만
   // 막히고 나머지는 정상). 그 상태를 눈에 보이게 해둔다 — 안 그러면 "직원이

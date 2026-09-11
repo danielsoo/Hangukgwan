@@ -13,9 +13,10 @@
 //
 // ── 이 파일이 지키는 두 가지 ────────────────────────────────────────
 //
-//   1. **고칠 수 있으면 그 자리에서 저장할 수 있다.** 입력 칸이 있는 카드는
-//      저장 버튼이든, 그 카드의 동작 버튼이든, 「바로 저장돼요」라는 말이든
-//      카드 안에 있어야 한다.
+//   1. **고칠 수 있으면 그 자리에서 저장 버튼을 누른다.** 2026-09-11 사장님:
+//      "누르는 즉시 저장되는 카드 — 이것도 그냥 저장 누르게 만들어줘."
+//      즉시 저장하던 네 카드(글자 크기·알림음·로고·직원 권한)도 이제
+//      저장 버튼을 가진다. 설정은 전부 같은 방식으로 움직여야 한다.
 //   2. **한 카드의 저장이 남의 칸을 건드리지 않는다.** 예전에는 매장 정보를
 //      저장하면 안 건드린 위치 반경·계절 설정까지 화면 값으로 덮어썼다.
 const fs = require("fs");
@@ -64,14 +65,28 @@ check("카드가 실제로 여러 개 잡힌다", cards.length >= 15, String(car
 
 out.push("\n[1] ★★ 고칠 수 있으면 그 자리에서 저장할 수 있다");
 {
-  // 입력 칸이 있는데 카드 안에 버튼도 없고 「바로 저장돼요」도 없으면,
-  // 사장님은 고쳐놓고 저장할 방법이 없다.
-  const stranded = cards.filter((c) => c.inputs.length > 0 && c.buttons.length === 0 && !c.instant);
+  // 입력 칸이 있는데 카드 안에 버튼이 하나도 없으면 고쳐놓고 저장할 길이 없다.
+  const stranded = cards.filter((c) => c.inputs.length > 0 && c.buttons.length === 0);
   check(
     "★ 저장할 길이 없는 카드가 하나도 없다",
     stranded.length === 0,
     stranded.map((c) => `[${c.cat}] ${c.title}`).join(" / ")
   );
+
+  // ★★ 예전에 「즉시 저장」이던 네 카드. 이제 전부 저장 버튼을 가진다.
+  const mustHaveSave = [
+    ["글자 크기", "uiFontScaleResetBtn", "saveUiFontScaleBtn"],
+    ["알림음", "alarmVolume", "saveAlarmBtn"],
+    ["매장 로고", "logoPhotoInput", "saveLogoBtn"],
+    ["직원 권한", "perm_menuEdit", "saveStaffPermsBtn"],
+  ];
+  for (const [name, marker, saveBtn] of mustHaveSave) {
+    const c = cards.find((x) => x.inputs.includes(marker) || x.buttons.includes(marker));
+    check(`★ ${name} 카드에 저장 버튼`, !!c && c.buttons.includes(saveBtn), c ? JSON.stringify(c.buttons) : "카드를 못 찾음");
+    check(`${name} — 저장 안 됨 표시도 있다`, !!c && new RegExp(`id="${saveBtn}Dirty"`).test(html), "");
+  }
+  // 「바로 저장돼요」 문구는 이제 없다 — 전부 버튼으로 바뀌었다.
+  check("★ 즉시저장 문구가 남아 있지 않다", !/settings-instant/.test(html) && !/settingsInstant/.test(js), "");
 
   // 위치 카드는 이 일이 실제로 났던 자리다. 이름을 박아 둔다.
   const loc = cards.find((c) => c.inputs.includes("s_order_radius_m"));
@@ -81,22 +96,18 @@ out.push("\n[1] ★★ 고칠 수 있으면 그 자리에서 저장할 수 있�
   check("품절 해제 카드에도 있다", !!soldout && soldout.buttons.includes("saveSoldOutReleaseBtn"), "");
 }
 
-out.push("\n[2] 저장 버튼이 없는 카드는 「바로 저장돼요」라고 적혀 있다");
+out.push("\n[2] 저장 버튼이 없는 카드는 버튼 자체가 그 동작인 카드뿐이다");
 {
-  // 버튼이 없으면 사장님은 저장이 안 된 줄 안다. 필요 없다면 필요 없다는
-  // 말이 그 자리에 있어야 한다.
+  // 비밀번호 「변경」과 테스터 모드 「켜기」는 누르는 것이 곧 저장이다.
+  // 그 밖에 저장 버튼 없는 카드가 새로 생기면 여기서 걸린다.
   const noSave = cards.filter((c) => !c.buttons.some((b) => /[Ss]ave/.test(b)));
+  const allowed = new Set(["testModeStartBtn", "changePwBtn", "changeOwnerPwBtn"]);
   for (const c of noSave) {
-    const ok = c.instant || c.buttons.length > 0;
-    check(`[${c.cat}] ${c.title}`, ok, JSON.stringify({ inputs: c.inputs.length, buttons: c.buttons }));
+    check(`[${c.cat}] ${c.title} — 누르는 것이 곧 저장인 카드`,
+      c.buttons.some((b) => allowed.has(b)), JSON.stringify(c.buttons));
   }
-  check("★ 로고 카드는 「바로 올라가요」", cards.find((c) => c.inputs.includes("logoPhotoInput")).instant, "");
-  check("★ 직원 권한은 「바로 저장돼요」", cards.find((c) => c.inputs.includes("perm_menuEdit")).instant, "");
-  check("★ 글자 크기도", cards.find((c) => c.buttons.includes("uiFontScaleResetBtn")).instant, "");
-  check("★ 알림음도", cards.find((c) => c.inputs.includes("alarmVolume")).instant, "");
-  check("세 가지 문구가 두 언어 모두 있다",
-    ["settingsInstantDevice", "settingsInstantUpload", "settingsInstantSaved"]
-      .every((k) => (js.match(new RegExp(`${k}:`, "g")) || []).length === 2), "");
+  check("저장 안 됨 문구가 두 언어 모두 있다", (js.match(/settingsUnsaved:/g) || []).length === 2, "");
+  check("로고 안내 문구도 두 언어", (js.match(/logoPicked:/g) || []).length === 2, "");
 }
 
 out.push("\n[3] ★★ 한 카드의 저장이 남의 칸을 건드리지 않는다");
