@@ -78,6 +78,9 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
   const opts = await halfOpts(start, end, req);
   res.json(
     Object.assign(computeSettlement(orders, start, end, { ...opts, shift, menu: menuForSettlement() }), {
+      // 「전체 기간」 버튼이 시작일로 쓸 날짜 (아래 allTimeStartDate).
+      // 직원에게는 어차피 오늘뿐이라 계산하지 않는다.
+      all_time_start: isOwner ? await allTimeStartDate(req) : null,
       // 화면이 「오늘 것만 보입니다」를 띄우는 데 쓴다. 화면을 믿고 막는 게
       // 아니라, 이미 막아놓고 그 사실을 알려주는 것뿐이다.
       today_only: !isOwner,
@@ -92,6 +95,30 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
  * 저녁 영업이 시작하는 시각도 같이 넘긴다 — 이 가게는 점심·저녁 두 타임이라
  * 그 사이 공백이 자연스러운 경계다.
  */
+/**
+ * 「전체 기간」의 시작일.
+ *
+ * 사장님(2026-09-11): "기간을 전체로도 선택할 수 있게 해줘."
+ *
+ * 「전체」가 어디서부터인지는 화면이 알 수 없다. 그래서 서버가 정해서
+ * 내려준다 — **영업 시작일**이다(src/serviceStart.js). 그 전 주문은 어떤
+ * 기간을 골라도 매출에서 빠지므로, 더 앞으로 잡아봐야 0 만 늘어난다.
+ *
+ * 영업 시작을 아직 안 정했으면 가장 오래된 주문 날짜로 잡는다. 이때만
+ * 질의가 한 번 더 나간다 — 정해져 있는 평소에는 store 안의 값 하나를
+ * 읽는 것이 전부다.
+ */
+async function allTimeStartDate(req) {
+  const started = serviceStartedAt(store);
+  if (started) return started.slice(0, 10);
+  const testId = testMode.currentId(req, store);
+  const [first] = await findOrders(
+    { test_session: testId ? testId : { $exists: false } },
+    { sort: { created_at: 1 }, limit: 1 }
+  );
+  return first && first.created_at ? String(first.created_at).slice(0, 10) : taipeiDateString();
+}
+
 /**
  * 「안 팔린 메뉴」를 세려면 지금 메뉴판에 무엇이 있는지를 알아야 한다
  * (src/settlement.js 의 unsoldItems 주석).

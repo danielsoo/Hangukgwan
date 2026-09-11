@@ -795,6 +795,7 @@
       settlementTodayBtn: "오늘",
       settlementWeekBtn: "최근 7일",
       settlementMonthBtn: "최근 30일",
+      settlementAllBtn: "전체 기간",
       settlementCsvBtn: "⬇️ CSV 다운로드",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
       settlementCloseRangeHint: "하루를 선택했을 때만 저장할 수 있어요 (시작일 = 종료일).",
@@ -1502,6 +1503,7 @@
       settlementTodayBtn: "今天",
       settlementWeekBtn: "最近 7 天",
       settlementMonthBtn: "最近 30 天",
+      settlementAllBtn: "全部期間",
       settlementCsvBtn: "⬇️ 下載 CSV",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
       settlementCloseRangeHint: "只有選擇單一天（開始日期＝結束日期）時才能儲存。",
@@ -12644,6 +12646,15 @@
     const today = taipeiTodayString();
     settlementShift = null;
     loadSettlement(addDaysToDateString(today, -6), today);
+  };
+  // 전체 기간 — 영업 시작일부터 오늘까지. 어디서부터인지는 서버가 정한다
+  // (src/routes/settlements.js allTimeStartDate). 화면이 스스로 「아주 옛날」
+  // 을 지어내면 0 만 잔뜩 붙은 그래프가 된다.
+  $("#settlementAllBtn").onclick = () => {
+    const today = taipeiTodayString();
+    const from = (lastSettlementData && lastSettlementData.all_time_start) || today;
+    settlementShift = null;
+    loadSettlement(from, today);
   };
   $("#settlementMonthBtn").onclick = () => {
     const today = taipeiTodayString();

@@ -249,6 +249,11 @@
             <button id="settlementTodayBtn" type="button" class="owner-only" data-i18n="settlementTodayBtn">오늘</button>
             <button id="settlementWeekBtn" type="button" class="owner-only" data-i18n="settlementWeekBtn">최근 7일</button>
             <button id="settlementMonthBtn" type="button" class="owner-only" data-i18n="settlementMonthBtn">최근 30일</button>
+            <!-- 사장님(2026-09-11): "기간을 전체로도 선택할 수 있게 해줘."
+                 「전체」가 어디서부터인지는 서버가 정해서 내려준다
+                 (all_time_start = 영업 시작일). 화면이 스스로 「아주 옛날」을
+                 지어내면 영업 전 날짜가 0 으로 줄줄이 붙는다. -->
+            <button id="settlementAllBtn" type="button" class="owner-only" data-i18n="settlementAllBtn">전체 기간</button>
             <button id="settlementCsvBtn" type="button" class="owner-only" data-i18n="settlementCsvBtn">⬇️ CSV 다운로드</button>
             <button id="settlementCloseBtn" type="button" class="settlement-close-btn owner-only" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
             <!-- 직원 계정에는 날짜를 고르는 길이 없다. 그러면 지금 무엇을 보고
