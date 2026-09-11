@@ -76,9 +76,12 @@ out.push("\n[3] 분류 이름 categoryLabel()");
   check("★ 딱 한 번만 선언된다", decls.length === 1, JSON.stringify(decls));
   check("★ 모듈 자리에 있다 (들여쓰기 2칸)", decls[0] && decls[0].indent === 2, JSON.stringify(decls));
   const uses = usesOf("categoryLabel").filter((u) => u !== (decls[0] && decls[0].line));
-  check("여러 곳에서 쓴다", uses.length >= 2, String(uses.length));
+  check("실제로 쓰인다", uses.length >= 1, String(uses.length));
   check("★ 쓰는 곳이 전부 선언보다 아래다", decls[0] && uses.every((u) => u > decls[0].line),
     JSON.stringify(uses.filter((u) => decls[0] && u < decls[0].line)));
+  // 「지금 한 군데서만 쓰니 도로 넣어도 되지 않나」 — 안 된다. 밖에서 부르는
+  // 함수가 하나 생기는 순간 같은 사고가 난다. 실제로 그렇게 났고, 그 뒤
+  // 그리는 방식을 바꾸면서 쓰는 곳이 다시 하나로 줄었을 뿐이다.
 }
 
 out.push("\n[4] 그래도 터지면 나머지는 그린다");

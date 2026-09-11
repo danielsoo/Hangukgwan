@@ -423,6 +423,8 @@
             <div class="stl-tabs" data-tabgroup="sold">
               <button type="button" class="stl-tab active" data-pane="soldCategory" data-i18n="settlementCategoryTitle">분류별 매출</button>
               <button type="button" class="stl-tab" data-pane="soldItems" data-i18n="settlementItemsTitle">품목별 판매 현황</button>
+              <button type="button" class="stl-tab" data-pane="allMenu" data-i18n="settlementAllMenuTitle">전체 메뉴 (많이 팔린 순)</button>
+              <button type="button" class="stl-tab" data-pane="soldPie" data-i18n="settlementPieTitle">판매 비중</button>
             </div>
             <div class="stl-pane" data-pane="soldCategory">
               <div class="stl-bars" id="settlementCategoryBars"></div>
@@ -443,18 +445,31 @@
               </table>
               <button type="button" class="stl-more" id="settlementItemsMore" hidden></button>
 
-              <!-- 한 개도 안 팔린 메뉴. 사장님(2026-09-11): "판매항목과 수량
-                   보는 것만큼 판매되지 않은 항목도 보였으면 좋겠어. 전혀
-                   판매되지 않는 항목이 뭔지도 알 수 있도록."
+            </div>
 
-                   위 표는 팔린 것만 담아서, 안 팔린 메뉴는 목록에서 그냥
-                   사라진다 — 없는 줄은 눈에 안 띈다. 접어 두되 개수는 항상
-                   보이게 해서, 펼치지 않아도 「몇 개가 안 나갔는지」는
-                   지나가다 읽힌다. -->
-              <div class="stl-unsold" id="settlementUnsold" hidden>
-                <button type="button" class="stl-unsold-toggle" id="settlementUnsoldToggle"></button>
-                <div class="stl-unsold-list" id="settlementUnsoldList" hidden></div>
+            <!-- 전체 메뉴, 많이 팔린 순. 사장님(2026-09-11):
+                 "전체 메뉴를 막대그래프로 좌에서 우로 뻗는 그 그래프로 해서
+                 팔린 횟수를 적어서 스크롤 내리면 안 팔리는 애들이 보일 수
+                 있게 하는 게 좋을 것 같아."
+
+                 「안 팔린 메뉴」를 따로 세어 보여주던 것을 이걸로 바꿨다.
+                 한 줄로 이어서 늘어놓으면 많이 팔린 것과 안 팔린 것이 같은
+                 자에 놓여서, 사이가 얼마나 벌어졌는지까지 같이 읽힌다 —
+                 목록 두 개를 오가며 머릿속으로 맞춰볼 필요가 없다. -->
+            <div class="stl-pane" data-pane="allMenu" hidden>
+              <div class="stl-allmenu-head" id="settlementAllMenuHead"></div>
+              <div class="stl-allmenu" id="settlementAllMenu"></div>
+            </div>
+
+            <!-- 판매 비중 (원 그래프). 위 막대와는 별개의 기능이다 —
+                 막대는 「무엇이 안 나갔나」를, 이건 「나간 것 안에서의
+                 비중」을 본다. -->
+            <div class="stl-pane" data-pane="soldPie" hidden>
+              <div class="stl-pie-wrap">
+                <canvas id="settlementPie" class="stl-pie-canvas"></canvas>
+                <div class="stl-pie-legend" id="settlementPieLegend"></div>
               </div>
+              <p class="stl-note" id="settlementPieNote"></p>
             </div>
           </section>
 

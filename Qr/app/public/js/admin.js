@@ -635,12 +635,14 @@
       settlementQtySuffix: "개",
       settlementItemsExpand: "전체 보기",
       settlementItemsCollapse: "접기",
-      settlementUnsoldTitle: "한 개도 안 팔린 메뉴 {n}개",
-      settlementUnsoldOf: "(메뉴 {total}개 중)",
-      settlementUnsoldShow: "보기",
-      settlementUnsoldHide: "접기",
-      settlementUnsoldNone: "✓ 메뉴판에 있는 것이 전부 한 번씩은 팔렸어요",
       settlementUnsoldSoldout: "품절",
+      settlementAllMenuTitle: "전체 메뉴 (많이 팔린 순)",
+      settlementAllMenuHead: "메뉴 {total}개 중 {sold}개가 팔렸어요. 한 개도 안 팔린 메뉴는 {unsold}개 — 아래로 내리면 나와요.",
+      settlementAllMenuAllSold: "✓ 메뉴 {total}개가 전부 한 번씩은 팔렸어요",
+      settlementPieTitle: "판매 비중",
+      settlementPieNote: "많이 팔린 {n}가지와 나머지를 묶은 「기타」예요. 조각 옆 숫자가 실제 수량이에요.",
+      settlementPieEmpty: "아직 팔린 것이 없어요",
+      settlementPieOther: "기타",
       settlementOrdersTitle: "📋 지난 주문 불러오기",
       settlementOrdersSearchPlaceholder: "메뉴 이름, 손님 이름, 픽업 번호로 찾기",
       settlementOrdersTablePlaceholder: "테이블 번호",
@@ -1333,12 +1335,14 @@
       settlementQtySuffix: "份",
       settlementItemsExpand: "顯示全部",
       settlementItemsCollapse: "收合",
-      settlementUnsoldTitle: "完全沒賣出的品項 {n} 項",
-      settlementUnsoldOf: "（共 {total} 項）",
-      settlementUnsoldShow: "顯示",
-      settlementUnsoldHide: "收合",
-      settlementUnsoldNone: "✓ 菜單上的品項今天都至少賣出一份",
       settlementUnsoldSoldout: "售完",
+      settlementAllMenuTitle: "全部菜單（依銷量）",
+      settlementAllMenuHead: "{total} 項中賣出 {sold} 項。完全沒賣出的有 {unsold} 項 — 往下捲就看得到。",
+      settlementAllMenuAllSold: "✓ {total} 項菜單今天都至少賣出一份",
+      settlementPieTitle: "銷售佔比",
+      settlementPieNote: "銷量前 {n} 名，其餘合併為「其他」。圓餅旁的數字是實際份數。",
+      settlementPieEmpty: "目前還沒有賣出任何品項",
+      settlementPieOther: "其他",
       settlementOrdersTitle: "📋 查詢過往訂單",
       settlementOrdersSearchPlaceholder: "以菜名、客人姓名或取餐號搜尋",
       settlementOrdersTablePlaceholder: "桌號",
@@ -11710,8 +11714,14 @@
     // 아래 것들이 전부 스크롤 밖으로 밀린다 — 위 10개만 두고, 필요할 때
     // 사장님이 펼친다.
     renderSettlementItems(data.item_breakdown || [], false);
-    // 팔린 것 바로 아래에 안 팔린 것. 둘은 같은 질문의 양쪽이다.
-    renderUnsoldItems(data);
+    // 전체 메뉴(많이 팔린 순)와 판매 비중. 둘은 별개의 탭이다.
+    renderAllMenuBars(data);
+    try {
+      renderSoldPie(data);
+    } catch (e) {
+      // 조각 하나 때문에 결산 화면 전체가 멈추면 안 된다.
+      console.warn("판매 비중 그래프를 그리지 못했습니다:", e);
+    }
 
     // ── 4. 언제, 어디서 ──────────────────────────────────────────
     // 상위 15개만 보여주므로, 퍼센트는 **하루 매출 전체** 대비여야 한다.
@@ -12001,75 +12011,191 @@
   }
 
   /**
-   * 한 개도 안 팔린 메뉴.
+   * 전체 메뉴를 많이 팔린 순으로, 좌에서 우로 뻗는 막대로.
    *
-   * 사장님(2026-09-11): "판매항목과 수량 보는 것만큼 판매되지 않은 항목도
-   * 보였으면 좋겠어. 전혀 판매되지 않는 항목이 뭔지도 알 수 있도록."
+   * 사장님(2026-09-11): "전체 메뉴를 막대그래프로 좌에서 우로 뻗는 그
+   * 그래프로 해서 팔린 횟수를 적어서 스크롤 내리면 안 팔리는 애들이 보일
+   * 수 있게 하는 게 좋을 것 같아."
    *
-   * 위 표는 팔린 것만 담아서, 안 팔린 메뉴는 목록에서 **그냥 사라진다.**
-   * 없는 줄은 눈에 안 띈다 — 40줄짜리 표를 다 읽고 머릿속으로 메뉴판과
-   * 맞춰보기 전에는 무엇이 빠졌는지 알 수가 없다.
+   * 안 팔린 것만 따로 세어 보여주던 것을 이걸로 바꿨다. 한 줄로 이어
+   * 놓으면 많이 팔린 것과 안 팔린 것이 **같은 자**에 놓여서, 사이가 얼마나
+   * 벌어졌는지까지 같이 읽힌다. 목록 두 개를 오가며 맞춰볼 필요가 없다.
    *
-   * 접어 두되 **개수는 항상 보이게** 한다. 펼치지 않아도 「몇 개가 안
-   * 나갔는지」는 지나가다 읽히고, 궁금할 때만 펼치면 된다. 여기를 늘 펼쳐
-   * 두면 이 화면이 다시 길어진다.
+   * 막대 길이는 **1등 대비**다. 여기에는 퍼센트를 적지 않는다 — 결산의
+   * 다른 막대들(renderBars)은 옆에 「전체 중 몇 %」가 붙어 있어서 막대도
+   * 전체 대비여야 하지만, 여기 붙는 숫자는 「몇 개 팔렸나」다. 한 품목이
+   * 전체의 3% 인 것이 보통이라 전체 대비로 그리면 막대가 전부 실오라기가
+   * 되어 서로 비교가 안 된다. **이 목록에 퍼센트를 붙이려거든 막대 기준도
+   * 같이 바꿔야 한다** — 둘이 다른 자를 쓰면 틀리게 읽힌다(2026-09-11).
    */
-  let unsoldExpanded = false;
-  function renderUnsoldItems(data) {
-    const box = $("#settlementUnsold");
-    if (!box) return;
-    const list = data.unsold_items;
+  function renderAllMenuBars(data) {
+    const wrap = $("#settlementAllMenu");
+    const head = $("#settlementAllMenuHead");
+    if (!wrap || !head) return;
+    const rows = data.menu_breakdown;
     // null 은 「하나도 안 팔렸다」가 아니라 **모른다**는 뜻이다(메뉴를 못 본
-    // 경우 — 저장된 마감 스냅샷 등). 0 과 같은 모양으로 보여주면 없는
-    // 사실을 지어내는 셈이라, 그럴 때는 이 칸을 아예 안 그린다.
-    if (!Array.isArray(list)) {
-      box.hidden = true;
+    // 경우 — 저장된 마감 스냅샷 등). 없는 사실을 지어내지 않는다.
+    if (!Array.isArray(rows)) {
+      head.textContent = "";
+      wrap.innerHTML = "";
       return;
     }
-    box.hidden = false;
-    const toggle = $("#settlementUnsoldToggle");
-    const listEl = $("#settlementUnsoldList");
-    if (list.length === 0) {
-      toggle.hidden = true;
-      listEl.hidden = false;
-      listEl.innerHTML = `<div class="stl-unsold-none">${T("settlementUnsoldNone")}</div>`;
+    const total = rows.length;
+    const soldCount = rows.filter((m) => m.qty > 0).length;
+    const unsold = total - soldCount;
+    head.textContent = unsold === 0
+      ? T("settlementAllMenuAllSold").replace("{total}", total)
+      : T("settlementAllMenuHead").replace("{total}", total).replace("{sold}", soldCount).replace("{unsold}", unsold);
+    const max = rows.reduce((m, r) => Math.max(m, r.qty), 0) || 1;
+    wrap.innerHTML = rows
+      .map((m) => {
+        const width = m.qty > 0 ? Math.max(2, Math.round((m.qty / max) * 1000) / 10) : 0;
+        const soldout = m.available ? "" : `<span class="stl-menu-soldout">${T("settlementUnsoldSoldout")}</span>`;
+        return `
+          <div class="stl-menu-row${m.qty > 0 ? "" : " is-zero"}">
+            <span class="stl-menu-name" title="${escapeHtml(itemDisplayName(m))}">${escapeHtml(itemDisplayName(m))}${soldout}</span>
+            <span class="stl-menu-track">${width > 0 ? `<span class="stl-menu-fill" style="width:${width}%"></span>` : ""}</span>
+            <span class="stl-menu-qty">${m.qty}${T("settlementQtySuffix")}</span>
+          </div>`;
+      })
+      .join("");
+  }
+
+  /**
+   * 판매 비중 — 입체 원 그래프.
+   *
+   * 사장님(2026-09-11): "팔린 항목들의 개수를 원 그래프로 3d 로 보여주면
+   * 좋을 것 같아." 위 막대와는 **별개의 기능**이다 — 막대는 「무엇이 안
+   * 나갔나」를, 이건 「나간 것 안에서의 비중」을 본다.
+   *
+   * 라이브러리를 더 들이지 않고 캔버스에 직접 그린다. Chart.js 는 3D 를
+   * 안 하고, 하는 라이브러리는 하나같이 무겁다 — 이 화면은 이미 폰트와
+   * 차트로 무거워서 조각 그리자고 수백 KB 를 더 얹을 이유가 없다.
+   *
+   * **숫자는 그림이 아니라 글자로 읽게 한다.** 입체로 눕히면 앞쪽 조각이
+   * 뒤쪽보다 커 보인다(옆면이 더 보이니까) — 눈대중이 실제 비중과 어긋나는
+   * 것은 3D 원 그래프의 피할 수 없는 성질이다. 그래서 범례에 수량과
+   * 퍼센트를 같이 적는다. 그림은 한눈에 보는 용, 숫자는 판단하는 용이다.
+   */
+  const PIE_SLICES = 8;
+  const PIE_COLORS = ["#1f3864", "#c0392b", "#2e7d32", "#b8860b", "#6a4c93", "#0e7490", "#d35400", "#4e5d6c", "#9aa5b1"];
+  function renderSoldPie(data) {
+    const canvas = $("#settlementPie");
+    const legend = $("#settlementPieLegend");
+    const note = $("#settlementPieNote");
+    if (!canvas || !legend) return;
+    const items = (data.item_breakdown || []).filter((it) => it.qty > 0);
+    const totalQty = items.reduce((sum, it) => sum + it.qty, 0);
+    const ctx = canvas.getContext && canvas.getContext("2d");
+    if (!ctx) return;
+    if (totalQty === 0) {
+      canvas.width = 0;
+      legend.innerHTML = `<p class="settings-hint">${T("settlementPieEmpty")}</p>`;
+      if (note) note.textContent = "";
       return;
     }
-    toggle.hidden = false;
-    const total = data.menu_item_count;
-    const head = T("settlementUnsoldTitle").replace("{n}", list.length);
-    const of = total ? ` ${T("settlementUnsoldOf").replace("{total}", total)}` : "";
-    toggle.textContent = `${head}${of} · ${T(unsoldExpanded ? "settlementUnsoldHide" : "settlementUnsoldShow")}`;
-    toggle.onclick = () => {
-      unsoldExpanded = !unsoldExpanded;
-      renderUnsoldItems(data);
-    };
-    listEl.hidden = !unsoldExpanded;
-    if (!unsoldExpanded) return;
-    // 분류별로 묶는다. 46개를 한 줄로 늘어놓으면 「구이류가 통째로 안
-    // 나갔다」 같은 것이 안 보인다.
-    const groups = new Map();
-    list.forEach((m) => {
-      const key = m.category_key || "";
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(m);
-    });
-    listEl.innerHTML = [...groups.entries()]
+    // 수량 순으로 위 몇 가지 + 「기타」. 40조각짜리 원은 아무것도 안 알려준다.
+    const sorted = [...items].sort((a, b) => b.qty - a.qty);
+    const top = sorted.slice(0, PIE_SLICES);
+    const rest = sorted.slice(PIE_SLICES);
+    const slices = top.map((it) => ({ name: itemDisplayName(it), qty: it.qty }));
+    if (rest.length) {
+      slices.push({ name: `${T("settlementPieOther")} (${rest.length})`, qty: rest.reduce((s, it) => s + it.qty, 0) });
+    }
+    drawPie3d(ctx, canvas, slices, totalQty);
+    legend.innerHTML = slices
       .map(
-        ([key, items]) => `
-          <div class="stl-unsold-cat">
-            <div class="stl-unsold-cat-name">${escapeHtml(categoryLabel(key))} (${items.length})</div>
-            <div class="stl-unsold-items">${items
-              .map(
-                (m) =>
-                  `<span class="stl-unsold-item${m.available ? "" : " is-soldout"}">${escapeHtml(itemDisplayName(m))}${
-                    m.available ? "" : `<span class="stl-unsold-soldout-tag">${T("settlementUnsoldSoldout")}</span>`
-                  }</span>`
-              )
-              .join("")}</div>
+        (sl, i) => `
+          <div class="stl-pie-item">
+            <span class="stl-pie-swatch" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
+            <span class="stl-pie-name">${escapeHtml(sl.name)}</span>
+            <span class="stl-pie-qty">${sl.qty}${T("settlementQtySuffix")}</span>
+            <span class="stl-pie-pct">${Math.round((sl.qty / totalQty) * 100)}%</span>
           </div>`
       )
       .join("");
+    if (note) note.textContent = T("settlementPieNote").replace("{n}", Math.min(PIE_SLICES, sorted.length));
+  }
+
+  // 눕힌 원 + 옆면. 뒤쪽 반원의 옆면을 먼저 칠하고 그 위에 윗면을 얹으면
+  // 두께가 있는 것처럼 보인다.
+  function drawPie3d(ctx, canvas, slices, totalQty) {
+    const dpr = window.devicePixelRatio || 1;
+    const cssW = Math.max(280, Math.min(520, canvas.parentElement.clientWidth || 420));
+    const cssH = Math.round(cssW * 0.62);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+
+    const depth = Math.round(cssH * 0.14);
+    const cx = cssW / 2;
+    const cy = (cssH - depth) / 2 + depth * 0.2;
+    const rx = cssW * 0.38;
+    const ry = rx * 0.52; // 눕힌 정도
+    const TAU = Math.PI * 2;
+
+    const angles = [];
+    let a = -Math.PI / 2; // 12시에서 시작
+    slices.forEach((sl) => {
+      const span = (sl.qty / totalQty) * TAU;
+      angles.push({ from: a, to: a + span });
+      a += span;
+    });
+
+    const shade = (hex, amount) => {
+      const n = parseInt(hex.slice(1), 16);
+      const r = Math.max(0, Math.min(255, Math.round(((n >> 16) & 255) * amount)));
+      const g = Math.max(0, Math.min(255, Math.round(((n >> 8) & 255) * amount)));
+      const b = Math.max(0, Math.min(255, Math.round((n & 255) * amount)));
+      return `rgb(${r},${g},${b})`;
+    };
+
+    // 옆면 — 아래쪽(화면 앞) 반원에 걸친 부분만 보인다.
+    for (let pass = 0; pass < depth; pass++) {
+      const y = cy + depth - pass;
+      slices.forEach((sl, i) => {
+        const { from, to } = angles[i];
+        ctx.beginPath();
+        ctx.moveTo(cx, y);
+        ctx.ellipse(cx, y, rx, ry, 0, from, to);
+        ctx.closePath();
+        ctx.fillStyle = shade(PIE_COLORS[i % PIE_COLORS.length], 0.62);
+        ctx.fill();
+      });
+    }
+
+    // 윗면
+    slices.forEach((sl, i) => {
+      const { from, to } = angles[i];
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.ellipse(cx, cy, rx, ry, 0, from, to);
+      ctx.closePath();
+      ctx.fillStyle = PIE_COLORS[i % PIE_COLORS.length];
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.65)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+
+    // 조각 위 숫자 — 그림이 아니라 글자로 읽게 한다(위 주석).
+    ctx.font = "700 13px system-ui, -apple-system, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    slices.forEach((sl, i) => {
+      const share = sl.qty / totalQty;
+      if (share < 0.05) return; // 너무 얇은 조각에는 안 적는다 — 겹쳐서 못 읽는다
+      const mid = (angles[i].from + angles[i].to) / 2;
+      const tx = cx + Math.cos(mid) * rx * 0.62;
+      const ty = cy + Math.sin(mid) * ry * 0.62;
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
+      ctx.fillText(String(sl.qty), tx + 1, ty + 1);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(String(sl.qty), tx, ty);
+    });
   }
 
   // 블록 안 탭 — 세로로 계속 쌓지 않으려는 것이다. 같은 묶음 안에서만

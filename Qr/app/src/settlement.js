@@ -466,17 +466,36 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
    * 메뉴를 안 넘겨주면(마감 스냅샷 등) null 이다 — 「하나도 안 팔렸다」가
    * 아니라 **모른다**는 뜻이고, 화면은 그때 이 칸을 아예 안 그린다.
    * 0 과 「모른다」를 같은 모양으로 보여주면 없는 사실을 지어내는 셈이다.
+   *
+   * 2026-09-11(두 번째): 안 팔린 것만 따로 세던 것을 **메뉴 전체 + 판매
+   * 수량**으로 바꿨다. 사장님: "전체 메뉴를 막대그래프로 ... 스크롤 내리면
+   * 안 팔리는 애들이 보일 수 있게." 한 줄로 이어 놓으면 많이 팔린 것과 안
+   * 팔린 것이 같은 자에 놓인다.
    */
   const menu = Array.isArray(opts.menu) ? opts.menu : null;
-  let unsoldItems = null;
+  let menuBreakdown = null;
   if (menu) {
-    const soldIds = new Set();
+    const soldBy = new Map();
     for (const o of paidOrders) {
       for (const it of o.items || []) {
-        if (it.item_id != null) soldIds.add(String(it.item_id));
+        if (it.item_id == null) continue;
+        const key = String(it.item_id);
+        const prev = soldBy.get(key) || { qty: 0, subtotal: 0 };
+        prev.qty += it.qty;
+        prev.subtotal += it.unit_price * it.qty;
+        soldBy.set(key, prev);
       }
     }
-    unsoldItems = menu.filter((m) => !soldIds.has(String(m.id)));
+    // **많이 팔린 순.** 안 팔린 것은 자연히 맨 아래로 모인다 — 사장님이
+    // 스크롤을 내리면 거기 있다. 같은 수량끼리는 메뉴판 순서를 지킨다
+    // (menu 배열이 이미 분류·정렬 순서다), 그래야 0 이 잔뜩 모인 아래쪽이
+    // 매번 뒤죽박죽으로 바뀌지 않는다.
+    menuBreakdown = menu
+      .map((m, i) => {
+        const sold = soldBy.get(String(m.id)) || { qty: 0, subtotal: 0 };
+        return { ...m, qty: sold.qty, subtotal: sold.subtotal, menu_order: i };
+      })
+      .sort((a, b) => b.qty - a.qty || a.menu_order - b.menu_order);
   }
 
   // Per-day revenue within the selected range, so a multi-day range can
@@ -594,9 +613,10 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     cancelled_amount: cancelledAmount,
     problem_amount: problemAmount,
     table_breakdown: tableBreakdown,
-    // 안 팔린 메뉴와, 그것을 세는 데 쓴 전체 메뉴 수 (위 unsoldItems 주석).
-    // 둘 다 null 이면 「메뉴를 못 봐서 모른다」는 뜻이다.
-    unsold_items: unsoldItems,
+    // 메뉴판에 있는 것 전부 + 각각 몇 개 팔렸나 (위 menuBreakdown 주석).
+    // null 이면 「메뉴를 못 봐서 모른다」는 뜻이다 — 「하나도 안 팔렸다」가
+    // 아니다.
+    menu_breakdown: menuBreakdown,
     menu_item_count: menu ? menu.length : null,
     daily_breakdown: dailyBreakdown,
     hourly_breakdown: hourlyBreakdown,
