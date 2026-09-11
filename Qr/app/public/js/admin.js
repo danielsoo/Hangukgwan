@@ -529,6 +529,12 @@
       settlementViewAll: "합산 보기",
       settlementShiftNote: "아래 내용이 전부 이 시간대의 것입니다.",
       settlementChartUnavailable: "그래프를 그리지 못했어요 (chart 파일을 못 불러왔습니다). 숫자는 위쪽 표와 아래 목록에 그대로 있습니다.",
+      settingsSoldOutReleaseTitle: "품절 자동 해제 시각",
+      settingsSoldOutReleaseHint: "「9/10까지 품절」처럼 끝 날짜를 정해두면, 그 다음 날 이 시각에 자동으로 다시 팔립니다. 비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 — 밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.",
+      labelSoldOutReleaseTime: "해제 시각 (비우면 영업 시작)",
+      soldOutReleaseFollowsHours: "지금은 영업 시작 시각({t})을 따릅니다.",
+      soldOutReleaseFixed: "매일 {t}에 풀립니다.",
+      soldOutReleasesAt: "{d} {t} 풀림",
       labelLocationCheckEnabled: "위치 확인 사용",
       locationOffHint: "꺼져 있습니다. 손님 폰에 위치를 묻지 않고, 어디서 주문하든 접수됩니다.",
       printFailReasonApp: "앱이 프린터에 연결하지 못했어요",
@@ -716,7 +722,7 @@
       settingsCatStore: "매장 정보",
       settingsCatStoreSub: "사진 · 로고 · 공지 · 상호/주소",
       settingsCatOrder: "주문 규칙",
-      settingsCatOrderSub: "주문 받는 시간 · 위치 제한",
+      settingsCatOrderSub: "주문 시간 · 품절 해제 · 위치 제한",
       settingsCatAccount: "계정",
       settingsCatAccountSub: "비밀번호 · 직원 권한",
       settingsCatNotify: "알림",
@@ -1209,6 +1215,12 @@
       settlementViewAll: "看合計",
       settlementShiftNote: "以下內容全部只包含這個時段。",
       settlementChartUnavailable: "圖表無法顯示（chart 檔案載入失敗）。數字仍在上方統計與下方清單中。",
+      settingsSoldOutReleaseTitle: "售完自動恢復時間",
+      settingsSoldOutReleaseHint: "設定了結束日期（例如「售完至 9/10」）時，隔天的這個時間會自動恢復販售。留空則使用開始營業時間。設為 00:00 表示跨日就恢復 — 營業到深夜時，可能會賣出廚房已經沒有的餐點，請留意。",
+      labelSoldOutReleaseTime: "恢復時間（留空＝開始營業時間）",
+      soldOutReleaseFollowsHours: "目前依照開始營業時間（{t}）。",
+      soldOutReleaseFixed: "每天 {t} 恢復。",
+      soldOutReleasesAt: "{d} {t} 恢復",
       labelLocationCheckEnabled: "啟用位置確認",
       locationOffHint: "目前關閉。不會向客人要求定位，任何地點都能下單。",
       printFailReasonApp: "APP 無法連線到出單機",
@@ -1396,7 +1408,7 @@
       settingsCatStore: "店家資訊",
       settingsCatStoreSub: "照片 · Logo · 公告 · 店名/地址",
       settingsCatOrder: "點餐規則",
-      settingsCatOrderSub: "可點餐時間 · 位置限制",
+      settingsCatOrderSub: "可點餐時間 · 售完恢復 · 位置限制",
       settingsCatAccount: "帳號",
       settingsCatAccountSub: "密碼 · 店員權限",
       settingsCatNotify: "通知",
@@ -1904,6 +1916,65 @@
     return "on_sale";
   }
   /** 배지에 적을 짧은 설명. 판매 중이면 빈 문자열. */
+  // 설정 화면 밑줄 — 지금 몇 시에 풀리는지 말로 적어준다. 칸이 비어 있으면
+  // 「영업 시작을 따른다」는 뜻인데, 그게 몇 시인지는 다른 카드에 있어서
+  // 여기서 한 번 더 말해주지 않으면 알 수가 없다.
+  function renderSoldOutReleaseNote(s) {
+    const el = $("#soldOutReleaseEffective");
+    if (!el) return;
+    const picked = (s && s.soldout_release_time) || "";
+    if (picked) {
+      el.textContent = T("soldOutReleaseFixed").replace("{t}", picked);
+      return;
+    }
+    // 영업 시작 시각은 「영업시간」 문구에서 읽는다 — 서버의
+    // src/availability.js openingTime() 과 같은 규칙이다.
+    const m = /(\d{1,2}):(\d{2})/.exec((s && s.store_hours) || "");
+    const t = m ? `${String(parseInt(m[1], 10)).padStart(2, "0")}:${m[2]}` : "11:00";
+    el.textContent = T("soldOutReleaseFollowsHours").replace("{t}", t);
+  }
+
+  // 이 카드만 저장한다. PUT /api/settings 는 보낸 칸만 바꾸므로, 다른 설정을
+  // 건드리지 않는다.
+  const saveSoldOutReleaseBtn = $("#saveSoldOutReleaseBtn");
+  if (saveSoldOutReleaseBtn) {
+    saveSoldOutReleaseBtn.onclick = async () => {
+      const value = $("#s_soldout_release_time").value.trim();
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        // 빈 문자열도 보낸다 — 「비웠다」가 「영업 시작을 따른다」는 뜻이다.
+        body: JSON.stringify({ soldout_release_time: value }),
+      });
+      const s = await res.json().catch(() => null);
+      if (s) {
+        // 서버가 이상한 값을 거른다. 거기서 돌아온 값으로 칸을 다시 맞춘다 —
+        // 안 그러면 안 저장된 값이 칸에 남아 저장된 것처럼 보인다.
+        $("#s_soldout_release_time").value = s.soldout_release_time || "";
+        renderSoldOutReleaseNote(s);
+      }
+      // 품절 배지의 「언제 풀림」도 이 시각을 쓴다. 같이 새로 불러온다.
+      await loadMenu().catch(() => {});
+      const msg = $("#soldOutReleaseMsg");
+      if (msg) {
+        msg.hidden = false;
+        setTimeout(() => (msg.hidden = true), 2000);
+      }
+    };
+  }
+
+  // 「9/11 11:00 풀림」. 서버가 계산해 보낸 시각(soldout_release_at)을 그대로
+  // 적는다 — 규칙을 화면에도 적어두면 언젠가 한쪽만 고쳐진다.
+  //
+  // 2026-09-11 사장님: "이거 품절 10일까지였는데 오늘 11일인데 안 풀렸어."
+  // 배지가 「9/10 ~ 9/10」만 보여주니 11일 아침엔 당연히 풀렸어야 한다고
+  // 읽힌다. 실제로는 그날 영업 시작에 풀리는데, 그 말이 어디에도 없었다.
+  function soldOutReleaseNote(item) {
+    const at = item && item.soldout_release_at;
+    if (!at || typeof at !== "string" || at.length < 16) return "";
+    return T("soldOutReleasesAt").replace("{d}", md(at.slice(0, 10))).replace("{t}", at.slice(11, 16));
+  }
+
   function soldOutNote(item) {
     const mode = soldOutModeOf(item);
     if (mode === "on_sale") return "";
@@ -5500,6 +5571,54 @@
     categories = await res.json();
     renderMenuAdmin();
     populateCategorySelect();
+    scheduleSoldOutRefresh();
+  }
+
+  // 품절이 풀리는 시각에 목록을 스스로 다시 불러온다.
+  //
+  // 2026-09-11 사장님: "이거 품절 10일까지였는데 오늘 11일인데 안 풀렸어."
+  // 서버는 제때 풀어주고 있었다. 문제는 **화면이 그걸 몰랐다**는 것이다 —
+  // 메뉴 목록은 탭을 누를 때만 다시 불러오는데, 가게 태블릿은 화면을 켜둔
+  // 채라 어제 불러온 목록을 그대로 보여주고 있었다.
+  //
+  // 1분마다 계속 물어보게 하지 않는 이유: 하루에 한 번 있는 일이라 그건
+  // 낭비다. 서버가 각 품목에 「언제 풀리는지」를 적어 보내주니, 그 중 가장
+  // 이른 시각 하나에만 알람을 맞춰두면 된다.
+  let soldOutRefreshTimer = null;
+  function scheduleSoldOutRefresh() {
+    if (soldOutRefreshTimer) {
+      clearTimeout(soldOutRefreshTimer);
+      soldOutRefreshTimer = null;
+    }
+    const now = Date.now();
+    let soonest = null;
+    for (const c of categories || []) {
+      for (const item of c.items || []) {
+        // 이미 팔리고 있는 것은 풀릴 일이 없다.
+        if (item.available) continue;
+        const at = item.soldout_release_at;
+        if (!at || typeof at !== "string") continue;
+        // "YYYY-MM-DD HH:MM:SS" 는 대만 시각이다. 태블릿도 대만에 있으니
+        // 브라우저의 지역 시각으로 읽으면 맞는다. 혹시 기기 시계가 다른
+        // 시간대여도, 아래에서 한 번 더 불러오면 서버 판단이 이긴다.
+        const ms = new Date(at.replace(" ", "T")).getTime();
+        if (!Number.isFinite(ms) || ms <= now) continue;
+        if (soonest == null || ms < soonest) soonest = ms;
+      }
+    }
+    // 알람이 걸렸는지 밖에서 볼 수 있게 남겨둔다. 「왜 안 풀렸지」를 다시
+    // 겪었을 때, 콘솔에서 이 값 하나만 보면 화면이 기다리고 있는지 아니면
+    // 아예 안 기다리고 있는지가 바로 갈린다. e2e 도 이 값을 본다.
+    window.__soldOutRefreshAt = soonest == null ? null : new Date(soonest).toISOString();
+    if (soonest == null) return;
+    // setTimeout 은 25일쯤이 한계다(32비트). 그보다 먼 것은 굳이 안 건다 —
+    // 그 사이에 화면을 한 번은 새로 열게 된다.
+    const delay = soonest - now + 2000; // 경계에 딱 걸리지 않게 2초 뒤
+    if (delay > 20 * 24 * 3600 * 1000) return;
+    soldOutRefreshTimer = setTimeout(() => {
+      soldOutRefreshTimer = null;
+      loadMenu();
+    }, delay);
   }
 
   function renderMenuAdmin() {
@@ -5540,7 +5659,8 @@
           <td>${canMenuEdit()
             ? `<button type="button" class="availability-pill ${item.available ? "on" : "off"}" data-soldout-id="${item.id}" title="${T("soldOutTitle")}">${item.available ? T("onSale") : T("soldOut")}</button>`
             : `<span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span>`}${
-              soldOutNote(item) ? `<div class="soldout-note">${soldOutNote(item)}</div>` : ""}</td>
+              soldOutNote(item) ? `<div class="soldout-note">${soldOutNote(item)}</div>` : ""}${
+              soldOutReleaseNote(item) ? `<div class="soldout-release">${soldOutReleaseNote(item)}</div>` : ""}</td>
           <td>${moveButtonsHtml}</td>
         `;
         // Staff without menuEdit can look at the menu but not open the edit
@@ -9146,6 +9266,8 @@
     $("#s_store_address_ko").value = s.store_address_ko || "";
     $("#s_store_address_en").value = s.store_address_en || "";
     $("#s_store_hours").value = s.store_hours || "";
+    $("#s_soldout_release_time").value = s.soldout_release_time || "";
+    renderSoldOutReleaseNote(s);
     $("#s_store_min_spend").value = s.store_min_spend || "";
     $("#s_store_notice").value = s.store_notice || "";
     $("#s_order_radius_m").value = s.order_radius_m || "200";
@@ -9693,6 +9815,9 @@
       store_address_ko: $("#s_store_address_ko").value.trim(),
       store_address_en: $("#s_store_address_en").value.trim(),
       store_hours: $("#s_store_hours").value.trim(),
+      // 빈 문자열도 보낸다 — 「비웠다」가 「영업 시작을 따른다」는 뜻이라,
+      // 안 보내면 예전에 고른 값이 그대로 남는다.
+      soldout_release_time: $("#s_soldout_release_time").value.trim(),
       store_min_spend: $("#s_store_min_spend").value.trim(),
       order_radius_m: $("#s_order_radius_m").value.trim(),
       location_check_enabled: $("#s_location_check_enabled").checked,

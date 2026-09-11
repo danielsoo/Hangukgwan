@@ -512,7 +512,7 @@
         <nav class="settings-nav">
           <button data-category="display" class="settings-nav-btn active"><span class="nav-name" data-i18n="settingsCatDisplay">화면 · 소리</span><span class="nav-sub" data-i18n="settingsCatDisplaySub">글자 크기 · 알림음</span></button>
           <button data-category="store" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatStore">매장 정보</span><span class="nav-sub" data-i18n="settingsCatStoreSub">사진 · 로고 · 공지 · 상호/주소</span></button>
-          <button data-category="order" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatOrder">주문 규칙</span><span class="nav-sub" data-i18n="settingsCatOrderSub">주문 받는 시간 · 위치 제한</span></button>
+          <button data-category="order" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatOrder">주문 규칙</span><span class="nav-sub" data-i18n="settingsCatOrderSub">주문 시간 · 품절 해제 · 위치 제한</span></button>
           <button data-category="account" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatAccount">계정</span><span class="nav-sub" data-i18n="settingsCatAccountSub">비밀번호 · 직원 권한</span></button>
           <button data-category="notify" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatNotify">알림</span><span class="nav-sub" data-i18n="settingsCatNotifySub">마감 LINE 알림</span></button>
           <button data-category="payment" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPayment">결제</span><span class="nav-sub" data-i18n="settingsCatPaymentSub">온라인 결제 (ECPay)</span></button>
@@ -761,6 +761,29 @@
           <div id="ohDatePanel" class="oh-panel" hidden></div>
           <button id="saveOrderHoursBtn" data-i18n="saveSettingsBtn">설정 저장</button>
           <div class="save-msg" id="orderHoursMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
+        </div>
+
+        <!-- 품절이 자동으로 풀리는 시각 (2026-09-11 사장님: "이거 품절 10일
+             까지였는데 오늘 11일인데 안 풀렸어").
+
+             안 풀린 게 아니라 아직 그 시각이 안 된 것이었다. 「9/10까지
+             품절」은 9/11 영업 시작(11:00)에 풀리는데, 그 시각이 화면 어디에도
+             안 적혀 있으니 아침에 보면 고장으로 읽힌다. 그래서 시각을 직접
+             고르실 수 있게 하고, 메뉴 목록의 배지에도 그 시각을 적는다. -->
+        <div class="settings-card need-settingsEdit">
+          <h3 data-i18n="settingsSoldOutReleaseTitle">품절 자동 해제 시각</h3>
+          <p class="settings-hint" data-i18n="settingsSoldOutReleaseHint">
+            「9/10까지 품절」처럼 끝 날짜를 정해두면, <strong>그 다음 날 이 시각에</strong> 자동으로 다시 팔립니다.
+            비워두면 영업 시작 시각을 씁니다. 자정(00:00)으로 두면 날짜가 바뀌는 순간 풀립니다 —
+            밤늦게까지 장사하는 날에는 주방에 없는 메뉴가 주문될 수 있으니 조심하세요.
+          </p>
+          <label><span data-i18n="labelSoldOutReleaseTime">해제 시각 (비우면 영업 시작)</span><input id="s_soldout_release_time" type="time" /></label>
+          <p class="settings-hint" id="soldOutReleaseEffective"></p>
+          <!-- 이 카드만의 저장 버튼. 매장 정보 카드의 「설정 저장」은 여기서
+               보이지도 않는다 — 고쳐놓고 저장할 곳이 없으면 안 고친 것과 같다.
+               위 「주문 받는 시간」 카드도 같은 방식이다. -->
+          <button id="saveSoldOutReleaseBtn" data-i18n="saveSettingsBtn">설정 저장</button>
+          <div class="save-msg" id="soldOutReleaseMsg" hidden data-i18n="savedMsg">저장되었습니다</div>
         </div>
         <div class="settings-card need-settingsEdit">
           <h3 data-i18n="settingsLocationTitle">위치 기반 주문 제한</h3>

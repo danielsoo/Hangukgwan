@@ -255,6 +255,9 @@ button.availability-pill:hover { border-color: currentColor; }
 /* 배지 밑의 "9월 12일까지" 같은 한 줄 — 표에서 하나씩 열어보지 않아도
    언제 풀리는지 보이게 한다. */
 .soldout-note { margin-top: 3px; font-size: 13px; color: var(--muted); }
+/* 「9/11 11:00 풀림」. 날짜 범위 바로 아래에 한 줄 더 붙는다 — 언제 풀리는지
+   모르면 그 날짜가 지난 아침에 「고장났나」로 읽힌다(2026-09-11). */
+.soldout-release { margin-top: 2px; font-size: 12px; color: #6b7280; }
 
 /* 품절 설정 팝업의 네 가지 선택지 */
 .soldout-modes { display: flex; flex-direction: column; gap: 8px; }

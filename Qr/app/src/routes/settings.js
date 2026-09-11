@@ -7,6 +7,7 @@ const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, servic
 const { nowLocal } = require("../time");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const { normalize: normalizeOrderHours, orderingState } = require("../openHours");
+const { hhmm } = require("../availability");
 const canEditSettings = requirePermission("settingsEdit");
 
 const router = express.Router();
@@ -39,6 +40,11 @@ const PUBLIC_KEYS = [
   // account key set as the FIREBASE_SERVICE_ACCOUNT env var instead — never
   // stored here, never sent to the customer page.
   "firebase_web_config",
+  // 품절이 자동으로 풀리는 시각 "HH:MM" (2026-09-11 사장님). 비워두면
+  // 영업 시작 시각을 쓴다 — 지금까지의 동작 그대로다(src/availability.js).
+  // 손님 화면은 이 값을 쓰지 않지만(서버가 계산해서 내려준다) 관리자 화면이
+  // 설정 칸을 채워야 해서 공개 목록에 둔다. 비밀도 아니다.
+  "soldout_release_time",
 ];
 
 function publicSettings() {
@@ -99,10 +105,26 @@ router.get("/", (req, res) => {
 
 router.put("/", canEditSettings, async (req, res) => {
   const b = req.body || {};
+  // 품절 해제 시각은 먼저 본다. 아무것도 저장하기 전에 막아야, 한 칸이 틀렸는데
+  // 나머지는 저장돼 버리는 어정쩡한 상태가 안 생긴다.
+  //
+  // 빈 칸과 틀린 값은 다르다. 빈 칸은 「영업 시작 시각을 따른다」는 뜻이고,
+  // 틀린 값은 사장님이 뭔가 잘못 넣은 것이다. 틀린 값을 빈 칸처럼 다루면
+  // 고른 시각이 조용히 사라진다 — 저장했다고 믿은 채로.
+  const releaseRaw = b.soldout_release_time;
+  const releaseGiven = releaseRaw != null;
+  const releaseBlank = releaseGiven && String(releaseRaw).trim() === "";
+  const releasePicked = releaseGiven && !releaseBlank ? hhmm(releaseRaw) : null;
+  if (releaseGiven && !releaseBlank && !releasePicked) {
+    return res.status(400).json({ error: "bad_soldout_release_time" });
+  }
   for (const key of PUBLIC_KEYS) {
     if (key === "store_cover_photo" || key === "store_logo") continue; // set only via the photo upload routes
+    if (key === "soldout_release_time") continue; // 형식을 확인해서 아래에서 따로 넣는다
     if (b[key] != null) store.settings[key] = String(b[key]);
   }
+  if (releasePicked) store.settings.soldout_release_time = releasePicked;
+  else if (releaseBlank) delete store.settings.soldout_release_time;
   if (TAEGEUK_SEASON_MODES.includes(b.taegeuk_season_mode)) store.settings.taegeukSeasonMode = b.taegeuk_season_mode;
   await save();
   res.json(publicSettings());

@@ -26,6 +26,33 @@ const { nowLocal, taipeiDateString } = require("./time");
 
 const DEFAULT_OPENING = "11:00";
 
+/** "9:5" 같은 건 안 받는다. "H:MM"/"HH:MM" 만 "HH:MM" 으로 돌려준다. */
+function hhmm(v) {
+  const m = /^\s*(\d{1,2}):(\d{2})\s*$/.exec(String(v == null ? "" : v));
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (!(h >= 0 && h <= 23) || !(min >= 0 && min <= 59)) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+}
+
+/**
+ * 품절이 풀리는 시각 "HH:MM".
+ *
+ * 사장님(2026-09-11): "이거 품절 10일까지였는데 오늘 11일인데 안 풀렸어."
+ * 안 풀린 게 아니라 **아직 그 시각이 안 된 것**이었다. 규칙이 자정이 아니라
+ * 「다음 날 영업 시작」이라, 11시 전에 보시면 그 날짜가 지났는데도 품절로
+ * 보인다. 그게 맞는 동작이긴 한데, 화면 어디에도 그 시각이 안 적혀 있으면
+ * 고장으로 읽힌다 — 그래서 (1) 시각을 사장님이 직접 고를 수 있게 하고,
+ * (2) 배지에 그 시각을 적는다(withAvailability 의 soldout_release_at).
+ *
+ * 고른 값이 없으면 예전과 같이 영업 시작 시각을 쓴다. 이미 그렇게 돌던
+ * 가게의 동작이 배포만으로 바뀌면 안 된다.
+ */
+function releaseTime(settings) {
+  return hhmm(settings && settings.soldout_release_time) || openingTime(settings);
+}
+
 // 영업 시작 시각을 설정의 store_hours("11:00-14:00, 17:00-21:00")에서 읽는다.
 // 사장님이 영업시간을 바꾸면 품절 풀리는 시각도 같이 따라간다 — 같은 값을
 // 두 군데 적어두면 한쪽만 바뀌어 어긋난다.
@@ -60,7 +87,7 @@ function isDate(s) {
 function soldOutWindow(item, settings) {
   const from = isDate(item.soldout_from) ? `${item.soldout_from} 00:00:00` : null;
   const until = isDate(item.soldout_until)
-    ? `${addDays(item.soldout_until, 1)} ${openingTime(settings)}:00`
+    ? `${addDays(item.soldout_until, 1)} ${releaseTime(settings)}:00`
     : null;
   return { from, until };
 }
@@ -100,6 +127,11 @@ function withAvailability(item, settings, now = nowLocal()) {
     available_stored: item.available ? 1 : 0,
     soldout_from: isDate(item.soldout_from) ? item.soldout_from : null,
     soldout_until: isDate(item.soldout_until) ? item.soldout_until : null,
+    // **언제 다시 팔리는지.** 화면이 이 값을 그대로 적고, 그 시각에 맞춰
+    // 목록을 다시 불러온다. 규칙을 화면에 한 번 더 적어두면 언젠가 한쪽만
+    // 고쳐진다 — 계산은 여기서만 한다.
+    // 「계속 품절」처럼 끝이 없으면 null 이다. 없는 시각을 지어내지 않는다.
+    soldout_release_at: soldOutWindow(item, settings).until,
   };
 }
 
@@ -110,7 +142,9 @@ function today(d = new Date()) {
 
 module.exports = {
   DEFAULT_OPENING,
+  hhmm,
   openingTime,
+  releaseTime,
   addDays,
   soldOutWindow,
   soldOutWindowActive,
