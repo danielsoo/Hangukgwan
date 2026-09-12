@@ -219,6 +219,10 @@ app.use("/api/line/webhook", require("./src/routes/lineWebhook"));
 app.use("/api/payment", require("./src/routes/payments"));
 app.use("/api/vip-cards", require("./src/routes/vipCards"));
 // 사장 전용 진단 수치 (읽기 전용) — src/routes/diag.js 주석 참고.
+// 관리자 화면이 뜰 때 필요한 것을 한 번에 답한다. 열세 번 나가던 요청이
+// 한 번이 된다(src/routes/bootstrap.js). 실패하면 화면이 예전처럼 하나씩
+// 부르므로, 이 줄이 없어도 앱은 그대로 돈다.
+app.use("/api/bootstrap", require("./src/routes/bootstrap"));
 app.use("/api/_diag", require("./src/routes/diag"));
 app.use("/api/members", require("./src/routes/members"));
 

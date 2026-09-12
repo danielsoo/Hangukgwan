@@ -149,8 +149,50 @@
   // fetch 호출부가 서른 곳 가까이라 한 곳씩 고치는 대신 여기서 감싼다.
   // Pusher 가 아직 연결되기 전이거나 미설정 매장이면 소켓 번호가 없고,
   // 그때는 손대지 않은 fetch 가 그대로 나간다(= 예전 동작).
+  // 로그인 한 번에 요청 열세 개가 나가던 것을 한 번으로 줄인다.
+  //
+  // 2026-09-12 사장님: "로그인도 그렇고 버튼 누르는 것도 그렇고 다" 느리다.
+  //
+  // 아래 checkAuth() 가 화면을 띄우려고 부르는 주소가 열세 개다. 서버에서는
+  // 그 열세 개가 각자 store 문서를 다시 읽고 세션을 다시 조회한다 — 같은
+  // 문서를 열세 번 읽는다(src/routes/bootstrap.js 주석에 자세히 적어 뒀다).
+  //
+  // 그래서 /api/bootstrap 하나가 그 열세 개의 답을 「주소: 답」 모양으로 한꺼번에
+  // 준다. 받아온 답은 여기 보관해 두고, 그 주소로 fetch 가 나가려 할 때
+  // 네트워크 대신 이걸 돌려준다. 그래서 **부르는 곳 열세 군데를 하나도 안
+  // 고쳤다** — 고치면 그만큼 틀릴 곳이 생긴다.
+  //
+  // 한 번 쓰면 버린다. 두 번째부터는 진짜 요청이 나가야 한다 — 안 그러면
+  // 새로고침 없이는 영영 옛 값을 보게 된다. 바로 그 증상을 어제 고쳤다.
+  const bootCache = new Map();
+  async function primeBoot() {
+    try {
+      const res = await nativeFetch("/api/bootstrap");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data || typeof data !== "object") return;
+      for (const [url, body] of Object.entries(data)) bootCache.set(url, body);
+    } catch (e) {
+      // 못 받아오면 아무 일도 안 일어난다. 화면이 예전처럼 하나씩 부른다.
+    }
+  }
+  function bootAnswer(url, init) {
+    const method = ((init && init.method) || "GET").toUpperCase();
+    if (method !== "GET") return null;
+    if (!bootCache.has(url)) return null;
+    const body = bootCache.get(url);
+    bootCache.delete(url); // 한 번만
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const nativeFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
+    const plainUrl = typeof input === "string" ? input : (input && input.url) || "";
+    const answered = bootAnswer(plainUrl, init);
+    if (answered) return Promise.resolve(answered);
     let sid = null;
     try {
       sid = pusherClient && pusherClient.connection && pusherClient.connection.socket_id;
@@ -2585,6 +2627,9 @@
 
   // ---------- Auth ----------
   async function checkAuth() {
+    // 아래에서 부르는 열세 개의 답을 한 번에 받아 둔다. 여기서 실패해도
+    // 그냥 예전처럼 하나씩 나갈 뿐이라, 이 줄이 화면을 막지는 않는다.
+    await primeBoot();
     const res = await fetch("/api/auth/me");
     const data = await res.json();
     if (data.isAdmin) {
