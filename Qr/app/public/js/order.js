@@ -204,17 +204,16 @@
     en: "This page was opened by a previous guest. Reloading — please order again.",
   };
 
-  // 맵기 목록에는 늘 「基本」이 맨 앞에 있다. 저장된 데이터에서 빠져 있어도
+  // 맵기 목록에는 늘 기본 칸이 맨 앞에 있다. 저장된 데이터에서 빠져 있어도
   // 화면에서 채워 넣는다 — 그래야 아무것도 안 건드린 손님에게 매운 것이
   // 나가는 일이 없다(openItemSheet 주석).
-  const SPICE_BASIC = "基本";
+  //
+  // 「무엇이 기본 칸인가」는 public/js/spice.js 한 곳에서 정한다. 손님 화면과
+  // 빌지가 서로 다르게 판단하면, 화면에는 안 매운 것으로 보이는데 주방에는
+  // 매운 것으로 나간다.
+  const SPICE_BASIC = window.HG_SPICE.BASIC;
   function spiceOptionsOf(item) {
-    const parts = String((item && item.spice_options) || "")
-      .split(",")
-      .map((x) => x.trim())
-      .filter(Boolean);
-    if (!parts.length) return [];
-    return parts.includes(SPICE_BASIC) ? parts : [SPICE_BASIC, ...parts];
+    return window.HG_SPICE.optionsOf(item && item.spice_options);
   }
 
   const $ = (sel) => document.querySelector(sel);
@@ -778,7 +777,9 @@
     // 그래서 「첫 칸을 고른다」가 아니라 「基本 을 고른다」로 못 박는다.
     // 데이터가 어떻게 생겼든 화면에는 늘 基本 이 있고 늘 그것이 켜져 있다.
     // 저장된 데이터도 같이 고쳐 뒀다(src/migrations/2026-09-10-spice-basic.js).
-    currentSpiceOption = item.spice_options ? SPICE_BASIC : null;
+    // 사장님이 「基本(中辣)」처럼 고쳐 둔 이름을 그대로 고른다. 「基本」으로
+    // 저장하면 주문에는 사장님이 지운 이름이 남는다 (2026-09-12).
+    currentSpiceOption = item.spice_options ? window.HG_SPICE.defaultOf(item.spice_options) : null;
     currentTakeoutOption = item.takeout_options ? item.takeout_options.split(",")[0].trim() : null;
     // A counter/takeout QR has no dine-in seat to speak of, so every item
     // defaults to 포장 there instead of the usual 매장 default — the toggle

@@ -4706,7 +4706,9 @@
         // default (不辣/小辣/中辣/大辣/辣) is worth a line, same "only the
         // exception gets called out" pattern already used for 매장/外帶
         // below (owner: "특별히 맵기 안 바꾸면 기본맛이야").
-        if (it.spice_choice && it.spice_choice !== "基本") detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
+        // 기본 칸은 안 찍는다. 「基本(中辣)」처럼 사장님이 설명을 붙여 둔
+        // 것도 기본이다 — 판단은 public/js/spice.js 한 곳에서(2026-09-12).
+        if (it.spice_choice && !window.HG_SPICE.isBasic(it.spice_choice)) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
         (it.selected_addons || []).forEach((a) => detailLines.push(`<div class="item-detail">└ +${a.name}</div>`));
         // 부대찌개(部隊鍋) 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy
         // 여부와 무관하게 항상 찍는다. 조리 여부는 결제 화면이 아니라
@@ -12564,7 +12566,7 @@
       .map((it) => {
         const extras = [
           it.option_choice,
-          it.spice_choice && it.spice_choice !== "基本" ? it.spice_choice : null,
+          it.spice_choice && !window.HG_SPICE.isBasic(it.spice_choice) ? it.spice_choice : null,
           it.takeout_choice,
           it.order_type === "takeout" ? T("settlementOrderTypeTakeout") : null,
           ...(it.selected_addons || []).map((a) => `+${a.name}`),

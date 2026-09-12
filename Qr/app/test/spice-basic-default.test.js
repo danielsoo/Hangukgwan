@@ -49,29 +49,71 @@ out.push("\n[2] 서버가 뜰 때 돌아간다");
   check("한 번만 돌게 표를 남긴다", /migration_2026_09_10_spice_basic_applied/.test(mig), "");
 }
 
-out.push("\n[3] 화면은 데이터와 무관하게 基本 을 보장한다");
+out.push("\n[3] 「무엇이 기본 칸인가」는 한 곳에서 정한다 (public/js/spice.js)");
 {
-  const orderJs = read("public", "js", "order.js");
-  check("★ 목록에 없으면 화면에서 채워 넣는다", /parts\.includes\(SPICE_BASIC\) \? parts : \[SPICE_BASIC, \.\.\.parts\]/.test(orderJs), "");
-  check("★ 처음 열 때 基本 이 골라져 있다", /currentSpiceOption = item\.spice_options \? SPICE_BASIC : null;/.test(orderJs), "");
-  check("골라진 칸에 불이 들어온다", /if \(opt === currentSpiceOption\) b\.classList\.add\("active"\);/.test(orderJs), "");
-  check("★ 첫 칸을 고르는 옛 방식이 남아 있지 않다", !/spice_options\.split\(","\)\[0\]/.test(orderJs), "");
-  check("맵기 칸이 없는 메뉴는 빈 목록이다", /if \(!parts\.length\) return \[\];/.test(orderJs), "");
+  // 실제로 돌려본다. 정규식으로 코드 모양만 보면, 모양은 맞는데 답이 틀린
+  // 경우를 못 잡는다 — 2026-09-12 에 바로 그 일이 있었다.
+  const win = {};
+  new Function("window", read("public", "js", "spice.js"))(win);
+  const S = win.HG_SPICE;
+  check("파일이 규칙을 내놓는다", !!(S && S.isBasic && S.optionsOf && S.defaultOf), "");
+
+  check("基本 은 기본이다", S.isBasic("基本"));
+  // ★★ 사장님(2026-09-12): "기본을 지우고 기본(중라)로 고쳤거든. 일부러
+  // 그렇게 고쳤는데 기본이 앞에 또 나왔어." 글자가 똑같은지를 보던 것이
+  // 원인이었다.
+  check("★★ 基本(中辣) 도 기본이다", S.isBasic("基本(中辣)"));
+  check("기본(중라) 처럼 한글로 적어도 — 은 아니다 (基本 으로 시작해야 한다)", S.isBasic("기본(중라)") === false);
+  check("小辣 는 기본이 아니다", S.isBasic("小辣") === false);
+  check("빈 값도 기본이 아니다", S.isBasic("") === false && S.isBasic(null) === false);
+
+  out.push("  · 목록");
+  check("★ 기본이 없으면 맨 앞에 채워 넣는다",
+    S.optionsOf("不辣,中辣").join(",") === "基本,不辣,中辣", S.optionsOf("不辣,中辣").join(","));
+  check("이미 있으면 그대로 둔다", S.optionsOf("基本,小辣").join(",") === "基本,小辣", S.optionsOf("基本,小辣").join(","));
+  // ★★ 이것이 사장님이 보신 증상이다 — 고치기 전에는 「基本,基本(中辣),小辣」.
+  check("★★ 基本(中辣) 로 고쳐두면 基本 을 또 넣지 않는다",
+    S.optionsOf("基本(中辣),小辣").join(",") === "基本(中辣),小辣", S.optionsOf("基本(中辣),小辣").join(","));
+  check("맵기 칸이 없는 메뉴는 빈 목록", S.optionsOf("").length === 0 && S.optionsOf(null).length === 0);
+
+  out.push("  · 처음 골라져 있는 값");
+  check("★ 기본 칸이 골라져 있다", S.defaultOf("基本,小辣") === "基本", String(S.defaultOf("基本,小辣")));
+  // 「基本」으로 저장하면 주문에 사장님이 지운 이름이 남는다.
+  check("★★ 사장님이 고쳐 둔 이름 그대로 고른다",
+    S.defaultOf("基本(中辣),小辣") === "基本(中辣)", String(S.defaultOf("基本(中辣),小辣")));
+  check("★ 기본이 빠진 데이터에서도 매운 것이 안 골라진다",
+    S.defaultOf("小辣,中辣") === "基本", String(S.defaultOf("小辣,中辣")));
+  check("맵기 칸이 없으면 null", S.defaultOf("") === null);
 }
 
-out.push("\n[4] 늘 골라져 있으니 막을 일이 없다");
+out.push("\n[4] 세 화면이 그 규칙을 같이 쓴다");
+{
+  // 손님 화면과 빌지가 서로 다르게 판단하면, 화면에는 안 매운 것으로
+  // 보이는데 주방에는 매운 것으로 나간다.
+  const orderJs = read("public", "js", "order.js");
+  const adminJs = read("public", "js", "admin.js");
+  const escpos = read("public", "js", "escpos.js");
+  const orderHtml = read("public", "order.html");
+  const adminHtml = read("public", "admin.html");
+
+  check("손님 화면: 목록", /window\.HG_SPICE\.optionsOf\(/.test(orderJs), "");
+  check("손님 화면: 처음 골라지는 값", /window\.HG_SPICE\.defaultOf\(item\.spice_options\)/.test(orderJs), "");
+  check("골라진 칸에 불이 들어온다", /if \(opt === currentSpiceOption\) b\.classList\.add\("active"\);/.test(orderJs), "");
+  check("★ 첫 칸을 고르는 옛 방식이 남아 있지 않다", !/spice_options\.split\(","\)\[0\]/.test(orderJs), "");
+  check("★ 글자를 맞대보던 옛 방식이 남아 있지 않다",
+    !/!== "基本"/.test(orderJs) && !/!== "基本"/.test(adminJs) && !/!== "基本"/.test(escpos), "");
+  check("관리자 미리보기", (adminJs.match(/HG_SPICE\.isBasic/g) || []).length >= 2, "");
+  check("실제 인쇄", /HG_SPICE\.isBasic/.test(escpos), "");
+  check("두 화면이 그 파일을 불러온다",
+    /src="\/js\/spice\.js"/.test(orderHtml) && /src="\/js\/spice\.js"/.test(adminHtml), "");
+}
+
+out.push("\n[5] 늘 골라져 있으니 막을 일이 없다");
 {
   const orderJs = read("public", "js", "order.js");
   const html = read("public", "order.html");
   check("고르라고 막던 규칙을 걷어냈다", !/SPICE_REQUIRED_MSG/.test(orderJs), "");
   check("그 안내 자리도 같이 걷어냈다", !/spiceRequiredMsg/.test(orderJs) && !/spiceRequiredMsg/.test(html), "");
-}
-
-out.push("\n[5] 빌지는 基本 을 안 찍는다");
-{
-  // 「基本」은 그냥 평소대로 만들라는 뜻이라 주방에 적을 말이 없다.
-  const escpos = read("public", "js", "escpos.js");
-  check("★ 基本 은 빌지에서 빠진다", /it\.spice_choice !== "基本"/.test(escpos), "");
 }
 
 console.log(out.join("\n"));
