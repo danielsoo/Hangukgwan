@@ -92,13 +92,19 @@ const headerFor = (src) => {
   return cc ? cc.value : "";
 };
 check("_next/static 은 immutable (파일명에 해시가 박혀 있다)", /immutable/.test(headerFor("/_next/static/(.*)")), headerFor("/_next/static/(.*)"));
-check("css/js/images 는 immutable 아님 (파일명이 안 바뀐다)", !/immutable/.test(headerFor("/(css|js|images)/(.*)")), headerFor("/(css|js|images)/(.*)"));
+// 2026-09-12: css/js/images 규칙을 여기서 뺐다. vercel.json 의 headers 는
+// 함수가 붙인 헤더를 이기는데, 그 한 줄 때문에 「지문이 있을 때만 오래
+// 준다」(src/assetVersion.js cacheHeaderFor)가 통째로 무시되고 모든 자산이
+// 한 시간에 엣지 캐시 없이 묶여 있었다. 이제 그 판단은 코드가 한다.
+check("css/js/images 를 한 값으로 고정하지 않는다 (assetVersion 이 정한다)",
+  headerFor("/(css|js|images)/(.*)") === "",
+  headerFor("/(css|js|images)/(.*)"));
 check("HTML 은 브라우저에 안 남긴다", /max-age=0/.test(headerFor("/(.*).html")), headerFor("/(.*).html"));
 
 // stale-while-revalidate 는 브라우저에도 적용돼서 페이지를 열 때마다 배경
 // 재검증 요청을 하나씩 더 만든다. 요청을 줄이려던 것이 늘어나므로 쓰지 않는다.
 out.push("\n[stale-while-revalidate 금지 — 브라우저가 배경 요청을 더 만든다]");
-for (const src of ["/_next/static/(.*)", "/(css|js|images)/(.*)", "/(.*).html"]) {
+for (const src of ["/_next/static/(.*)", "/(.*).html"]) {
   check(`${src} 에 SWR 없음`, !/stale-while-revalidate/.test(headerFor(src)), headerFor(src));
 }
 

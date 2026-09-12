@@ -9,10 +9,10 @@
 //  1. /admin 은 한 번 열면 계속 떠 있는 화면이다. 주문 목록만 계속 받아올
 //     뿐 화면을 만드는 admin.js 자체는 다시 받지 않는다. 배포 전부터 열려
 //     있던 탭은 배포 뒤에도 옛 코드를 돈다.
-//  2. /js/*.js 와 /css/*.css 에 한 시간 캐시가 걸려 있다(server.js 의
-//     express.static, 그리고 vercel.json 의 headers). 파일 이름에 버전이
-//     없으므로 주소가 같고, 주소가 같으면 브라우저는 받아둔 것을 쓴다.
-//     POS 앱은 WebView 라 더 끈질기다.
+//  2. /js/*.js 와 /css/*.css 에 한 시간 캐시가 걸려 있었다. 파일 이름에
+//     버전이 없으므로 주소가 같고, 주소가 같으면 브라우저는 받아둔 것을
+//     쓴다. POS 앱은 WebView 라 더 끈질기다.
+//     (지금은 아래 cacheHeaderFor() 가 지문이 있을 때만 오래 준다.)
 //
 // server.js 의 그 캐시 설정 위에는 이미 이렇게 적혀 있었다 —
 //   "고쳤다는데 왜 그대로냐"는 혼란이 반복됐다
@@ -122,4 +122,49 @@ function sendStamped(fileName) {
   };
 }
 
-module.exports = { assetVersion, computeVersion, stampHtml, stampedHtmlFile, sendStamped, PUBLIC_DIR };
+// ── 지문이 있으면 오래 캐시해도 된다 ──────────────────────────────────
+//
+// 2026-09-12 사장님: "로그인도 그렇고 버튼 누르는 것도 그렇고 다" 느리다.
+//
+// admin.js 는 673KB(압축 209KB)다. 여태 한 시간 캐시였고, 엣지(CDN)는
+// 하나도 안 들고 있었다 — Vercel 엣지는 `s-maxage` 가 있을 때만 함수 응답을
+// 캐시하는데 `max-age` 뿐이었다(2026-09-08 속도 점검 「원인 1」). 그래서
+// 가게 태블릿은 한 시간마다 이 파일을 **서울의 함수에서** 다시 받아왔다.
+//
+// 위에서 주소에 지문을 박아 뒀으므로, 이제 그럴 이유가 없다. 내용이 바뀌면
+// 주소가 바뀌니 오래 캐시해도 옛 파일을 쓸 일이 없다. 캐시를 늘리는 게
+// 아니라, **정확할 때만 듣게 해 둔 덕분에** 늘릴 수 있는 것이다.
+//
+// 지문이 없는 주소는 짧게만 준다. 그걸 1년으로 잡으면 이 파일이 애초에
+// 막으려던 "고쳤다는데 왜 그대로냐"가 그대로 돌아온다.
+const ASSET_IMMUTABLE = "public, max-age=31536000, immutable, s-maxage=31536000";
+const ASSET_SHORT = "public, max-age=60, s-maxage=60";
+
+/** 이 요청에 줄 Cache-Control. 지문(?v=)이 박혀 있을 때만 오래 준다. */
+function cacheHeaderFor(req, opts) {
+  const production = (opts && "production" in opts) ? opts.production : process.env.NODE_ENV === "production";
+  // 로컬에서는 캐시하지 않는다 — 2026-09-05: 사장님이 로컬에서 admin.js 를
+  // 고칠 때마다 캐시 때문에 방금 저장한 코드가 안 보여서 "고쳤다는데 왜
+  // 그대로냐"가 반복됐다.
+  if (!production) return "no-store";
+  const stamped = req && req.query && req.query.v;
+  return stamped ? ASSET_IMMUTABLE : ASSET_SHORT;
+}
+
+/** express.static 의 setHeaders 로 바로 넘길 수 있는 모양. */
+function staticSetHeaders(res) {
+  res.setHeader("Cache-Control", cacheHeaderFor(res.req));
+}
+
+module.exports = {
+  assetVersion,
+  computeVersion,
+  stampHtml,
+  stampedHtmlFile,
+  sendStamped,
+  cacheHeaderFor,
+  staticSetHeaders,
+  ASSET_IMMUTABLE,
+  ASSET_SHORT,
+  PUBLIC_DIR,
+};

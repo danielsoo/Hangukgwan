@@ -54,22 +54,12 @@ app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
 // that (see loadFirebaseSdk() in order.js for the other piece: the
 // Firebase SDK no longer loads at all for a store that hasn't set up
 // 회원(VIP) login).
+// 정적 파일의 캐시 길이는 src/assetVersion.js 가 정한다 — 주소에 배포
+// 지문(?v=)이 박혀 있을 때만 오래 준다. 2026-09-12 "로그인도 그렇고 버튼
+// 누르는 것도 그렇고 다" 느리다는 말에 대한 화면 쪽 답이 그 파일에 있다.
 app.use(
   express.static(path.join(__dirname, "public"), {
-    // No cache-busting/hashed filenames in this app, so a long maxAge risks
-    // an admin device or a customer's phone holding onto a stale JS/CSS
-    // file for a while after a deploy. 1 hour balances real repeat-visit
-    // savings (the same table's QR scanned again later, staff reloading
-    // /admin through a shift) against how long a fix could take to
-    // visibly land — always fixable sooner with a manual hard refresh.
-    //
-    // Local dev (NODE_ENV !== "production", e.g. `node server.js` on
-    // localhost while testing a fix) skips this entirely — 2026-09-05:
-    // 사장님이 로컬(localhost:3000)에서 admin.js를 고칠 때마다 이 1시간
-    // 캐시 때문에 일반 새로고침으로는 방금 배포(로컬 저장)한 최신 코드가
-    // 안 보이고 하드리프레시가 필요해서 "고쳤다는데 왜 그대로냐"는 혼란이
-    // 반복됐다. 실제 운영(production)에서는 그대로 1시간 캐시 유지.
-    maxAge: process.env.NODE_ENV === "production" ? "1h" : 0,
+    setHeaders: require("./src/assetVersion").staticSetHeaders,
   })
 );
 

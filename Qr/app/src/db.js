@@ -244,11 +244,27 @@ async function deleteDoc(kind, id) {
 
 async function refreshStore() {
   await connectDB();
-  // orders 는 이제 이 문서에 없다. 옛 문서에 남아 있더라도 끌어오지 않는다
-  // — 그 몇 MB를 안 읽는 것이 이 변경의 전부다.
-  const existing = await db
-    .collection("store")
-    .findOne({ _id: "main" }, { projection: { orders: 0 } });
+  // 두 번 읽는다 — store 문서 하나, 그리고 최근 주문. 이 둘을 **동시에**
+  // 보낸다.
+  //
+  // 2026-09-12 사장님: "로그인도 그렇고 버튼 누르는 것도 그렇고 다" 느리다.
+  // 이 함수는 /api/* 요청 하나하나가 전부 거치는 자리라, 여기서 왕복 하나를
+  // 줄이면 화면에 보이는 모든 동작이 그만큼 같이 빨라진다.
+  //
+  // 순서대로 해야 할 이유가 하나 있긴 했다. 주문을 고르는 조건에 영업 시작
+  // 시각(store.settings.service_started_at)이 들어가는데, 그 값은 방금
+  // 읽어온 store 안에 있다. 그래서 「먼저 store, 그 다음 주문」이었다.
+  //
+  // 그 값은 하루에 한 번 바뀐다. 그래서 지금 들고 있는 값으로 먼저 같이
+  // 쏘고, store 가 도착한 뒤에 **값이 정말 바뀌었는지 확인해서** 바뀌었을
+  // 때만 주문을 다시 읽는다. 평소에는 왕복 하나가 사라지고, 바뀐 그 한
+  // 번만 예전과 같아진다. 틀린 목록이 나갈 일은 없다.
+  const { serviceStartedAt } = require("./serviceStart");
+  const startBefore = serviceStartedAt(store);
+  const [existing, ordersFirstTry] = await Promise.all([
+    db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } }),
+    loadRecentOrders(),
+  ]);
   if (existing) {
     Object.assign(store, existing);
     // Backfill any keys missing (lets us evolve the schema safely later)
@@ -258,7 +274,9 @@ async function refreshStore() {
   } else {
     await db.collection("store").insertOne(withoutOutOfDocument(store));
   }
-  store.orders = await loadRecentOrders();
+  const startAfter = serviceStartedAt(store);
+  const sameStart = String(startBefore || "") === String(startAfter || "");
+  store.orders = sameStart ? ordersFirstTry : await loadRecentOrders();
 }
 
 function withoutOutOfDocument(obj) {
