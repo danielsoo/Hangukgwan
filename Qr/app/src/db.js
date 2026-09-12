@@ -277,6 +277,7 @@ async function refreshStore() {
   const startAfter = serviceStartedAt(store);
   const sameStart = String(startBefore || "") === String(startAfter || "");
   store.orders = sameStart ? ordersFirstTry : await loadRecentOrders();
+  lastRefreshAt = Date.now(); // refreshAndSave 가 "방금 읽었나"를 보는 값
 }
 
 function withoutOutOfDocument(obj) {
@@ -314,8 +315,27 @@ async function save() {
 // refreshStore() replaces store.menuItems/orders/etc. with new arrays, so
 // any item/order reference captured before this call no longer lives in
 // those arrays.
+// 방금 읽었으면 또 읽지 않는다.
+//
+// 2026-09-12 사장님: "메뉴 수정하는 거 ... 이런 게 너무 오래 걸려."
+// 재 보니 메뉴 항목 하나 고치는 데 몽고를 다섯 번 왕복했다. 그중 두 번이
+// 같은 store 문서를 읽는 것이었다 — 요청이 들어올 때 server.js 미들웨어가
+// 한 번(refreshStore), 그리고 저장 직전에 여기서 또 한 번.
+//
+// 저장 직전에 다시 읽는 이유는 "쓰는 순간과 읽은 순간 사이의 틈을 좁힌다"
+// 였다. 그런데 그 미들웨어는 **같은 요청의 몇 밀리초 전**에 이미 읽었다.
+// 그 사이에 좁힐 틈이 거의 없다. 틈이 정말 벌어지는 경우(요청 안에서 오래
+// 걸리는 일을 하고 나서 저장하는 경우)만 다시 읽으면 된다.
+//
+// 그래서 시각을 재 두고, 방금 읽었으면 건너뛴다. 오래됐으면 예전처럼 읽는다.
+// 이건 겹쳐쓰기(clobber) 대책이 아니다 — 그건 store 문서를 통째로 쓰지 않는
+// 것으로만 풀린다(CLAUDE.md, patchArrayItem/saveFields). 여기서는 공짜로
+// 사라지는 왕복 하나를 없앨 뿐이다.
+const REFRESH_FRESH_MS = 2000;
+let lastRefreshAt = 0;
+
 async function refreshAndSave(mutate) {
-  await refreshStore();
+  if (Date.now() - lastRefreshAt > REFRESH_FRESH_MS) await refreshStore();
   await mutate(store);
   await save();
 }

@@ -68,19 +68,29 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
   // 메모리의 store.orders 는 최근 며칠치뿐이다(src/db.js) — 지난 달 결산을
   // 뽑으려면 그 날짜 범위를 직접 질의해야 한다. created_at 이 "YYYY-MM-DD
   // HH:MM:SS" 라 문자열 범위로 그대로 걸린다(끝날짜는 그 날 23:59:59까지).
-  const orders = await ordersInRange(start, end, req);
+  //
+  // 2026-09-12 사장님: "결산 탭 들어가는 거 ... 너무 오래 걸려."
+  // 이 화면이 필요로 하는 질의는 셋인데(주문 범위, 오전 정산 시각, 전체
+  // 기간 시작일) 서로 아무 관계가 없다. 줄줄이 기다릴 이유가 없어서
+  // 나란히 보낸다. 왕복 셋이 하나가 된다.
+  const shiftQ = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
+  const [orders, opts, allTimeStart] = await Promise.all([
+    ordersInRange(start, end, req),
+    halfOpts(start, end, req),
+    // 직원에게는 어차피 오늘뿐이라 계산하지 않는다.
+    isOwner ? allTimeStartDate(req) : Promise.resolve(null),
+  ]);
   // 「오전만 보기」 / 「오후만 보기」. 없으면 하루 전체(합산)다.
   //
   // 화면에서 거르지 않고 여기서 거른다 — 결제수단, 분류별, 시간대, 테이블별,
   // 차트가 전부 이 한 번의 거르기를 따라간다. 화면에서 조각조각 거르면 어느
   // 하나를 빠뜨리고, 그 칸만 조용히 하루치를 보여준다.
-  const shift = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
-  const opts = await halfOpts(start, end, req);
+  const shift = shiftQ;
   res.json(
     Object.assign(computeSettlement(orders, start, end, { ...opts, shift, menu: menuForSettlement() }), {
       // 「전체 기간」 버튼이 시작일로 쓸 날짜 (아래 allTimeStartDate).
       // 직원에게는 어차피 오늘뿐이라 계산하지 않는다.
-      all_time_start: isOwner ? await allTimeStartDate(req) : null,
+      all_time_start: allTimeStart,
       // 화면이 「오늘 것만 보입니다」를 띄우는 데 쓴다. 화면을 믿고 막는 게
       // 아니라, 이미 막아놓고 그 사실을 알려주는 것뿐이다.
       today_only: !isOwner,

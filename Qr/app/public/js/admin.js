@@ -2826,7 +2826,14 @@
       // 로드되던 데이터라, 그 탭을 아직 한 번도 안 열었어도 여기서 곧장
       // 볼 수 있도록 탭 전환 시점에 로드한다. tables는 로그인 직후
       // showDashboard()에서 이미 로드/폴링되고 있어 별도 로드 불필요.
-      if (btn.dataset.tab === "payment") loadZones().then(renderPaymentFloorPlan);
+      // 2026-09-12 사장님: "결제 탭 ... 들어가는 게 너무 오래 걸려."
+      // 여기서 네트워크를 먼저 기다리고 나서 그렸다. 구역 목록은 로그인할
+      // 때 이미 받아 두므로(/api/bootstrap), 들고 있는 것으로 **먼저 그리고**
+      // 그 다음 갱신한다. 탭은 즉시 열리고, 구역이 바뀌었으면 곧 다시 그려진다.
+      if (btn.dataset.tab === "payment") {
+        renderPaymentFloorPlan();
+        loadZones().then(renderPaymentFloorPlan);
+      }
     };
   });
 

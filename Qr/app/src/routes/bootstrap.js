@@ -83,6 +83,9 @@ const ALWAYS = [
   ["/api/menu/admin", "../routes/menu", "/admin"],
   ["/api/tables", "../routes/tables", "/"],
   ["/api/settings", "../routes/settings", "/"],
+  // 결제 탭이 열릴 때 쓰는 구역 목록. 여기서 같이 받아 두면 탭이 네트워크를
+  // 기다리지 않고 바로 열린다(admin.js 의 payment 탭).
+  ["/api/zones", "../routes/zones", "/"],
   ["/api/settings/ticket-print", "../routes/settings", "/ticket-print"],
   ["/api/settings/move-slip", "../routes/settings", "/move-slip"],
   ["/api/settings/escpos", "../routes/settings", "/escpos"],
