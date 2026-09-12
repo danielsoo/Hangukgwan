@@ -4,6 +4,7 @@ const path = require("path");
 const express = require("express");
 const session = require("express-session");
 const compression = require("compression");
+const { nowLocal } = require("./src/time");
 const MongoStore = require("connect-mongo");
 const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave } = require("./src/db");
 const seed = require("./src/seed");
@@ -116,9 +117,50 @@ let migratedOnce = false;
 // 이 인스턴스가 몇 번째 요청을 처리하고 있나 (src/instance.js). 1 이면 방금
 // 뜬 것이다 — 콜드 스타트. /api/_diag 가 그 값을 보여준다.
 app.use(async (req, res, next) => {
-  require("./src/instance").countRequest();
+  const instance = require("./src/instance");
+  const requestLog = require("./src/requestLog");
+  instance.countRequest();
+
+  // 이 요청이 얼마나 걸렸는지 재 두고, 응답을 내보내기 직전에 담는다.
+  // **여기서 몽고에 쓰지 않는다** — 담기만 하고, 다음 요청이 store 를 읽을
+  // 때 나란히 나간다(src/requestLog.js). 서버리스는 응답을 내보내는 순간
+  // 인스턴스를 얼려서, 응답 뒤에 쓰려고 하면 그 쓰기가 다음 요청까지
+  // 매달려 있게 된다. 어제 Pusher 에서 그 일이 있었다.
+  const startedAt = Date.now();
+  const stats = instance.stats();
+  // **주소를 지금 잡아 둔다.** res.end 는 라우터 안에서 불리는데, 그때
+  // req.path 는 그 라우터에 상대적인 값으로 바뀌어 있다 — /api/orders 가
+  // "/" 로, /api/auth/login 이 "/login" 으로 기록됐다(2026-09-12 실제로
+  // 그렇게 쌓였다). 요약이 통째로 무의미해진다.
+  const routeAtEntry = requestLog.routeOf(req.originalUrl ? req.originalUrl.split("?")[0] : req.path);
+  const endResponse = res.end.bind(res);
+  res.end = function (...args) {
+    try {
+      requestLog.record({
+        created_at: new Date(), // 몽고 TTL 이 보는 값 — Date 여야 한다
+        at: nowLocal(),
+        route: routeAtEntry,
+        method: req.method,
+        status: res.statusCode,
+        ms: Date.now() - startedAt,
+        cold: stats.requests_served === 1,
+        nth: stats.requests_served,
+        age_s: stats.instance_age_s,
+        region: process.env.VERCEL_REGION || null,
+      });
+    } catch (e) {
+      // 기록이 응답을 막지 않는다.
+    }
+    return endResponse(...args);
+  };
+
   try {
-    await refreshStore();
+    // 담아둔 기록을 store 읽기와 **나란히** 내보낸다. 줄줄이 세우면 이
+    // 기능이 막으려던 바로 그 일(요청마다 왕복 하나 추가)이 된다.
+    await Promise.all([
+      refreshStore(),
+      requestLog.pending() ? requestLog.flush(getDb()) : Promise.resolve(),
+    ]);
     if (!seededOnce) {
       await seed();
       seededOnce = true;

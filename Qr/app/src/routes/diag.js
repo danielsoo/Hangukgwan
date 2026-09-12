@@ -12,6 +12,7 @@
 const express = require("express");
 const { store } = require("../db");
 const { requireOwner } = require("../auth");
+const requestLog = require("../requestLog");
 
 const router = express.Router();
 
@@ -125,6 +126,102 @@ router.get("/", requireOwner, async (req, res) => {
   } catch (e) {
     out.instance_error = e.message;
   }
+
+  res.set("Cache-Control", "no-store");
+  res.json(out);
+});
+
+/**
+ * 쌓인 기록을 사람이 읽을 수 있는 모양으로.
+ *
+ * 2026-09-12 사장님: "모든 기록들이 모이면서 알기 쉽잖아"
+ *
+ * 그래서 줄을 그대로 뱉지 않고 **요약해서** 준다. 수천 줄을 눈으로 훑어서
+ * 알 수 있는 것은 없다. 알고 싶은 것은 세 가지뿐이다 —
+ *
+ *  1. 어느 동작이 느린가        (동작별 중앙값·상위 10%·최대)
+ *  2. 느린 것이 얼마나 잦은가   (400ms 넘는 비율)
+ *  3. 콜드 스타트 때문인가      (콜드일 때와 아닐 때의 값 차이)
+ *
+ * 3번이 핵심이다. 둘이 비슷하면 인스턴스는 죄가 없고 다른 데를 봐야 한다.
+ * 콜드가 몇 배 느리면, 왕복 횟수를 줄이는 것은 거의 의미가 없다.
+ */
+function percentile(sorted, p) {
+  if (!sorted.length) return null;
+  const i = Math.min(sorted.length - 1, Math.floor((sorted.length * p) / 100));
+  return sorted[i];
+}
+
+router.get("/log", requireOwner, async (req, res) => {
+  const hours = Math.min(24 * 14, Math.max(1, parseInt(req.query.hours, 10) || 24));
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const out = { hours, since: since.toISOString(), slow_ms: requestLog.SLOW_MS, keep_days: requestLog.KEEP_DAYS };
+
+  try {
+    const db = require("../db").getDb();
+    const rows = await db
+      .collection(requestLog.COLLECTION)
+      .find({ created_at: { $gte: since } })
+      .limit(20000)
+      .toArray();
+
+    out.count = rows.length;
+    if (!rows.length) {
+      // 빈 화면이 "빠르다"로 읽히면 안 된다. 왜 비었는지 말해준다.
+      // 비어 있는 것과 "기록이 고장나서 비어 있는 것"을 구별해준다.
+      // 조용히 비면 그게 "빠르다"로 읽힌다.
+      const why = requestLog.lastFlushError();
+      out.note = why
+        ? `기록을 저장하지 못하고 있습니다: ${why}`
+        : "아직 쌓인 기록이 없습니다. 배포 뒤 관리자 화면을 몇 번 쓰면 쌓입니다.";
+      res.set("Cache-Control", "no-store");
+      return res.json(out);
+    }
+
+    const cold = rows.filter((r) => r.cold);
+    const warm = rows.filter((r) => !r.cold);
+    const msOf = (list) => list.map((r) => r.ms).sort((a, b) => a - b);
+    const summarize = (list) => {
+      const ms = msOf(list);
+      return {
+        n: list.length,
+        p50: percentile(ms, 50),
+        p90: percentile(ms, 90),
+        max: ms.length ? ms[ms.length - 1] : null,
+      };
+    };
+
+    out.overall = summarize(rows);
+    // 이 한 줄이 "인스턴스가 문제인가"를 가른다.
+    out.cold = summarize(cold);
+    out.warm = summarize(warm);
+    out.cold_share_pct = Math.round((cold.length / rows.length) * 100);
+    out.slow_share_pct = Math.round((rows.filter((r) => r.ms >= requestLog.SLOW_MS).length / rows.length) * 100);
+
+    const byRoute = new Map();
+    for (const r of rows) {
+      const key = `${r.method} ${r.route}`;
+      if (!byRoute.has(key)) byRoute.set(key, []);
+      byRoute.get(key).push(r);
+    }
+    out.by_route = [...byRoute.entries()]
+      .map(([key, list]) => Object.assign({ route: key }, summarize(list), {
+        cold_n: list.filter((r) => r.cold).length,
+      }))
+      .sort((a, b) => b.p90 - a.p90)
+      .slice(0, 30);
+
+    // 가장 느렸던 것들 — 요약이 못 보여주는 한 건짜리 사고를 위해.
+    out.slowest = rows
+      .slice()
+      .sort((a, b) => b.ms - a.ms)
+      .slice(0, 15)
+      .map((r) => ({ at: r.at, route: `${r.method} ${r.route}`, ms: r.ms, cold: !!r.cold, nth: r.nth, status: r.status }));
+  } catch (e) {
+    out.error = e.message;
+  }
+  const flushErr = requestLog.lastFlushError();
+  if (flushErr) out.log_write_error = flushErr;
 
   res.set("Cache-Control", "no-store");
   res.json(out);

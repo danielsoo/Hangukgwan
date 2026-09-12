@@ -155,6 +155,18 @@ class Collection {
     const doc = this.docs.find((d) => matches(d, filter)) || null;
     return doc ? project(doc, opts.projection) : null;
   }
+  // 진짜 드라이버에는 있고 여기 없어서 2026-09-12 에 한 번 헛돌았다
+  // (src/requestLog.js 의 flush 가 조용히 실패했다).
+  async insertMany(docs, opts = {}) {
+    const inserted = {};
+    let n = 0;
+    for (const d of docs || []) {
+      const r = await this.insertOne(d);
+      inserted[n++] = r && r.insertedId;
+    }
+    return { acknowledged: true, insertedCount: n, insertedIds: inserted };
+  }
+
   async insertOne(doc) {
     const _id = doc._id || new ObjectId();
     const full = { ...doc, _id };
