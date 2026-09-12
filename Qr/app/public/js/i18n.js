@@ -77,7 +77,13 @@ const I18N = {
     networkErrorMsg: "網路連線失敗，請再試一次",
     noOrdersYet: "尚未點餐",
     loadingMenu: "菜單載入中…",
-    mixOptionsHint: "牛豬比例可自由搭配，首次點餐兩者合計需滿 2 份",
+    // {n} = 그 메뉴의 min_first_order_qty. 2 를 글자로 박아두면 사장님이
+    // 최소 수량을 바꾼 날 안내만 옛 숫자로 남는다.
+    mixOptionsHint: "牛豬比例可自由搭配，首次點餐兩者合計需滿 {n} 份",
+    // 이미 주문한 적이 있는 자리에는 최소 수량이 걸리지 않는다.
+    mixOptionsHintAfter: "牛豬比例可自由搭配",
+    // 섞지 않는 메뉴(닭갈비·삼겹살 등)의 첫 주문 안내.
+    minFirstOrderHint: "首次點餐這道菜合計需滿 {n} 份",
     payOnlineBtn: "線上付款",
     payOnlineConfirm: "要用信用卡/LINE Pay/JKOPay 等方式付清這桌的未結帳金額嗎？",
     idleWarningMsg: "1 分鐘後畫面將自動鎖定，需要重新掃描 QR Code 才能繼續。",
@@ -183,7 +189,9 @@ const I18N = {
     networkErrorMsg: "네트워크 연결에 실패했습니다. 다시 시도해주세요",
     noOrdersYet: "아직 주문 내역이 없습니다",
     loadingMenu: "메뉴 불러오는 중…",
-    mixOptionsHint: "소/돼지 비율은 자유롭게 조절 가능, 첫 주문은 합계 최소 2인분이에요",
+    mixOptionsHint: "소/돼지 비율은 자유롭게 조절 가능, 첫 주문은 합계 최소 {n}인분이에요",
+    mixOptionsHintAfter: "소/돼지 비율은 자유롭게 조절 가능해요",
+    minFirstOrderHint: "첫 주문에서는 이 메뉴를 합계 {n}인분 이상 담아주세요",
     payOnlineBtn: "온라인 결제",
     payOnlineConfirm: "이 테이블의 미결제 금액을 신용카드/LINE Pay/JKOPay 등으로 결제할까요?",
     idleWarningMsg: "1분 후 화면이 자동으로 잠깁니다. 계속하려면 QR 코드를 다시 스캔해야 해요.",
@@ -289,7 +297,9 @@ const I18N = {
     networkErrorMsg: "Network error, please try again",
     noOrdersYet: "No orders yet",
     loadingMenu: "Loading menu…",
-    mixOptionsHint: "Mix beef and pork in any ratio — on your first order the combined total must be at least 2 servings",
+    mixOptionsHint: "Mix beef and pork in any ratio — on your first order the combined total must be at least {n} servings",
+    mixOptionsHintAfter: "Mix beef and pork in any ratio",
+    minFirstOrderHint: "On your first order, this dish needs at least {n} servings in total",
     payOnlineBtn: "Pay Online",
     payOnlineConfirm: "Pay this table's outstanding balance now by credit card / LINE Pay / JKOPay?",
     idleWarningMsg: "The screen will lock automatically in 1 minute — you'll need to rescan the QR code to continue.",

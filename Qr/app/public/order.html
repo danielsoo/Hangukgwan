@@ -130,6 +130,12 @@
           <span id="qtyVal">1</span>
           <button id="qtyPlus">+</button>
         </div>
+        <!-- 첫 주문 최소 수량 안내. 사장님(2026-09-12): 동판불고기에 있는
+             안내 문구를 닭갈비·삼겹살에도 넣어달라고 하셨다. 그 셋은 모두
+             min_first_order_qty 가 2 인데, 안내가 붙어 있던 것은 牛/豬 를
+             섞는 동판뿐이었다. 나머지 둘은 수량이 2 로 미리 올라가 있기만
+             하고 왜 그런지는 아무 데도 안 쓰여 있었다. -->
+        <div class="mix-options-hint" id="qtyHint" hidden></div>
         <div class="mix-options" id="mixOptions" hidden>
           <!-- Quick-pick: choosing 牛 sets it to 2/0, choosing 豬 sets it to
                0/2 — a normal single-choice starting point. The +/- counters

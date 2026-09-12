@@ -892,7 +892,16 @@
       optWrap.hidden = true;
       qtyRow.hidden = true;
       mixWrap.hidden = false;
-      $("#mixOptionsHint").textContent = t("mixOptionsHint");
+      // 섞는 메뉴는 mixOptionsHint 가 같은 이야기를 한다 — 두 줄이 겹치면
+      // 안 된다.
+      if ($("#qtyHint")) $("#qtyHint").hidden = true;
+      // 최소 수량은 「이 자리의 첫 주문」에만 걸린다. 이미 주문한 적이
+      // 있으면 그 문장은 사실이 아니므로 비율 이야기만 남긴다.
+      const mixMin = item.min_first_order_qty || 0;
+      $("#mixOptionsHint").textContent =
+        mixMin && !hasPriorOrder
+          ? t("mixOptionsHint").replace("{n}", mixMin)
+          : t("mixOptionsHintAfter");
       const opts = item.options.split(",").map((s) => s.trim());
       mixQty = {};
       opts.forEach((opt) => (mixQty[opt] = 0));
@@ -904,6 +913,20 @@
       currentQty = item.min_first_order_qty && !hasPriorOrder ? item.min_first_order_qty : 1;
       $("#qtyVal").textContent = String(currentQty);
       qtyRow.hidden = false;
+      // 왜 2 로 올라가 있는지 적어준다.
+      //
+      // 사장님(2026-09-12): 동판불고기에 있는 안내를 닭갈비·삼겹살에도
+      // 넣어달라고 하셨다. 셋 다 첫 주문 최소 2인분인데, 안내가 붙어 있던
+      // 것은 牛/豬 를 섞는 동판뿐이었다 — 나머지 둘은 숫자만 2 로 올라가
+      // 있고 이유는 아무 데도 없었다. 손님은 그걸 「왜 1인분은 안 되지」로
+      // 읽는다.
+      const qtyHint = $("#qtyHint");
+      if (qtyHint) {
+        const minQty = item.min_first_order_qty || 0;
+        const show = minQty > 1 && !hasPriorOrder;
+        qtyHint.hidden = !show;
+        qtyHint.textContent = show ? t("minFirstOrderHint").replace("{n}", minQty) : "";
+      }
       if (item.options) {
         optWrap.hidden = false;
         item.options.split(",").forEach((opt, i) => {
