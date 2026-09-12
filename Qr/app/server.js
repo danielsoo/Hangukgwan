@@ -37,6 +37,121 @@ app.set("trust proxy", 1);
 // static files and every /api/* JSON response alike.
 app.use(compression());
 
+// ── 재는 것은 제일 앞에서 ────────────────────────────────────────────
+//
+// 2026-09-12 사장님: "그럼 모든 행동이 이제 다 로그로 남는거지?"
+//
+// 아니었다. 재는 자리가 아래쪽(/api 전용 미들웨어)이라, 그 위에서 끝나는
+// 것들 — 손님이 받는 메뉴 사진(/api/photo), 화면 파일(js/css), 페이지
+// 자체 — 은 하나도 안 잡혔다. 손님이 QR 을 찍고 기다리는 시간의 상당 부분이
+// 바로 그것들인데.
+//
+// 그래서 재는 것만 맨 앞으로 옮긴다. 기록은 메모리에 담기만 하므로 여기
+// 있어도 값이 들지 않는다. 몽고에 내보내는 것은 그대로 아래에 둔다 — 거기가
+// 어차피 store 를 읽는 자리라, 그것과 나란히 나가면 공짜다.
+//
+// 다만 /api 가 아닌 것(사진·파일)은 **느리거나 인스턴스가 방금 떴을 때만**
+// 담는다. 전부 담으면 사진 한 장 한 장이 줄을 차지해서, 정작 봐야 할 줄이
+// 상한에 밀려 사라진다.
+app.use((req, res, next) => {
+  // 이 요청이 몽고에서 보낸 시간을 요청마다 따로 센다(src/dbTiming.js).
+  // 전역 변수로 세면 동시에 들어온 요청들이 서로의 시간을 더해서, 바쁠수록
+  // 숫자가 부풀어 오른다 — 하필 바쁠 때를 보려는 것인데.
+  require("./src/dbTiming").run(() => {
+    try {
+      startMeasuring(req, res);
+    } catch (e) {
+      // 재는 것이 요청을 막지 않는다.
+    }
+    next();
+  });
+});
+
+function startMeasuring(req, res) {
+  const instance = require("./src/instance");
+  const requestLog = require("./src/requestLog");
+  instance.countRequest();
+
+  const startedAt = Date.now();
+  const stats = instance.stats();
+  const isApi = String(req.path || "").indexOf("/api/") === 0;
+  // **주소를 지금 잡아 둔다.** res.end 는 라우터 안에서 불리는데, 그때
+  // req.path 는 그 라우터에 상대적인 값으로 바뀌어 있다 — /api/orders 가
+  // "/" 로, /api/auth/login 이 "/login" 으로 기록됐다(2026-09-12 실제로
+  // 그렇게 쌓였다). 요약이 통째로 무의미해진다.
+  const routeAtEntry = requestLog.routeOf(req.originalUrl ? req.originalUrl.split("?")[0] : req.path);
+
+  // 화면이 실제로 기다린 시간. 앞 요청들의 값이 헤더에 얹혀 온다
+  // (public/js/clientTiming.js — 손님 화면과 관리자 화면이 같이 쓴다).
+  // 서버가 자기 시계로는 볼 수 없는 구간 — 기기에서 서울까지, 연결 맺기,
+  // 함수가 깨어나는 시간 — 이 여기 들어 있다.
+  try {
+    const raw = req.get("X-Client-Timing");
+    if (raw) {
+      for (const part of String(raw).slice(0, 2000).split(";")) {
+        const [route, ms, status] = part.split("|");
+        if (!route || !/^\d+$/.test(ms || "")) continue;
+        // click: 으로 시작하면 「누른 것 하나가 끝날 때까지」다. 요청 하나가
+        // 아니라 사람이 실제로 기다린 시간이라, 요청 줄과 섞으면 안 된다
+        // — 결제 완료 한 번이 PATCH 세 줄로 흩어지는 것을 막으려고 따로
+        // 재는 값인데, 섞으면 도로 흩어진다.
+        const isClick = route.indexOf("click:") === 0;
+        requestLog.record({
+          created_at: new Date(),
+          at: nowLocal(),
+          // client=요청 하나를 화면이 잰 값, click=누른 것 하나가 끝날 때까지
+          src: isClick ? "click" : "client",
+          route: isClick ? route.slice(6).slice(0, 80) : requestLog.routeOf(route),
+          method: isClick ? "CLICK" : "GET",
+          // click 줄의 status 자리에는 그 누름이 보낸 요청 수가 들어 있다.
+          status: isClick ? 0 : parseInt(status, 10) || 0,
+          reqs: isClick ? parseInt(status, 10) || 0 : undefined,
+          ms: Math.min(600000, parseInt(ms, 10)),
+        });
+      }
+    }
+  } catch (e) {
+    // 헤더가 이상해도 요청은 그대로 간다.
+  }
+
+  // 응답을 내보내기 직전에 담는다. **여기서 몽고에 쓰지 않는다** — 담기만
+  // 하고, 다음 /api 요청이 store 를 읽을 때 나란히 나간다. 서버리스는 응답을
+  // 내보내는 순간 인스턴스를 얼려서, 응답 뒤에 쓰려고 하면 그 쓰기가 다음
+  // 요청까지 매달려 있게 된다. 어제 Pusher 에서 그 일이 있었다.
+  const endResponse = res.end.bind(res);
+  res.end = function (...args) {
+    try {
+      const ms = Date.now() - startedAt;
+      const cold = stats.requests_served === 1;
+      // 사진·파일은 느리거나 방금 뜬 인스턴스일 때만. 위 주석 참고.
+      if (isApi || cold || ms >= requestLog.SLOW_MS) {
+        const mongo = require("./src/dbTiming").current();
+        requestLog.record({
+          created_at: new Date(), // 몽고 TTL 이 보는 값 — Date 여야 한다
+          at: nowLocal(),
+          src: "server",
+          route: routeAtEntry,
+          method: req.method,
+          status: res.statusCode,
+          ms,
+          // 이 요청이 몽고를 기다린 시간. ms 와의 차이가 곧 「몽고 밖에서 쓴
+          // 시간」이다 — 아침과 저녁의 차이가 어느 쪽인지를 이 둘이 가른다.
+          mongo_ms: mongo.mongo_ms,
+          mongo_ops: mongo.mongo_ops,
+          cold,
+          nth: stats.requests_served,
+          age_s: stats.instance_age_s,
+          region: process.env.VERCEL_REGION || null,
+        });
+      }
+    } catch (e) {
+      // 기록이 응답을 막지 않는다.
+    }
+    return endResponse(...args);
+  };
+}
+
+
 // The `verify` hook stashes the raw request body on req.rawBody — needed by
 // the LINE webhook route (src/routes/lineWebhook.js) to check the
 // X-Line-Signature header, which is an HMAC over the exact raw bytes LINE
@@ -116,98 +231,24 @@ let seededOnce = false;
 let migratedOnce = false;
 // 이 인스턴스가 몇 번째 요청을 처리하고 있나 (src/instance.js). 1 이면 방금
 // 뜬 것이다 — 콜드 스타트. /api/_diag 가 그 값을 보여준다.
-app.use((req, res, next) => {
-  // 이 요청이 몽고에서 보낸 시간을 요청마다 따로 센다(src/dbTiming.js).
-  // 전역 변수로 세면 동시에 들어온 요청들이 서로의 시간을 더해서, 바쁠수록
-  // 숫자가 부풀어 오른다 — 하필 바쁠 때를 보려는 것인데.
-  require("./src/dbTiming").run(() =>
-    // measured 안에서 못 잡은 예외가 여기까지 오면 요청이 영영 안 끝난다.
-    Promise.resolve(measured(req, res, next)).catch(next)
-  );
-});
+// 여기서부터가 /api 전용이다. store 를 새로 읽고, 담아둔 기록을 그것과
+// 나란히 내보낸다. (재는 것은 위의 startMeasuring 이 이미 다 했다.)
+app.use(storeRefreshAndFlush);
 
-async function measured(req, res, next) {
-  const instance = require("./src/instance");
+async function storeRefreshAndFlush(req, res, next) {
   const requestLog = require("./src/requestLog");
-  instance.countRequest();
-
-  // 이 요청이 얼마나 걸렸는지 재 두고, 응답을 내보내기 직전에 담는다.
-  // **여기서 몽고에 쓰지 않는다** — 담기만 하고, 다음 요청이 store 를 읽을
-  // 때 나란히 나간다(src/requestLog.js). 서버리스는 응답을 내보내는 순간
-  // 인스턴스를 얼려서, 응답 뒤에 쓰려고 하면 그 쓰기가 다음 요청까지
-  // 매달려 있게 된다. 어제 Pusher 에서 그 일이 있었다.
-  const startedAt = Date.now();
-  const stats = instance.stats();
-  // **주소를 지금 잡아 둔다.** res.end 는 라우터 안에서 불리는데, 그때
-  // req.path 는 그 라우터에 상대적인 값으로 바뀌어 있다 — /api/orders 가
-  // "/" 로, /api/auth/login 이 "/login" 으로 기록됐다(2026-09-12 실제로
-  // 그렇게 쌓였다). 요약이 통째로 무의미해진다.
-  const routeAtEntry = requestLog.routeOf(req.originalUrl ? req.originalUrl.split("?")[0] : req.path);
-
-  // 태블릿이 실제로 기다린 시간. 앞 요청들의 값이 헤더에 얹혀 온다
-  // (public/js/admin.js). 서버가 자기 시계로는 볼 수 없는 구간 — 신주에서
-  // 서울까지, 연결 맺기, 함수가 깨어나는 시간 — 이 여기 들어 있다.
-  try {
-    const raw = req.get("X-Client-Timing");
-    if (raw) {
-      for (const part of String(raw).slice(0, 2000).split(";")) {
-        const [route, ms, status] = part.split("|");
-        if (!route || !/^\d+$/.test(ms || "")) continue;
-        // click: 으로 시작하면 「누른 것 하나가 끝날 때까지」다. 요청 하나가
-        // 아니라 사람이 실제로 기다린 시간이라, 요청 줄과 섞으면 안 된다
-        // — 결제 완료 한 번이 PATCH 세 줄로 흩어지는 것을 막으려고 따로
-        // 재는 값인데, 섞으면 도로 흩어진다.
-        const isClick = route.indexOf("click:") === 0;
-        requestLog.record({
-          created_at: new Date(),
-          at: nowLocal(),
-          // client=요청 하나를 화면이 잰 값, click=누른 것 하나가 끝날 때까지
-          src: isClick ? "click" : "client",
-          route: isClick ? route.slice(6).slice(0, 80) : requestLog.routeOf(route),
-          method: isClick ? "CLICK" : "GET",
-          // click 줄의 status 자리에는 그 누름이 보낸 요청 수가 들어 있다.
-          status: isClick ? 0 : parseInt(status, 10) || 0,
-          reqs: isClick ? parseInt(status, 10) || 0 : undefined,
-          ms: Math.min(600000, parseInt(ms, 10)),
-        });
-      }
-    }
-  } catch (e) {
-    // 헤더가 이상해도 요청은 그대로 간다.
-  }
-  const endResponse = res.end.bind(res);
-  res.end = function (...args) {
-    try {
-      const mongo = require("./src/dbTiming").current();
-      requestLog.record({
-        created_at: new Date(), // 몽고 TTL 이 보는 값 — Date 여야 한다
-        at: nowLocal(),
-        src: "server",
-        route: routeAtEntry,
-        method: req.method,
-        status: res.statusCode,
-        ms: Date.now() - startedAt,
-        // 이 요청이 몽고를 기다린 시간. ms 와의 차이가 곧 「몽고 밖에서 쓴
-        // 시간」이다 — 아침과 저녁의 차이가 어느 쪽인지를 이 둘이 가른다.
-        mongo_ms: mongo.mongo_ms,
-        mongo_ops: mongo.mongo_ops,
-        cold: stats.requests_served === 1,
-        nth: stats.requests_served,
-        age_s: stats.instance_age_s,
-        region: process.env.VERCEL_REGION || null,
-      });
-    } catch (e) {
-      // 기록이 응답을 막지 않는다.
-    }
-    return endResponse(...args);
-  };
-
   try {
     // 담아둔 기록을 store 읽기와 **나란히** 내보낸다. 줄줄이 세우면 이
     // 기능이 막으려던 바로 그 일(요청마다 왕복 하나 추가)이 된다.
     await Promise.all([
       refreshStore(),
-      requestLog.pending() ? requestLog.flush(getDb()) : Promise.resolve(),
+      // getDb() 는 connectDB() 전에는 못 쓴다. 예전에는 첫 /api 요청에
+      // 담아둔 기록이 없어서 이 자리에 오지도 않았는데, 재는 자리를 맨
+      // 앞으로 옮기면서 화면 파일 요청들이 먼저 담기게 됐다 — 그래서 **첫
+      // 요청이 500 으로 죽었다**(2026-09-12, 브라우저로 확인). 연결이 끝난
+      // 뒤에 내보낸다. connectDB() 는 같은 약속을 돌려주므로 refreshStore()
+      // 와 나란히 가는 것은 그대로다.
+      connectDB().then(() => (requestLog.pending() ? requestLog.flush(getDb()) : null)),
     ]);
     if (!seededOnce) {
       await seed();

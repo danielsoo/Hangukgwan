@@ -140,6 +140,18 @@ function check(name, cond, extra = "") {
     check("어떻게 기록한 것인지도 적혀 있다", !!body.how && typeof body.how.rule === "string", JSON.stringify(body.how || {}));
   }
 
+  out.push("\n[★ 첫 요청이 죽지 않는다 — 연결되기 전에 내보내려 하면 500 이 난다]");
+  // 2026-09-12: 재는 자리를 맨 앞으로 옮기자 화면 파일 요청들이 먼저 담겼고,
+  // 그래서 **첫 /api 요청에 이미 담아둔 기록이 있는** 상태가 됐다. 그걸
+  // connectDB() 전에 내보내려다 getDb() 가 터져서 첫 요청이 통째로 500 이
+  // 됐다. 브라우저로 열어보고서야 알았다.
+  {
+    const fresh = request.agent(app);
+    requestLog.record({ created_at: new Date(), at: "x", route: "/js/admin.js", method: "GET", status: 200, ms: 1 });
+    const r5 = await fresh.get("/api/settings");
+    check("★ 담아둔 기록이 있어도 요청이 200 이다", r5.status === 200, `${r5.status} ${JSON.stringify(r5.body).slice(0, 120)}`);
+  }
+
   out.push("\n[직원은 못 본다 — 가게 내부 사정이다]");
   const anon = request.agent(app);
   const r2 = await anon.get("/api/_diag/log");
