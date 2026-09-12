@@ -210,8 +210,27 @@ router.get("/log", requireOwner, async (req, res) => {
 
     // 화면이 잰 것과 서버가 잰 것. 차이가 곧 「앱 바깥」 — 신주에서 서울까지,
     // 연결 맺기, 함수가 깨어나는 시간이다. 서버는 자기 시계로 이걸 못 본다.
+    // **누른 것 하나.** 2026-09-12 사장님: "탭 변경, 버튼, 결제 완료 등 모든
+    // 클릭에 적용되는 거지?" — 이 줄이 사장님이 실제로 기다린 시간이다.
+    // 요청 줄은 결제 완료 한 번을 PATCH 세 줄로 흩어놓지만 이건 안 그런다.
+    const clickRows = rows.filter((r) => r.src === "click");
+    if (clickRows.length) {
+      out.clicks = summarize(clickRows);
+      const byClick = new Map();
+      for (const r of clickRows) {
+        if (!byClick.has(r.route)) byClick.set(r.route, []);
+        byClick.get(r.route).push(r);
+      }
+      out.by_click = [...byClick.entries()]
+        .map(([label, list]) => Object.assign({ click: label }, summarize(list), {
+          reqs_p50: percentile(list.map((r) => r.reqs || 0).sort((a, b) => a - b), 50),
+        }))
+        .sort((a, b) => b.p90 - a.p90)
+        .slice(0, 30);
+    }
+
     const clientRows = rows.filter((r) => r.src === "client");
-    const serverRows = rows.filter((r) => r.src !== "client");
+    const serverRows = rows.filter((r) => r.src !== "client" && r.src !== "click");
     if (clientRows.length) {
       out.client = summarize(clientRows);
       out.server = summarize(serverRows);
@@ -295,9 +314,9 @@ router.get("/log/export", requireOwner, async (req, res) => {
     since: since.toISOString(),
     how: {
       rule: "모든 요청을 기록한다 (표본 아님). 담아뒀다가 다음 요청에 한 번의 쓰기로 몰아 내보낸다.",
-      src: "server=서버 안에서 보낸 시간, client=태블릿이 실제로 기다린 시간(망·콜드 스타트 포함)",
+      src: "click=누른 것 하나가 끝날 때까지(사람이 기다린 시간), client=요청 하나를 화면이 잰 시간, server=서버 안에서 보낸 시간",
       keep_days: requestLog.KEEP_DAYS,
-      fields: "ms=걸린 시간, mongo_ms=그중 몽고를 기다린 시간, mongo_ops=몽고 호출 수, cold=이 인스턴스의 첫 요청인가, nth=이 인스턴스가 처리한 몇 번째 요청, age_s=인스턴스가 살아 있던 시간",
+      fields: "ms=걸린 시간, reqs=그 누름이 보낸 요청 수(click 줄), mongo_ms=그중 몽고를 기다린 시간, mongo_ops=몽고 호출 수, cold=이 인스턴스의 첫 요청인가, nth=이 인스턴스가 처리한 몇 번째 요청, age_s=인스턴스가 살아 있던 시간",
     },
     region: process.env.VERCEL_REGION || null,
   };
@@ -318,6 +337,7 @@ router.get("/log/export", requireOwner, async (req, res) => {
       ms: r.ms,
       mongo_ms: r.mongo_ms,
       mongo_ops: r.mongo_ops,
+      reqs: r.reqs,
       cold: !!r.cold,
       nth: r.nth,
       age_s: r.age_s,

@@ -204,12 +204,91 @@
   //
   // 보내는 방법: **따로 요청을 만들지 않는다.** 그러면 바쁠 때 요청이 더
   // 늘어나는데, 하필 바쁠 때가 보려는 순간이다. 다음 요청의 헤더에 얹는다.
+  // ── 누른 것 하나가 끝날 때까지 ──────────────────────────────────────
+  //
+  // 2026-09-12 사장님: "탭 변경, 버튼, 결제 완료 등 모든 클릭에 적용되는
+  // 거지?"
+  //
+  // 아니었다. 위의 것은 **요청 하나**를 잰다. 그래서 세 가지가 빠졌다.
+  //
+  //  1. 요청을 안 보내는 탭 전환은 아예 안 잡힌다. 그래도 사람은 기다린다
+  //     — 화면을 다시 그리는 시간이 있다.
+  //  2. **결제 완료는 주문 N 개면 PATCH 를 N 번 보낸다.** 요청 단위로 재면
+  //     "200ms 짜리 세 줄"로 흩어져서, 정작 사장님이 기다린 1.8초는
+  //     어디에도 안 남는다.
+  //  3. 응답이 온 뒤 화면을 다시 그리는 시간이 빠진다.
+  //
+  // 그래서 **누른 순간부터 화면이 멎을 때까지**를 하나로 잰다. 누르면 시작,
+  // 그 사이 나간 요청이 전부 끝나고 화면을 한 번 더 그린 뒤에 끝. 요청이
+  // 하나도 없었으면 그리는 시간만 남는다.
+  //
+  // 이름은 id → data-tab/data-pane → class 순으로 잡는다. 글자(버튼에 적힌
+  // 말)는 안 쓴다 — 헤더에 ASCII 만 담을 수 있어서 한국어는 어차피 털린다.
+  const ACTION_SETTLE_MS = 120; // 이만큼 조용하면 끝난 것으로 본다
+  const ACTION_MAX_MS = 20000; // 영영 안 끝나는 것을 막는다
+  let action = null;
+
+  function labelOfClick(el) {
+    const node = el && el.closest ? el.closest("button, a, [data-tab], [data-pane], .tab-btn, .order-card, input[type=checkbox]") : null;
+    if (!node) return null;
+    const parts = [];
+    if (node.dataset && node.dataset.tab) parts.push("tab:" + node.dataset.tab);
+    else if (node.dataset && node.dataset.pane) parts.push("pane:" + node.dataset.pane);
+    else if (node.id) parts.push("#" + node.id);
+    else if (node.className && typeof node.className === "string") parts.push("." + node.className.trim().split(/\s+/)[0]);
+    else parts.push(node.tagName.toLowerCase());
+    return parts.join("").replace(/[^\x20-\x7E]/g, "").slice(0, 60) || null;
+  }
+
+  function finishAction() {
+    if (!action || action.done) return;
+    action.done = true;
+    const a = action;
+    action = null;
+    noteClientTiming("click:" + a.label, Date.now() - a.t0, a.reqs);
+  }
+
+  function maybeFinishAction() {
+    if (!action || action.done || action.inflight > 0) return;
+    // 요청이 다 끝났다. 화면을 한 번 더 그릴 시간을 주고, 그 사이 새 요청이
+    // 안 나가면 끝난 것으로 본다. (응답을 받고 나서 다시 부르는 화면이
+    // 많다 — 그것까지 하나로 묶어야 사람이 기다린 시간이 된다.)
+    clearTimeout(action.settleTimer);
+    action.settleTimer = setTimeout(() => {
+      if (!action || action.done || action.inflight > 0) return;
+      requestAnimationFrame(() => finishAction());
+    }, ACTION_SETTLE_MS);
+  }
+
+  document.addEventListener(
+    "click",
+    (e) => {
+      const label = labelOfClick(e.target);
+      if (!label) return;
+      // 앞엣것이 아직 안 끝났으면 거기서 끊는다 — 두 번 누른 것은 두 번이다.
+      finishAction();
+      action = { label, t0: Date.now(), inflight: 0, reqs: 0, done: false, settleTimer: null };
+      const a = action;
+      // 요청이 하나도 안 나가는 누름(탭 전환 등)도 끝이 있어야 한다.
+      setTimeout(() => {
+        if (action === a) maybeFinishAction();
+      }, 0);
+      setTimeout(() => {
+        if (action === a) finishAction();
+      }, ACTION_MAX_MS);
+    },
+    true // capture — 화면이 e.stopPropagation() 해도 놓치지 않는다
+  );
+
   const CLIENT_TIMING_MAX = 25;
   const CLIENT_TIMING_MAX_BYTES = 1400;
   let clientTimings = [];
   function noteClientTiming(url, ms, status) {
     try {
-      if (!url || url.indexOf("/api/") !== 0) return;
+      // /api 요청과 「누른 것 하나」(click:...) 둘 다 받는다. 그 밖의 주소는
+      // 우리 것이 아니다.
+      if (!url) return;
+      if (url.indexOf("/api/") !== 0 && url.indexOf("click:") !== 0) return;
       // 헤더에는 ASCII 만 담을 수 있다. 아닌 글자가 섞이면 브라우저가 요청
       // 자체를 거부한다 — 그러면 이 태블릿의 모든 요청이 죽는다. 털어낸다.
       const route = url
@@ -252,15 +331,33 @@
     if (!plainUrl.startsWith("/api/")) return nativeFetch(input, init);
 
     const startedAt = Date.now();
+    // 이 요청이 「누른 것 하나」에 속하는가. 속하면 그것이 끝날 때까지
+    // 그 누름은 안 끝난 것이다.
+    const ownerAction = action && !action.done ? action : null;
+    if (ownerAction) {
+      // 「끝났나」를 세던 타이머를 되돌린다. 응답을 받고 나서 다음 요청을
+      // 보내는 자리가 많은데(결제 완료 → 목록 새로고침), 그 사이를 끊으면
+      // 한 번의 누름이 두 줄로 쪼개진다.
+      clearTimeout(ownerAction.settleTimer);
+      ownerAction.inflight++;
+      ownerAction.reqs++;
+    }
+    function settle() {
+      if (!ownerAction || ownerAction.done) return;
+      ownerAction.inflight--;
+      if (action === ownerAction) maybeFinishAction();
+    }
     function timed(p) {
       return p.then(
         function (res) {
           noteClientTiming(plainUrl, Date.now() - startedAt, res && res.status);
+          settle();
           return res;
         },
         function (err) {
           // 실패한 요청이야말로 오래 걸린다. 빠뜨리면 제일 나쁜 순간이 빠진다.
           noteClientTiming(plainUrl, Date.now() - startedAt, 0);
+          settle();
           throw err;
         }
       );
@@ -3045,6 +3142,16 @@
       }
       const parts = [];
       parts.push(`<p class="diag-line"><b>${d.count.toLocaleString()}</b>건 · 최근 ${d.hours}시간 · 느린 요청 <b>${d.slow_share_pct}%</b> (${d.slow_ms}ms 이상)</p>`);
+
+      // 누른 것 하나 — 사장님이 실제로 기다린 시간. 맨 위에 둔다.
+      if (Array.isArray(d.by_click) && d.by_click.length) {
+        parts.push('<h4 class="diag-h">누른 것 하나가 끝날 때까지 (사람이 기다린 시간)</h4>');
+        parts.push('<div class="diag-scroll"><table class="diag-table"><tr><th>누른 곳</th><th>횟수</th><th>보통</th><th>느린 편</th><th>최대</th><th>요청 수</th></tr>');
+        for (const c of d.by_click.slice(0, 15)) {
+          parts.push(`<tr><td>${c.click}</td><td>${c.n}</td><td>${msCell(c.p50)}</td><td>${msCell(c.p90)}</td><td>${msCell(c.max)}</td><td>${c.reqs_p50 == null ? "-" : c.reqs_p50}</td></tr>`);
+        }
+        parts.push("</table></div>");
+      }
 
       // 시간대별 — 아침과 저녁이 어떻게 다른지가 이 표에 있다.
       if (Array.isArray(d.by_hour) && d.by_hour.length) {

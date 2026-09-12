@@ -153,13 +153,21 @@ async function measured(req, res, next) {
       for (const part of String(raw).slice(0, 2000).split(";")) {
         const [route, ms, status] = part.split("|");
         if (!route || !/^\d+$/.test(ms || "")) continue;
+        // click: 으로 시작하면 「누른 것 하나가 끝날 때까지」다. 요청 하나가
+        // 아니라 사람이 실제로 기다린 시간이라, 요청 줄과 섞으면 안 된다
+        // — 결제 완료 한 번이 PATCH 세 줄로 흩어지는 것을 막으려고 따로
+        // 재는 값인데, 섞으면 도로 흩어진다.
+        const isClick = route.indexOf("click:") === 0;
         requestLog.record({
           created_at: new Date(),
           at: nowLocal(),
-          src: "client", // 화면이 잰 값 — 서버가 잰 줄과 섞이면 안 된다
-          route: requestLog.routeOf(route),
-          method: "GET",
-          status: parseInt(status, 10) || 0,
+          // client=요청 하나를 화면이 잰 값, click=누른 것 하나가 끝날 때까지
+          src: isClick ? "click" : "client",
+          route: isClick ? route.slice(6).slice(0, 80) : requestLog.routeOf(route),
+          method: isClick ? "CLICK" : "GET",
+          // click 줄의 status 자리에는 그 누름이 보낸 요청 수가 들어 있다.
+          status: isClick ? 0 : parseInt(status, 10) || 0,
+          reqs: isClick ? parseInt(status, 10) || 0 : undefined,
           ms: Math.min(600000, parseInt(ms, 10)),
         });
       }
