@@ -578,6 +578,7 @@
           <button data-category="payment" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPayment">결제</span><span class="nav-sub" data-i18n="settingsCatPaymentSub">온라인 결제 (ECPay)</span></button>
           <button data-category="vip" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatVip">회원(VIP)</span><span class="nav-sub" data-i18n="settingsCatVipSub">구글 로그인 설정</span></button>
           <button data-category="print" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPrint">인쇄</span><span class="nav-sub" data-i18n="settingsCatPrintSub">주방 프린터 · 빌지 글자</span></button>
+          <button data-category="diag" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatDiag">진단 · 속도</span><span class="nav-sub" data-i18n="settingsCatDiagSub">느린 곳 찾기 · 기록 내려받기</span></button>
         </nav>
 
         <div class="settings-content">
@@ -1120,6 +1121,39 @@
           <button id="resetMoveSlipBtn" type="button" data-i18n="ticketFontResetBtn">기본값으로</button>
           <button id="testMoveSlipBtn" type="button" data-i18n="moveSlipTestBtn">🖨️ 테스트 인쇄</button>
           <div class="save-msg" id="moveSlipMsg" hidden></div>
+        </div>
+        </div>
+
+        <!-- 진단 · 속도 — 2026-09-12 사장님: "일단 이틀 돌리고 나온 json 을
+             너한테 줄 수 있게 세팅해줘."
+
+             화면에서 숫자를 읽는 것과, 파일로 꺼내 남에게 넘기는 것은 다른
+             일이다. 여기서는 둘 다 한다. 요약은 바로 보여주고, 원본은
+             버튼 하나로 파일이 된다. -->
+        <div id="settings-cat-diag" class="settings-category owner-only" hidden>
+        <div class="settings-card">
+          <h3 data-i18n="diagSpeedTitle">속도 기록</h3>
+          <p class="settings-hint" data-i18n="diagSpeedHint">
+            어느 동작이 느린지 서버가 스스로 재서 쌓아둔 기록이에요. 느린 요청과
+            처음 뜨는 순간은 전부, 빠른 요청은 표본만 남습니다. 14일이 지나면
+            자동으로 지워져요.
+          </p>
+          <div class="diag-range">
+            <label for="diagHours" data-i18n="diagRangeLabel">기간</label>
+            <select id="diagHours">
+              <option value="24">최근 24시간</option>
+              <option value="48" selected>최근 2일</option>
+              <option value="168">최근 7일</option>
+              <option value="336">최근 14일 (전부)</option>
+            </select>
+            <button type="button" id="diagReloadBtn" data-i18n="diagReloadBtn">불러오기</button>
+            <button type="button" id="diagDownloadBtn" class="primary-btn" data-i18n="diagDownloadBtn">⬇ 기록 파일로 받기</button>
+          </div>
+          <div id="diagSummary" class="diag-summary"></div>
+          <p class="settings-hint" id="diagLinkHint" hidden>
+            <span data-i18n="diagLinkHintText">받기가 안 되면 이 주소를 브라우저에서 열어주세요.</span>
+            <code id="diagLink"></code>
+          </p>
         </div>
         </div>
         </div>

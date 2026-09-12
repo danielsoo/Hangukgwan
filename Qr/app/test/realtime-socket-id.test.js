@@ -116,7 +116,9 @@ const adminSrc = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), 
 check("fetch 를 감싼다", /window\.fetch\s*=\s*function/.test(adminSrc));
 check("X-Socket-Id 를 넣는다", /headers\.set\("X-Socket-Id"/.test(adminSrc));
 check("소켓 번호를 Pusher 연결에서 읽는다", /pusherClient\.connection\.socket_id/.test(adminSrc));
-check('/api 가 아니면 손대지 않는다', /url\.startsWith\("\/api\/"\)/.test(adminSrc));
+// 변수 이름은 바뀔 수 있다(2026-09-12 에 url → plainUrl). 지켜야 하는 것은
+// 「같은 출처의 /api 요청에만 손댄다」는 성질이다.
+check('/api 가 아니면 손대지 않는다', /[Uu]rl\.startsWith\("\/api\/"\)/.test(adminSrc));
 check("감싸기 전의 fetch 를 보관한다", /const nativeFetch = window\.fetch\.bind\(window\)/.test(adminSrc));
 
 out.push("\n[7] 알림을 뺐으면 화면은 스스로 갱신해야 한다");

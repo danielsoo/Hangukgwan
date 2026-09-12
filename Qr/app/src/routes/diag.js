@@ -13,6 +13,7 @@ const express = require("express");
 const { store } = require("../db");
 const { requireOwner } = require("../auth");
 const requestLog = require("../requestLog");
+const { nowLocal } = require("../time");
 
 const router = express.Router();
 
@@ -195,6 +196,50 @@ router.get("/log", requireOwner, async (req, res) => {
     // 이 한 줄이 "인스턴스가 문제인가"를 가른다.
     out.cold = summarize(cold);
     out.warm = summarize(warm);
+
+    // 몽고냐 아니냐. 2026-09-12 사장님: "아침엔 빨랐는데 저녁엔 느려졌어."
+    // 코드는 그대로였으니 바뀐 것은 부하다. 몽고가 느려진 것인지(M0 는
+    // 여러 손님이 같이 쓰는 호스트다) 아닌지를 이 둘이 가른다.
+    const withMongo = rows.filter((r) => typeof r.mongo_ms === "number");
+    if (withMongo.length) {
+      const mongoMs = withMongo.map((r) => r.mongo_ms).sort((a, b) => a - b);
+      out.mongo = { n: withMongo.length, p50: percentile(mongoMs, 50), p90: percentile(mongoMs, 90), max: mongoMs[mongoMs.length - 1] };
+      const outside = withMongo.map((r) => Math.max(0, r.ms - r.mongo_ms)).sort((a, b) => a - b);
+      out.outside_mongo = { p50: percentile(outside, 50), p90: percentile(outside, 90), max: outside[outside.length - 1] };
+    }
+
+    // 화면이 잰 것과 서버가 잰 것. 차이가 곧 「앱 바깥」 — 신주에서 서울까지,
+    // 연결 맺기, 함수가 깨어나는 시간이다. 서버는 자기 시계로 이걸 못 본다.
+    const clientRows = rows.filter((r) => r.src === "client");
+    const serverRows = rows.filter((r) => r.src !== "client");
+    if (clientRows.length) {
+      out.client = summarize(clientRows);
+      out.server = summarize(serverRows);
+      out.outside_app_p50 =
+        out.client.p50 != null && out.server.p50 != null ? out.client.p50 - out.server.p50 : null;
+    }
+
+    // **시간대별.** 아침과 저녁을 갈라 보여주는 것이 이 화면의 목적이다.
+    // 한 줄로 뭉친 평균은 "아침엔 빨랐다"를 지워버린다.
+    const byHour = new Map();
+    for (const r of rows) {
+      const hh = String(r.at || "").slice(11, 13);
+      if (!/^\d\d$/.test(hh)) continue;
+      if (!byHour.has(hh)) byHour.set(hh, []);
+      byHour.get(hh).push(r);
+    }
+    out.by_hour = [...byHour.entries()]
+      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+      .map(([hh, list]) => Object.assign({ hour: `${hh}시` }, summarize(list), {
+        cold_n: list.filter((r) => r.cold).length,
+        mongo_p50: percentile(list.filter((r) => typeof r.mongo_ms === "number").map((r) => r.mongo_ms).sort((a, b) => a - b), 50),
+      }));
+
+    const droppedRows = rows.filter((r) => r.dropped);
+    if (droppedRows.length) {
+      // 버린 줄이 있었다는 것 자체가 데이터다 — 그 시각에 요청이 몰렸다는 뜻.
+      out.dropped_total = droppedRows.reduce((a, r) => a + (r.dropped || 0), 0);
+    }
     out.cold_share_pct = Math.round((cold.length / rows.length) * 100);
     out.slow_share_pct = Math.round((rows.filter((r) => r.ms >= requestLog.SLOW_MS).length / rows.length) * 100);
 
@@ -225,6 +270,70 @@ router.get("/log", requireOwner, async (req, res) => {
 
   res.set("Cache-Control", "no-store");
   res.json(out);
+});
+
+/**
+ * 기록을 통째로 파일 하나로.
+ *
+ * 2026-09-12 사장님: "일단 이틀 돌리고 나온 json 을 너한테 줄 수 있게
+ * 세팅해줘."
+ *
+ * 요약(/log)은 화면에서 읽으라고 만든 것이고, 이건 **남에게 넘기라고**
+ * 만든 것이다. 그래서 줄을 줄이지 않는다 — 요약이 이미 평균을 내버린
+ * 뒤라면, 받는 쪽은 "그 한 번은 왜 3초였나"를 영영 물을 수 없다.
+ *
+ * 다만 요약도 같이 넣는다. 파일 하나만 보고도 큰 그림이 바로 보이게.
+ */
+router.get("/log/export", requireOwner, async (req, res) => {
+  const hours = Math.min(24 * 14, Math.max(1, parseInt(req.query.hours, 10) || 48));
+  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+  const body = {
+    // 받는 쪽이 "이게 뭔지"를 따로 묻지 않아도 되게, 파일 자체에 적어 둔다.
+    what: "한국관 주문시스템 — 요청 속도 기록 (src/requestLog.js)",
+    exported_at: nowLocal(),
+    hours,
+    since: since.toISOString(),
+    how: {
+      rule: "모든 요청을 기록한다 (표본 아님). 담아뒀다가 다음 요청에 한 번의 쓰기로 몰아 내보낸다.",
+      src: "server=서버 안에서 보낸 시간, client=태블릿이 실제로 기다린 시간(망·콜드 스타트 포함)",
+      keep_days: requestLog.KEEP_DAYS,
+      fields: "ms=걸린 시간, mongo_ms=그중 몽고를 기다린 시간, mongo_ops=몽고 호출 수, cold=이 인스턴스의 첫 요청인가, nth=이 인스턴스가 처리한 몇 번째 요청, age_s=인스턴스가 살아 있던 시간",
+    },
+    region: process.env.VERCEL_REGION || null,
+  };
+
+  try {
+    const db = require("../db").getDb();
+    const rows = await db
+      .collection(requestLog.COLLECTION)
+      .find({ created_at: { $gte: since } })
+      .limit(50000)
+      .toArray();
+    body.count = rows.length;
+    body.rows = rows.map((r) => ({
+      at: r.at,
+      src: r.src || "server",
+      route: `${r.method} ${r.route}`,
+      status: r.status,
+      ms: r.ms,
+      mongo_ms: r.mongo_ms,
+      mongo_ops: r.mongo_ops,
+      cold: !!r.cold,
+      nth: r.nth,
+      age_s: r.age_s,
+      region: r.region,
+      dropped: r.dropped,
+    }));
+  } catch (e) {
+    body.error = e.message;
+  }
+  const flushErr = requestLog.lastFlushError();
+  if (flushErr) body.log_write_error = flushErr;
+
+  const day = String(nowLocal()).slice(0, 10);
+  res.set("Cache-Control", "no-store");
+  res.set("Content-Disposition", `attachment; filename="hangukgwan-speed-${day}.json"`);
+  res.type("application/json").send(JSON.stringify(body, null, 1));
 });
 
 module.exports = router;

@@ -2030,3 +2030,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .stl-halves { grid-template-columns: 1fr; }
   .stl-half-stats { grid-template-columns: 1fr 1fr; }
 }
+
+/* 진단 · 속도 (2026-09-12) — 표가 좁은 화면에서 잘리지 않게 가로로만 넘긴다. */
+.diag-range { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.diag-h { margin: 14px 0 6px; font-size: 0.95em; }
+.diag-line { margin: 6px 0; }
+.diag-warn { color: #b00020; font-weight: 600; }
+.diag-scroll { overflow-x: auto; }
+.diag-table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+.diag-table th, .diag-table td { border: 1px solid var(--line, #ddd); padding: 4px 8px; text-align: right; white-space: nowrap; }
+.diag-table th:first-child, .diag-table td:first-child { text-align: left; }
+.diag-table th { background: var(--bg-soft, #f6f6f6); font-weight: 600; }

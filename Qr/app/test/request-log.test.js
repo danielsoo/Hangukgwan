@@ -42,24 +42,24 @@ function check(name, cond, extra = "") {
   check("숫자가 여럿이어도", requestLog.routeOf("/api/menu/admin/items/7/photo") === "/api/menu/admin/items/:id/photo", requestLog.routeOf("/api/menu/admin/items/7/photo"));
   check("글자는 그대로", requestLog.routeOf("/api/settings/print-device") === "/api/settings/print-device");
 
-  out.push("\n[전부 쓰지 않는다 — 빠른 요청까지 다 쓰면 그게 느려지는 이유가 된다]");
+  out.push("\n[전부 남긴다 — 표본은 아침과 저녁의 차이를 지운다]");
+  // 2026-09-12 사장님: "모든 이벤트에 속도를 측정할 수 있게 해줘. 분명 아침
+  // 영업때는 빨랐는데 저녁 영업때는 갑자기 느려졌어." 표본만 남기면 저녁의
+  // 느린 순간이 통째로 빠질 수 있고, 빠져도 빠졌다는 것을 알 수가 없다.
   const before = requestLog.pending();
   for (let i = 0; i < 10; i++) requestLog.record({ ms: 5, status: 200, cold: false });
-  const fastKept = requestLog.pending() - before;
-  check("★ 빠른 요청 열 번이 열 줄이 되지 않는다", fastKept <= 1, `${fastKept}줄`);
+  check("★ 빠른 요청 열 번이 열 줄로 남는다", requestLog.pending() - before === 10, `${requestLog.pending() - before}줄`);
 
+  const afterFast = requestLog.pending();
   requestLog.record({ ms: requestLog.SLOW_MS + 1, status: 200, cold: false });
-  check("★ 느린 요청은 반드시 남는다", requestLog.pending() > before + fastKept);
-  const afterSlow = requestLog.pending();
   requestLog.record({ ms: 5, status: 200, cold: true });
-  check("★ 콜드 스타트는 빨라도 남는다", requestLog.pending() > afterSlow);
-  const afterCold = requestLog.pending();
   requestLog.record({ ms: 5, status: 500, cold: false });
-  check("실패한 요청도 남는다", requestLog.pending() > afterCold);
+  check("느린 것·콜드·실패도 당연히 남는다", requestLog.pending() === afterFast + 3, `${requestLog.pending()}줄`);
 
   out.push("\n[메모리가 불어나지 않는다 — 못 내보내는 동안에도]");
-  for (let i = 0; i < 500; i++) requestLog.record({ ms: 9999, status: 200, cold: false });
-  check("★ 담아두는 줄 수에 상한이 있다", requestLog.pending() <= 50, `${requestLog.pending()}줄`);
+  for (let i = 0; i < 2000; i++) requestLog.record({ ms: 9999, status: 200, cold: false });
+  check("★ 담아두는 줄 수에 상한이 있다", requestLog.pending() <= requestLog.MAX_QUEUE, `${requestLog.pending()}줄`);
+  check("★ 버린 줄이 있으면 몇 줄인지 안다 (조용히 비면 「한산했다」로 읽힌다)", requestLog.droppedCount() > 0, String(requestLog.droppedCount()));
 
   out.push("\n[내보내면 비워진다 — 같은 줄을 두 번 쓰지 않는다]");
   await requestLog.flush(handle);
@@ -70,11 +70,8 @@ function check(name, cond, extra = "") {
   out.push("\n[요청이 실제로 기록을 남긴다]");
   const boss = request.agent(app);
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
-  // 빠른 요청은 표본으로만 남으므로(SAMPLE_EVERY), 표본이 한 번은 걸리도록
-  // 그 주기보다 넉넉히 부른다. 여기서 "세 번 부르고 한 줄을 기대"하면
-  // 테스트가 운에 달리게 된다.
-  for (let i = 0; i < requestLog.SAMPLE_EVERY + 5; i++) await boss.get("/api/orders");
-  await boss.get("/api/orders"); // 마지막 기록은 이 요청에 얹혀 나간다
+  await boss.get("/api/orders");
+  await boss.get("/api/orders"); // 앞 요청의 기록은 이때 나간다
   const rows = await handle.collection(requestLog.COLLECTION).find({ route: "/api/orders" }).toArray();
   check("★ /api/orders 가 기록에 남는다", rows.length > 0, `${rows.length}줄`);
   if (rows.length) {
@@ -91,6 +88,57 @@ function check(name, cond, extra = "") {
   check("느린 것이 얼마나 잦은가", typeof r.body.slow_share_pct === "number", String(r.body.slow_share_pct));
   check("★ 콜드일 때와 아닐 때를 갈라서 준다", !!r.body.cold && !!r.body.warm, JSON.stringify(r.body.cold));
   check("가장 느렸던 것들도 준다", Array.isArray(r.body.slowest));
+
+  out.push("\n[몽고를 기다린 시간을 따로 센다 — 몽고냐 아니냐를 가르는 줄]");
+  // 2026-09-12 "아침엔 빨랐는데 저녁엔 느려졌어." 코드는 그대로였으니 바뀐
+  // 것은 부하다. ms 만 있으면 몽고인지 콜드 스타트인지 우리 코드인지 알 수
+  // 없다.
+  const timed = await handle.collection(requestLog.COLLECTION).find({ route: "/api/orders" }).toArray();
+  check("★ mongo_ms 가 기록된다", timed.some((r) => typeof r.mongo_ms === "number"), JSON.stringify(timed[0] || {}).slice(0, 200));
+  check("몽고 호출 수도 기록된다", timed.some((r) => typeof r.mongo_ops === "number"));
+  check(
+    "★ 몽고 시간이 전체 시간을 넘지 않는다 (동시 요청끼리 시간을 더하면 넘는다)",
+    timed.every((r) => typeof r.mongo_ms !== "number" || r.mongo_ms <= r.ms + 5),
+    JSON.stringify(timed.map((r) => `${r.mongo_ms}/${r.ms}`).slice(0, 5))
+  );
+
+  out.push("\n[화면이 잰 값도 받는다 — 서버는 신주~서울 구간을 못 본다]");
+  await boss.get("/api/orders").set("X-Client-Timing", "/api/orders|1234|200;/api/tables/7|99|200");
+  await boss.get("/api/orders"); // 앞 요청에서 담긴 것이 이때 나간다
+  const clientRows = await handle.collection(requestLog.COLLECTION).find({ src: "client" }).toArray();
+  check("★ 화면이 보낸 값이 기록된다", clientRows.length >= 2, `${clientRows.length}줄`);
+  check("서버가 잰 줄과 구별된다", clientRows.every((r) => r.src === "client"));
+  check(
+    "주소의 숫자는 서버와 같은 규칙으로 모인다",
+    clientRows.some((r) => r.route === "/api/tables/:id"),
+    JSON.stringify(clientRows.map((r) => r.route))
+  );
+  // 망가진 헤더가 요청을 죽이면 안 된다. (헤더는 ASCII 만 담을 수 있어서
+  // 화면 쪽에서도 ASCII 아닌 글자는 털어낸다.)
+  const junk = await boss.get("/api/orders").set("X-Client-Timing", "garbage;;;|||;/api/x|abc|200");
+  check("★ 망가진 헤더가 와도 요청은 그대로 된다", junk.status === 200, String(junk.status));
+  await boss.get("/api/orders");
+
+  out.push("\n[요약이 아침과 저녁을 갈라 준다]");
+  const r3 = await boss.get("/api/_diag/log?hours=24");
+  check("★ 시간대별 줄이 있다", Array.isArray(r3.body.by_hour) && r3.body.by_hour.length > 0, JSON.stringify(r3.body.by_hour || []).slice(0, 200));
+  check("몽고 시간과 그 바깥을 갈라 준다", !!r3.body.mongo && !!r3.body.outside_mongo, JSON.stringify(r3.body.mongo));
+  check("화면이 잰 값과 서버가 잰 값을 갈라 준다", !!r3.body.client && !!r3.body.server, JSON.stringify(r3.body.client));
+
+  out.push("\n[파일로 받을 수 있다 — 남에게 넘기라고 만든 것]");
+  const r4 = await boss.get("/api/_diag/log/export?hours=48");
+  check("사장은 받을 수 있다", r4.status === 200, String(r4.status));
+  check(
+    "★ 파일로 저장되게 나온다",
+    /attachment; filename="hangukgwan-speed-\d{4}-\d{2}-\d{2}\.json"/.test(r4.headers["content-disposition"] || ""),
+    r4.headers["content-disposition"]
+  );
+  {
+    const body = typeof r4.body === "object" && r4.body.rows ? r4.body : JSON.parse(r4.text);
+    check("줄이 그대로 들어 있다 (요약만 주면 그 한 번을 못 본다)", Array.isArray(body.rows) && body.rows.length > 0, String(body.count));
+    check("이게 무슨 파일인지 파일 안에 적혀 있다", typeof body.what === "string" && body.what.length > 10, body.what);
+    check("어떻게 기록한 것인지도 적혀 있다", !!body.how && typeof body.how.rule === "string", JSON.stringify(body.how || {}));
+  }
 
   out.push("\n[직원은 못 본다 — 가게 내부 사정이다]");
   const anon = request.agent(app);

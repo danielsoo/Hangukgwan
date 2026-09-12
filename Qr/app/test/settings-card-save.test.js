@@ -107,7 +107,14 @@ out.push("\n[2] 저장 버튼이 없는 카드는 버튼 자체가 그 동작인
   // 비밀번호 「변경」과 테스터 모드 「켜기」는 누르는 것이 곧 저장이다.
   // 그 밖에 저장 버튼 없는 카드가 새로 생기면 여기서 걸린다.
   const noSave = cards.filter((c) => !c.buttons.some((b) => /[Ss]ave/.test(b)));
-  const allowed = new Set(["testModeStartBtn", "changePwBtn", "changeOwnerPwBtn"]);
+  const allowed = new Set([
+    "testModeStartBtn", "changePwBtn", "changeOwnerPwBtn",
+    // 속도 기록 카드(2026-09-12)는 **아무것도 저장하지 않는다.** 읽기만
+    // 하는 카드다. 기간 고르는 칸이 있지만 그건 설정이 아니라 「무엇을
+    // 볼까」라, 저장할 것이 없다. 여기에 저장 버튼을 달면 누르는 사람이
+    // 무언가 바뀌었다고 오해한다.
+    "diagReloadBtn", "diagDownloadBtn",
+  ]);
   for (const c of noSave) {
     check(`[${c.cat}] ${c.title} — 누르는 것이 곧 저장인 카드`,
       c.buttons.some((b) => allowed.has(b)), JSON.stringify(c.buttons));

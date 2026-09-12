@@ -116,7 +116,17 @@ let seededOnce = false;
 let migratedOnce = false;
 // 이 인스턴스가 몇 번째 요청을 처리하고 있나 (src/instance.js). 1 이면 방금
 // 뜬 것이다 — 콜드 스타트. /api/_diag 가 그 값을 보여준다.
-app.use(async (req, res, next) => {
+app.use((req, res, next) => {
+  // 이 요청이 몽고에서 보낸 시간을 요청마다 따로 센다(src/dbTiming.js).
+  // 전역 변수로 세면 동시에 들어온 요청들이 서로의 시간을 더해서, 바쁠수록
+  // 숫자가 부풀어 오른다 — 하필 바쁠 때를 보려는 것인데.
+  require("./src/dbTiming").run(() =>
+    // measured 안에서 못 잡은 예외가 여기까지 오면 요청이 영영 안 끝난다.
+    Promise.resolve(measured(req, res, next)).catch(next)
+  );
+});
+
+async function measured(req, res, next) {
   const instance = require("./src/instance");
   const requestLog = require("./src/requestLog");
   instance.countRequest();
@@ -133,16 +143,46 @@ app.use(async (req, res, next) => {
   // "/" 로, /api/auth/login 이 "/login" 으로 기록됐다(2026-09-12 실제로
   // 그렇게 쌓였다). 요약이 통째로 무의미해진다.
   const routeAtEntry = requestLog.routeOf(req.originalUrl ? req.originalUrl.split("?")[0] : req.path);
+
+  // 태블릿이 실제로 기다린 시간. 앞 요청들의 값이 헤더에 얹혀 온다
+  // (public/js/admin.js). 서버가 자기 시계로는 볼 수 없는 구간 — 신주에서
+  // 서울까지, 연결 맺기, 함수가 깨어나는 시간 — 이 여기 들어 있다.
+  try {
+    const raw = req.get("X-Client-Timing");
+    if (raw) {
+      for (const part of String(raw).slice(0, 2000).split(";")) {
+        const [route, ms, status] = part.split("|");
+        if (!route || !/^\d+$/.test(ms || "")) continue;
+        requestLog.record({
+          created_at: new Date(),
+          at: nowLocal(),
+          src: "client", // 화면이 잰 값 — 서버가 잰 줄과 섞이면 안 된다
+          route: requestLog.routeOf(route),
+          method: "GET",
+          status: parseInt(status, 10) || 0,
+          ms: Math.min(600000, parseInt(ms, 10)),
+        });
+      }
+    }
+  } catch (e) {
+    // 헤더가 이상해도 요청은 그대로 간다.
+  }
   const endResponse = res.end.bind(res);
   res.end = function (...args) {
     try {
+      const mongo = require("./src/dbTiming").current();
       requestLog.record({
         created_at: new Date(), // 몽고 TTL 이 보는 값 — Date 여야 한다
         at: nowLocal(),
+        src: "server",
         route: routeAtEntry,
         method: req.method,
         status: res.statusCode,
         ms: Date.now() - startedAt,
+        // 이 요청이 몽고를 기다린 시간. ms 와의 차이가 곧 「몽고 밖에서 쓴
+        // 시간」이다 — 아침과 저녁의 차이가 어느 쪽인지를 이 둘이 가른다.
+        mongo_ms: mongo.mongo_ms,
+        mongo_ops: mongo.mongo_ops,
         cold: stats.requests_served === 1,
         nth: stats.requests_served,
         age_s: stats.instance_age_s,
@@ -203,7 +243,7 @@ app.use(async (req, res, next) => {
     console.error("Startup / DB connection failed:", e);
     res.status(500).json({ error: "server_not_ready" });
   }
-});
+}
 
 app.use(
   session({

@@ -95,6 +95,10 @@ async function connectDB() {
   clientReadyPromise = (async () => {
     const client = await getClient();
     db = client.db(process.env.MONGODB_DB || "hangukgwan");
+    // 요청마다 「몽고에서 보낸 시간」을 따로 세기 위해 한 번 감싼다
+    // (src/dbTiming.js). 아침엔 빠르고 저녁엔 느린 이유가 몽고인지
+    // 아닌지를 가르는 값이다.
+    require("./dbTiming").wrapDb(db);
     connectMs = Date.now() - t0;
   })();
   return clientReadyPromise;

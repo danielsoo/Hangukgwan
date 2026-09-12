@@ -26,12 +26,12 @@
 // 지운다. 무료 M0 는 512MB 라 이걸 안 걸면 언젠가 가게가 멈춘다.
 const COLLECTION = "request_log";
 const KEEP_DAYS = 14;
-const SLOW_MS = 400; // 이보다 느린 요청은 무조건 남긴다
-const SAMPLE_EVERY = 20; // 빠른 요청은 스무 번에 한 번
-const MAX_QUEUE = 50; // 못 내보내는 동안 메모리가 불어나지 않게
+const SLOW_MS = 400; // 「느리다」의 기준. 남기고 안 남기고가 아니라 요약용이다
+const MAX_QUEUE = 300; // 못 내보내는 동안 메모리가 불어나지 않게
+const MAX_BATCH = 300; // 한 번에 내보내는 줄 수
 
 let queue = [];
-let seen = 0;
+let dropped = 0;
 let indexReady = false;
 
 /** /api/orders/123 → /api/orders/:id — 숫자가 낀 주소를 한 줄로 모은다. */
@@ -43,24 +43,33 @@ function routeOf(pathname) {
     .slice(0, 120);
 }
 
-/**
- * 이 요청을 남길 것인가.
- *
- * 느린 것과 콜드 스타트는 그 자체가 찾던 답이라 무조건 남긴다. 나머지는
- * 표본만 — "평소에는 이만큼 빠르다"를 말할 수 있을 정도면 된다.
- */
-function shouldKeep(entry) {
-  if (entry.ms >= SLOW_MS) return true;
-  if (entry.cold) return true;
-  if (entry.status >= 400) return true;
-  return seen % SAMPLE_EVERY === 0;
+// 전부 남긴다.
+//
+// 2026-09-12 사장님: "모든 이벤트에 속도를 측정할 수 있게 해줘. 분명 대만
+// 기준 오늘 아침 영업때는 빨랐는데 저녁 영업때는 갑자기 느려졌어."
+//
+// 처음에는 빠른 요청을 스무 번에 한 번만 남겼다. 몽고에 쓰는 양을 줄이려는
+// 것이었는데, 찾으려는 것이 **「아침과 저녁이 어떻게 다른가」**라면 표본은
+// 위험하다. 저녁의 느린 순간이 통째로 빠질 수 있고, 빠져도 빠졌다는 것을
+// 알 수가 없다.
+//
+// 그래도 몽고에 쓰는 횟수는 안 늘어난다. 줄 수가 아니라 **쓰기 횟수**가
+// 비용이기 때문이다 — 담아뒀다가 다음 요청에 한 번의 insertMany 로 몰아
+// 내보낸다. 백 줄이든 한 줄이든 쓰기는 한 번이다.
+//
+// 그래도 못 내보내는 동안 메모리가 불어나면 안 되니 상한을 둔다. 버릴
+// 때는 **몇 줄을 버렸는지 같이 기록한다** — 조용히 비면 그게 "한산했다"로
+// 읽힌다.
+function record(entry) {
+  if (queue.length >= MAX_QUEUE) {
+    queue.shift(); // 오래된 것부터
+    dropped++;
+  }
+  queue.push(entry);
 }
 
-function record(entry) {
-  seen++;
-  if (!shouldKeep(entry)) return;
-  if (queue.length >= MAX_QUEUE) queue.shift(); // 오래된 것부터 버린다
-  queue.push(entry);
+function droppedCount() {
+  return dropped;
 }
 
 function pending() {
@@ -73,8 +82,13 @@ function pending() {
  */
 async function flush(db) {
   if (!db || !queue.length) return;
-  const rows = queue;
-  queue = [];
+  const rows = queue.slice(0, MAX_BATCH);
+  queue = queue.slice(MAX_BATCH);
+  if (dropped) {
+    // 버린 줄이 있었다는 사실 자체가 데이터다 — 그 시각에 요청이 몰렸다는 뜻.
+    rows.push({ created_at: new Date(), at: rows[0] && rows[0].at, route: "(dropped)", method: "-", status: 0, ms: 0, dropped });
+    dropped = 0;
+  }
   try {
     if (!indexReady) {
       indexReady = true;
@@ -101,4 +115,4 @@ function lastFlushError() {
   return lastError;
 }
 
-module.exports = { COLLECTION, KEEP_DAYS, SLOW_MS, SAMPLE_EVERY, routeOf, record, pending, flush, lastFlushError };
+module.exports = { COLLECTION, KEEP_DAYS, SLOW_MS, MAX_QUEUE, MAX_BATCH, routeOf, record, pending, flush, lastFlushError, droppedCount };

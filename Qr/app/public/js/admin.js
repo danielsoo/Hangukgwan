@@ -188,6 +188,54 @@
     });
   }
 
+  // 이 태블릿이 실제로 기다린 시간.
+  //
+  // 2026-09-12 사장님: "모든 이벤트에 속도를 측정할 수 있게 해줘. 분명 대만
+  // 기준 오늘 아침 영업때는 빨랐는데 저녁 영업때는 갑자기 느려졌어."
+  //
+  // 서버가 재는 값은 **서버 안에서 보낸 시간**뿐이다. 신주에서 서울까지
+  // 오가는 시간, 연결을 새로 맺는 시간, 함수가 깨어나는 시간은 서버가 자기
+  // 시계로 볼 수 없다. 그런데 사장님이 기다리는 것은 그 전부다.
+  //
+  //   화면 2000ms, 서버 30ms   → 앱이 아니라 그 바깥이다 (망·콜드 스타트)
+  //   화면 2000ms, 서버 1900ms → 앱 안이다
+  //
+  // 이 둘을 갈라놓지 않으면 아침과 저녁의 차이를 영영 설명할 수 없다.
+  //
+  // 보내는 방법: **따로 요청을 만들지 않는다.** 그러면 바쁠 때 요청이 더
+  // 늘어나는데, 하필 바쁠 때가 보려는 순간이다. 다음 요청의 헤더에 얹는다.
+  const CLIENT_TIMING_MAX = 25;
+  const CLIENT_TIMING_MAX_BYTES = 1400;
+  let clientTimings = [];
+  function noteClientTiming(url, ms, status) {
+    try {
+      if (!url || url.indexOf("/api/") !== 0) return;
+      // 헤더에는 ASCII 만 담을 수 있다. 아닌 글자가 섞이면 브라우저가 요청
+      // 자체를 거부한다 — 그러면 이 태블릿의 모든 요청이 죽는다. 털어낸다.
+      const route = url
+        .split("?")[0]
+        .replace(/[^\x20-\x7E]/g, "")
+        .split("/")
+        .map(function (seg) { return /^\d+$/.test(seg) ? ":id" : seg; })
+        .join("/");
+      clientTimings.push(route + "|" + Math.round(ms) + "|" + (status || 0));
+      if (clientTimings.length > CLIENT_TIMING_MAX) clientTimings.shift();
+    } catch (e) {
+      // 재는 것이 화면을 막지 않는다.
+    }
+  }
+  function takeClientTimingHeader() {
+    if (!clientTimings.length) return null;
+    let out = "";
+    while (clientTimings.length) {
+      const next = out ? out + ";" + clientTimings[0] : clientTimings[0];
+      if (next.length > CLIENT_TIMING_MAX_BYTES) break;
+      out = next;
+      clientTimings.shift();
+    }
+    return out || null;
+  }
+
   const nativeFetch = window.fetch.bind(window);
   window.fetch = function (input, init) {
     const plainUrl = typeof input === "string" ? input : (input && input.url) || "";
@@ -199,20 +247,36 @@
     } catch (e) {
       sid = null;
     }
-    if (!sid) return nativeFetch(input, init);
-    const url = typeof input === "string" ? input : (input && input.url) || "";
     // 같은 출처의 /api 요청만. Pusher 자신의 통신이나 외부 주소는 건드리지
     // 않는다.
-    if (!url.startsWith("/api/")) return nativeFetch(input, init);
+    if (!plainUrl.startsWith("/api/")) return nativeFetch(input, init);
+
+    const startedAt = Date.now();
+    function timed(p) {
+      return p.then(
+        function (res) {
+          noteClientTiming(plainUrl, Date.now() - startedAt, res && res.status);
+          return res;
+        },
+        function (err) {
+          // 실패한 요청이야말로 오래 걸린다. 빠뜨리면 제일 나쁜 순간이 빠진다.
+          noteClientTiming(plainUrl, Date.now() - startedAt, 0);
+          throw err;
+        }
+      );
+    }
+
     try {
       const opts = Object.assign({}, init);
       const headers = new Headers((init && init.headers) || (typeof input === "object" && input && input.headers) || undefined);
-      headers.set("X-Socket-Id", sid);
+      if (sid) headers.set("X-Socket-Id", sid);
+      const timing = takeClientTimingHeader();
+      if (timing) headers.set("X-Client-Timing", timing);
       opts.headers = headers;
-      return nativeFetch(input, opts);
+      return timed(nativeFetch(input, opts));
     } catch (e) {
       // 헤더를 못 붙이는 상황이 있더라도 요청 자체는 나가야 한다.
-      return nativeFetch(input, init);
+      return timed(nativeFetch(input, init));
     }
   };
   let openTableNumber = null;
@@ -2846,6 +2910,10 @@
   function selectSettingsCategory(name) {
     $$(".settings-nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.category === name));
     $$(".settings-category").forEach((p) => (p.hidden = p.id !== `settings-cat-${name}`));
+    // 진단 화면은 열 때 불러온다. 로그인할 때 미리 부르면, 쓰지도 않을
+    // 요약을 매번 계산하게 된다 — 느린 것을 보려고 만든 화면이 느려지는
+    // 이유가 되면 안 된다.
+    if (name === "diag") loadDiagSpeed();
   }
   $$(".settings-nav-btn").forEach((btn) => {
     btn.onclick = () => {
@@ -2944,6 +3012,109 @@
       box.appendChild(btn);
     });
     box.hidden = false;
+  }
+
+  // ---------- 진단 · 속도 ----------
+  // 2026-09-12 사장님: "일단 이틀 돌리고 나온 json 을 너한테 줄 수 있게
+  // 세팅해줘." 그리고 "분명 아침 영업때는 빨랐는데 저녁 영업때는 갑자기
+  // 느려졌어."
+  //
+  // 그래서 이 화면이 답해야 하는 것은 「지금 빠른가」가 아니라 **「언제
+  // 느려지는가, 그때 무엇이 느린가」** 다. 시간대별 줄이 먼저 오는 이유다.
+  function diagHours() {
+    const el = $("#diagHours");
+    return (el && el.value) || "48";
+  }
+  function msCell(v) {
+    return v == null ? "-" : `${v}ms`;
+  }
+  async function loadDiagSpeed() {
+    const box = $("#diagSummary");
+    if (!box) return;
+    box.textContent = "불러오는 중…";
+    try {
+      const res = await fetch(`/api/_diag/log?hours=${encodeURIComponent(diagHours())}`);
+      if (!res.ok) {
+        box.textContent = res.status === 403 || res.status === 401 ? "사장 계정으로만 볼 수 있어요." : `불러오지 못했어요 (${res.status})`;
+        return;
+      }
+      const d = await res.json();
+      if (!d.count) {
+        box.textContent = d.note || "아직 쌓인 기록이 없습니다.";
+        return;
+      }
+      const parts = [];
+      parts.push(`<p class="diag-line"><b>${d.count.toLocaleString()}</b>건 · 최근 ${d.hours}시간 · 느린 요청 <b>${d.slow_share_pct}%</b> (${d.slow_ms}ms 이상)</p>`);
+
+      // 시간대별 — 아침과 저녁이 어떻게 다른지가 이 표에 있다.
+      if (Array.isArray(d.by_hour) && d.by_hour.length) {
+        parts.push('<h4 class="diag-h">시간대별</h4>');
+        parts.push('<div class="diag-scroll"><table class="diag-table"><tr><th>시각</th><th>건수</th><th>보통</th><th>느린 편(상위10%)</th><th>최대</th><th>몽고</th><th>첫 요청</th></tr>');
+        for (const h of d.by_hour) {
+          parts.push(`<tr><td>${h.hour}</td><td>${h.n}</td><td>${msCell(h.p50)}</td><td>${msCell(h.p90)}</td><td>${msCell(h.max)}</td><td>${msCell(h.mongo_p50)}</td><td>${h.cold_n}</td></tr>`);
+        }
+        parts.push("</table></div>");
+      }
+
+      // 어디서 시간을 쓰나 — 이 세 줄이 원인을 가른다.
+      parts.push('<h4 class="diag-h">어디서 시간을 쓰나</h4><div class="diag-scroll"><table class="diag-table">');
+      if (d.mongo) {
+        parts.push(`<tr><td>몽고를 기다린 시간</td><td>${msCell(d.mongo.p50)}</td><td>상위10% ${msCell(d.mongo.p90)}</td></tr>`);
+        parts.push(`<tr><td>몽고 밖에서 쓴 시간</td><td>${msCell(d.outside_mongo.p50)}</td><td>상위10% ${msCell(d.outside_mongo.p90)}</td></tr>`);
+      }
+      parts.push(`<tr><td>처음 뜬 인스턴스</td><td>${msCell(d.cold.p50)}</td><td>${d.cold.n}건 (${d.cold_share_pct}%)</td></tr>`);
+      parts.push(`<tr><td>이미 떠 있던 인스턴스</td><td>${msCell(d.warm.p50)}</td><td>${d.warm.n}건</td></tr>`);
+      if (d.client) {
+        parts.push(`<tr><td>태블릿이 기다린 시간</td><td>${msCell(d.client.p50)}</td><td>서버 밖 ${msCell(d.outside_app_p50)}</td></tr>`);
+      }
+      parts.push("</table></div>");
+
+      if (Array.isArray(d.by_route) && d.by_route.length) {
+        parts.push('<h4 class="diag-h">느린 동작 (상위10% 기준)</h4><div class="diag-scroll"><table class="diag-table"><tr><th>동작</th><th>건수</th><th>보통</th><th>느린 편</th><th>최대</th></tr>');
+        for (const r of d.by_route.slice(0, 12)) {
+          parts.push(`<tr><td>${r.route}</td><td>${r.n}</td><td>${msCell(r.p50)}</td><td>${msCell(r.p90)}</td><td>${msCell(r.max)}</td></tr>`);
+        }
+        parts.push("</table></div>");
+      }
+      if (d.dropped_total) {
+        parts.push(`<p class="diag-line">요청이 몰려서 기록 ${d.dropped_total}건을 버렸습니다. 그 시각에 부하가 있었다는 뜻이에요.</p>`);
+      }
+      if (d.log_write_error) {
+        parts.push(`<p class="diag-line diag-warn">기록을 저장하지 못하고 있습니다: ${d.log_write_error}</p>`);
+      }
+      box.innerHTML = parts.join("");
+    } catch (e) {
+      box.textContent = "불러오지 못했어요: " + e.message;
+    }
+  }
+
+  if ($("#diagReloadBtn")) $("#diagReloadBtn").onclick = loadDiagSpeed;
+  if ($("#diagDownloadBtn")) {
+    $("#diagDownloadBtn").onclick = async () => {
+      const url = `/api/_diag/log/export?hours=${encodeURIComponent(diagHours())}`;
+      // POS 앱(WebView)에서는 내려받기가 막히는 경우가 있다. 안 되면 주소를
+      // 보여줘서 다른 브라우저에서 열 수 있게 한다 — 조용히 아무 일도 안
+      // 일어나는 것이 제일 나쁘다.
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `hangukgwan-speed-${new Date().toISOString().slice(0, 10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          URL.revokeObjectURL(a.href);
+          a.remove();
+        }, 1000);
+      } catch (e) {
+        const hint = $("#diagLinkHint");
+        const link = $("#diagLink");
+        if (link) link.textContent = location.origin + url;
+        if (hint) hint.hidden = false;
+      }
+    };
   }
 
   if ($("#settingsSearch")) {

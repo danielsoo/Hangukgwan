@@ -93,10 +93,14 @@ function instrument(handle) {
   const took = Date.now() - t0;
   const reads = log.filter((l) => l.what === "store.findOne" || l.what.endsWith(".find"));
   check("읽기가 두 번 일어난다 (store 문서 + 최근 주문)", reads.length >= 2, JSON.stringify(log.map((l) => l.what)));
+  // 지켜야 하는 성질은 「둘째가 첫째가 끝나기 전에 출발했다」다. 시작
+  // 시각의 간격을 아주 좁게 잡으면 기계가 바쁜 날 그냥 깜빡인다 —
+  // 2026-09-12 에 실제로 한 번 깜빡였다(간격 30ms, 기준 30ms). 진짜 증거는
+  // 아래의 전체 시간이고, 이 줄은 그 보조다.
   check(
-    "★ 둘이 거의 같은 때 출발한다 (줄줄이 아님)",
-    reads.length >= 2 && Math.abs(reads[0].at - reads[1].at) < DELAY / 2,
-    `간격 ${reads.length >= 2 ? Math.abs(reads[0].at - reads[1].at) : "?"}ms`
+    "★ 둘째가 첫째를 기다리지 않고 출발한다",
+    reads.length >= 2 && Math.abs(reads[0].at - reads[1].at) < DELAY,
+    `간격 ${reads.length >= 2 ? Math.abs(reads[0].at - reads[1].at) : "?"}ms (지연 ${DELAY}ms)`
   );
   check(
     `★ 전체가 한 번 값으로 끝난다 (${DELAY}ms 두 번이면 ${DELAY * 2}ms)`,
