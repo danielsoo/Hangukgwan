@@ -191,7 +191,20 @@ function broadcastTableMoved(from, payload) {
   return push(channelForTable(from), "moved", payload || {}, null);
 }
 
+// /api/_diag 가 「쓰기마다 얼마를 기다리고 있나」를 재는 데 쓴다.
+// 아무도 안 듣는 채널로 한 번 쏴 본다 — 화면에는 아무 일도 안 일어난다.
+function pusherConfigured() {
+  return !!pusher;
+}
+function pingPusher() {
+  if (!pusher) return Promise.resolve();
+  return pusher.trigger("diag", "ping", {});
+}
+
 module.exports = {
+  TRIGGER_TIMEOUT_MS,
+  pusherConfigured,
+  pingPusher,
   broadcastOrdersChanged,
   broadcastDataChanged,
   broadcastOnWrite,

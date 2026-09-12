@@ -65,6 +65,27 @@ function check(name, cond, extra = "") {
   check("node 버전", typeof r.body.node === "string");
   check("몽고 ping 이 실패해도 응답은 200", r.status === 200);
 
+  // 2026-09-12 사장님: "지금 어드민 사이트 반응속도가 너어무 느려졌어."
+  //
+  // 그때 이 화면이 답해야 하는 질문은 하나다 — **어디서 시간을 쓰나.**
+  // 매 요청이 치르는 비용은 세 갈래뿐이고(몽고까지의 거리, 실제로 읽는 양,
+  // 쓰기마다 기다리는 알림 왕복), 셋 중 어느 것이냐에 따라 할 일이 완전히
+  // 다르다. 한 줄이라도 빠지면 다시 추측으로 돌아가게 된다.
+  out.push("\n[어디서 시간을 쓰나 — 느리다는 말을 받았을 때 볼 줄]");
+  const timing = ["mongo_ping_ms", "store_read_ms", "orders_read_ms", "pusher_ms"];
+  for (const k of timing) {
+    check(
+      `${k} — 값이든 실패 이유든 나온다`,
+      k in r.body || `${k.replace(/_ms$/, "")}_error` in r.body || "read_error" in r.body || "mongo_ping_error" in r.body,
+      JSON.stringify(r.body).slice(0, 300)
+    );
+  }
+  check(
+    "쓰기가 알림을 얼마나 기다리는지도 같이 적는다",
+    typeof r.body.pusher_timeout_ms === "number",
+    String(r.body.pusher_timeout_ms)
+  );
+
   out.push("\n[캐시 금지 — 순간 상태라 저장되면 안 된다]");
   check("no-store", (r.headers["cache-control"] || "").includes("no-store"), r.headers["cache-control"]);
 
