@@ -456,9 +456,10 @@
       else if (it.__delta === "+") line("[추가 / 追加]", sz("itemDetail", 13), 900);
       row(itemName(it), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
       if (it.option_choice) line("  └ " + it.option_choice, sz("itemDetail", 13), wt("itemDetail", 400));
-      // 기본 칸은 안 찍는다 — 주방의 기본값이라 새로 알려줄 것이 없다.
-      // 「基本(中辣)」처럼 설명이 붙은 것도 기본이다(public/js/spice.js).
-      if (it.spice_choice && !window.HG_SPICE.isBasic(it.spice_choice)) line("  └ " + it.spice_choice, sz("itemDetail", 13), wt("itemDetail", 400));
+      // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
+      // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
+      // (public/js/spice.js isSilentOnTicket).
+      if (it.spice_choice && !window.HG_SPICE.isSilentOnTicket(it.spice_choice)) line("  └ " + it.spice_choice, sz("itemDetail", 13), wt("itemDetail", 400));
       (it.selected_addons || []).forEach((a) => line("  └ +" + a.name, sz("itemDetail", 13), wt("itemDetail", 400)));
       // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
       // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).

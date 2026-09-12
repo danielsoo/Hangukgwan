@@ -84,6 +84,16 @@ out.push("\n[3] 「무엇이 기본 칸인가」는 한 곳에서 정한다 (pub
   check("★ 기본이 빠진 데이터에서도 매운 것이 안 골라진다",
     S.defaultOf("小辣,中辣") === "基本", String(S.defaultOf("小辣,中辣")));
   check("맵기 칸이 없으면 null", S.defaultOf("") === null);
+
+  out.push("  · 빌지에 적을 말이 있는가 (isBasic 과 다른 질문이다)");
+  // 사장님(2026-09-12): "맵기 옵션에 있던 기본을 버리고 基本(中辣) 이거를
+  // 추가했으니까 基本(中辣) 이게 뜨는 게 맞지."
+  check("「基本」은 안 적는다 (평소대로라는 뜻)", S.isSilentOnTicket("基本"));
+  check("★★ 사장님이 써 넣은 「基本(中辣)」는 빌지에 나간다", S.isSilentOnTicket("基本(中辣)") === false);
+  check("小辣 는 당연히 나간다", S.isSilentOnTicket("小辣") === false);
+  // 같은 값을 두고 두 함수의 답이 갈리는 자리 — 이 갈림이 이 파일의 요점이다.
+  check("★ 기본 자리이면서 빌지에는 나간다",
+    S.isBasic("基本(中辣)") === true && S.isSilentOnTicket("基本(中辣)") === false);
 }
 
 out.push("\n[4] 세 화면이 그 규칙을 같이 쓴다");
@@ -102,8 +112,11 @@ out.push("\n[4] 세 화면이 그 규칙을 같이 쓴다");
   check("★ 첫 칸을 고르는 옛 방식이 남아 있지 않다", !/spice_options\.split\(","\)\[0\]/.test(orderJs), "");
   check("★ 글자를 맞대보던 옛 방식이 남아 있지 않다",
     !/!== "基本"/.test(orderJs) && !/!== "基本"/.test(adminJs) && !/!== "基本"/.test(escpos), "");
-  check("관리자 미리보기", (adminJs.match(/HG_SPICE\.isBasic/g) || []).length >= 2, "");
-  check("실제 인쇄", /HG_SPICE\.isBasic/.test(escpos), "");
+  check("관리자 미리보기", (adminJs.match(/HG_SPICE\.isSilentOnTicket/g) || []).length >= 2, "");
+  check("실제 인쇄", /HG_SPICE\.isSilentOnTicket/.test(escpos), "");
+  // 빌지 쪽에서 isBasic 을 쓰면 「基本(中辣)」가 종이에서 사라진다.
+  check("★ 빌지는 기본 자리 검사가 아니라 적을 말 검사를 쓴다",
+    !/HG_SPICE\.isBasic/.test(escpos), "");
   check("두 화면이 그 파일을 불러온다",
     /src="\/js\/spice\.js"/.test(orderHtml) && /src="\/js\/spice\.js"/.test(adminHtml), "");
 }
