@@ -852,6 +852,7 @@
       orderHoursUnavailableSub: "서버를 다시 띄운 뒤 새로고침해주세요",
       livePreviewLabel: "미리보기 (손님 화면)",
       tabSettlement: "결산",
+      settlementLoading: "결산을 불러오는 중이에요…",
       settlementStartLabel: "시작일",
       settlementEndLabel: "종료일",
       settlementTodayBtn: "오늘",
@@ -1560,6 +1561,7 @@
       orderHoursUnavailableSub: "請重新啟動伺服器後重新整理",
       livePreviewLabel: "預覽（顧客畫面）",
       tabSettlement: "結算",
+      settlementLoading: "正在載入結算…",
       settlementStartLabel: "開始日期",
       settlementEndLabel: "結束日期",
       settlementTodayBtn: "今天",
@@ -12099,7 +12101,40 @@
     ].forEach((sel) => { const el = $(sel); if (el) el.innerHTML = ""; });
   }
 
+  // 결산은 이 화면에서 제일 오래 걸리는 요청이다 — 날짜 범위만큼 주문을
+  // 다시 읽어야 하니 어쩔 수 없다. 문제는 그동안 화면이 **아무 말도 안
+  // 했다**는 것이다.
+  //
+  // 2026-09-12 사장님(화면 사진과 함께): "결산탭을 누르거나 날짜를 변경하면
+  // 이 상태가 정지상태가 너무 오래 유지돼"
+  //
+  // 사진 속 화면은 「매출 —」, 「총합 NT$0」이었다. 이건 기다리는 중인 것과
+  // **매출이 0 인 것이 똑같이 보인다**는 뜻이다. 영업 중에 직원이 이걸 보면
+  // 장사가 안 된 줄 안다. 느린 것보다 이쪽이 더 나쁘다.
+  //
+  // 그래서 두 가지를 한다.
+  //  1. 기다리는 동안 기다린다고 말한다(.stl-busy).
+  //  2. **앞의 숫자를 지우지 않는다.** 날짜를 바꿀 때 화면을 비우면, 새 값이
+  //     올 때까지 사장님은 아무 근거 없는 0 을 보게 된다. 흐리게 두고 바뀐다.
+  let settlementSeq = 0;
+  function setSettlementBusy(on) {
+    const box = $("#tab-settlement");
+    if (box) box.classList.toggle("stl-busy", !!on);
+  }
+
   async function loadSettlement(start, end) {
+    const mySeq = ++settlementSeq;
+    setSettlementBusy(true);
+    try {
+      await loadSettlementInner(start, end, mySeq);
+    } finally {
+      // 늦게 온 앞 요청이 「다 됐다」고 끄면, 진행 중인 새 요청이 안 도는
+      // 것처럼 보인다. 마지막 것만 끈다.
+      if (mySeq === settlementSeq) setSettlementBusy(false);
+    }
+  }
+
+  async function loadSettlementInner(start, end, mySeq) {
     const params = new URLSearchParams();
     // 직원 세션은 **날짜를 아예 안 보낸다.** 서버는 직원이 보낸 날짜가
     // 오늘이 아니면 403 으로 거절하는데(src/auth.js requireTodayForStaff),
@@ -12114,20 +12149,30 @@
     // 오늘로 넘어왔는데 여전히 오후만 보이면 그게 더 헷갈린다.
     if (settlementShift) params.set("shift", settlementShift);
     const qs = params.toString();
-    const res = await fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
+    const resPromise = fetch(qs ? `/api/settlements?${qs}` : "/api/settlements");
     // 못 받아왔으면 **비운다.** 그냥 돌아가면 조금 전 숫자가 그대로 남아,
     // 못 받아온 것을 「지금 값」으로 읽게 된다 (2026-09-11 사장님 화면에
     // 사장님의 일주일치가 남아 있던 것과 같은 종류의 사고다).
+    // 지난 정산 기록(추이·월별 폴더)은 사장님 것이다. 직원 세션에서는
+    // 부르지 않는다 — 서버가 403 으로 막고 있어 화면은 비지만, 매번 막힐
+    // 요청을 보내는 것 자체가 콘솔을 더럽히고 「왜 빈칸이지」를 만든다.
+    //
+    // 결산 본문과는 아무 관계가 없으므로 **나란히** 보낸다. 예전에는 본문이
+    // 다 그려진 뒤에 시작해서, 사장님은 두 번을 차례로 기다렸다.
+    const historyPromise = currentRole === "owner" ? loadSettlementHistory() : null;
+    const res = await resPromise;
+
+    // 내가 부르고 나서 사장님이 날짜를 또 바꿨으면, 내 답은 이미 옛것이다.
+    // 그대로 그리면 화면이 뒤로 간다 — 늦게 온 옛 답이 새 답을 덮어쓴다.
+    if (mySeq !== settlementSeq) return;
+
     if (!res.ok) {
       blankSettlement();
       return;
     }
     renderSettlement(await res.json());
     activeSettlementHistoryDate = start && end && start === end ? start : null;
-    // 지난 정산 기록(추이·월별 폴더)은 사장님 것이다. 직원 세션에서는
-    // 부르지 않는다 — 서버가 403 으로 막고 있어 화면은 비지만, 매번 막힐
-    // 요청을 보내는 것 자체가 콘솔을 더럽히고 「왜 빈칸이지」를 만든다.
-    if (currentRole === "owner") loadSettlementHistory();
+    if (historyPromise) await historyPromise;
   }
 
   function taipeiTodayString() {

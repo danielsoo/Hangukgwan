@@ -236,6 +236,15 @@
         </nav>
 
         <div class="settlement-content">
+          <!-- 기다리는 중이라고 말하는 줄. 2026-09-12 사장님(화면 사진과
+               함께): "결산탭을 누르거나 날짜를 변경하면 이 상태가 정지상태가
+               너무 오래 유지돼" — 그 화면은 「매출 —」, 「총합 NT$0」 이었다.
+               기다리는 중인 것과 매출이 0 인 것이 똑같이 보였다는 뜻이다.
+               영업 중에 직원이 그걸 보면 장사가 안 된 줄 안다. -->
+          <div class="stl-loading" aria-live="polite">
+            <span class="stl-spinner" aria-hidden="true"></span>
+            <span data-i18n="settlementLoading">결산을 불러오는 중이에요…</span>
+          </div>
           <div class="settlement-toolbar">
             <label class="settlement-date-label owner-only">
               <span data-i18n="settlementStartLabel">시작일</span>

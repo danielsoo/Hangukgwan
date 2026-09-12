@@ -2041,3 +2041,37 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .diag-table th, .diag-table td { border: 1px solid var(--line, #ddd); padding: 4px 8px; text-align: right; white-space: nowrap; }
 .diag-table th:first-child, .diag-table td:first-child { text-align: left; }
 .diag-table th { background: var(--bg-soft, #f6f6f6); font-weight: 600; }
+
+/* 결산을 불러오는 중 (2026-09-12) — 사장님: "결산탭을 누르거나 날짜를
+   변경하면 이 상태가 정지상태가 너무 오래 유지돼".
+
+   기다리는 동안 **앞의 숫자를 지우지 않는다.** 지우면 새 값이 올 때까지
+   근거 없는 0 을 보게 되고, 그건 「매출이 없다」로 읽힌다. 흐리게만 둔다.
+   누르는 것도 막는다 — 기다리는 중에 또 누르면 요청만 쌓인다. */
+.stl-loading { display: none; }
+.stl-busy .stl-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border-radius: 10px;
+  background: var(--bg-soft, #f3f4f6);
+  font-weight: 600;
+}
+.stl-busy .settlement-content > *:not(.stl-loading) {
+  opacity: 0.45;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.stl-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: stl-spin 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+@keyframes stl-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .stl-spinner { animation: none; } }
