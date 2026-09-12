@@ -80,13 +80,28 @@ function getClient() {
 // Ensures the Mongo client + db handle are ready. Cheap to call repeatedly
 // (memoized for the life of this process) — this does NOT load `store`'s
 // contents; call refreshStore() for that.
+// 이 인스턴스가 몽고에 처음 붙는 데 걸린 시간. 콜드 스타트의 값이다.
+//
+// 2026-09-12 사장님: "근데 버셀이나 몽고 둘 다 서버가 서울인데?"
+// 맞다. 왕복은 3ms 다(2026-09-10 리전 이동). 그러면 **따뜻한 인스턴스에서는
+// 몽고가 느릴 수가 없다.** 그런데도 느리다면 남은 후보는 「따뜻하지 않은
+// 인스턴스」다. 새로 뜬 인스턴스는 Atlas 로 TLS 를 새로 맺어야 하고 그건
+// 왕복 3ms 짜리가 아니다. 그 값을 여기서 한 번만 재 둔다.
+let connectMs = null;
+
 async function connectDB() {
   if (clientReadyPromise) return clientReadyPromise;
+  const t0 = Date.now();
   clientReadyPromise = (async () => {
     const client = await getClient();
     db = client.db(process.env.MONGODB_DB || "hangukgwan");
+    connectMs = Date.now() - t0;
   })();
   return clientReadyPromise;
+}
+
+function firstConnectMs() {
+  return connectMs;
 }
 
 // Re-fetches the latest store document from Mongo into the in-memory
@@ -526,6 +541,7 @@ module.exports = {
   connectDB, getDb, getClient, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
   saveFields, saveNextId, reserveId, ensureOrderIdFloor,
   savePhoto, getPhoto, deletePhoto,
+  firstConnectMs,
   findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,
 };

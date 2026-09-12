@@ -109,6 +109,23 @@ router.get("/", requireOwner, async (req, res) => {
     out.pusher_error = e.message;
   }
 
+  // 이 인스턴스가 얼마나 오래 살아 있었고 몇 번째 요청인가.
+  //
+  // 2026-09-12 사장님: "근데 버셀이나 몽고 둘 다 서버가 서울인데?"
+  // 맞는 지적이다. 2026-09-10 에 리전을 서울로 옮겨 왕복이 3ms 가 됐다.
+  // **따뜻한 인스턴스에서는 몽고가 느릴 수가 없다.** 그런데도 느리다면
+  // 남은 후보는 「매번 새로 뜨는 인스턴스」다 — 새 인스턴스는 함수 번들을
+  // 풀고 Atlas 로 TLS 를 새로 맺는다. 그건 3ms 가 아니다.
+  //
+  // requests_served 가 계속 1~2 로 나오면 요청마다 새 인스턴스가 뜨고
+  // 있다는 뜻이고, 그때는 왕복 횟수를 줄이는 것이 아무 소용이 없다.
+  try {
+    Object.assign(out, require("../instance").stats());
+    out.mongo_connect_ms = require("../db").firstConnectMs();
+  } catch (e) {
+    out.instance_error = e.message;
+  }
+
   res.set("Cache-Control", "no-store");
   res.json(out);
 });

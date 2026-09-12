@@ -113,7 +113,10 @@ app.use("/api/photo", require("./src/routes/photos"));
 // genuine 404) pays for this.
 let seededOnce = false;
 let migratedOnce = false;
+// 이 인스턴스가 몇 번째 요청을 처리하고 있나 (src/instance.js). 1 이면 방금
+// 뜬 것이다 — 콜드 스타트. /api/_diag 가 그 값을 보여준다.
 app.use(async (req, res, next) => {
+  require("./src/instance").countRequest();
   try {
     await refreshStore();
     if (!seededOnce) {

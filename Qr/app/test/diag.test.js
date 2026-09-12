@@ -86,6 +86,13 @@ function check(name, cond, extra = "") {
     String(r.body.pusher_timeout_ms)
   );
 
+  out.push("\n[따뜻한 인스턴스인가 — 2026-09-12 \"둘 다 서울인데?\"]");
+  // 서울-서울이면 몽고 왕복은 3ms 다. 그런데도 느리면 남은 후보는 매번 새로
+  // 뜨는 인스턴스다. 이 줄이 없으면 그걸 확인할 방법이 없다.
+  check("이 인스턴스가 몇 번째 요청인지 적는다", typeof r.body.requests_served === "number", String(r.body.requests_served));
+  check("인스턴스가 얼마나 살아 있었는지 적는다", typeof r.body.instance_age_s === "number", String(r.body.instance_age_s));
+  check("몽고에 처음 붙는 데 걸린 시간도 적는다", "mongo_connect_ms" in r.body, JSON.stringify(r.body).slice(0, 200));
+
   out.push("\n[캐시 금지 — 순간 상태라 저장되면 안 된다]");
   check("no-store", (r.headers["cache-control"] || "").includes("no-store"), r.headers["cache-control"]);
 
