@@ -3,7 +3,8 @@
   "outputDirectory": "site",
   "functions": {
     "api/index.js": {
-      "includeFiles": "{public,site}/**"
+      "includeFiles": "{public,site}/**",
+      "maxDuration": 60
     }
   },
   "headers": [

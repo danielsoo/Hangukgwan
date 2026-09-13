@@ -65,6 +65,17 @@ function needsRecentOrders(reqOrPath) {
     return true;
   }
 
+  // 테스터 모드. 켜기/참여/빠지기/상태 보기는 주문과 아무 상관이 없다.
+  // 끄기(그리고 그 미리보기)만 다르다 — 테스트가 앉혀놓은 자리를 고를 때
+  // hasUnpaidOrder(store, ...) 로 「진짜 주문이 남아 있는 자리인가」를 보고,
+  // 그건 store.orders 를 읽는다(src/testMode.js testSeats). 목록이 없으면
+  // 손님이 앉아 있는 자리의 인원수를 지워버릴 수 있다.
+  if (under(path, "/api/test-mode")) {
+    if (path === "/api/test-mode/end" && method === "POST") return true;
+    if (path === "/api/test-mode/preview-end") return true;
+    return false;
+  }
+
   // VIP 카드 판매도 paid 주문 한 건을 직접 insert한다.
   if (under(path, "/api/vip-cards/sell")) return false;
   if (under(path, "/api/vip-cards")) return false;

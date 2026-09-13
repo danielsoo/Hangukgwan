@@ -170,10 +170,12 @@ function snapshotMenu(store) {
 const TAGGED_COLLECTIONS = ["orders", "payments", "daily_settlements", "reservations"];
 
 async function countTagged(db, id) {
+  // 네 번을 줄줄이 세우지 않는다 — 미리보기 화면이 그만큼 늦게 뜬다.
+  const counts = await Promise.all(
+    TAGGED_COLLECTIONS.map((name) => db.collection(name).countDocuments({ test_session: id }))
+  );
   const out = {};
-  for (const name of TAGGED_COLLECTIONS) {
-    out[name] = await db.collection(name).countDocuments({ test_session: id });
-  }
+  TAGGED_COLLECTIONS.forEach((name, i) => { out[name] = counts[i]; });
   return out;
 }
 
@@ -284,12 +286,18 @@ async function end(db, store, { save, deletePhoto }, opts = {}) {
   const revertSettings = opts.revertSettings !== false;
   const revertMenu = opts.revertMenu !== false;
 
-  const doc = (await db.collection(COLLECTION).findOne({ _id: cur.id })) || {};
+  // 네 컬렉션을 차례로 지우면 왕복이 네 번 줄줄이 선다. 종료 한 번이
+  // 함수 제한에 걸려 아예 안 끝나던 이유의 하나였다(2026-09-13 사장님:
+  // "종료는 종료도 안되고 있어"). 서로 기다릴 이유가 없으니 같이 보낸다.
+  const [rawDoc, ...results] = await Promise.all([
+    db.collection(COLLECTION).findOne({ _id: cur.id }),
+    ...TAGGED_COLLECTIONS.map((name) => db.collection(name).deleteMany({ test_session: cur.id })),
+  ]);
+  const doc = rawDoc || {};
   const deleted = {};
-  for (const name of TAGGED_COLLECTIONS) {
-    const r = await db.collection(name).deleteMany({ test_session: cur.id });
-    deleted[name] = r.deletedCount || 0;
-  }
+  TAGGED_COLLECTIONS.forEach((name, i) => {
+    deleted[name] = (results[i] && results[i].deletedCount) || 0;
+  });
 
   // 메모리에 들고 있는 것들도 같이 턴다. 다음 요청의 refreshStore 가
   // 어차피 다시 읽지만, 이 요청의 응답도 맞아야 한다.

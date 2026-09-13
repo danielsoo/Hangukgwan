@@ -39,8 +39,11 @@ function check(name, cond, extra = "") {
   else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
 }
 
+// 대만 기준 날짜여야 한다. UTC 로 만들면 대만 새벽 0~8시(UTC 16~24시)에는
+// day(0) 이 어제가 되어, 코드가 멀쩡한데도 하루 여덟 시간씩 시험이 깨진다
+// (claude/multi-session-git-rules.md 에 적어둔 그 자리다).
 function day(offset) {
-  const d = new Date(Date.now() + offset * 24 * 60 * 60 * 1000);
+  const d = new Date(Date.now() + 8 * 3600 * 1000 + offset * 24 * 60 * 60 * 1000);
   return d.toISOString().slice(0, 10);
 }
 
@@ -67,8 +70,11 @@ function day(offset) {
   old.push({ _id: 900, id: 900, status: "new", items: [], created_at: `${day(-20)} 12:00:00` });
   old.push({ _id: 901, id: 901, status: "preparing", items: [], created_at: `${day(-25)} 12:00:00` });
   old.push({ _id: 902, id: 902, status: "served", items: [], created_at: `${day(-15)} 12:00:00` });
-  // 최근 것 — 끝났어도 들고 있어야 한다(재인쇄·결산이 닿는 범위)
-  old.push({ _id: 950, id: 950, status: "paid", items: [], created_at: `${day(-1)} 12:00:00` });
+  // 오늘 끝난 주문 — 주문판의 「결제완료」 칸이 이걸 쓴다. 들고 있어야 한다.
+  old.push({ _id: 950, id: 950, status: "paid", items: [], created_at: `${day(0)} 12:00:00` });
+  // 어제 끝난 주문 — 마감된 날이다. 목록에 들어오면 안 된다(2026-09-13).
+  // 실측: 285건 중 212건이 지난 날의 끝난 주문이었고, 그것만으로 4초였다.
+  old.push({ _id: 951, id: 951, status: "paid", items: [], created_at: `${day(-1)} 12:00:00` });
   // 영업 시작 전 테스트 주문 — 안 끝났어도 들어오면 안 된다
   old.push({ _id: 800, id: 800, status: "new", items: [], created_at: `${day(-40)} 12:00:00` });
   for (const o of old) await col.insertOne(o);
@@ -81,7 +87,8 @@ function day(offset) {
   check("★ 20일 전 「신규」 주문이 그대로 있다", ids.includes(900), JSON.stringify(ids.slice(0, 12)));
   check("★ 25일 전 「조리중」 주문도 있다", ids.includes(901));
   check("★ 15일 전 「서빙완료」 주문도 있다", ids.includes(902));
-  check("최근 며칠 안의 끝난 주문도 있다", ids.includes(950));
+  check("오늘 끝난 주문은 들고 있다", ids.includes(950));
+  check("★ 어제 끝난 주문은 안 들고 있다 — 마감된 날은 안 훑는다", !ids.includes(951), JSON.stringify(ids));
 
   out.push("\n[들어오면 안 되는 것은 안 들어온다]");
   check("★ 영업 시작 전 주문은 안 들어온다", !ids.includes(800), JSON.stringify(ids));

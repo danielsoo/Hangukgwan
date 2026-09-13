@@ -47,10 +47,24 @@ function check(name, cond, extra = "") {
   out.push("\n[주문이 반드시 필요한 주소]");
   for (const url of [
     "/api/settlements",
-    "/api/test-mode",
     "/api/bootstrap",
   ]) {
     check(`${url} → 주문 읽음`, needsRecentOrders(url) === true);
+  }
+
+  out.push("\n[테스터 모드는 끄기만 주문이 필요하다]");
+  // 끄기는 테스트가 앉혀놓은 자리를 고를 때 hasUnpaidOrder 로 「진짜 주문이
+  // 남아 있는 자리인가」를 본다(src/testMode.js testSeats). 목록이 없으면
+  // 손님이 앉은 자리의 인원수를 지울 수 있다. 나머지는 주문과 무관하다.
+  check("★ 끄기 → 주문 읽음", needsRecentOrders({ method: "POST", originalUrl: "/api/test-mode/end" }) === true);
+  check("★ 끄기 미리보기 → 주문 읽음", needsRecentOrders({ method: "GET", originalUrl: "/api/test-mode/preview-end" }) === true);
+  for (const [label, req] of [
+    ["상태 보기", { method: "GET", originalUrl: "/api/test-mode" }],
+    ["켜기", { method: "POST", originalUrl: "/api/test-mode/start" }],
+    ["이 기기도 참여", { method: "POST", originalUrl: "/api/test-mode/join" }],
+    ["기기 빠지기", { method: "POST", originalUrl: "/api/test-mode/leave" }],
+  ]) {
+    check(`${label} → 주문 안 읽음`, needsRecentOrders(req) === false);
   }
   check("모르는 새 API는 안전하게 주문을 읽는다", needsRecentOrders("/api/future-route") === true);
 

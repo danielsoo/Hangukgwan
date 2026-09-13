@@ -200,20 +200,45 @@ async function loadRecentOrders() {
   // 그래서 상태 목록을 한 곳(src/orderStatus.js)에 두고, 주문을 저장하는
   // 라우트의 입력 검사도 같은 목록을 쓰게 했다. 모르는 상태는 애초에 못
   // 들어온다.
+  //
+  // 2026-09-13 밤, 실측으로 마지막 조각이 나왔다. 색인은 여섯 개가 다 있고
+  // (`orders_indexes`), 컬렉션 전체가 373건뿐인데도 `orders_read_ms` 가
+  // 3,979ms 였다. 질의가 틀려서가 아니다. **들고 오는 건수가 많아서다** —
+  // 이 무료 M0 묶음에서는 문서 한 건에 약 14ms 가 붙는다(왕복 자체는 7ms).
+  // 285건이면 그것만으로 4초다.
+  //
+  // 그 285건이 무엇이었나:
+  //
+  //     09-11: 93건   09-12: 119건   09-13(오늘): 73건
+  //
+  // 넷 중 셋이 **이미 끝난 지난 날 주문**이었다. 크기로도 373KB 중 items 가
+  // 223KB 다. 주문판이 지난 날의 결제완료를 다시 그릴 일은 없다.
+  //
+  // 사장님(2026-09-13): "마감 버튼을 누르면 그건 어차피 픽스된 거니까 안
+  // 훑어도 되는 거잖아. 나중에 결산에서 볼 때 오래 걸려야 하는 일이지 다른
+  // 모든 곳에서 느려야 하는 게 아니잖아."
+  //
+  // 그래서 목록은 **오늘치만** 들고 온다. 안 끝난 주문은 아래 (가)가 날짜와
+  // 무관하게 전부 들고 오므로, 받을 돈이 화면에서 사라지는 일은 없다.
+  // 지난 날 주문 한 건이 필요하면 그때 그 한 건만 `_id` 로 꺼낸다
+  // (src/orderQueries.js operationalOrderById). 그쪽은 여전히 recentCutoff()
+  // 기준(사흘)이라, 번호로 찾아 들어가는 길은 좁아지지 않는다.
   const { serviceStartedAt } = require("./serviceStart");
   const { OPEN } = require("./orderStatus");
+  const { taipeiDateString } = require("./time");
   const started = serviceStartedAt(store); // "YYYY-MM-DD HH:MM:SS" 또는 null
-  const cutoff = recentCutoff(); // "YYYY-MM-DD"
+  const today = taipeiDateString(); // "YYYY-MM-DD"
   // 영업 시작 전(=테스트) 주문은 어느 쪽에도 안 들어가야 한다. 날짜가 앞에
   // 오는 형식이라 문자열 비교가 그대로 시간 비교가 된다.
-  const from = started && started > cutoff ? started : cutoff;
+  const from = started && started > today ? started : today;
 
   // (가) 안 끝난 주문 — 아무리 오래돼도 들고 있어야 한다. 화면에서 사라지면
   //      받을 돈이 사라진다. {status:1, created_at:1} 인덱스를 탄다.
   const openFilter = { status: { $in: OPEN } };
   if (started) openFilter.created_at = { $gte: started };
 
-  // (나) 최근 며칠 — 상태와 무관하게. {created_at:1} 인덱스를 탄다.
+  // (나) 오늘 것 — 상태와 무관하게. 주문판의 「결제완료」 칸과 포장 픽업
+  //      번호가 이걸 쓴다. {created_at:1} 인덱스를 탄다.
   const recentFilter = { created_at: { $gte: from } };
 
   const rows = await db
