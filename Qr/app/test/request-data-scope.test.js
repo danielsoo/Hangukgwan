@@ -14,6 +14,10 @@ const {
   applyTableOrdersIndex20260913,
   MIGRATION_FLAG: TABLE_ORDERS_INDEX_FLAG,
 } = require("../src/migrations/2026-09-13-table-orders-index");
+const {
+  applyBoardOrdersIndex20260914,
+  MIGRATION_FLAG: BOARD_ORDERS_INDEX_FLAG,
+} = require("../src/migrations/2026-09-14-board-orders-index");
 
 let pass = 0;
 let fail = 0;
@@ -163,10 +167,35 @@ function check(name, cond, extra = "") {
   check("테이블 인덱스 생성 한 번", tableIndexCreates === 1, `${tableIndexCreates}번`);
   check("테이블 인덱스 완료 저장 한 번", tableIndexSaves === 1, `${tableIndexSaves}번`);
 
+  out.push("\n[주문판의 결제완료 조회 인덱스도 DB 전체에서 한 번]");
+  const boardStore = { settings: {} };
+  let boardIndexCreates = 0;
+  let boardIndexSaves = 0;
+  const boardIndexDeps = {
+    async connectDB() {},
+    getDb() {
+      return { collection(name) {
+        return { async createIndex(spec) {
+          boardIndexCreates++;
+          check("orders의 status+updated_at 인덱스", name === "orders" && spec.status === 1 && spec.updated_at === 1, JSON.stringify({ name, spec }));
+        } };
+      } };
+    },
+    async saveFields(fields) {
+      boardIndexSaves++;
+      check("주문판 인덱스 완료 표시만 부분 저장", !!fields[`settings.${BOARD_ORDERS_INDEX_FLAG}`], JSON.stringify(fields));
+    },
+  };
+  await applyBoardOrdersIndex20260914(boardStore, boardIndexDeps);
+  await applyBoardOrdersIndex20260914(boardStore, boardIndexDeps);
+  check("주문판 인덱스 생성 한 번", boardIndexCreates === 1, `${boardIndexCreates}번`);
+  check("주문판 인덱스 완료 저장 한 번", boardIndexSaves === 1, `${boardIndexSaves}번`);
+
   const serverSrc = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
   check("connect-mongo 자체 반복 인덱스 생성은 꺼져 있음", /autoRemove:\s*["']disabled["']/.test(serverSrc));
   check("요청 종류에 따라 includeOrders를 넘김", /refreshStore\(\{ includeOrders \}\)/.test(serverSrc));
   check("테이블 주문 인덱스 마이그레이션이 서버에 연결됨", /applyTableOrdersIndex20260913/.test(serverSrc));
+  check("주문판 인덱스 마이그레이션이 서버에 연결됨", /applyBoardOrdersIndex20260914/.test(serverSrc));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);

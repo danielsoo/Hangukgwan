@@ -26,6 +26,7 @@ function check(name, cond, extra = "") {
 const read = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8");
 const settlements = read("src", "routes", "settlements.js");
 const adminJs = read("public", "js", "admin.js");
+const dbSrc = read("src", "db.js");
 
 out.push("[1] 정산이 표시를 남긴다 (src/routes/settlements.js)");
 {
@@ -52,12 +53,14 @@ out.push("\n[2] 화면이 그 표시를 보고 내린다 (public/js/admin.js)");
 
 out.push("\n[3] 내린 줄을 다른 화면은 계속 읽는다");
 {
-  // 결산·이력·매출 집계가 settled_at 을 보고 거르기 시작하면 그날 매출이
-  // 통째로 사라진다. 어느 쪽에도 그런 조건이 없어야 한다.
+  // 결산·이력·매출 집계가 settled_at 을 보고 거르면 그날 매출이 사라진다.
+  // 다만 실시간 주문판용 메모리 목록은 이미 정산한 줄을 DB에서부터 빼는 게
+  // 맞다. 원본 컬렉션은 그대로이고 결산/이력은 직접 기간 조회를 한다.
   const settlementSrc = read("src", "settlement.js");
   const ordersSrc = read("src", "routes", "orders.js");
   check("★ 매출 계산은 settled_at 을 안 본다", !/settled_at/.test(settlementSrc), "");
   check("★ 주문 목록·이력도 settled_at 으로 안 거른다", !/settled_at/.test(ordersSrc), "");
+  check("실시간 주문판 DB 조회는 정산된 줄을 미리 제외한다", /settled_at:\s*\{\s*\$exists:\s*false/.test(dbSrc), "");
 }
 
 console.log(out.join("\n"));

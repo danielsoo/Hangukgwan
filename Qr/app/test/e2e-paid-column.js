@@ -44,7 +44,11 @@ function check(name, cond, extra = "") {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const browser = await launchBrowser();
-  const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+  // 운영 패드는 대만에 있다. 테스트를 실행하는 컴퓨터가 뉴욕처럼 날짜가
+  // 아직 전날인 곳이면, 서버의 Taipei "오늘" 주문을 브라우저가 "내일"로
+  // 보고 결제완료 칸에서 전부 숨긴다. 화면과 서버를 실제 영업 시간대로 맞춘다.
+  const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, timezoneId: "Asia/Taipei" });
+  const page = await context.newPage();
   page.on("dialog", (d) => d.dismiss());
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
   await page.evaluate(async () => {
@@ -61,11 +65,10 @@ function check(name, cond, extra = "") {
   const item = store.menuItems[0];
 
   const now = nowLocal();
-  const at = (mmss) => `${now.slice(0, 11)}${mmss}`;
   let id = 900000;
-  const paid = (tableNumber, clock, extra = {}) => ({
+  const paid = (tableNumber, paidAt, extra = {}) => ({
     _id: ++id, id, table_number: String(tableNumber), status: "paid",
-    order_type: "dine_in", created_at: at(clock), updated_at: at(clock), paid_at: at(clock),
+    order_type: "dine_in", created_at: paidAt, updated_at: paidAt, paid_at: paidAt,
     payment_method: "cash", party_size: 2, party_adults: 2, party_children: 0,
     subtotal: item.price, discount_amount: 0, total: item.price,
     items: [{ item_id: item.id, code: item.code, name_ko: item.name_ko, name_zh: item.name_zh,
@@ -78,10 +81,12 @@ function check(name, cond, extra = "") {
   //  · 같은 테이블 두 라운드 → 한 장으로 접히는 게 맞다
   //  · 포장 두 분 → 두 장이어야 한다 (예전에는 한 장으로 덮였다)
   const rows = [
-    paid(table.number, "12:03:00"),
-    paid(table.number, "12:04:00"),
-    paid(counter.number, "12:01:00", { pickup_number: 3, customer_name: "王緦苹", order_type: "takeout" }),
-    paid(counter.number, "12:23:00", { pickup_number: 4, customer_name: "陳小姐", order_type: "takeout" }),
+    // 고정된 12시를 쓰면 자정~정오에 시험할 때 "미래에 결제된 주문"이 되어
+    // 정산 경계에서 빠진다. 실제 현재 시각으로 두어 언제 돌려도 이미 받은 돈이다.
+    paid(table.number, now),
+    paid(table.number, now),
+    paid(counter.number, now, { pickup_number: 3, customer_name: "王緦苹", order_type: "takeout" }),
+    paid(counter.number, now, { pickup_number: 4, customer_name: "陳小姐", order_type: "takeout" }),
   ];
   // 주문은 store 문서가 아니라 자기 컬렉션에 산다(2026-09-10 분리).
   await getDb().collection("orders").bulkWrite(
@@ -125,20 +130,23 @@ function check(name, cond, extra = "") {
   {
     // 쌓이는 것은 여기서 치운다. 「여기까지 끊는다」는 뜻이라, 끊은 뒤에도
     // 남아 있으면 다음 장사의 결제와 섞인다.
-    await page.evaluate(async () => {
+    const closeResult = await page.evaluate(async () => {
       const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-      await fetch("/api/settlements/shift-close", {
+      const res = await fetch("/api/settlements/shift-close", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: today, shift: "day" }),
       });
+      return { status: res.status, body: await res.text() };
     });
+    check("정산 요청이 성공한다", closeResult.status === 200, JSON.stringify(closeResult));
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(1800);
     const after = await page.evaluate(() => {
       const col = document.querySelector('.order-col[data-status="paid"]');
       return col ? { count: col.querySelector(".col-count").textContent, n: col.querySelectorAll(".order-card").length } : null;
     });
-    check("★ 정산 뒤에는 한 장도 안 남는다", after && after.n === 0, JSON.stringify(after));
+    check("★ 정산 뒤에는 한 장도 안 남는다", after && after.n === 0,
+      JSON.stringify({ after, close: closeResult.body }));
   }
 
   out.push("\n[중복 제거 코드가 남아 있지 않다]");

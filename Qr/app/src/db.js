@@ -218,8 +218,9 @@ async function loadRecentOrders() {
   // 훑어도 되는 거잖아. 나중에 결산에서 볼 때 오래 걸려야 하는 일이지 다른
   // 모든 곳에서 느려야 하는 게 아니잖아."
   //
-  // 그래서 목록은 **오늘치만** 들고 온다. 안 끝난 주문은 아래 (가)가 날짜와
-  // 무관하게 전부 들고 오므로, 받을 돈이 화면에서 사라지는 일은 없다.
+  // 그래서 목록은 **운영 중인 것만** 들고 온다. 안 끝난 주문은 아래 (가)가
+  // 날짜와 무관하게 전부 들고 오므로, 받을 돈이 화면에서 사라지는 일은 없다.
+  // 끝난 것은 오늘 결제됐고 아직 정산 전인 것만 (나)에서 더한다.
   // 지난 날 주문 한 건이 필요하면 그때 그 한 건만 `_id` 로 꺼낸다
   // (src/orderQueries.js operationalOrderById). 그쪽은 여전히 recentCutoff()
   // 기준(사흘)이라, 번호로 찾아 들어가는 길은 좁아지지 않는다.
@@ -228,22 +229,30 @@ async function loadRecentOrders() {
   const { taipeiDateString } = require("./time");
   const started = serviceStartedAt(store); // "YYYY-MM-DD HH:MM:SS" 또는 null
   const today = taipeiDateString(); // "YYYY-MM-DD"
-  // 영업 시작 전(=테스트) 주문은 어느 쪽에도 안 들어가야 한다. 날짜가 앞에
-  // 오는 형식이라 문자열 비교가 그대로 시간 비교가 된다.
-  const from = started && started > today ? started : today;
-
   // (가) 안 끝난 주문 — 아무리 오래돼도 들고 있어야 한다. 화면에서 사라지면
   //      받을 돈이 사라진다. {status:1, created_at:1} 인덱스를 탄다.
   const openFilter = { status: { $in: OPEN } };
   if (started) openFilter.created_at = { $gte: started };
 
-  // (나) 오늘 것 — 상태와 무관하게. 주문판의 「결제완료」 칸과 포장 픽업
-  //      번호가 이걸 쓴다. {created_at:1} 인덱스를 탄다.
-  const recentFilter = { created_at: { $gte: from } };
+  // (나) 오늘 **결제됐고 아직 정산 전인 것** — 주문판의 「결제완료」 칸만
+  //      쓴다. 예전에는 "오늘 만든 주문"을 상태와 무관하게 전부 가져온 뒤,
+  //      브라우저가 취소 주문과 이미 정산된 주문을 버렸다. 오전 정산 뒤에도
+  //      점심 주문 수십 건을 MongoDB -> Vercel -> 패드로 보낸 뒤 숨긴 셈이다.
+  //
+  //      결제한 시각은 updated_at 이다. 어제 들어온 미결제 주문을 오늘 받은
+  //      경우도 오늘 결제완료 칸에 보여야 하므로 created_at 으로 자르면 안 된다.
+  //      {status:1, updated_at:1} 인덱스를 탄다.
+  const paidFilter = {
+    status: "paid",
+    updated_at: { $gte: `${today} 00:00:00`, $lte: `${today} 23:59:59` },
+    settled_at: { $exists: false },
+  };
+  // 영업 시작 전 테스트 주문을 오늘 결제했다고 운영 주문으로 되살리지 않는다.
+  if (started) paidFilter.created_at = { $gte: started };
 
   const rows = await db
     .collection(ORDERS_COLLECTION)
-    .find({ $or: [openFilter, recentFilter] })
+    .find({ $or: [openFilter, paidFilter] })
     .toArray();
   // MongoDB의 $or는 두 조건에 동시에 맞는 문서도 한 번만 돌려준다.
   return rows.map(stripMongoId).sort((a, b) => a.id - b.id);

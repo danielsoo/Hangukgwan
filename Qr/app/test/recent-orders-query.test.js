@@ -70,8 +70,25 @@ function day(offset) {
   old.push({ _id: 900, id: 900, status: "new", items: [], created_at: `${day(-20)} 12:00:00` });
   old.push({ _id: 901, id: 901, status: "preparing", items: [], created_at: `${day(-25)} 12:00:00` });
   old.push({ _id: 902, id: 902, status: "served", items: [], created_at: `${day(-15)} 12:00:00` });
-  // 오늘 끝난 주문 — 주문판의 「결제완료」 칸이 이걸 쓴다. 들고 있어야 한다.
-  old.push({ _id: 950, id: 950, status: "paid", items: [], created_at: `${day(0)} 12:00:00` });
+  // 오늘 결제됐고 정산 전인 주문 — 주문판의 「결제완료」 칸이 쓴다.
+  old.push({
+    _id: 950, id: 950, status: "paid", items: [], created_at: `${day(0)} 11:00:00`,
+    updated_at: `${day(0)} 12:00:00`,
+  });
+  // 오늘 만들었어도 이미 정산했거나 취소한 것은 주문판에 필요 없다.
+  old.push({
+    _id: 952, id: 952, status: "paid", items: [], created_at: `${day(0)} 10:00:00`,
+    updated_at: `${day(0)} 12:30:00`, settled_at: `${day(0)} 14:00:00`,
+  });
+  old.push({
+    _id: 953, id: 953, status: "cancelled", items: [], created_at: `${day(0)} 12:00:00`,
+    updated_at: `${day(0)} 12:10:00`,
+  });
+  // 어제 들어왔지만 오늘 받은 돈은 오늘 결제완료 칸에 있어야 한다.
+  old.push({
+    _id: 954, id: 954, status: "paid", items: [], created_at: `${day(-1)} 20:00:00`,
+    updated_at: `${day(0)} 11:30:00`,
+  });
   // 어제 끝난 주문 — 마감된 날이다. 목록에 들어오면 안 된다(2026-09-13).
   // 실측: 285건 중 212건이 지난 날의 끝난 주문이었고, 그것만으로 4초였다.
   old.push({ _id: 951, id: 951, status: "paid", items: [], created_at: `${day(-1)} 12:00:00` });
@@ -87,11 +104,14 @@ function day(offset) {
   check("★ 20일 전 「신규」 주문이 그대로 있다", ids.includes(900), JSON.stringify(ids.slice(0, 12)));
   check("★ 25일 전 「조리중」 주문도 있다", ids.includes(901));
   check("★ 15일 전 「서빙완료」 주문도 있다", ids.includes(902));
-  check("오늘 끝난 주문은 들고 있다", ids.includes(950));
+  check("오늘 결제한 정산 전 주문은 들고 있다", ids.includes(950));
+  check("어제 주문이어도 오늘 결제했으면 들고 있다", ids.includes(954));
   check("★ 어제 끝난 주문은 안 들고 있다 — 마감된 날은 안 훑는다", !ids.includes(951), JSON.stringify(ids));
 
   out.push("\n[들어오면 안 되는 것은 안 들어온다]");
   check("★ 영업 시작 전 주문은 안 들어온다", !ids.includes(800), JSON.stringify(ids));
+  check("★ 이미 정산된 오늘 주문은 안 들어온다", !ids.includes(952), JSON.stringify(ids));
+  check("★ 오늘 취소한 주문도 안 들어온다", !ids.includes(953), JSON.stringify(ids));
   check("오래된 결제완료는 안 들어온다", !ids.includes(1) && !ids.includes(399), JSON.stringify(ids.length));
   check("같은 주문이 두 번 들어오지 않는다", new Set(ids).size === ids.length, `${ids.length} vs ${new Set(ids).size}`);
   check("주문 번호 순으로 정렬돼 있다", ids.every((v, i) => i === 0 || ids[i - 1] <= v), JSON.stringify(ids));
@@ -102,8 +122,9 @@ function day(offset) {
   check("★ 안 끝난 주문은 $in 으로 고른다", /\$in/.test(joined), joined.slice(0, 300));
   check("★ 풀 1개에서도 왕복 한 번 — 단일 질의", filters.length === 1, `${filters.length}개: ${joined.slice(0, 200)}`);
   check("인덱스를 타는 두 조건만 $or 로 합친다", /\$or/.test(joined), joined.slice(0, 200));
-  check("두 조건 모두 created_at 으로 범위가 잡혀 있다",
-    (joined.match(/created_at/g) || []).length === 2, joined.slice(0, 300));
+  check("진행 주문은 created_at 으로 범위가 잡혀 있다", /created_at/.test(joined), joined.slice(0, 300));
+  check("결제완료 칸은 결제 시각(updated_at)으로 오늘만 찾는다", /updated_at/.test(joined), joined.slice(0, 300));
+  check("이미 정산된 결제는 DB에서부터 제외한다", /settled_at/.test(joined), joined.slice(0, 300));
 
   out.push("\n[상태 목록이 한 곳에서만 정해진다]");
   // 여기가 갈라지면 빠진 상태의 주문이 화면에서 조용히 사라진다.
