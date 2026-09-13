@@ -89,7 +89,15 @@ function check(name, cond, extra = "") {
     };
     document.body.appendChild(b);
   });
-  await page.locator("#e2eCustomerBtn").click();
+  // 진짜로 눌러서 맞히지 않는다. 손님 화면에는 인원수 입력 창이 화면을 덮고
+  // 있고(partySizeBackdrop), 시험용 단추는 아주 아래(y≈7000)에 붙는다 —
+  // 실제 손가락으로는 닿지 않는 자리다. 2026-09-13 에 이 시험이 그걸로 30초
+  // 기다리다 죽었다.
+  //
+  // 여기서 재는 것은 「누름 하나가 한 줄로 잡히는가」이지 「저 자리를 누를 수
+  // 있는가」가 아니다. 그건 다른 시험들이 본다. 그래서 단추에 바로 누름을
+  // 보낸다 — document 에 걸린 그 귀는 똑같이 듣는다.
+  await page.evaluate(() => document.querySelector("#e2eCustomerBtn").click());
   await page.waitForTimeout(1200);
   for (let i = 0; i < 2; i++) {
     await page.evaluate(() => fetch("/api/menu").then((r) => r.json()).catch(() => null));
