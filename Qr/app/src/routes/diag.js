@@ -57,6 +57,63 @@ router.get("/", requireOwner, async (req, res) => {
       await db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } });
       out.store_read_ms = Date.now() - t;
 
+      // 2026-09-14 사장님: "애초에 불러오는 게 텍스트밖에 없는데 이렇게 오래
+      // 걸린다고?" 맞는 말이다. 61KB 에 왕복 5ms 인데 398ms 가 나올 이유가
+      // 없다. 그래서 「받는 양이 문제인가」를 가르는 세 줄을 여기 둔다.
+      //
+      // (가) 같은 문서를 **_id 하나만** 달라고 해서 잰다. 왕복도 같고, 찾는
+      //      것도 같고, 받는 것만 거의 0 이다.
+      //        이것도 느리면 → 받는 양 문제가 아니다. 문서 자체이거나 연결이다
+      //        이건 빠르면 → 받는 양이 맞다. 그러면 (나)로 그 양을 확인한다
+      t = Date.now();
+      await db.collection("store").findOne({ _id: "main" }, { projection: { _id: 1 } });
+      out.store_idonly_ms = Date.now() - t;
+
+      // (나) **디스크에 있는 진짜 크기.** 아래 store_kb 는 메모리에 올라온
+      //      것이라 projection({orders:0}) 으로 감춰진 부분을 못 본다. 몽고는
+      //      뺄 때도 문서를 통째로 읽고 나서 지운다 — 옛 주문 배열이 아직
+      //      남아 있어도 우리 눈에는 61KB 로만 보인다.
+      try {
+        const rows = await db
+          .collection("store")
+          .aggregate([
+            { $match: { _id: "main" } },
+            {
+              $project: {
+                total: { $bsonSize: "$$ROOT" },
+                keys: {
+                  $map: {
+                    input: { $objectToArray: "$$ROOT" },
+                    as: "kv",
+                    in: { k: "$$kv.k", bytes: { $bsonSize: { v: "$$kv.v" } } },
+                  },
+                },
+              },
+            },
+          ])
+          .toArray();
+        const doc = rows && rows[0];
+        if (doc) {
+          out.store_doc_kb = Math.round(doc.total / 1024);
+          out.store_doc_kb_by_key = Object.fromEntries(
+            (doc.keys || [])
+              .map((x) => [x.k, Math.round(x.bytes / 1024)])
+              .filter(([, kb]) => kb >= 1)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 12)
+          );
+        }
+      } catch (e) {
+        out.store_doc_size_error = e.message;
+      }
+
+      // (다) 대조군. 아주 작은 문서 하나. 이것마저 느리면 읽는 양과 무관하게
+      //      **모든 읽기**가 느린 것이고, 그러면 범인은 연결(maxPoolSize: 1)
+      //      이거나 묶음 자체다.
+      t = Date.now();
+      await db.collection("counters").findOne({ _id: "orders" });
+      out.tiny_read_ms = Date.now() - t;
+
       // 주문을 다루는 요청이 하는 것과 **같은 것**을 재야 한다. 2026-09-13 에
       // 이 줄이 3979ms 로 나와서 4초의 범인을 찾았다(src/db.js
       // loadRecentOrders). 다르게 재면 그때 그걸 못 봤을 것이다.
