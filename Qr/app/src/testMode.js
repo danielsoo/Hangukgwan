@@ -233,6 +233,54 @@ function menuDiff(store, before) {
  *      여기서 걸리는 것은 진짜 주문뿐이다. 테스트로 앉힌 자리에 진짜
  *      주문이 들어온 자리라면 그 착석은 이제 진짜다.
  */
+// ---- 지금 몇 대가 참여 중인가 ----
+//
+// 2026-09-14 사장님: "마지막으로 나가는 사람한테 알려주면 되잖냐."
+//
+// 맞는 말이다. 「나가기」를 누른 사람이 마지막이면 그 자리에서 알려주고
+// 끝내면 된다. 혼자 켰다 끄면 그대로 끝나고, 여럿이면 마지막 사람이
+// 정리하고 나간다. 별도의 종료 버튼을 따로 기억할 필요가 없다.
+//
+// 그러려면 **서버가 인원을 알아야 한다.** 지금까지는 참여 여부가 각 기기의
+// 로그인 세션 안에만 있어서(req.session.testSessionId) 서버는 몇 대가 들어
+// 있는지 몰랐다. 그래서 9/13 저녁에 켠 세션이 하루 넘게 떠 있어도 아무도
+// 눈치채지 못했다 — 참여했던 기기들의 로그인 세션이 12시간 뒤 만료되면서
+// 조용히 다 빠져나갔는데, 세션 자체는 그대로 남았다.
+//
+// 그래서 참여한 로그인 세션 번호를 테스터 세션 문서에 모아 둔다. 인원은
+// 그중 **아직 살아 있는 것**만 센다 — 로그인 세션이 만료되면 sessions
+// 컬렉션에서 사라지므로, 따로 하트비트를 쓰지 않아도 저절로 맞는다.
+// (connect-mongo 는 로그인 세션 하나를 _id 로 저장한다 — server.js 참고.)
+const SESSIONS_COLLECTION = "sessions";
+
+async function joinDevice(db, sessionId, sid) {
+  if (!db || !sessionId || !sid) return;
+  await db.collection(COLLECTION).updateOne({ _id: sessionId }, { $addToSet: { devices: sid } });
+}
+
+async function leaveDevice(db, sessionId, sid) {
+  if (!db || !sessionId || !sid) return;
+  await db.collection(COLLECTION).updateOne({ _id: sessionId }, { $pull: { devices: sid } });
+}
+
+/**
+ * 참여 중인 기기 수. 못 세면 null 을 돌려준다 — 0 으로 뭉개면 안 된다.
+ *
+ * 0 은 「아무도 없다」는 뜻이고 화면은 그걸 보고 「정리할까요」를 띄운다.
+ * 못 센 것을 0 으로 내려보내면 멀쩡히 여럿이 쓰는 중에도 그 안내가 뜬다.
+ */
+async function countJoined(db, cur) {
+  if (!db || !cur) return null;
+  try {
+    const doc = await db.collection(COLLECTION).findOne({ _id: cur.id }, { projection: { devices: 1 } });
+    const sids = (doc && Array.isArray(doc.devices) ? doc.devices : []).filter(Boolean);
+    if (!sids.length) return 0;
+    return await db.collection(SESSIONS_COLLECTION).countDocuments({ _id: { $in: sids } });
+  } catch (e) {
+    return null;
+  }
+}
+
 function testSeats(store, sessionId) {
   const { hasUnpaidOrder } = require("./partySize");
   return (store.tables || []).filter(
@@ -359,6 +407,9 @@ async function end(db, store, { save, deletePhoto }, opts = {}) {
 
 module.exports = {
   TAGGED_COLLECTIONS,
+  joinDevice,
+  leaveDevice,
+  countJoined,
   testSeats,
   previewEnd,
   end,

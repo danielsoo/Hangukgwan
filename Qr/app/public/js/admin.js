@@ -848,6 +848,7 @@
       settingsCatPrintSub: "주방 프린터 · 빌지 글자",
       testBannerMine: "테스터 모드 — 이 기기에서 만드는 것은 종료할 때 전부 사라집니다",
       testBannerOther: "테스터 모드가 켜져 있어요 — 이 기기는 평소 그대로이고, 여기서 넣는 주문은 진짜로 남습니다",
+      testBannerNobody: "테스터 모드가 켜져 있는데 참여한 기기가 없어요. 아무도 테스트 중이 아닙니다.",
       testBannerEndBtn: "종료",
       settingsCatDiag: "진단 · 속도",
       settingsCatDiagSub: "느린 곳 찾기 · 기록 내려받기",
@@ -1568,6 +1569,7 @@
       settingsCatPrintSub: "廚房印表機 · 出單字級",
       testBannerMine: "測試模式 — 這台裝置建立的資料，結束時會全部刪除",
       testBannerOther: "測試模式已開啟 — 這台裝置照常運作，在這裡送出的訂單會真實保留",
+      testBannerNobody: "測試模式已開啟，但沒有任何裝置參與中。目前沒有人在測試。",
       testBannerEndBtn: "結束",
       settingsCatDiag: "診斷 · 速度",
       settingsCatDiagSub: "找出卡住的地方 · 下載紀錄",
@@ -9679,7 +9681,13 @@
       banner.hidden = !st.active;
       banner.classList.toggle("is-other", !!st.active && !st.thisDevice);
       const text = $("#testModeBannerText");
-      if (text) text.textContent = T(st.thisDevice ? "testBannerMine" : "testBannerOther");
+      // 아무도 참여 중이 아닌 경우를 따로 말한다. 9/13 저녁에 켠 세션이
+      // 하루 넘게 떠 있던 것이 정확히 이 상태였는데, 화면은 그냥 "켜져
+      // 있어요"라고만 해서 「누가 쓰고 있나 보다」로 읽혔다.
+      // joined 가 null 이면 못 센 것이다 — 0 처럼 다루지 않는다.
+      const nobody = !st.thisDevice && st.joined === 0;
+      if (text) text.textContent = T(st.thisDevice ? "testBannerMine" : nobody ? "testBannerNobody" : "testBannerOther");
+      banner.classList.toggle("is-idle", nobody);
       // 끄는 것은 사장님만 할 수 있다(서버도 requireOwner 로 막는다). 직원
       // 화면에 눌러도 안 되는 버튼을 두지 않는다.
       const endBtn = $("#testModeBannerEnd");
@@ -9738,6 +9746,16 @@
     const leave = $("#testModeLeaveBtn");
     if (leave) {
       leave.onclick = async () => {
+        // 2026-09-14 사장님: "마지막으로 나가는 사람한테 알려주면 되잖냐."
+        //
+        // 내가 마지막이면 나가는 것이 곧 끝내는 것이다. 그냥 빠져나가면
+        // 아무도 안 들어 있는 세션이 남고, 그러면 누가 마지막인지 알 수
+        // 없으니 아무도 못 끈다 — 9/13 저녁에 켠 것이 하루 넘게 떠 있던
+        // 이유가 그거였다.
+        //
+        // 다만 몰래 끝내지는 않는다. 무엇이 지워지는지 보여주고 사람이
+        // 누른다(endTestMode 가 그 창을 띄운다).
+        if (testModeState && testModeState.lastOne) return endTestMode({ fromLeave: true });
         const res = await fetch("/api/test-mode/leave", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         if (!res.ok) return;
         testModeState = await res.json();
@@ -9763,7 +9781,7 @@
     if (bannerEnd) bannerEnd.onclick = endTestMode;
   }
 
-  async function endTestMode() {
+  async function endTestMode(opts = {}) {
     // 먼저 무엇이 사라지는지 받아온다. 이걸 건너뛰고 바로 지우면 안 된다.
     let pv = null;
     let alreadyOff = false;
@@ -9798,7 +9816,11 @@
     }
     if (!pv) return showAlert("테스터 모드 상태를 읽지 못했어요. 새로고침 후 다시 시도해 주세요.");
 
-    const lines = ["테스터 모드를 종료하면 아래가 영구히 사라집니다.", ""];
+    // 「나가기」에서 온 것이면 왜 여기까지 왔는지부터 말한다. 그냥 빠지려고
+    // 눌렀는데 삭제 확인 창이 뜨면 놀란다.
+    const lines = opts.fromLeave
+      ? ["마지막 참여자입니다.", "", "나가면 테스터 모드가 함께 끝나고 아래가 영구히 사라집니다.", ""]
+      : ["테스터 모드를 종료하면 아래가 영구히 사라집니다.", ""];
     const rows = pv.rows || {};
     const label = { orders: "주문", payments: "결제기록", daily_settlements: "마감 기록", reservations: "예약" };
     for (const [k, v] of Object.entries(rows)) if (v > 0) lines.push(`· ${label[k] || k} ${v}건`);
@@ -9826,7 +9848,7 @@
       }
     }
     lines.push("");
-    lines.push("계속할까요?");
+    lines.push(opts.fromLeave ? "나가고 종료할까요?" : "계속할까요?");
     if (!(await showConfirm(lines.join("\n")))) return;
 
     const res = await fetch("/api/test-mode/end", {

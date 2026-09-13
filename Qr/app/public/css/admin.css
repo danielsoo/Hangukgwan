@@ -1873,6 +1873,10 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .test-mode-banner.is-other .test-mode-banner-dot { background: #fbbf24; animation: none; }
 .test-mode-banner.is-other .test-mode-banner-btn { background: #fef3c7; color: #78350f; }
+/* 아무도 참여 중이 아닌 상태 — 위험하지도 정상적이지도 않다. 「치워야 할
+   것이 남아 있다」에 가깝다. */
+.test-mode-banner.is-idle { background: #92400e; }
+.test-mode-banner.is-idle .test-mode-banner-dot { background: #fed7aa; animation: none; }
 #testModeBannerText { flex: 1; }
 .test-mode-banner-btn {
   flex: none;

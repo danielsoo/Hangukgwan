@@ -1,6 +1,6 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
-const { store, save } = require("../db");
+const { store, save, getDb, connectDB } = require("../db");
 const { requireOwner } = require("../auth");
 const { isAdminRole } = require("../accounts");
 
@@ -39,7 +39,24 @@ router.post("/login", (req, res) => {
   return res.status(401).json({ error: "wrong_password" });
 });
 
-router.post("/logout", (req, res) => {
+router.post("/logout", async (req, res) => {
+  // 테스터 모드에 참여한 채로 로그아웃하면 그 자리도 같이 비운다.
+  //
+  // 2026-09-13 에 이게 없어서 사고가 났다. 참여 표시는 로그인 세션 안에만
+  // 있었는데(req.session.testSessionId), 로그인 세션은 12시간이면 만료된다.
+  // 참여했던 기기들이 하나씩 조용히 빠져나가고 테스터 세션만 남아, 아무도
+  // 안 들어 있는 채로 하루 넘게 켜져 있었다. 누가 마지막인지 알 수 없으니
+  // 아무도 끄지 못했다.
+  const testId = req.session && req.session.testSessionId;
+  if (testId) {
+    try {
+      const testMode = require("../testMode");
+      await connectDB();
+      await testMode.leaveDevice(getDb(), testId, req.sessionID);
+    } catch (e) {
+      // 자리 하나 못 비웠다고 로그아웃이 막히면 안 된다.
+    }
+  }
   req.session.destroy(() => res.json({ ok: true }));
 });
 
