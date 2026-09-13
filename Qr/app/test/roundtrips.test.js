@@ -9,11 +9,44 @@
 // 으로 수백 ms 가 된다. 줄일 수 있는 것은 **횟수**뿐이다.
 //
 // 그래서 개수가 아니라 **깊이**를 잰다. 나란히 보낸 다섯 번은 한 번어치고,
-// 줄줄이 보낸 두 번은 두 번어치다. 몽고 호출마다 같은 지연을 물려 놓고 전체
-// 걸린 시간을 그 지연으로 나누면 그 깊이가 나온다.
+// 줄줄이 보낸 두 번은 두 번어치다.
 //
 // 여기 적힌 숫자는 「이 정도까지는 봐준다」는 예산이다. 넘으면 어딘가에서
 // 기다림이 하나 늘어난 것이고, 그건 가게 화면이 그만큼 느려졌다는 뜻이다.
+//
+// ── 깊이를 시계로 재면 안 된다 (2026-09-13) ─────────────────────────
+//
+// 처음에는 몽고 호출마다 같은 지연을 물리고 **전체 걸린 시간을 그 지연으로
+// 나눠서** 깊이를 구했다. 그건 틀린 방법이었다.
+//
+// 다른 세션이 맥에서 이 시험이 깨진다고 알려왔다. 여기(클라우드)서는
+// 통과했다. 같은 코드가 기계에 따라 갈린다는 뜻이다 — 재 보니 결산 탭이
+// 「2.40번어치」였고, 한도는 2 였다. 2.50 만 넘으면 3 으로 반올림돼 실패한다.
+// 기계가 조금만 느리면 넘어간다.
+//
+// 직접 원인은 `$nin` 커밋이었다. 질의를 하나 더 **나란히** 보내서 깊이는
+// 그대로인데 걸린 시간만 늘었고, 그게 반올림 경계를 밀었다. 그렇다고 한도를
+// 3 으로 올리면 시험이 아무것도 안 지킨다 — 진짜로 줄줄이 하나가 늘어도
+// 통과하게 된다.
+//
+// 그래서 세는 방식으로 바꿨다. 그런데 **첫 시도도 틀렸다.** 「아무것도 안
+// 돌고 있을 때 시작하면 새 묶음」으로 셌더니, 요청 내내 나란히 도는 호출이
+// 하나만 있어도(기록을 내보내는 request_log.insertOne 이 그렇다) 「돌고 있는
+// 게 없는 순간」이 영영 안 와서 전부 한 묶음이 됐다. 줄줄이로 되돌려 놓고
+// 돌려 보니 그대로 통과했다 — **아무것도 안 지키는 시험**이었다.
+//
+// 지금 세는 것은 **그 호출이 몇 번째로 기다린 것인가**다. 어떤 호출이
+// 시작할 때, 그 시점에 **이미 끝나 있던** 호출들 중 가장 깊은 것 + 1 이
+// 그 호출의 깊이다. 전체 깊이는 그중 가장 큰 값이다.
+//
+//   나란히 둘: 둘 다 아무것도 안 끝난 때 시작 → 둘 다 1, 전체 1
+//   줄줄이 둘: 뒤엣것은 앞엣것이 끝난 뒤 시작 → 2, 전체 2
+//   내내 도는 것이 하나 끼어 있어도 위 계산은 안 흔들린다
+//
+// 기계 속도와도 무관하다. 지연을 다섯 배로 흔들어 놓고 돌려도 값이 같다.
+//
+// (지연은 남겨 둔다. 나란히 보낸 호출들이 확실히 겹치게 해서, 「먼저 것이
+//  끝난 뒤에 다음 것이 시작」으로 잘못 세어지는 일을 막는다.)
 //
 // (세션 조회는 여기 안 잡힌다 — connect-mongo 는 자기 연결을 따로 들고
 // 있어서 이 계측기가 못 본다. 실제로는 아래 숫자마다 1을 더 보태야 한다.)
@@ -43,10 +76,26 @@ function check(name, cond, extra = "") {
   else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
 }
 
-const DELAY = 40;
+const DELAY = 25;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let ops = [];
+let maxDepth = 0; // 제일 깊이 줄줄이 기다린 횟수
+let doneDepths = []; // 이미 끝난 호출들의 깊이
 const wrapped = new WeakSet();
+
+// 이 호출은 몇 번째로 기다린 것인가 — 시작하는 그 시점에 **이미 끝나 있던**
+// 호출들 중 가장 깊은 것 + 1. 내내 돌고 있는 호출이 끼어 있어도 안 흔들린다.
+async function timed(name, run) {
+  ops.push(name);
+  const mine = (doneDepths.length ? Math.max(...doneDepths) : 0) + 1;
+  if (mine > maxDepth) maxDepth = mine;
+  try {
+    await sleep(DELAY);
+    return await run();
+  } finally {
+    doneDepths.push(mine);
+  }
+}
 
 // 몽고 호출 하나하나에 같은 지연을 물린다. fake-mongo 는 컬렉션 객체를
 // 재사용하므로, 같은 객체를 두 번 감싸면 지연도 두 겹이 된다 — WeakSet 으로
@@ -57,17 +106,17 @@ function instrument(handle) {
     const col = real(name);
     if (wrapped.has(col)) return col;
     wrapped.add(col);
-    for (const m of ["findOne", "insertOne", "updateOne", "replaceOne", "deleteOne", "bulkWrite", "countDocuments", "updateMany", "findOneAndUpdate"]) {
+    for (const m of ["findOne", "insertOne", "updateOne", "replaceOne", "deleteOne", "bulkWrite", "countDocuments", "updateMany", "findOneAndUpdate", "estimatedDocumentCount", "indexes"]) {
       if (typeof col[m] === "function") {
         const r = col[m].bind(col);
-        col[m] = async (...a) => { ops.push(`${name}.${m}`); await sleep(DELAY); return r(...a); };
+        col[m] = (...a) => timed(`${name}.${m}`, () => r(...a));
       }
     }
     const rf = col.find.bind(col);
     col.find = (...a) => {
       const cur = rf(...a);
       const rt = cur.toArray.bind(cur);
-      cur.toArray = async () => { ops.push(`${name}.find`); await sleep(DELAY); return rt(); };
+      cur.toArray = () => timed(`${name}.find`, () => rt());
       return cur;
     };
     return col;
@@ -76,10 +125,10 @@ function instrument(handle) {
 
 async function depthOf(fn) {
   ops = [];
-  const t0 = Date.now();
+  maxDepth = 0;
+  doneDepths = [];
   const res = await fn();
-  const ms = Date.now() - t0;
-  return { depth: Math.round(ms / DELAY), calls: ops.length, status: res && res.status, ops: ops.slice() };
+  return { depth: maxDepth, calls: ops.length, status: res && res.status, ops: ops.slice() };
 }
 
 (async () => {
