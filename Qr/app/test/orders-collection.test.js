@@ -100,7 +100,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   // 있으면 여기서 만드는 옛 주문들이 그 규칙에 걸려 빠지므로, 이 테스트
   // 안에서만 비워둔다(그 규칙 자체는 test/e2e-service-start.js 가 잰다).
   {
-    const { save } = require("../src/db");
+    const { save, storeWrite } = require("../src/db");
     const { SETTING_KEY } = require("../src/serviceStart");
     delete store.settings[SETTING_KEY];
     // 같은 이유로 「주문 받는 시간」도 꺼둔다. 이 테스트는 아무 때나 돌고,
@@ -151,8 +151,16 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   io.length = 0;
   await req("GET", "/api/menu");
   const storeReads = io.filter((c) => c.col === "store" && c.op === "findOne");
-  check("store 문서를 읽을 때 주문을 빼고 읽는다",
-    storeReads.length > 0 && storeReads.every((c) => c.args[1] && c.args[1].projection && c.args[1].projection.orders === 0),
+  // 읽는 모양은 둘 중 하나여야 한다.
+  //   {orders: 0} — 문서를 통째로 받되 주문은 빼고 (판 번호가 바뀌었을 때)
+  //   {rev: 1}    — 판 번호 한 칸만 (바뀐 게 없을 때. 운영에서 9ms)
+  // 어느 쪽이든 주문 뭉치가 딸려 오면 안 된다. 그게 이 시험의 요지다.
+  const shapeOf = (c) => (c.args[1] && c.args[1].projection) || {};
+  check("store 문서를 읽을 때 주문이 딸려 오지 않는다",
+    storeReads.length > 0 && storeReads.every((c) => shapeOf(c).orders === 0 || shapeOf(c).rev === 1),
+    JSON.stringify(storeReads.map((c) => c.args[1])));
+  check("★ 바뀐 게 없으면 판 번호 한 칸만 묻는다",
+    storeReads.some((c) => shapeOf(c).rev === 1),
     JSON.stringify(storeReads.map((c) => c.args[1])));
   const orderReadsForMenu = io.filter((c) => c.col === "orders" && c.op === "find");
   check("★ 메뉴 요청은 orders 컬렉션을 한 번도 읽지 않는다",
@@ -219,8 +227,8 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   }));
   await getDb().collection("store").updateOne({ _id: "main" }, { $set: { orders: legacy } });
   delete store.settings[MIGRATION_FLAG];
-  const { save } = require("../src/db");
-  await applyOrdersCollection20260910(store, { save, getDb, connectDB });
+  const { save, storeWrite } = require("../src/db");
+  await applyOrdersCollection20260910(store, { save, getDb, connectDB, storeWrite });
   const movedCount = await getDb().collection("orders").countDocuments({ id: { $gte: 500000, $lte: 500119 } });
   check("옛 주문 120건이 전부 옮겨졌다", movedCount === 120, `${movedCount}건`);
   const afterDoc = await getDb().collection("store").findOne({ _id: "main" });
@@ -228,7 +236,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   check("이관 표시가 남는다", !!store.settings[MIGRATION_FLAG]);
   // 두 번 돌려도 안전해야 한다(배포가 여러 번 뜨거나 중간에 끊길 수 있다).
   const orderIndexesBefore = getDb().collection("orders").indexes.length;
-  await applyOrdersCollection20260910(store, { save, getDb, connectDB });
+  await applyOrdersCollection20260910(store, { save, getDb, connectDB, storeWrite });
   const orderIndexesAfter = getDb().collection("orders").indexes.length;
   const again = await getDb().collection("orders").countDocuments({ id: { $gte: 500000, $lte: 500119 } });
   check("다시 돌려도 늘거나 줄지 않는다", again === 120, `${again}건`);
@@ -295,7 +303,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   out.push("\n[2차 이관도 아무것도 잃지 않는다]");
   {
     const { applySplitCollections20260910, MIGRATION_FLAG: FLAG2 } = require("../src/migrations/2026-09-10-split-collections");
-    const { save } = require("../src/db");
+    const { save, storeWrite } = require("../src/db");
     const legacyPayments = Array.from({ length: 40 }, (_, i) => ({
       id: 800000 + i, merchant_trade_no: `HG${800000 + i}`, table_number: "3",
       order_ids: [1], amount: 500, status: "paid", created_at: "2026-06-01 12:00:00",
@@ -307,7 +315,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     await getDb().collection("store").updateOne({ _id: "main" },
       { $set: { payments: legacyPayments, reservations: legacyRes, daily_settlements: [] } });
     delete store.settings[FLAG2];
-    await applySplitCollections20260910(store, { save, getDb, connectDB });
+    await applySplitCollections20260910(store, { save, getDb, connectDB, storeWrite });
 
     const pc = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
     const rc = await getDb().collection("reservations").countDocuments({ id: { $gte: 810000, $lte: 810014 } });
@@ -318,7 +326,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     // 두 번 돌려도 늘거나 줄지 않아야 한다.
     const splitIndexesBefore = ["payments", "daily_settlements", "reservations"]
       .reduce((n, name) => n + getDb().collection(name).indexes.length, 0);
-    await applySplitCollections20260910(store, { save, getDb, connectDB });
+    await applySplitCollections20260910(store, { save, getDb, connectDB, storeWrite });
     const splitIndexesAfter = ["payments", "daily_settlements", "reservations"]
       .reduce((n, name) => n + getDb().collection(name).indexes.length, 0);
     const pc2 = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });

@@ -6,7 +6,7 @@ const session = require("express-session");
 const compression = require("compression");
 const { nowLocal } = require("./src/time");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave, saveFields } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave, saveFields, storeWrite } = require("./src/db");
 const seed = require("./src/seed");
 // 0번 테이블 정리 마이그레이션이 「지워도 안전한가」를 묻는 데 쓴다.
 const { hasUnpaidOrder } = require("./src/partySize");
@@ -15,6 +15,7 @@ const { applyFollowup202609 } = require("./src/migrations/2026-09-followup");
 const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fixes");
 const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-takeout-options");
 const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-orders-collection");
+const { applyStoreRev20260914 } = require("./src/migrations/2026-09-14-store-rev");
 const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
 const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
 const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-hours");
@@ -276,11 +277,14 @@ async function storeRefreshAndFlush(req, res, next) {
       await applyMenuFixes20260904(store, { save, deletePhoto });
       await applyTakeoutOptions20260907(store, { save });
       // 주문을 store 문서 밖으로 — 이 앱이 느렸던 가장 큰 이유다(src/db.js).
-      await applyOrdersCollection20260910(store, { save, getDb, connectDB });
+      await applyOrdersCollection20260910(store, { save, getDb, connectDB, storeWrite });
+      // store 문서에 판 번호를 달아준다 — 이게 있어야 매 요청이 37KB 를
+      // 다시 안 받는다(src/db.js STORE_REV).
+      await applyStoreRev20260914(store, { storeWrite, saveFields });
       // 9/8 저녁 이전은 테스트 — 결산과 주문 목록에서 뺀다(src/serviceStart.js).
       await applyServiceStart20260910(store, { save });
       // 결제기록·정산·예약도 밖으로 — 지금은 옮길 게 몇 줄뿐이라 가장 싸다.
-      await applySplitCollections20260910(store, { save, getDb, connectDB });
+      await applySplitCollections20260910(store, { save, getDb, connectDB, storeWrite });
       // 영업시간 밖에는 손님이 QR 로 주문하지 못하게 — 직원은 그대로 된다
       // (src/openHours.js).
       await applyOrderHours20260910(store, { save });

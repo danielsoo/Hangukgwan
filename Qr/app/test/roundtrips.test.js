@@ -151,6 +151,23 @@ async function depthOf(fn) {
     ["로그인               GET /api/bootstrap", 4, () => boss.get("/api/bootstrap")],
   ];
 
+  // 인스턴스가 막 뜬 순간에는 store 문서를 한 번 통째로 받는다(판 번호를
+  // 아직 모르니까). 그 뒤로는 판 번호 한 칸만 묻는다 — 운영에서 그 차이가
+  // 9ms 대 394ms 다(src/db.js STORE_REV). 아래 예산은 **장사 중의 값**,
+  // 즉 이미 한 번 받아 둔 인스턴스의 값이라 여기서 한 번 덥힌다.
+  await boss.get("/api/zones");
+
+  out.push("\n[같은 것을 또 받지 않는다]");
+  {
+    const r = await depthOf(() => boss.get("/api/zones"));
+    const fullStoreReads = r.ops.filter((o) => o === "store.findOne").length;
+    check(
+      "★ 두 번째 요청은 store 문서를 다시 받지 않는다",
+      r.status === 200 && fullStoreReads <= 1,
+      `store 읽기 ${fullStoreReads}번 (호출 ${r.calls}: ${r.ops.join(", ")})`
+    );
+  }
+
   out.push("\n[화면을 여는 동작 — 몽고를 줄줄이 몇 번 기다리나]");
   for (const [label, max, fn] of budget) {
     const r = await depthOf(fn);

@@ -319,6 +319,59 @@ async function saveOrders(orders) {
 // vipCards 는 남긴다: 물리 카드 수만큼만 늘어나 사실상 고정이고(200장에
 // 0.03MB), 주문마다 VIP 할인을 보느라 매번 읽어야 해서 메모리에 있는
 // 편이 맞다.
+// ---- store 문서의 판 번호(rev) ----
+//
+// 2026-09-14 사장님: "이게 왜 스택으로 쌓이는지 진짜 모르겠다니까."
+//
+// 재보니 이랬다. store 문서는 37KB 고(메뉴 24 + 테이블 6 + 설정 5 + 나머지),
+// **모든 API 요청이 그걸 통째로 다시 받고 있었다.** 로그인도, 버튼 하나도.
+//
+//     그 문서를 꺼내서 몇 바이트만 받기       9ms
+//     그 문서를 꺼내서 37KB 를 받기         394ms
+//
+// 385ms 가 전부 「보내는」 값이다. 그리고 이 값은 어디서나 같은 비율로
+// 나온다 — store 37KB/394ms, 주문 21건 23KB/260ms, 주문 285건 374KB/3979ms.
+// 전부 **초당 약 94KB** 다. 무료 M0 의 대역폭이 그 정도다. 건수가 아니라
+// 바이트가 값을 정한다.
+//
+// 메뉴는 하루에 몇 번 바뀌지도 않는데 하루 수천 번 받고 있었다. 그래서
+// 매번 받는 대신 **"바뀌었나"만 묻는다.** 문서에 판 번호를 하나 달고, 요청
+// 마다 그 한 칸만 읽는다(9ms). 같으면 들고 있던 것을 쓰고, 다르면 그때만
+// 통째로 받는다. 시간으로 묵히는 캐시가 아니라 매번 확인하는 것이라,
+// 묵은 값이 화면에 나갈 일이 없다.
+//
+// ★ 규칙: store 문서를 바꾸는 길은 **전부 storeWrite() 나 save() 를 거친다.**
+//   한 군데라도 빼먹고 직접 updateOne 을 하면 판 번호가 안 올라가고, 그
+//   변경이 다른 기기 화면에 영영 안 나타난다. 메뉴를 고쳤는데 안 바뀌는
+//   것보다 나쁜 것은 없다. test/store-rev.test.js 가 이 규칙을 지킨다.
+const STORE_REV = "rev";
+
+function newRev() {
+  return new ObjectId().toHexString();
+}
+
+// 이 인스턴스가 지금 들고 있는 store 가 어느 판인가. null 이면 "모른다"는
+// 뜻이고, 다음 요청에서 통째로 다시 읽는다.
+let storeLoadedRev = null;
+
+/**
+ * store 문서를 바꾼다. **판 번호를 같이 올린다.**
+ *
+ * 쓰고 난 뒤에는 이 인스턴스의 판 번호를 일부러 지운다(null). 같은 순간에
+ * 다른 인스턴스도 이 문서의 **다른 칸**을 고쳤을 수 있는데, 내 메모리에는
+ * 그 변경이 없다. 새 판 번호를 그대로 믿어버리면 그 변경을 영영 못 본다.
+ * 그래서 쓴 쪽은 다음 요청에 한 번 더 읽는다 — 쓰기는 드물고 읽기는 잦으니
+ * 이 값이 싸다.
+ */
+async function storeWrite(update, opts = {}) {
+  await connectDB();
+  const { filter = { _id: "main" }, ...rest } = opts;
+  const merged = { ...update, $set: { ...(update.$set || {}), [STORE_REV]: newRev() } };
+  const r = await db.collection("store").updateOne(filter, merged, rest);
+  storeLoadedRev = null;
+  return r;
+}
+
 const OUT_OF_DOCUMENT = ["orders", "payments", "daily_settlements", "reservations"];
 
 // 이름 그대로의 컬렉션에 한 건씩 저장한다. 셋 다 id 로 찾고, id 로 지운다.
@@ -379,15 +432,27 @@ async function refreshStore({ includeOrders = true } = {}) {
   // 번만 예전과 같아진다. 틀린 목록이 나갈 일은 없다.
   const { serviceStartedAt } = require("./serviceStart");
   const startBefore = serviceStartedAt(store);
+
+  // 먼저 **판 번호 한 칸만** 읽는다(9ms). 이 인스턴스가 들고 있는 것과 같으면
+  // 37KB 를 다시 받지 않는다 — 그게 394ms 다. 위 STORE_REV 주석 참고.
   let existing;
   let ordersFirstTry;
+  const revRead = db.collection("store").findOne({ _id: "main" }, { projection: { [STORE_REV]: 1 } });
+  let revDoc;
   if (includeOrders) {
-    [existing, ordersFirstTry] = await Promise.all([
-      db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } }),
-      loadRecentOrders(),
-    ]);
+    [revDoc, ordersFirstTry] = await Promise.all([revRead, loadRecentOrders()]);
   } else {
+    revDoc = await revRead;
+  }
+  const liveRev = revDoc ? revDoc[STORE_REV] : undefined;
+  // 판 번호가 아직 없는 문서(이 기능을 넣기 전 상태)에서는 늘 통째로 읽는다.
+  // 마이그레이션이 한 번 달아주면 그때부터 싸진다.
+  const upToDate = !!liveRev && !!storeLoadedRev && liveRev === storeLoadedRev;
+  if (revDoc && upToDate) {
+    existing = null; // 이미 들고 있는 store 가 최신이다
+  } else if (revDoc) {
     existing = await db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } });
+    storeLoadedRev = existing ? existing[STORE_REV] || null : null;
   }
   if (existing) {
     Object.assign(store, existing);
@@ -395,8 +460,11 @@ async function refreshStore({ includeOrders = true } = {}) {
     const defaults = defaultStore();
     for (const k of Object.keys(defaults)) if (!(k in store)) store[k] = defaults[k];
     for (const k of Object.keys(defaults.nextId)) if (!(k in store.nextId)) store.nextId[k] = 1;
-  } else {
+  } else if (!revDoc) {
+    // 문서 자체가 없다(완전히 빈 데이터베이스). 지금 들고 있는 기본값을 넣는다.
+    store[STORE_REV] = newRev();
     await db.collection("store").insertOne(withoutOutOfDocument(store));
+    storeLoadedRev = store[STORE_REV];
   }
   if (includeOrders) {
     const startAfter = serviceStartedAt(store);
@@ -416,7 +484,10 @@ async function save() {
   await connectDB();
   // 주문은 빼고 쓴다. 안 그러면 방금 밖으로 꺼낸 것을 매번 도로 집어넣는 셈이
   // 되고, 메모리에는 최근 며칠치만 있으므로 지난 주문을 통째로 날린다.
+  store[STORE_REV] = newRev();
   await db.collection("store").replaceOne({ _id: "main" }, withoutOutOfDocument(store), { upsert: true });
+  // storeWrite 와 같은 이유로 일부러 지운다 — 아래 주석 참고.
+  storeLoadedRev = null;
 }
 
 // The per-request refreshStore() call in server.js only guards against
@@ -496,7 +567,7 @@ async function patchArrayItem(arrayField, id, updates) {
   for (const [key, val] of Object.entries(updates)) {
     setDoc[`${arrayField}.$.${key}`] = val;
   }
-  await db.collection("store").updateOne({ _id: "main", [`${arrayField}.id`]: id }, { $set: setDoc });
+  await storeWrite({ $set: setDoc }, { filter: { _id: "main", [`${arrayField}.id`]: id } });
   const item = (store[arrayField] || []).find((it) => it.id === id);
   if (item) Object.assign(item, updates);
   return item;
@@ -535,7 +606,7 @@ async function saveFields(fields) {
   const setDoc = {};
   for (const [k, v] of Object.entries(fields)) setDoc[k] = v;
   if (!Object.keys(setDoc).length) return;
-  await db.collection("store").updateOne({ _id: "main" }, { $set: setDoc }, { upsert: true });
+  await storeWrite({ $set: setDoc }, { upsert: true });
 }
 
 /**
@@ -628,13 +699,10 @@ async function ensureOrderIdFloor() {
     { $max: { value: lastIssued } },
     { upsert: true }
   );
-  await db.collection("store").updateOne(
-    { _id: "main" },
-    {
-      $max: { "nextId.orders": floor },
-      $set: { [`settings.${ORDER_ID_FLOOR_FLAG}`]: appliedAt },
-    }
-  );
+  await storeWrite({
+    $max: { "nextId.orders": floor },
+    $set: { [`settings.${ORDER_ID_FLOOR_FLAG}`]: appliedAt },
+  });
   if (top && typeof top.id === "number" && !(store.nextId.orders > top.id)) {
     store.nextId.orders = top.id + 1;
   }
@@ -695,4 +763,5 @@ module.exports = {
   loadRecentOrders,
   findOrders, findOrderById, insertOrder, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,
+  storeWrite, STORE_REV, newRev,
 };

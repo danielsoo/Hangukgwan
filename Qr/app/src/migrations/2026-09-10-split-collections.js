@@ -24,7 +24,7 @@ const MOVES = [
   ["reservations", "reservations", [{ date: 1, time: 1 }, { status: 1 }]],
 ];
 
-async function applySplitCollections20260910(store, { save, getDb, connectDB }) {
+async function applySplitCollections20260910(store, { save, getDb, connectDB , storeWrite }) {
   // 이관 표시가 있다는 것은 아래 컬렉션과 인덱스 생성까지 성공했다는 뜻이다.
   // 새 서버리스 인스턴스마다 같은 createIndex 여섯 개를 반복하면, 작은 DB도
   // 첫 요청이 그 여섯 작업 뒤에 줄을 서게 된다.
@@ -65,7 +65,8 @@ async function applySplitCollections20260910(store, { save, getDb, connectDB }) 
   // 다시 쓰지 않는다.
   const unset = {};
   for (const [key] of MOVES) unset[key] = "";
-  await db.collection("store").updateOne({ _id: "main" }, { $unset: unset });
+  // src/db.js STORE_REV 규칙 — store 문서를 바꾸는 길은 전부 여기를 거친다.
+  await storeWrite({ $unset: unset });
 
   store.settings[MIGRATION_FLAG] = true;
   await save();

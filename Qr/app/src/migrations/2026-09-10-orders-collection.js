@@ -13,7 +13,7 @@
 // 데이터가 없어지는 것이 아니라 다음 실행에서 그대로 이어서 정리된다.
 const MIGRATION_FLAG = "migration_2026_09_10_orders_collection_applied";
 
-async function applyOrdersCollection20260910(store, { save, getDb, connectDB }) {
+async function applyOrdersCollection20260910(store, { save, getDb, connectDB, storeWrite }) {
   // 이관이 끝난 운영 DB에서는 인덱스도 이미 만들어졌다. 예전에는 새 Vercel
   // 인스턴스가 뜰 때마다 아래 createIndex 네 개를 다시 기다렸다. 데이터가
   // 작아도 이 메타데이터 작업 네 번이 모든 첫 API의 앞을 막고 Atlas 작업/
@@ -61,7 +61,9 @@ async function applyOrdersCollection20260910(store, { save, getDb, connectDB }) 
   }
 
   // 이제 원래 자리를 비운다. $unset 이라 store 문서 전체를 다시 쓰지 않는다.
-  await db.collection("store").updateOne({ _id: "main" }, { $unset: { orders: "" } });
+  // storeWrite 를 거친다 — store 문서를 바꾸는 길은 전부 판 번호를 올린다
+  // (src/db.js STORE_REV). 바로 아래 save() 도 올리지만, 규칙에 예외를 두지 않는다.
+  await storeWrite({ $unset: { orders: "" } });
 
   store.settings[MIGRATION_FLAG] = true;
   await save();
