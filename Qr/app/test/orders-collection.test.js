@@ -150,6 +150,9 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   check("store 문서를 읽을 때 주문을 빼고 읽는다",
     storeReads.length > 0 && storeReads.every((c) => c.args[1] && c.args[1].projection && c.args[1].projection.orders === 0),
     JSON.stringify(storeReads.map((c) => c.args[1])));
+  const orderReadsForMenu = io.filter((c) => c.col === "orders" && c.op === "find");
+  check("★ 메뉴 요청은 orders 컬렉션을 한 번도 읽지 않는다",
+    orderReadsForMenu.length === 0, JSON.stringify(orderReadsForMenu));
 
   out.push("\n[주문이 쌓여도 store 문서는 커지지 않는다]");
   const sizeBefore = Buffer.byteLength(JSON.stringify(await getDb().collection("store").findOne({ _id: "main" })));
@@ -173,7 +176,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     _id: 999002, id: 999002, table_number: "9", status: "served", items: [], total: 700,
     created_at: `${daysAgo(RECENT_DAYS + 30)} 12:00:00`, account_id: null,
   });
-  await req("GET", "/api/menu"); // refreshStore 한 번 더
+  await req("GET", "/api/orders", null, ck); // 주문이 필요한 주소에서 refreshStore
   check("오래된 결제완료 주문은 메모리에서 빠진다", !store.orders.some((o) => o.id === 999001));
   check("오래된 미결제 주문은 메모리에 남는다", store.orders.some((o) => o.id === 999002),
     store.orders.map((o) => o.id).join(","));
@@ -207,9 +210,13 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   check("옮긴 뒤 store 문서에서 주문이 사라진다", !afterDoc.orders);
   check("이관 표시가 남는다", !!store.settings[MIGRATION_FLAG]);
   // 두 번 돌려도 안전해야 한다(배포가 여러 번 뜨거나 중간에 끊길 수 있다).
+  const orderIndexesBefore = getDb().collection("orders").indexes.length;
   await applyOrdersCollection20260910(store, { save, getDb, connectDB });
+  const orderIndexesAfter = getDb().collection("orders").indexes.length;
   const again = await getDb().collection("orders").countDocuments({ id: { $gte: 500000, $lte: 500119 } });
   check("다시 돌려도 늘거나 줄지 않는다", again === 120, `${again}건`);
+  check("완료된 이관은 인덱스를 다시 만들지 않는다", orderIndexesAfter === orderIndexesBefore,
+    `${orderIndexesBefore} → ${orderIndexesAfter}`);
 
   out.push("\n[save() 가 주문을 도로 집어넣지 않는다]");
   // 이게 무너지면 메모리에 있는 최근 며칠치만 남고 지난 주문이 통째로
@@ -292,9 +299,15 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     const cleaned = await getDb().collection("store").findOne({ _id: "main" });
     check("옮긴 뒤 문서에서 사라진다", !cleaned.payments && !cleaned.reservations);
     // 두 번 돌려도 늘거나 줄지 않아야 한다.
+    const splitIndexesBefore = ["payments", "daily_settlements", "reservations"]
+      .reduce((n, name) => n + getDb().collection(name).indexes.length, 0);
     await applySplitCollections20260910(store, { save, getDb, connectDB });
+    const splitIndexesAfter = ["payments", "daily_settlements", "reservations"]
+      .reduce((n, name) => n + getDb().collection(name).indexes.length, 0);
     const pc2 = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
     check("다시 돌려도 그대로다", pc2 === 40, `${pc2}건`);
+    check("완료된 2차 이관도 인덱스를 다시 만들지 않는다", splitIndexesAfter === splitIndexesBefore,
+      `${splitIndexesBefore} → ${splitIndexesAfter}`);
     // save() 가 도로 집어넣지 않는지 — 1차 이관에서와 같은 위험이다.
     await save();
     const afterSave2 = await getDb().collection("store").findOne({ _id: "main" });
@@ -302,6 +315,13 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     const survived2 = await getDb().collection("payments").countDocuments({ id: { $gte: 800000, $lte: 800039 } });
     check("save() 뒤에도 옛 결제기록이 살아 있다", survived2 === 40, `${survived2}건`);
   }
+
+  out.push("\n[이미 채워진 seed는 DB를 쓰지 않는다]");
+  io.length = 0;
+  await require("../src/seed")();
+  const seedWrites = io.filter((c) => c.col === "store" && ["replaceOne", "updateOne", "insertOne"].includes(c.op));
+  check("★ 바뀐 기본값이 없으면 store 저장 0번", seedWrites.length === 0,
+    JSON.stringify(seedWrites.map((c) => `${c.col}.${c.op}`)));
 
   server.close();
   console.log(out.join("\n"));

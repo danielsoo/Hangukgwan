@@ -633,18 +633,12 @@
     // saveOrderToHistory below). Relies on isCounterTable already being set
     // by initPartySize() — see the .then(checkPriorOrder) chain at the
     // bottom of this file.
-    if (isCounterTable) {
-      const myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
-      hasPriorOrder = myIds.length > 0;
-      return;
-    }
-    try {
-      const res = await fetch(`/api/orders/table/${encodeURIComponent(tableNumber)}`);
-      const list = await res.json();
-      hasPriorOrder = Array.isArray(list) && list.length > 0;
-    } catch (e) {
-      /* leave hasPriorOrder at its safe default (false = enforce minimum) */
-    }
+    // 일반 테이블은 initPartySize 응답이 이미 같은 착석의 주문을 계산해서
+    // has_prior_order로 준다. 예전처럼 /api/orders/table/:n 을 다시 부르면
+    // QR 첫 화면에서 같은 주문 데이터를 두 번 읽는다.
+    if (!isCounterTable) return;
+    const myIds = JSON.parse(localStorage.getItem(`hgk_orders_${tableNumber}`) || "[]");
+    hasPriorOrder = myIds.length > 0;
   }
 
   function renderTabs() {
@@ -2084,6 +2078,7 @@
         }
         return;
       }
+      if (res.ok) hasPriorOrder = !!data.has_prior_order;
       if (res.ok) rememberSeating(data.seating_started_at);
       if (res.ok && data.party_size) {
         partySize = data.party_size;

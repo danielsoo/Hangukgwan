@@ -25,18 +25,19 @@ const MOVES = [
 ];
 
 async function applySplitCollections20260910(store, { save, getDb, connectDB }) {
+  // 이관 표시가 있다는 것은 아래 컬렉션과 인덱스 생성까지 성공했다는 뜻이다.
+  // 새 서버리스 인스턴스마다 같은 createIndex 여섯 개를 반복하면, 작은 DB도
+  // 첫 요청이 그 여섯 작업 뒤에 줄을 서게 된다.
+  if (store.settings && store.settings[MIGRATION_FLAG]) return;
+
   await connectDB();
   const db = getDb();
 
-  // 인덱스는 매번 만들어도 안전하다(있으면 아무 일도 하지 않는다). 이관
-  // 표시와 무관하게 두는 이유는, 표시만 남고 인덱스가 없는 상태로 굳는 걸
-  // 막기 위해서다 — 인덱스가 없으면 컬렉션 전체를 훑게 되어 쪼갠 의미가
-  // 반쯤 사라진다.
+  // 인덱스는 이관 전에 한 번 만든다. 플래그는 이관과 인덱스가 전부 성공한
+  // 뒤에만 저장되므로, 중간에 끊기면 다음 실행이 다시 이어 간다.
   for (const [, name, indexes] of MOVES) {
     for (const spec of indexes) await db.collection(name).createIndex(spec);
   }
-
-  if (store.settings && store.settings[MIGRATION_FLAG]) return;
 
   const moved = {};
   for (const [key, name] of MOVES) {

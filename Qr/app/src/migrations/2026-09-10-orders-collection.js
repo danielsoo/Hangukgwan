@@ -14,6 +14,12 @@
 const MIGRATION_FLAG = "migration_2026_09_10_orders_collection_applied";
 
 async function applyOrdersCollection20260910(store, { save, getDb, connectDB }) {
+  // 이관이 끝난 운영 DB에서는 인덱스도 이미 만들어졌다. 예전에는 새 Vercel
+  // 인스턴스가 뜰 때마다 아래 createIndex 네 개를 다시 기다렸다. 데이터가
+  // 작아도 이 메타데이터 작업 네 번이 모든 첫 API의 앞을 막고 Atlas 작업/
+  // 연결을 불필요하게 늘렸다.
+  if (store.settings && store.settings[MIGRATION_FLAG]) return;
+
   await connectDB();
   const db = getDb();
   const col = db.collection("orders");
@@ -21,13 +27,12 @@ async function applyOrdersCollection20260910(store, { save, getDb, connectDB }) 
   // 조회에 쓰는 두 필드에 인덱스를 만든다. 요청마다 "안 끝난 주문 + 최근
   // 며칠"을 찾고, 결산은 날짜 범위를 찾는다. 인덱스가 없으면 컬렉션 전체를
   // 훑게 되어 문서를 쪼갠 의미가 반쯤 사라진다.
-  // createIndex 는 이미 있으면 아무 일도 하지 않는다(매번 불러도 안전).
+  // createIndex 는 이관 전에 한 번만 한다. 플래그는 이관과 인덱스가 모두
+  // 성공한 뒤에만 저장되므로, 중간 실패 때는 다음 실행이 다시 이어 간다.
   await col.createIndex({ created_at: 1 });
   await col.createIndex({ status: 1, created_at: 1 });
   await col.createIndex({ account_id: 1, created_at: -1 });
   await col.createIndex({ table_number: 1, status: 1 });
-
-  if (store.settings && store.settings[MIGRATION_FLAG]) return;
 
   // store 문서에 아직 남아 있는 주문을 읽는다. refreshStore() 는 이제
   // orders 를 걸러서 가져오므로(projection), 여기서만 원본을 직접 본다.

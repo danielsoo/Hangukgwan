@@ -74,6 +74,9 @@ function check(name, cond, extra = "") {
   }
 
   const handle = db.getDb();
+  // 운영에서는 Atlas 연결 수를 줄이려고 로그를 30초씩 모아 한 번에 쓴다.
+  // 시험은 그 시간을 기다리지 않고, 지금까지 모인 줄만 즉시 비운다.
+  await requestLog.flush(handle);
   const clientRows = await handle.collection(requestLog.COLLECTION).find({ src: "client" }).toArray();
   check("★ 손님 화면이 잰 줄이 몽고에 있다", clientRows.length > 0, `${clientRows.length}줄`);
 
@@ -103,6 +106,7 @@ function check(name, cond, extra = "") {
     await page.evaluate(() => fetch("/api/menu").then((r) => r.json()).catch(() => null));
     await page.waitForTimeout(500);
   }
+  await requestLog.flush(handle);
   const clicks = await handle.collection(requestLog.COLLECTION).find({ src: "click", route: "#e2eCustomerBtn" }).toArray();
   check("★★ 요청 세 번이 한 줄로 잡힌다", clicks.length === 1, `${clicks.length}줄: ${JSON.stringify(clicks.map((r) => `${r.ms}ms/${r.reqs}건`))}`);
   if (clicks.length) check("요청 수를 들고 있다", clicks[0].reqs >= 3, String(clicks[0].reqs));

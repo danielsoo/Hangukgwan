@@ -6,7 +6,7 @@ const session = require("express-session");
 const compression = require("compression");
 const { nowLocal } = require("./src/time");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave, saveFields } = require("./src/db");
 const seed = require("./src/seed");
 // 0번 테이블 정리 마이그레이션이 「지워도 안전한가」를 묻는 데 쓴다.
 const { hasUnpaidOrder } = require("./src/partySize");
@@ -21,9 +21,14 @@ const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-h
 // 배포한 것이 화면에 안 닿던 문제 — 자세한 배경은 그 파일 맨 위 주석.
 const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
-const { applyRemoveTable020260910 } = require("./src/migrations/2026-09-10-remove-table-0");
+const {
+  applyRemoveTable020260910,
+  MIGRATION_FLAG: REMOVE_TABLE_0_FLAG,
+} = require("./src/migrations/2026-09-10-remove-table-0");
 const { applySpiceBasic20260910 } = require("./src/migrations/2026-09-10-spice-basic");
 const { applyServicePeriodBackfill20260910 } = require("./src/migrations/2026-09-10-service-period-backfill");
+const { applyRuntimeIndexes20260913 } = require("./src/migrations/2026-09-13-runtime-indexes");
+const { needsRecentOrders, needsOrderIdFloor } = require("./src/requestDataScope");
 
 const app = express();
 
@@ -238,10 +243,13 @@ app.use(storeRefreshAndFlush);
 async function storeRefreshAndFlush(req, res, next) {
   const requestLog = require("./src/requestLog");
   try {
+    const includeOrders = needsRecentOrders(req);
     // 담아둔 기록은 30초씩 모은 뒤 store 읽기와 **나란히** 내보낸다.
     // 매 요청마다 한 줄씩 쓰면 연결 포화 때 진단 기능이 장애를 더 키운다.
     await Promise.all([
-      refreshStore(),
+      // 설정·메뉴·로그인처럼 주문을 전혀 쓰지 않는 주소는 작은 store 문서만
+      // 읽는다. 주문/테이블/결제 주소만 최근 주문 질의 두 개를 함께 치른다.
+      refreshStore({ includeOrders }),
       // getDb() 는 connectDB() 전에는 못 쓴다. 예전에는 첫 /api 요청에
       // 담아둔 기록이 없어서 이 자리에 오지도 않았는데, 재는 자리를 맨
       // 앞으로 옮기면서 화면 파일 요청들이 먼저 담기게 됐다 — 그래서 **첫
@@ -260,9 +268,6 @@ async function storeRefreshAndFlush(req, res, next) {
     // completely empty database). Each migration is internally idempotent
     // (checks its own store.settings flag), so calling it again is always
     // safe even if this per-process guard somehow ran more than once.
-    // 주문 번호가 이미 겹쳐 있을 수 있다 — 실제 최대 번호 위로 한 번 올린다
-    // (src/db.js ensureOrderIdFloor, 2026-09-10 9번 테이블).
-    await ensureOrderIdFloor();
     if (!migratedOnce) {
       await applyFeedback202609(store, { save, nextId, savePhoto });
       await applyFollowup202609(store, { save });
@@ -281,12 +286,28 @@ async function storeRefreshAndFlush(req, res, next) {
       // 옮겨가고 빈 기타는 없어진다.
       await applyTraditionalCategory20260910(store, { save, nextId });
       // 포장 손님이 들어오던 「外帶」 0번 테이블을 없앤다. 지워도 안전할
-      // 때만 지우고, 아니면 다음 부팅에 다시 본다.
+      // 때만 지우고, 아니면 다음 부팅에 다시 본다. 아직 이관하지 않은 아주
+      // 오래된 설치에서만 미결제 주문 확인용 목록을 여기서 한 번 보충한다.
+      if (
+        !includeOrders &&
+        !(store.settings && store.settings[REMOVE_TABLE_0_FLAG]) &&
+        (store.tables || []).some((t) => String(t.number) === "0")
+      ) {
+        await refreshStore();
+      }
       await applyRemoveTable020260910(store, { save, refreshAndSave, hasUnpaidOrder });
       await applySpiceBasic20260910(store, { save });
       await applyServicePeriodBackfill20260910(store, { getDb, connectDB, save });
+      // 세션·진단기록 TTL 인덱스를 새 Vercel 인스턴스마다 다시 만드는 일을
+      // DB 전체에서 딱 한 번 하는 마이그레이션으로 바꾼다.
+      await applyRuntimeIndexes20260913(store, { getDb, connectDB, saveFields });
+      requestLog.markIndexReady();
       migratedOnce = true;
     }
+    // 실제로 주문번호를 새로 만드는 요청에서만 과거 번호 안전판을 확인한다.
+    // 예전에는 새 Vercel 인스턴스의 첫 설정/메뉴 요청까지 orders 최대값 질의를
+    // 기다렸고, 주문과 무관한 화면이 느려지는 원인이 하나 더 됐다.
+    if (needsOrderIdFloor(req)) await ensureOrderIdFloor();
     next();
   } catch (e) {
     console.error("Startup / DB connection failed:", e);
@@ -306,6 +327,9 @@ app.use(
       clientPromise: getClient(),
       dbName: process.env.MONGODB_DB || "hangukgwan",
       collectionName: "sessions",
+      // TTL 인덱스는 위의 일회성 마이그레이션이 만든다. native 기본값을 두면
+      // connect-mongo가 콜드 스타트마다 createIndex를 다시 기다린다.
+      autoRemove: "disabled",
       // 세션 만료 시각만 늘리는 쓰기를 요청마다 하지 않는다.
       //
       // resave:false 는 "세션 내용이 안 바뀌면 다시 저장하지 마라"이지만,

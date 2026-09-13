@@ -108,6 +108,15 @@ function instrument(handle) {
     `${took}ms`
   );
 
+  out.push("\n[주문이 필요 없는 요청은 주문 컬렉션을 아예 읽지 않는다]");
+  const orderReadsBefore = log.filter((l) => l.what === `${ORDERS_COLLECTION}.find`).length;
+  await handle.collection(ORDERS_COLLECTION).insertOne({ id: 3, status: "new", items: [], created_at: AFTER });
+  await refreshStore({ includeOrders: false });
+  const orderReadsAfter = log.filter((l) => l.what === `${ORDERS_COLLECTION}.find`).length;
+  check("★ 주문 질의 0번", orderReadsAfter === orderReadsBefore, `${orderReadsBefore} → ${orderReadsAfter}`);
+  check("기존 주문 배열을 지우지 않는다", store.orders.some((o) => o.id === 1), JSON.stringify(store.orders));
+  check("새 주문을 읽은 척하지 않는다", !store.orders.some((o) => o.id === 3), JSON.stringify(store.orders));
+
   out.push("\n[그래도 틀린 목록이 나가지 않는다]");
   // 다른 인스턴스가 영업 시작을 방금 눌러서, 우리가 들고 있던 값과 데이터
   // 베이스의 값이 다른 상황. 이때는 주문을 다시 읽어야 한다.

@@ -123,8 +123,14 @@ const PHOTO_ALIAS = { "25": "24", "27": "26", "29": "28", "53": "52" };
 
 async function run() {
   await connectDB();
+  // 서버리스 인스턴스마다 run()은 한 번 호출되지만, 이미 운영 중인 가게는
+  // 아래 기본값을 전부 갖고 있다. 예전에는 바뀐 것이 하나도 없어도 마지막에
+  // store 문서 전체를 replaceOne 해, 콜드 스타트마다 불필요한 쓰기와 충돌
+  // 가능성을 만들었다. 실제로 무언가 채워졌을 때만 저장한다.
+  let changed = false;
 
   if (store.categories.length === 0) {
+    changed = true;
     const catIds = {};
     for (const c of CATEGORIES) {
       const id = nextId("categories");
@@ -173,6 +179,7 @@ async function run() {
   }
 
   if (store.tables.length === 0) {
+    changed = true;
     const DEFAULT_TABLE_COUNT = parseInt(process.env.DEFAULT_TABLE_COUNT || "40", 10);
     // Skip any table number containing the digit 4 (死 homophone — avoided
     // in Taiwan the way many buildings skip the 4th/14th/24th floor).
@@ -191,6 +198,7 @@ async function run() {
   // Floor plan: 4 default zones (owner can rename/resize/move them from
   // Admin > 테이블 / QR 코드 > 배치도 보기), arranged 2x2 to start.
   if (store.zones.length === 0) {
+    changed = true;
     const defaultZones = [
       { name: "구역 1", x: 20, y: 20, width: 340, height: 260 },
       { name: "구역 2", x: 380, y: 20, width: 340, height: 260 },
@@ -207,6 +215,7 @@ async function run() {
   // yet (existing installs from before this feature) so every table shows
   // up somewhere sensible on first load of the 배치도 view.
   if (store.tables.some((t) => t.x == null)) {
+    changed = true;
     const perRow = 8;
     let i = 0;
     for (const t of store.tables) {
@@ -222,6 +231,7 @@ async function run() {
   }
 
   if (!store.settings.admin_password_hash) {
+    changed = true;
     const pw = process.env.ADMIN_PASSWORD || "changeme123";
     store.settings.admin_password_hash = bcrypt.hashSync(pw, 10);
     console.log("Seeded admin password from ADMIN_PASSWORD env (change it in Admin > Settings).");
@@ -236,10 +246,12 @@ async function run() {
   // 있다는 뜻이었다. 비어 있는 동안 직원 로그인만 막히고(POST /auth/login 의
   // staffHash 분기를 그냥 건너뛴다) 사장 로그인과 나머지는 평소대로 동작한다.
   if (!store.settings.staff_password_hash && process.env.STAFF_PASSWORD) {
+    changed = true;
     store.settings.staff_password_hash = bcrypt.hashSync(process.env.STAFF_PASSWORD, 10);
     console.log("Seeded staff password from STAFF_PASSWORD env (change it in Admin > Settings > 직원 권한 관리).");
   }
   if (!store.settings.staff_permissions) {
+    changed = true;
     // Everything defaults to OFF — the owner opts staff into each area
     // individually. Advancing/viewing orders and printing tickets are
     // always allowed regardless of these toggles (core day-to-day work).
@@ -258,7 +270,10 @@ async function run() {
     // manual migration every time a new toggleable feature is added.
     const permDefaults = { menuEdit: false, tableEdit: false, settingsEdit: false, orderCancel: false, orderEdit: false, reservationManage: false };
     for (const k of Object.keys(permDefaults)) {
-      if (!(k in store.settings.staff_permissions)) store.settings.staff_permissions[k] = permDefaults[k];
+      if (!(k in store.settings.staff_permissions)) {
+        store.settings.staff_permissions[k] = permDefaults[k];
+        changed = true;
+      }
     }
   }
 
@@ -305,10 +320,13 @@ async function run() {
     line_pending_followers: [],
   };
   for (const [k, v] of Object.entries(storeDefaults)) {
-    if (!(k in store.settings)) store.settings[k] = v;
+    if (!(k in store.settings)) {
+      store.settings[k] = v;
+      changed = true;
+    }
   }
 
-  await save();
+  if (changed) await save();
 }
 
 module.exports = run;

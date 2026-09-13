@@ -63,6 +63,8 @@ out.push("\n[3] 소스가 지키는 것들");
   check("★ 이미 눌렸으면 건드리지 않는다", /existing && existing\.am_closed_at/.test(fn), "");
   check("★ 아직 이르면 DB 도 안 본다", /if \(nowLocal\(\) < cut\) return;/.test(fn), "");
   check("★ 하루에 한 번만 확인한다", /if \(autoAmCloseDoneFor === date\) return;/.test(fn), "");
+  check("★ 여러 인스턴스도 하루 한 번만 DB에서 확인", /store\.settings\[AUTO_AM_DONE_SETTING\] === date/.test(fn), "");
+  check("★ 느린 확인이 다음 4초 폴링과 겹치지 않는다", /if \(autoAmClosePromise\) return autoAmClosePromise;/.test(fn), "");
   check("★ 테스터 모드 기기로는 진짜 정산을 안 돌린다", /if \(testMode\.currentId\(req, store\)\) return;/.test(fn), "");
   // 인스턴스가 여러 개라 같은 순간에 둘이 올 수 있다. 조건부로 박고 실제로
   // 박은 쪽만 문자를 보낸다 — 안 그러면 LINE 이 두 통 간다.

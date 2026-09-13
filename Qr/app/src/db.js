@@ -315,16 +315,19 @@ async function deleteDoc(kind, id) {
   return r.deletedCount > 0;
 }
 
-async function refreshStore() {
+async function refreshStore({ includeOrders = true } = {}) {
   await connectDB();
-  // 두 번 읽는다 — store 문서 하나, 그리고 최근 주문. 이 둘을 **동시에**
-  // 보낸다.
+  // store 문서는 모든 API가 읽지만, 최근 주문은 실제로 주문/테이블/결제를
+  // 다루는 API만 읽는다(server.js 의 needsRecentOrders).
   //
   // 2026-09-12 사장님: "로그인도 그렇고 버튼 누르는 것도 그렇고 다" 느리다.
-  // 이 함수는 /api/* 요청 하나하나가 전부 거치는 자리라, 여기서 왕복 하나를
-  // 줄이면 화면에 보이는 모든 동작이 그만큼 같이 빨라진다.
+  // 예전에는 설정 한 칸, 메뉴 한 번, 로그인 한 번도 주문 컬렉션 질의 두 개를
+  // 함께 치렀다. 주문 질의가 느려지면 주문과 아무 상관없는 화면까지 똑같이
+  // 5~15초씩 멈춘 이유다. includeOrders=false 면 store 문서만 읽고, 이
+  // 인스턴스가 이미 들고 있던 store.orders 는 건드리지 않는다.
   //
-  // 순서대로 해야 할 이유가 하나 있긴 했다. 주문을 고르는 조건에 영업 시작
+  // 주문이 필요한 경우에는 두 번 읽는다 — store 문서 하나, 최근 주문. 둘은
+  // **동시에** 보낸다. 순서대로 해야 할 이유가 하나 있긴 했다. 주문 조건에 영업 시작
   // 시각(store.settings.service_started_at)이 들어가는데, 그 값은 방금
   // 읽어온 store 안에 있다. 그래서 「먼저 store, 그 다음 주문」이었다.
   //
@@ -334,10 +337,16 @@ async function refreshStore() {
   // 번만 예전과 같아진다. 틀린 목록이 나갈 일은 없다.
   const { serviceStartedAt } = require("./serviceStart");
   const startBefore = serviceStartedAt(store);
-  const [existing, ordersFirstTry] = await Promise.all([
-    db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } }),
-    loadRecentOrders(),
-  ]);
+  let existing;
+  let ordersFirstTry;
+  if (includeOrders) {
+    [existing, ordersFirstTry] = await Promise.all([
+      db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } }),
+      loadRecentOrders(),
+    ]);
+  } else {
+    existing = await db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } });
+  }
   if (existing) {
     Object.assign(store, existing);
     // Backfill any keys missing (lets us evolve the schema safely later)
@@ -347,9 +356,11 @@ async function refreshStore() {
   } else {
     await db.collection("store").insertOne(withoutOutOfDocument(store));
   }
-  const startAfter = serviceStartedAt(store);
-  const sameStart = String(startBefore || "") === String(startAfter || "");
-  store.orders = sameStart ? ordersFirstTry : await loadRecentOrders();
+  if (includeOrders) {
+    const startAfter = serviceStartedAt(store);
+    const sameStart = String(startBefore || "") === String(startAfter || "");
+    store.orders = sameStart ? ordersFirstTry : await loadRecentOrders();
+  }
   lastRefreshAt = Date.now(); // refreshAndSave 가 "방금 읽었나"를 보는 값
 }
 
@@ -385,7 +396,7 @@ async function save() {
 // like a multi-second file upload.
 //
 // `mutate` must look up whatever it needs fresh off the `store` argument —
-// refreshStore() replaces store.menuItems/orders/etc. with new arrays, so
+// refreshStore() replaces store.menuItems/etc. with new arrays, so
 // any item/order reference captured before this call no longer lives in
 // those arrays.
 // 방금 읽었으면 또 읽지 않는다.
@@ -408,7 +419,11 @@ const REFRESH_FRESH_MS = 2000;
 let lastRefreshAt = 0;
 
 async function refreshAndSave(mutate) {
-  if (Date.now() - lastRefreshAt > REFRESH_FRESH_MS) await refreshStore();
+  // refreshAndSave 의 모든 호출은 menuItems/tables/zones/vipCards 같은
+  // store 문서 안의 값만 바꾼다. 주문은 별도 컬렉션에 있고 save()도 주문을
+  // 쓰지 않으므로, 저장 직전 안전 확인 때문에 주문 두 질의를 다시 할 이유가
+  // 없다. 주문이 필요한 라우트는 요청 시작 때 따로 읽는다(server.js).
+  if (Date.now() - lastRefreshAt > REFRESH_FRESH_MS) await refreshStore({ includeOrders: false });
   await mutate(store);
   await save();
 }

@@ -44,7 +44,8 @@ router.get("/", requireOwner, async (req, res) => {
     out.mongo_ping_error = e.message;
   }
 
-  // 매 요청이 치르는 두 번의 읽기 — refreshStore() 가 하는 일 그대로다.
+  // 두 주요 읽기 경로를 따로 잰다. 일반 요청은 이제 필요한 쪽만 읽지만,
+  // 진단 화면은 병목을 구분할 수 있도록 둘 다 명시적으로 측정한다.
   // mongo_ping_ms 는 「왕복 자체」의 값이고, 이 둘은 「실제로 읽는 양까지
   // 합친」 값이다. 둘의 차이가 크면 문서가 커진 것이고, 둘 다 크면 몽고가
   // 멀리 있는 것이다. 어느 쪽이냐에 따라 할 일이 완전히 다르다.
@@ -56,7 +57,7 @@ router.get("/", requireOwner, async (req, res) => {
       await db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } });
       out.store_read_ms = Date.now() - t;
 
-      // 실제로 매 요청이 하는 것과 **같은 것**을 재야 한다. 2026-09-13 에
+      // 주문을 다루는 요청이 하는 것과 **같은 것**을 재야 한다. 2026-09-13 에
       // 이 줄이 3979ms 로 나와서 4초의 범인을 찾았다(src/db.js
       // loadRecentOrders). 다르게 재면 그때 그걸 못 봤을 것이다.
       t = Date.now();

@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders } = require("../db");
+const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf, halfOf } = require("../settlement");
 const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
@@ -471,6 +471,8 @@ async function markSettled(date, closedAt, shift, testId) {
 // 16:27 에 들어와서 그때 돌았더라도 경계는 16:25 다 — 그래야 같은 날을
 // 몇 번을 다시 계산해도 같은 답이 나온다.
 let autoAmCloseDoneFor = null; // "YYYY-MM-DD" — 이 프로세스에서 이미 확인한 날
+let autoAmClosePromise = null; // 4초 폴링이 느린 확인 작업을 겹쳐 만들지 않게
+const AUTO_AM_DONE_SETTING = "auto_am_close_done_for";
 
 /**
  * 오늘 자동 정산이 걸리는 시각 "YYYY-MM-DD HH:MM:SS". 가를 수 없으면 null.
@@ -493,11 +495,31 @@ function autoAmCutFor(dateStr) {
  * 못 도는 일은 사실상 없다.
  */
 async function maybeAutoCloseAm(req) {
+  // Atlas가 느려 한 번의 확인이 4초를 넘으면 다음 폴링이 들어온다. 예전에는
+  // 응답을 기다리지 않는 대신 같은 DB 작업이 계속 겹쳐, 연결 하나짜리 풀의
+  // 뒤 요청들까지 막았다. 이 인스턴스 안에서는 진행 중인 한 작업을 같이 쓴다.
+  if (autoAmClosePromise) return autoAmClosePromise;
+  autoAmClosePromise = runAutoAmClose(req);
+  try {
+    return await autoAmClosePromise;
+  } finally {
+    autoAmClosePromise = null;
+  }
+}
+
+async function runAutoAmClose(req) {
   try {
     // 테스터 모드 기기의 요청으로는 진짜 정산을 돌리지 않는다.
     if (testMode.currentId(req, store)) return;
     const date = taipeiDateString();
     if (autoAmCloseDoneFor === date) return;
+    // Vercel 인스턴스의 메모리는 서로 다르다. 한 인스턴스가 오늘 확인을
+    // 끝냈다는 표를 작은 store 문서에 남겨, 이후 생긴 인스턴스들이
+    // daily_settlements를 다시 읽지 않게 한다.
+    if (store.settings && store.settings[AUTO_AM_DONE_SETTING] === date) {
+      autoAmCloseDoneFor = date;
+      return;
+    }
     const cut = autoAmCutFor(date);
     if (!cut) return;
     if (nowLocal() < cut) return;
@@ -508,6 +530,8 @@ async function maybeAutoCloseAm(req) {
     const [existing] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
     if (existing && existing.am_closed_at) {
       autoAmCloseDoneFor = date;
+      store.settings[AUTO_AM_DONE_SETTING] = date;
+      await saveFields({ [`settings.${AUTO_AM_DONE_SETTING}`]: date });
       return;
     }
 
@@ -548,6 +572,11 @@ async function maybeAutoCloseAm(req) {
       ];
       await sendLineMessage(store, lines.join("\n"));
     }
+
+    // 실제 스냅샷·주문 표시·LINE까지 끝난 뒤에만 완료 표를 남긴다. 중간에
+    // 실패했는데 먼저 표를 세우면 다음 인스턴스가 이어서 끝낼 수 없게 된다.
+    store.settings[AUTO_AM_DONE_SETTING] = date;
+    await saveFields({ [`settings.${AUTO_AM_DONE_SETTING}`]: date });
   } catch (e) {
     // 여기서 실패해도 주문판은 그대로 돌아야 한다.
     console.warn("자동 오전 정산 실패:", e && e.message);
@@ -606,6 +635,7 @@ router.get("/cron-close", async (req, res) => {
 module.exports = router;
 module.exports.maybeAutoCloseAm = maybeAutoCloseAm;
 module.exports.autoAmCutFor = autoAmCutFor;
+module.exports.AUTO_AM_DONE_SETTING = AUTO_AM_DONE_SETTING;
 // 주문 목록도 결산과 **같은 기준**으로 갈라야 한다 (src/routes/orders.js
 // GET /history). 위의 오전 매출과 아래 오전 목록이 다른 규칙으로 갈리면
 // 둘 중 어느 쪽이 맞는지 알 방법이 없다.

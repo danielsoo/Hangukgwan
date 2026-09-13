@@ -36,6 +36,12 @@ let dropped = 0;
 let indexReady = false;
 let lastFlushAt = Date.now();
 
+// 일회성 런타임 인덱스 마이그레이션(server.js)이 TTL 인덱스를 확인했다.
+// 이 프로세스의 첫 flush가 같은 createIndex를 다시 하지 않게 한다.
+function markIndexReady() {
+  indexReady = true;
+}
+
 /** /api/orders/123 → /api/orders/:id — 숫자가 낀 주소를 한 줄로 모은다. */
 function routeOf(pathname) {
   return String(pathname || "")
@@ -131,5 +137,5 @@ function lastFlushError() {
 
 module.exports = {
   COLLECTION, KEEP_DAYS, SLOW_MS, MAX_QUEUE, MAX_BATCH, FLUSH_INTERVAL_MS,
-  routeOf, record, pending, shouldFlush, flush, lastFlushError, droppedCount,
+  routeOf, record, pending, shouldFlush, flush, markIndexReady, lastFlushError, droppedCount,
 };

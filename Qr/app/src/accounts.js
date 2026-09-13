@@ -24,11 +24,12 @@
 // says the email is verified.
 const bcrypt = require("bcryptjs");
 const { ObjectId } = require("mongodb");
-const { connectDB, getDb } = require("./db");
+const { connectDB, getDb, store, saveFields } = require("./db");
 
 const COLLECTION = "users";
 const BCRYPT_COST = 10; // matches the existing admin/staff password hashes
 const MIN_PASSWORD_LENGTH = 8;
+const INDEX_FLAG = "indexes_2026_09_13_users_v1";
 
 // Roles, most privileged last. "customer" is the default for anyone who
 // signs up from the website; only an owner can grant the other two (see
@@ -51,25 +52,36 @@ let indexPromise = null;
 async function collection() {
   await connectDB();
   const col = getDb().collection(COLLECTION);
-  // Created once per process. The unique indexes are the actual guarantee
+  // Created once per database, not once per Vercel process. The unique indexes are the actual guarantee
   // that one email = one account — the find-then-insert checks in
   // createUser() below are a race away from creating duplicates on their
   // own, and Mongo rejecting the second insert is what makes that safe.
-  if (!indexPromise) {
-    indexPromise = Promise.all([
-      col.createIndex({ email: 1 }, { unique: true }),
-      // sparse: Google-only accounts have no email/password, email-only
-      // accounts have no google_uid — a plain unique index would treat all
-      // the missing ones as a single duplicate null.
-      col.createIndex({ google_uid: 1 }, { unique: true, sparse: true }),
-    ]).catch((e) => {
-      // Never let index creation take the app down; a duplicate would still
-      // be caught by whichever index did get built, and logging beats a
-      // 500 on every login.
-      console.error("[accounts] index creation failed:", e.message);
-    });
+  // 예전에는 인스턴스마다 두 createIndex를 다시 기다렸다. 통합 계정으로
+  // 로그인한 관리자 화면은 API마다 syncSessionRole이 이 함수를 거치므로,
+  // 콜드 스타트 때 모든 터치가 이 불필요한 작업 뒤에 줄을 섰다.
+  if (!(store.settings && store.settings[INDEX_FLAG]) && !indexPromise) {
+    indexPromise = (async () => {
+      try {
+        await Promise.all([
+          col.createIndex({ email: 1 }, { unique: true }),
+          // sparse: Google-only accounts have no email/password, email-only
+          // accounts have no google_uid — a plain unique index would treat all
+          // the missing ones as a single duplicate null.
+          col.createIndex({ google_uid: 1 }, { unique: true, sparse: true }),
+        ]);
+        const appliedAt = new Date().toISOString();
+        store.settings = store.settings || {};
+        store.settings[INDEX_FLAG] = appliedAt;
+        await saveFields({ [`settings.${INDEX_FLAG}`]: appliedAt });
+      } catch (e) {
+        // Never let index creation take the app down; a duplicate would still
+        // be caught by whichever index did get built, and logging beats a
+        // 500 on every login.
+        console.error("[accounts] index creation failed:", e.message);
+      }
+    })();
   }
-  await indexPromise;
+  if (indexPromise) await indexPromise;
   return col;
 }
 

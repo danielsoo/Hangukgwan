@@ -135,6 +135,12 @@ async function depthOf(fn) {
   await db.connectDB();
   const boss = request.agent(app);
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
+  // 이 파일은 화면 동작의 왕복 깊이를 재는 시험이다. 실행 시각이 오후 자동
+  // 정산 시각을 지났으면 주문 GET이 하루 한 번짜리 정산 작업을 백그라운드로
+  // 시작해 다음 항목의 계측에 섞인다. 그 기능 자체는 auto-am-close.test.js가
+  // 따로 재므로, 여기서는 오늘 확인이 끝난 상태로 고정한다.
+  const { AUTO_AM_DONE_SETTING } = require("../src/routes/settlements");
+  db.store.settings[AUTO_AM_DONE_SETTING] = require("../src/time").taipeiDateString();
   instrument(db.getDb());
 
   // 예산. 「이만큼까지는 기다려도 된다」 — 넘으면 무언가 줄줄이 늘어난 것이다.

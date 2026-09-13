@@ -57,4 +57,4 @@ async function applyRemoveTable020260910(store, { save, refreshAndSave, hasUnpai
   console.log(`Removed table ${TARGET_NUMBER} (${table.label || "no label"}) — takeout now goes through the counter QR only.`);
 }
 
-module.exports = { applyRemoveTable020260910 };
+module.exports = { applyRemoveTable020260910, MIGRATION_FLAG };

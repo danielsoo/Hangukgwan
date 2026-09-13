@@ -356,6 +356,10 @@ router.get("/:tableNumber/party-size", (req, res) => {
     min_spend_per_person: minSpend.perPerson(store.settings),
     min_spend_required: minSpend.requiredFor(store.settings, tableForMinSpend),
     min_spend_spent: minSpend.spentSoFar(seatingOrders),
+    // 손님 화면은 불판 메뉴의 "첫 주문 2인분" 규칙 때문에 이것을 따로
+    // /api/orders/table/:n 으로 한 번 더 물었다. 바로 위에서 이미 같은 착석
+    // 주문을 계산했으므로 결과를 같이 보내 중복 API/주문 조회를 없앤다.
+    has_prior_order: seatingOrders.length > 0,
   });
 });
 
