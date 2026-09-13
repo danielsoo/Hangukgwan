@@ -56,13 +56,26 @@ router.get("/", requireOwner, async (req, res) => {
       await db.collection("store").findOne({ _id: "main" }, { projection: { orders: 0 } });
       out.store_read_ms = Date.now() - t;
 
+      // 실제로 매 요청이 하는 것과 **같은 것**을 재야 한다. 2026-09-13 에
+      // 이 줄이 3979ms 로 나와서 4초의 범인을 찾았다(src/db.js
+      // loadRecentOrders). 다르게 재면 그때 그걸 못 봤을 것이다.
       t = Date.now();
-      const cutoff = recentCutoff();
-      await db
-        .collection(ORDERS_COLLECTION)
-        .find({ $or: [{ status: { $nin: ["paid", "cancelled"] } }, { created_at: { $gte: cutoff } }] })
-        .toArray();
+      const rows = await require("../db").loadRecentOrders();
       out.orders_read_ms = Date.now() - t;
+      out.orders_loaded = rows.length;
+
+      // 훑는 대상이 얼마나 커졌나. estimatedDocumentCount 는 메타데이터만
+      // 보므로 그 자체는 즉시 끝난다(countDocuments 와 다르다).
+      out.orders_total = await db.collection(ORDERS_COLLECTION).estimatedDocumentCount();
+
+      // 인덱스가 정말 있는가. 위 질의는 이것들을 타라고 고친 것이라, 없으면
+      // 고쳐도 그대로 느리다. 이름만 본다.
+      try {
+        const idx = await db.collection(ORDERS_COLLECTION).indexes();
+        out.orders_indexes = (idx || []).map((x) => x.name);
+      } catch (e) {
+        out.orders_indexes_error = e.message;
+      }
     }
   } catch (e) {
     out.read_error = e.message;

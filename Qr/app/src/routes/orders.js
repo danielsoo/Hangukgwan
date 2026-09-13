@@ -832,7 +832,11 @@ router.post("/move", requireAdmin, async (req, res) => {
 // disappear from the books without a trace.
 router.patch("/:id", requireAdmin, async (req, res) => {
   const { status } = req.body || {};
-  const valid = ["new", "preparing", "served", "paid", "cancelled"];
+  // 목록은 src/orderStatus.js 한 곳에서만 정한다. 여기 목록과 「안 끝난
+  // 주문을 고르는 질의」의 목록이 갈라지면, 빠진 상태의 주문이 화면에서
+  // 조용히 사라진다 — 그건 받을 돈이 사라지는 것이다(src/db.js
+  // loadRecentOrders 주석).
+  const valid = require("../orderStatus").ALL;
   if (!valid.includes(status)) return res.status(400).json({ error: "invalid_status" });
   if (status === "cancelled" && req.session.role !== "owner") {
     const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderCancel);

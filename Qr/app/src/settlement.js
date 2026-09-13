@@ -19,7 +19,8 @@ const { taipeiDateString, nowLocal } = require("./time");
 // enough that it really does look like a missed payment rather than
 // ordinary service still in progress (owner picked this over "오늘은 문제
 // 표시 자체를 숨기기"/"지금 그대로 두기").
-const OPEN_STATUSES = ["new", "preparing", "served"];
+// 목록은 src/orderStatus.js 한 곳에서만 정한다.
+const OPEN_STATUSES = require("./orderStatus").OPEN;
 const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // startDate/endDate are inclusive "YYYY-MM-DD" strings (Taipei business

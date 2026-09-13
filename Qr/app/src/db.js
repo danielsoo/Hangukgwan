@@ -156,18 +156,61 @@ function recentCutoff(now = new Date()) {
 }
 
 async function loadRecentOrders() {
-  const cutoff = recentCutoff();
-  // 안 끝난 주문은 아무리 오래돼도 들고 있어야 한다 — 화면에서 사라지면
-  // 받을 돈이 사라진다.
-  const window = { $or: [{ status: { $nin: ["paid", "cancelled"] } }, { created_at: { $gte: cutoff } }] };
-  // 영업 시작 전(=테스트) 주문은 빼고 본다. 그게 없으면, 결제하지 않은
-  // 테스트 주문이 "안 끝난 주문"으로 잡혀서 실시간 주문 목록에 영원히
-  //남는다(src/serviceStart.js).
-  const { createdAtFilter } = require("./serviceStart");
-  const started = createdAtFilter(store);
-  const filter = started ? { $and: [window, started] } : window;
-  const rows = await db.collection(ORDERS_COLLECTION).find(filter).toArray();
-  return rows.map(stripMongoId).sort((a, b) => a.id - b.id);
+  // 2026-09-13 — 이 함수가 4초였다.
+  //
+  // 사장님: "결제 탭, 결산 탭 ... 이런 게 너무 오래 걸려."
+  // /api/_diag 로 재니 `orders_read_ms: 3979`. 요청 하나가 4.25초였는데 그중
+  // 3.98초가 여기였다. 몽고 왕복 자체는 5ms 였다(`mongo_ping_ms`). 멀어서도,
+  // 연결이 모자라서도, 콜드 스타트도 아니었다. **이 한 줄이었다.**
+  //
+  // 왜 느렸나 — 예전 질의는 이랬다.
+  //
+  //     { $or: [ { status: { $nin: ["paid","cancelled"] } },
+  //              { created_at: { $gte: 사흘전 } } ] }
+  //
+  // `$nin` 은 **인덱스를 못 탄다.** 「이것만 빼고 전부」는 색인을 뒤져서 좁힐
+  // 수가 없으니 하나하나 봐야 한다. 게다가 `$or` 의 한쪽이 그러면 전체가
+  // 훑기가 된다. 그래서 안 끝난 주문 몇 건을 찾으려고 **영업 시작 이후의
+  // 모든 주문**을 훑었다. 장사를 하루 더 할수록 훑을 것이 하루치 늘어난다 —
+  // 아침에 빠르고 저녁에 느린 것이 이 모양이다.
+  //
+  // 어떻게 고치나 — 「끝나지 않은 것」을 「이 셋 중 하나」로 뒤집는다.
+  // `$in` 은 인덱스를 탄다(`{status:1, created_at:1}`). 그리고 「최근 사흘」은
+  // 원래부터 `{created_at:1}` 로 탈 수 있었다. 둘을 **따로, 나란히** 묻고
+  // 합친다. `$or` 하나로 묶어 두면 계획을 짜는 쪽 마음이라 둘 다 훑을 수 있다.
+  //
+  // 뒤집으면서 위험해지는 자리가 하나 있다. 목록에서 빠진 상태가 있으면 그
+  // 주문은 화면에서 **사라진다.** 이 가게에서 그건 받을 돈이 사라지는 것이다.
+  // 그래서 상태 목록을 한 곳(src/orderStatus.js)에 두고, 주문을 저장하는
+  // 라우트의 입력 검사도 같은 목록을 쓰게 했다. 모르는 상태는 애초에 못
+  // 들어온다.
+  const { serviceStartedAt } = require("./serviceStart");
+  const { OPEN } = require("./orderStatus");
+  const started = serviceStartedAt(store); // "YYYY-MM-DD HH:MM:SS" 또는 null
+  const cutoff = recentCutoff(); // "YYYY-MM-DD"
+  // 영업 시작 전(=테스트) 주문은 어느 쪽에도 안 들어가야 한다. 날짜가 앞에
+  // 오는 형식이라 문자열 비교가 그대로 시간 비교가 된다.
+  const from = started && started > cutoff ? started : cutoff;
+
+  // (가) 안 끝난 주문 — 아무리 오래돼도 들고 있어야 한다. 화면에서 사라지면
+  //      받을 돈이 사라진다. {status:1, created_at:1} 인덱스를 탄다.
+  const openFilter = { status: { $in: OPEN } };
+  if (started) openFilter.created_at = { $gte: started };
+
+  // (나) 최근 며칠 — 상태와 무관하게. {created_at:1} 인덱스를 탄다.
+  const recentFilter = { created_at: { $gte: from } };
+
+  const col = db.collection(ORDERS_COLLECTION);
+  const [openRows, recentRows] = await Promise.all([
+    col.find(openFilter).toArray(),
+    col.find(recentFilter).toArray(),
+  ]);
+
+  // 둘에 다 걸린 주문은 한 번만. _id 는 주문 번호 그대로다(saveOrder).
+  const byId = new Map();
+  for (const r of openRows) byId.set(r._id, r);
+  for (const r of recentRows) byId.set(r._id, r);
+  return [...byId.values()].map(stripMongoId).sort((a, b) => a.id - b.id);
 }
 
 function stripMongoId(row) {
@@ -546,6 +589,7 @@ module.exports = {
   saveFields, saveNextId, reserveId, ensureOrderIdFloor,
   savePhoto, getPhoto, deletePhoto,
   firstConnectMs,
+  loadRecentOrders,
   findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,
 };
