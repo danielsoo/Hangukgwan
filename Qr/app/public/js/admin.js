@@ -846,6 +846,9 @@
       settingsCatVipSub: "구글 로그인 설정",
       settingsCatPrint: "인쇄",
       settingsCatPrintSub: "주방 프린터 · 빌지 글자",
+      testBannerMine: "테스터 모드 — 이 기기에서 만드는 것은 종료할 때 전부 사라집니다",
+      testBannerOther: "테스터 모드가 켜져 있어요 — 이 기기는 평소 그대로이고, 여기서 넣는 주문은 진짜로 남습니다",
+      testBannerEndBtn: "종료",
       settingsCatDiag: "진단 · 속도",
       settingsCatDiagSub: "느린 곳 찾기 · 기록 내려받기",
       diagSpeedTitle: "속도 기록",
@@ -1563,6 +1566,9 @@
       settingsCatVipSub: "Google 登入設定",
       settingsCatPrint: "列印",
       settingsCatPrintSub: "廚房印表機 · 出單字級",
+      testBannerMine: "測試模式 — 這台裝置建立的資料，結束時會全部刪除",
+      testBannerOther: "測試模式已開啟 — 這台裝置照常運作，在這裡送出的訂單會真實保留",
+      testBannerEndBtn: "結束",
       settingsCatDiag: "診斷 · 速度",
       settingsCatDiagSub: "找出卡住的地方 · 下載紀錄",
       diagSpeedTitle: "速度紀錄",
@@ -2658,6 +2664,8 @@
       if (!$("#tab-reservations").hidden) renderReservations();
       // 설정 화면 — 「주문 받는 시간」 카드와 찾기 결과도 JS 가 글자를 만든다.
       refreshOrderHoursI18n();
+      // 테스터 띠도 JS 가 글자를 만든다.
+      renderTestMode();
       updateMoveSlipPreview();
       if ($("#settingsSearch")) renderSettingsSearch($("#settingsSearch").value);
     };
@@ -9652,8 +9660,34 @@
 
   function renderTestMode() {
     const st = testModeState || {};
+    // 배너는 **켜져 있으면 언제나** 보인다.
+    //
+    // 2026-09-14 사장님: "테스터가 켜져있으면 위에 긴 바로 보여줬었는데 지금은
+    // 안 보여."
+    //
+    // 조건이 `thisDevice` 였다. 이 기기가 테스트 기기일 때만 띠가 떴다는
+    // 뜻인데, 켜둔 것을 잊는 쪽은 오히려 **참여하지 않은 기기**다. 실제로
+    // 9/13 새벽에 켠 세션이 하루 넘게 열린 채였고, 사장님 화면에는 아무
+    // 표시도 없었다. 이 파일 위쪽 admin.html 주석에 적어둔 의도("켜둔 줄
+    // 모르고 하루를 보낸다")와 코드가 어긋나 있었다.
+    //
+    // 다만 문구는 갈라야 한다. 참여하지 않은 기기에 "여기서 만드는 것은
+    // 사라집니다"라고 띄우면 그게 더 위험한 거짓말이다 — 그 기기의 주문은
+    // 진짜로 남는다.
     const banner = $("#testModeBanner");
-    if (banner) banner.hidden = !st.thisDevice;
+    if (banner) {
+      banner.hidden = !st.active;
+      banner.classList.toggle("is-other", !!st.active && !st.thisDevice);
+      const text = $("#testModeBannerText");
+      if (text) text.textContent = T(st.thisDevice ? "testBannerMine" : "testBannerOther");
+      // 끄는 것은 사장님만 할 수 있다(서버도 requireOwner 로 막는다). 직원
+      // 화면에 눌러도 안 되는 버튼을 두지 않는다.
+      const endBtn = $("#testModeBannerEnd");
+      if (endBtn) {
+        endBtn.hidden = currentRole !== "owner";
+        endBtn.textContent = T("testBannerEndBtn");
+      }
+    }
 
     const off = $("#testModeOff");
     const on = $("#testModeOn");

@@ -1864,6 +1864,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
   0%, 100% { opacity: 1; }
   50% { opacity: 0.25; }
 }
+/* 참여하지 않은 기기 — 켜져 있다는 것은 알려야 하지만, 이 기기의 주문은
+   진짜로 남으므로 「위험」으로 읽히면 안 된다. 같은 자리, 다른 목소리. */
+.test-mode-banner.is-other {
+  background: #78350f;
+  color: #fef3c7;
+  font-weight: 600;
+}
+.test-mode-banner.is-other .test-mode-banner-dot { background: #fbbf24; animation: none; }
+.test-mode-banner.is-other .test-mode-banner-btn { background: #fef3c7; color: #78350f; }
 #testModeBannerText { flex: 1; }
 .test-mode-banner-btn {
   flex: none;
