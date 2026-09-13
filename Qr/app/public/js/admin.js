@@ -12029,7 +12029,7 @@
     });
   }
 
-  function renderSettlement(data) {
+  function renderSettlement(data, opts = {}) {
     lastSettlementData = data;
     currentSettlementDate = data.date; // null when viewing a multi-day range
     $("#settlementStartDate").value = data.start_date;
@@ -12212,8 +12212,11 @@
       { total: data.total_revenue }
     );
 
-    // 날짜를 바꾸면 아래 주문 목록도 그 범위로 따라간다.
-    loadSettlementOrders();
+    // 날짜를 바꾸면 아래 주문 목록도 그 범위로 따라간다. 다만 결산을
+    // 불러오는 길에서는 **이미 나란히 출발해 있다**(loadSettlementInner).
+    // 여기서 또 부르면 같은 요청이 두 번 나가고, 늦게 온 쪽이 먼저 온 쪽을
+    // 덮어쓴다.
+    if (!opts.ordersAlreadyLoading) loadSettlementOrders();
 
     renderItemsChart(data.item_breakdown);
     renderTrendChart(data.daily_breakdown || []);
@@ -12322,6 +12325,14 @@
     // 결산 본문과는 아무 관계가 없으므로 **나란히** 보낸다. 예전에는 본문이
     // 다 그려진 뒤에 시작해서, 사장님은 두 번을 차례로 기다렸다.
     const historyPromise = currentRole === "owner" ? loadSettlementHistory() : null;
+    // 아래 「지난 주문 목록」도 여기서 같이 출발시킨다.
+    //
+    // 2026-09-14 사장님: 결산 기록 한 줄을 누르면 4초. 재보니 요청 자체는
+    // 1.0~1.2초인데 **세 개가 줄줄이** 서 있었다. 이 목록은 renderSettlement
+    // 안에서 불리고 있어서, 결산 본문이 다 그려질 때까지 출발조차 못 했다.
+    // 그런데 이 목록이 필요로 하는 것은 화면의 날짜 칸과 오전/오후뿐이고,
+    // 결산 응답에서 가져오는 값은 하나도 없다. 기다릴 이유가 없다.
+    const ordersPromise = loadSettlementOrders();
     const res = await resPromise;
 
     // 내가 부르고 나서 사장님이 날짜를 또 바꿨으면, 내 답은 이미 옛것이다.
@@ -12332,8 +12343,9 @@
       blankSettlement();
       return;
     }
-    renderSettlement(await res.json());
+    renderSettlement(await res.json(), { ordersAlreadyLoading: true });
     activeSettlementHistoryDate = start && end && start === end ? start : null;
+    await ordersPromise;
     if (historyPromise) await historyPromise;
   }
 
