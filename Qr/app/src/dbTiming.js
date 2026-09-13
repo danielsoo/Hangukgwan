@@ -43,7 +43,13 @@ function current() {
 // 시간이 두 겹으로 세어지므로 한 번만 감싼다(2026-09-12 에 계측기를 만들다
 // 실제로 여덟 겹이 된 적이 있다).
 const seen = new WeakSet();
-const READS = ["findOne", "countDocuments", "distinct", "aggregate"];
+// 약속(Promise)을 돌려주는 것들. 감쌀 때 await 로 감싸도 된다.
+const READS = ["findOne", "countDocuments", "estimatedDocumentCount", "distinct"];
+// **커서**를 돌려주는 것들. 이쪽은 다르게 감싸야 한다 — 2026-09-14 에
+// aggregate 를 위 목록에 넣었다가 "aggregate(...).toArray is not a function"
+// 으로 죽었다. aggregate 는 그 자리에서 커서를 돌려주는데, async 로 감싸면
+// 커서가 약속이 되어 .toArray() 가 사라진다. 재려다 부순 것이다.
+const CURSORS = ["find", "aggregate"];
 const WRITES = ["insertOne", "insertMany", "updateOne", "updateMany", "replaceOne", "deleteOne", "deleteMany", "bulkWrite", "findOneAndUpdate"];
 
 function wrapCollection(col) {
@@ -61,10 +67,12 @@ function wrapCollection(col) {
       }
     };
   }
-  if (typeof col.find === "function") {
-    const realFind = col.find.bind(col);
-    col.find = (...args) => {
-      const cur = realFind(...args);
+  for (const m of CURSORS) {
+    if (typeof col[m] !== "function") continue;
+    const real = col[m].bind(col);
+    col[m] = (...args) => {
+      // 커서는 그대로 돌려준다. 시간은 실제로 기다리는 자리(toArray)에서 잰다.
+      const cur = real(...args);
       if (cur && typeof cur.toArray === "function") {
         const realToArray = cur.toArray.bind(cur);
         cur.toArray = async () => {

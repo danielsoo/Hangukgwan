@@ -69,6 +69,17 @@ router.get("/", requireOwner, async (req, res) => {
       await db.collection("store").findOne({ _id: "main" }, { projection: { _id: 1 } });
       out.store_idonly_ms = Date.now() - t;
 
+      // (가-2) 위 (가)는 사실 **문서를 안 읽는다.** _id 만 달라고 하면 몽고가
+      //        _id 색인만 보고 답할 수 있다(covered query). 그래서 9ms 가
+      //        나와도 「문서가 작다」는 증거가 못 된다. 대조군을 제대로
+      //        만들려면 **문서를 꺼내게 하되 돌려주는 것은 거의 없어야** 한다.
+      //        색인에 없는 필드를 하나 고르면 몽고는 문서를 꺼낼 수밖에 없다.
+      //          이게 빠르면 → 문서는 작다. 394ms 는 61KB 를 보내는 값이다
+      //          이게 394ms 면 → 문서가 크다. 보내는 양이 아니라 꺼내는 값이다
+      t = Date.now();
+      await db.collection("store").findOne({ _id: "main" }, { projection: { "nextId.orders": 1 } });
+      out.store_fetch_tiny_ms = Date.now() - t;
+
       // (나) **디스크에 있는 진짜 크기.** 아래 store_kb 는 메모리에 올라온
       //      것이라 projection({orders:0}) 으로 감춰진 부분을 못 본다. 몽고는
       //      뺄 때도 문서를 통째로 읽고 나서 지운다 — 옛 주문 배열이 아직
