@@ -11,16 +11,16 @@
 // ── 기록하느라 느려지면 안 된다 ──────────────────────────────────────
 //
 // 이게 이 파일의 전부다. 요청마다 몽고에 한 줄씩 쓰면, 줄이려던 왕복을
-// 도로 늘리는 셈이다. 그래서 두 가지를 지킨다.
+// 도로 늘리는 셈이다. 그래서 세 가지를 지킨다.
 //
 //  1. **요청 안에서 쓰지 않는다.** 잰 값은 메모리에 담아만 두고, **다음**
-//     요청이 올 때 store 를 읽는 것과 **나란히** 내보낸다. 나란히 가므로
-//     그 요청이 더 기다리는 시간은 사실상 0 이다. 인스턴스가 죽으면 담아둔
-//     몇 줄은 사라지는데, 진단 기록이라 그래도 된다.
-//  2. **전부 쓰지 않는다.** 느린 요청과 콜드 스타트는 반드시 쓰고, 나머지는
-//     스무 번에 한 번만 쓴다. 빠른 요청은 이미 답을 알고 있어서 다 적을
-//     이유가 없다. 다만 「평소엔 얼마나 빠른가」를 알아야 느린 것이 얼마나
-//     드문지 말할 수 있으므로, 표본은 남긴다.
+//     요청이 왔을 때 store 를 읽는 것과 **나란히** 내보낸다. 인스턴스가
+//     죽으면 담아둔 몇 줄은 사라지는데, 진단 기록이라 그래도 된다.
+//  2. **30초씩 모아 한 번에 쓴다.** 예전 코드는 전부 메모리에 담기는 했지만
+//     다음 요청에서 바로 내보냈다. 요청이 계속 오면 결국 요청마다 insert가
+//     하나씩 붙었고, 연결이 모자란 날에는 그 진단 쓰기가 장애를 더 키웠다.
+//  3. **메모리 상한을 둔다.** 못 내보내는 동안에도 오래된 것부터 버리고,
+//     몇 줄을 버렸는지는 다음 묶음에 같이 기록한다.
 //
 // 무한정 쌓이지도 않는다 — created_at 에 14일 TTL 을 걸어 몽고가 알아서
 // 지운다. 무료 M0 는 512MB 라 이걸 안 걸면 언젠가 가게가 멈춘다.
@@ -29,10 +29,12 @@ const KEEP_DAYS = 14;
 const SLOW_MS = 400; // 「느리다」의 기준. 남기고 안 남기고가 아니라 요약용이다
 const MAX_QUEUE = 300; // 못 내보내는 동안 메모리가 불어나지 않게
 const MAX_BATCH = 300; // 한 번에 내보내는 줄 수
+const FLUSH_INTERVAL_MS = 30000; // 요청마다 쓰지 않고 이만큼 모아 한 번
 
 let queue = [];
 let dropped = 0;
 let indexReady = false;
+let lastFlushAt = Date.now();
 
 /** /api/orders/123 → /api/orders/:id — 숫자가 낀 주소를 한 줄로 모은다. */
 function routeOf(pathname) {
@@ -53,8 +55,8 @@ function routeOf(pathname) {
 // 위험하다. 저녁의 느린 순간이 통째로 빠질 수 있고, 빠져도 빠졌다는 것을
 // 알 수가 없다.
 //
-// 그래도 몽고에 쓰는 횟수는 안 늘어난다. 줄 수가 아니라 **쓰기 횟수**가
-// 비용이기 때문이다 — 담아뒀다가 다음 요청에 한 번의 insertMany 로 몰아
+// 그래도 몽고에 쓰는 횟수는 늘리지 않는다. 줄 수가 아니라 **쓰기 횟수**가
+// 비용이기 때문이다 — 담아뒀다가 30초에 한 번의 insertMany 로 몰아
 // 내보낸다. 백 줄이든 한 줄이든 쓰기는 한 번이다.
 //
 // 그래도 못 내보내는 동안 메모리가 불어나면 안 되니 상한을 둔다. 버릴
@@ -76,12 +78,22 @@ function pending() {
   return queue.length;
 }
 
+/** 지금 내보낼 때인가. 가득 찼으면 30초를 기다리지 않는다. */
+function shouldFlush(now = Date.now()) {
+  return queue.length > 0 && (
+    queue.length >= MAX_BATCH || now - lastFlushAt >= FLUSH_INTERVAL_MS
+  );
+}
+
 /**
  * 담아둔 것을 내보낸다. **부르는 쪽이 다른 읽기와 나란히 돌려야 한다** —
  * 줄줄이 세우면 이 파일이 막으려던 바로 그 일이 된다.
  */
 async function flush(db) {
   if (!db || !queue.length) return;
+  // 실패해도 바로 다음 요청이 또 쓰기를 시도해 장애를 증폭하지 않게, 시도한
+  // 시각 자체를 먼저 남긴다.
+  lastFlushAt = Date.now();
   const rows = queue.slice(0, MAX_BATCH);
   queue = queue.slice(MAX_BATCH);
   if (dropped) {
@@ -92,10 +104,12 @@ async function flush(db) {
   try {
     if (!indexReady) {
       indexReady = true;
-      // 이미 있으면 아무 일도 안 한다. 실패해도 기록은 계속된다.
-      db.collection(COLLECTION)
-        .createIndex({ created_at: 1 }, { expireAfterSeconds: KEEP_DAYS * 24 * 60 * 60 })
-        .catch(() => {});
+      // 이미 있으면 아무 일도 안 한다. 연결 하나짜리 풀에서 insert와 동시에
+      // 던져 대기열을 만들지 않도록 먼저 끝낸다. 실패해도 기록은 계속된다.
+      try {
+        await db.collection(COLLECTION)
+          .createIndex({ created_at: 1 }, { expireAfterSeconds: KEEP_DAYS * 24 * 60 * 60 });
+      } catch (e) {}
     }
     await db.collection(COLLECTION).insertMany(rows, { ordered: false });
   } catch (e) {
@@ -115,4 +129,7 @@ function lastFlushError() {
   return lastError;
 }
 
-module.exports = { COLLECTION, KEEP_DAYS, SLOW_MS, MAX_QUEUE, MAX_BATCH, routeOf, record, pending, flush, lastFlushError, droppedCount };
+module.exports = {
+  COLLECTION, KEEP_DAYS, SLOW_MS, MAX_QUEUE, MAX_BATCH, FLUSH_INTERVAL_MS,
+  routeOf, record, pending, shouldFlush, flush, lastFlushError, droppedCount,
+};

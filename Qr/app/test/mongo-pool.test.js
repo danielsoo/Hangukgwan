@@ -32,7 +32,7 @@ function check(name, cond, extra = "") {
   const opts = captured && captured.options;
 
   check("MongoClient 옵션이 실제로 전달된다", !!opts, JSON.stringify(captured));
-  check("★ 인스턴스당 연결은 최대 3개", opts && opts.maxPoolSize === 3, JSON.stringify(opts));
+  check("★ 인스턴스당 연결은 최대 1개", opts && opts.maxPoolSize === 1, JSON.stringify(opts));
   check("★ 유휴 연결을 미리 유지하지 않는다", opts && opts.minPoolSize === 0, JSON.stringify(opts));
   check("★ 새 연결은 한 번에 하나만 연다", opts && opts.maxConnecting === 1, JSON.stringify(opts));
   check("★ 유휴 연결은 30초 뒤 반환한다", opts && opts.maxIdleTimeMS === 30000, JSON.stringify(opts));

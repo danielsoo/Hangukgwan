@@ -238,8 +238,8 @@ app.use(storeRefreshAndFlush);
 async function storeRefreshAndFlush(req, res, next) {
   const requestLog = require("./src/requestLog");
   try {
-    // 담아둔 기록을 store 읽기와 **나란히** 내보낸다. 줄줄이 세우면 이
-    // 기능이 막으려던 바로 그 일(요청마다 왕복 하나 추가)이 된다.
+    // 담아둔 기록은 30초씩 모은 뒤 store 읽기와 **나란히** 내보낸다.
+    // 매 요청마다 한 줄씩 쓰면 연결 포화 때 진단 기능이 장애를 더 키운다.
     await Promise.all([
       refreshStore(),
       // getDb() 는 connectDB() 전에는 못 쓴다. 예전에는 첫 /api 요청에
@@ -248,7 +248,7 @@ async function storeRefreshAndFlush(req, res, next) {
       // 요청이 500 으로 죽었다**(2026-09-12, 브라우저로 확인). 연결이 끝난
       // 뒤에 내보낸다. connectDB() 는 같은 약속을 돌려주므로 refreshStore()
       // 와 나란히 가는 것은 그대로다.
-      connectDB().then(() => (requestLog.pending() ? requestLog.flush(getDb()) : null)),
+      connectDB().then(() => (requestLog.shouldFlush() ? requestLog.flush(getDb()) : null)),
     ]);
     if (!seededOnce) {
       await seed();

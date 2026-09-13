@@ -49,6 +49,8 @@ function check(name, cond, extra = "") {
   const before = requestLog.pending();
   for (let i = 0; i < 10; i++) requestLog.record({ ms: 5, status: 200, cold: false });
   check("★ 빠른 요청 열 번이 열 줄로 남는다", requestLog.pending() - before === 10, `${requestLog.pending() - before}줄`);
+  check("★ 기록이 있어도 요청마다 바로 쓰지는 않는다", !requestLog.shouldFlush(), `${requestLog.pending()}줄`);
+  check("★ 30초가 지나면 묶어서 쓴다", requestLog.shouldFlush(Date.now() + requestLog.FLUSH_INTERVAL_MS + 1));
 
   const afterFast = requestLog.pending();
   requestLog.record({ ms: requestLog.SLOW_MS + 1, status: 200, cold: false });
@@ -60,6 +62,7 @@ function check(name, cond, extra = "") {
   for (let i = 0; i < 2000; i++) requestLog.record({ ms: 9999, status: 200, cold: false });
   check("★ 담아두는 줄 수에 상한이 있다", requestLog.pending() <= requestLog.MAX_QUEUE, `${requestLog.pending()}줄`);
   check("★ 버린 줄이 있으면 몇 줄인지 안다 (조용히 비면 「한산했다」로 읽힌다)", requestLog.droppedCount() > 0, String(requestLog.droppedCount()));
+  check("★ 메모리가 가득 차면 30초 전에도 내보낸다", requestLog.shouldFlush());
 
   out.push("\n[내보내면 비워진다 — 같은 줄을 두 번 쓰지 않는다]");
   await requestLog.flush(handle);
@@ -71,7 +74,10 @@ function check(name, cond, extra = "") {
   const boss = request.agent(app);
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
   await boss.get("/api/orders");
-  await boss.get("/api/orders"); // 앞 요청의 기록은 이때 나간다
+  await boss.get("/api/orders");
+  // 운영에서는 30초마다 자동으로 나가지만, 테스트가 30초를 실제로 기다릴
+  // 이유는 없다. 같은 flush를 직접 불러 저장된 내용만 확인한다.
+  await requestLog.flush(handle);
   const rows = await handle.collection(requestLog.COLLECTION).find({ route: "/api/orders" }).toArray();
   check("★ /api/orders 가 기록에 남는다", rows.length > 0, `${rows.length}줄`);
   if (rows.length) {
@@ -104,7 +110,8 @@ function check(name, cond, extra = "") {
 
   out.push("\n[화면이 잰 값도 받는다 — 서버는 신주~서울 구간을 못 본다]");
   await boss.get("/api/orders").set("X-Client-Timing", "/api/orders|1234|200;/api/tables/7|99|200");
-  await boss.get("/api/orders"); // 앞 요청에서 담긴 것이 이때 나간다
+  await boss.get("/api/orders");
+  await requestLog.flush(handle);
   const clientRows = await handle.collection(requestLog.COLLECTION).find({ src: "client" }).toArray();
   check("★ 화면이 보낸 값이 기록된다", clientRows.length >= 2, `${clientRows.length}줄`);
   check("서버가 잰 줄과 구별된다", clientRows.every((r) => r.src === "client"));
