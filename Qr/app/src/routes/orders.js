@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, nextId, saveOrder, saveOrders, findOrders, saveNextId, patchArrayItem, reserveId } = require("../db");
+const { store, insertOrder, saveOrder, saveOrders, findOrders, patchArrayItem, reserveId } = require("../db");
 const { requireAdmin, requireOwner, requireTodayForStaff } = require("../auth");
 const { isOpenNow, orderingState } = require("../openHours");
 const { nowLocal, taipeiDateString } = require("../time");
@@ -34,8 +34,19 @@ function resolveSelectedAddons(mi, requestedNames) {
 const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
+const { openOrdersForTable, operationalOrderById, ordersForSeating, ordersForNewOrder } = require("../orderQueries");
 
 const router = express.Router();
+
+// 직접 읽어 고친 주문을 이 프로세스의 작은 캐시에도 맞춰 둔다. DB가 원본이고
+// 다음 주문판 GET이 다시 채우지만, 같은 인스턴스에서 바로 이어지는 테스트나
+// 후속 로직이 옛 객체를 보지 않게 한다.
+function rememberOrder(order) {
+  if (!order) return;
+  const i = store.orders.findIndex((o) => o.id === order.id);
+  if (i >= 0) store.orders[i] = order;
+  else store.orders.push(order);
+}
 
 // 사장님 요청(2026-09-06): "vip 카드를 소지중이면 세일을 해주거든. 1. 特約
 // 95折 2. VIP 9折... 이 할인은 음료와 주류는 빼고 적용돼. 또 현금만 돼." —
@@ -350,7 +361,10 @@ router.post("/", async (req, res) => {
   // bypassed by calling this API directly, same as the party-size/location
   // checks above — the client (public/js/order.js) already nudges toward
   // this, this is just the real enforcement point.
-  const priorOrders = store.orders.filter(
+  // 전체 가게 주문을 먼저 메모리에 채우지 않는다. 첫 주문 규칙·低消·포장
+  // 픽업번호에 필요한 것은 이 테이블의 현재 착석(포장은 오늘)뿐이다.
+  const tableOrders = await ordersForNewOrder(store, orderingTable, taipeiDateString());
+  const priorOrders = tableOrders.filter(
     (o) => o.table_number === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
   );
   if (!isTestDevice && priorOrders.length === 0) {
@@ -383,7 +397,7 @@ router.post("/", async (req, res) => {
   // customerName in the kitchen queue/ticket so staff have something short
   // to call out ("3번 홍길동님") without reading a full name off every card.
   const pickupNumber = orderingTable.is_counter
-    ? store.orders.filter((o) => o.table_number === orderingTable.number && o.created_at.slice(0, 10) === taipeiDateString()).length + 1
+    ? tableOrders.length + 1
     : null;
 
   // `total` above (from the items loop) is the pre-discount sum — kept as
@@ -397,8 +411,10 @@ router.post("/", async (req, res) => {
   // 문서를 통째로 덮어쓰는 save() 때문에 뒤로 갈 수 있고, 그러면 이미 있는
   // 번호로 주문이 만들어져 앞 주문을 덮어쓰고 빌지도 안 찍힌다(src/db.js
   // reserveId, 2026-09-10 9번 테이블).
-  const knownMaxOrderId = store.orders.reduce((m, o) => (o.id > m ? o.id : m), 0);
-  const orderId = await reserveId("orders", knownMaxOrderId + 1);
+  // 과거 최대 번호 복구는 이 요청 앞의 ensureOrderIdFloor()가 DB 전체에서
+  // 한 번만 끝냈다. 여기서 테이블 주문 최대값을 다시 $max로 쓰면 새 주문마다
+  // 불필요한 DB 쓰기가 하나 늘어난다.
+  const orderId = await reserveId("orders");
 
   // 시각을 한 번만 읽는다. created_at 과 아래 service_period 가 서로 다른
   // 순간을 가리키면, 16:24:59 에 들어온 주문이 「오후」로 찍히는 일이 생긴다.
@@ -469,7 +485,6 @@ router.post("/", async (req, res) => {
   // 이 기기를 이 착석에 묶어 둔다. 자리 화면을 거치지 않고 들어온 기기도
   // 이 순간부터는 「이 착석의 기기」가 되고, 다음 손님이 앉으면 걸린다.
   if (!isStaff) seating.bind(req, orderingTable.number, seating.seatingOf(orderingTable));
-  store.orders.push(order);
   // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
   // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이
   // 싸다 — 예전에는 이 한 줄이 몇 MB를 다시 쓰는 일이었다.
@@ -483,8 +498,20 @@ router.post("/", async (req, res) => {
   // 주문 한 건만 쓴다. 번호는 위에서 데이터베이스가 이미 올려줬으므로
   // store 문서를 여기서 다시 쓸 일이 없다 — 예전에는 카운터 하나 때문에
   // 문서 전체를 갈아끼웠고, 그게 다른 요청이 방금 한 일을 되돌렸다.
-  await saveOrder(order);
-  await broadcastOrdersChanged(req);
+  // 새 주문은 upsert가 아니라 insert다. 배포 교체 순간의 옛 인스턴스가 같은
+  // 번호를 잡았더라도 기존 주문을 덮지 않고, 중복키를 받으면 새 번호로 다시
+  // 시도한다. 주문 한 건이 사라지고 빌지가 안 나오던 사고를 DB 제약으로 막는다.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await insertOrder(order);
+      break;
+    } catch (e) {
+      if (!(e && e.code === 11000) || attempt >= 4) throw e;
+      order.id = await reserveId("orders");
+    }
+  }
+  rememberOrder(order);
+  await broadcastOrdersChanged(req, [order.id]);
 
   res.status(201).json(order);
 });
@@ -600,11 +627,14 @@ router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
 // 앉은 시각을 모르는 자리(인원수가 없는 자리, 포장 카운터)는 예전 그대로
 // 안 받은 주문만 준다. 확실하지 않을 때 남의 주문을 보여주는 것보다,
 // 덜 보여주는 편이 낫다.
-router.get("/table/:tableNumber", (req, res) => {
+router.get("/table/:tableNumber", async (req, res) => {
   const num = String(req.params.tableNumber);
   const table = store.tables.find((t) => String(t.number) === num);
   const seatingStart = seatingStartOf(table);
-  const list = store.orders
+  const rows = table && table.is_counter
+    ? await openOrdersForTable(store, num)
+    : await ordersForSeating(store, table);
+  const list = rows
     .filter(testMode.visibleTo(req, store))
     .filter((o) => String(o.table_number) === num && o.status !== "cancelled")
     .filter((o) => (seatingStart ? String(o.created_at || "") >= seatingStart : o.status !== "paid"))
@@ -614,9 +644,9 @@ router.get("/table/:tableNumber", (req, res) => {
 
 // Customer: check status of their own order (also used for polling in
 // place of the real-time push we used to do over Socket.IO)
-router.get("/:id", (req, res) => {
+router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const order = store.orders.find((o) => o.id === id);
+  const order = await operationalOrderById(store, id);
   if (!order || !testMode.visibleTo(req, store)(order)) return res.status(404).json({ error: "not_found" });
   res.json(order);
 });
@@ -673,9 +703,11 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   if (!Array.isArray(orderIds) || orderIds.length === 0) {
     return res.status(400).json({ error: "invalid_order_ids" });
   }
+  const wanted = [...new Set(orderIds.map((id) => parseInt(id, 10)).filter(Number.isFinite))];
+  const byId = new Map((await findOrders({ _id: { $in: wanted } })).map((o) => [o.id, o]));
   const touched = [];
   orderIds.forEach((id, index) => {
-    const order = store.orders.find((o) => o.id === parseInt(id, 10));
+    const order = byId.get(parseInt(id, 10));
     if (order) {
       order.queue_order = index;
       touched.push(order);
@@ -683,7 +715,8 @@ router.patch("/reorder", requireAdmin, async (req, res) => {
   });
   // 순서를 바꾼 주문만 쓴다.
   await saveOrders(touched);
-  await broadcastOrdersChanged(req);
+  touched.forEach(rememberOrder);
+  await broadcastOrdersChanged(req, touched.map((o) => o.id));
   res.json({ ok: true });
 });
 
@@ -737,7 +770,7 @@ router.post("/move", requireAdmin, async (req, res) => {
   // 않을 때 남의 결제 기록까지 옮기는 것보다, 덜 옮기고 직원이 한 번 더
   // 보는 편이 낫다.
   const seatingStart = seatingStartOf(fromTable);
-  const tableOrders = store.orders.filter(
+  const tableOrders = (await ordersForSeating(store, fromTable)).filter(
     (o) => String(o.table_number) === from && o.status !== "cancelled"
   );
   const moving = seatingStart
@@ -796,13 +829,14 @@ router.post("/move", requireAdmin, async (req, res) => {
   delete toTable.moved_to;
 
   await saveOrders(moving);
+  moving.forEach(rememberOrder);
   // 옮긴 두 자리만 쓴다. 여기서 문서를 통째로 쓰면 그 사이 다른 자리에
   // 앉은 손님의 인원수가 지워진다.
   await Promise.all([
     patchArrayItem("tables", fromTable.id, Object.assign(partyPatchOf(fromTable), { moved_to: fromTable.moved_to })),
     patchArrayItem("tables", toTable.id, Object.assign(partyPatchOf(toTable), { moved_to: null })),
   ]);
-  await broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req, moving.map((o) => o.id));
   // 옛 자리 화면에 바로 알린다. 이 한 줄이 안내를 「1분 안에」 에서 「누르는
   // 즉시」 로 바꾼다 — 손님은 그 사이에 옛 자리로 주문을 한 번 더 넣을 수
   // 있고, 그러면 그 주문만 빈 자리로 떨어져 나간다.
@@ -843,7 +877,7 @@ router.patch("/:id", requireAdmin, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: "permission_denied" });
   }
   const id = parseInt(req.params.id, 10);
-  const order = store.orders.find((o) => o.id === id);
+  const order = await operationalOrderById(store, id);
   if (!order) return res.status(404).json({ error: "not_found" });
 
   // 사장님 요청(2026-09-06): 이 라우트로 결제 완료(status: "paid")를 찍을 때
@@ -887,15 +921,22 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 주문이 전부 취소돼서 받을 돈이 아예 없는 테이블은 결제할 것이 없으므로
   // 이 길로 들어오지 않는다 — 결제 탭의 「손님 나감」 버튼으로 직원이 직접
   // 비운다(DELETE /api/tables/:n/party-size).
-  const partyCleared = status === "paid" && clearPartySizeIfSettled(store, order.table_number);
-
   // 이 주문 하나만 쓴다. store 문서는 인원수가 실제로 비워졌을 때만 —
   // 사장님이 5~20초를 기다리던 버튼이 바로 이 자리다.
   await saveOrder(order);
+  rememberOrder(order);
+  // 결제 완료일 때만 같은 테이블의 남은 미결제 주문을 인덱스로 좁혀 본다.
+  // 방금 주문은 이미 paid로 저장됐으므로 결과에 없고, 다른 미결제가 하나라도
+  // 있으면 인원수는 그대로다. 가게 전체 주문을 읽을 이유가 없다.
+  let partyCleared = false;
+  if (status === "paid") {
+    const remaining = await openOrdersForTable(store, order.table_number);
+    partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, order.table_number);
+  }
   // 인원수는 그 테이블의 네 칸만 쓴다 — 문서를 통째로 쓰면 그 사이 들어온
   // 주문이 방금 지운 인원수를 되살린다(src/partySize.js savePartySize).
   if (partyCleared) await savePartySize(store, order.table_number);
-  await broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req, [order.id]);
   res.json(order);
 });
 
@@ -913,7 +954,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: "permission_denied" });
   }
   const id = parseInt(req.params.id, 10);
-  const order = store.orders.find((o) => o.id === id);
+  const order = await operationalOrderById(store, id);
   if (!order) return res.status(404).json({ error: "not_found" });
   if (order.status === "paid" || order.status === "cancelled") {
     return res.status(400).json({ error: "order_not_editable" });
@@ -999,7 +1040,8 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   }
 
   await saveOrder(order);
-  await broadcastOrdersChanged(req);
+  rememberOrder(order);
+  await broadcastOrdersChanged(req, [order.id]);
   res.json(order);
 });
 
@@ -1064,7 +1106,7 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
     if (!allowed) return res.status(403).json({ error: "permission_denied" });
   }
   const id = parseInt(req.params.id, 10);
-  const order = store.orders.find((o) => o.id === id);
+  const order = await operationalOrderById(store, id);
   if (!order) return res.status(404).json({ error: "not_found" });
   if (order.status === "paid" || order.status === "cancelled") {
     return res.status(400).json({ error: "order_not_editable" });
@@ -1116,15 +1158,19 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   // paid였던 경우 포함) 이 주문 전체를 paid로 넘긴다 — PATCH /:id와 같은
   // party_size 정리 규칙도 그대로 적용한다.
   const allPaid = order.items.every((it) => it.paid);
-  let partyCleared = false;
   if (allPaid) {
     order.status = "paid";
-    partyCleared = clearPartySizeIfSettled(store, order.table_number);
   }
 
   await saveOrder(order);
+  rememberOrder(order);
+  let partyCleared = false;
+  if (allPaid) {
+    const remaining = await openOrdersForTable(store, order.table_number);
+    partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, order.table_number);
+  }
   if (partyCleared) await savePartySize(store, order.table_number);
-  await broadcastOrdersChanged(req);
+  await broadcastOrdersChanged(req, [order.id]);
   res.json({ updatedOrder: order });
 });
 

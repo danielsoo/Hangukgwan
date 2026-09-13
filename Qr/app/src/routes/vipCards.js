@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, refreshAndSave, patchArrayItem, nextId, saveOrder, reserveId } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId, insertOrder, reserveId } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
 const {
   expiryDate,
@@ -257,9 +257,8 @@ router.post("/sell", requireAdmin, async (req, res) => {
     payment_method: "cash",
     note: number ? `card ${number}` : "",
   };
-  const knownMaxOrderId = store.orders.reduce((m, o) => (o.id > m ? o.id : m), 0);
   const order = {
-    id: await reserveId("orders", knownMaxOrderId + 1),
+    id: await reserveId("orders"),
     table_number: String(table.number),
     status: "paid",
     order_type: item.order_type,
@@ -287,13 +286,23 @@ router.post("/sell", requireAdmin, async (req, res) => {
     account_id: null,
   };
   item.paid_at = now;
-  store.orders.push(order);
   // 주문 줄 하나만 쓴다. 예전에는 save() 로 store 문서를 통째로 같이 썼는데,
   // 그 순간 다른 요청이 넣은 주문이나 지운 인원수가 되살아난다
   // (CLAUDE.md 「store 문서를 통째로 쓰지 않는다」). 카드 자체는 위
   // refreshAndSave 에서 이미 저장됐다.
-  await saveOrder(order);
-  await broadcastOrdersChanged(req);
+  // 일반 주문과 똑같이 insert만 한다. 번호 충돌이 생겨도 기존 주문을 upsert로
+  // 덮지 않고 새 번호를 받아 다시 넣는다.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await insertOrder(order);
+      break;
+    } catch (e) {
+      if (!(e && e.code === 11000) || attempt >= 4) throw e;
+      order.id = await reserveId("orders");
+    }
+  }
+  store.orders.push(order);
+  await broadcastOrdersChanged(req, [order.id]);
   res.status(201).json({ order, card: card ? serialize(card) : null, price });
 });
 

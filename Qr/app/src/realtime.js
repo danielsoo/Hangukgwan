@@ -102,8 +102,14 @@ function push(channel, event, payload, socketId) {
   }
 }
 
-function broadcastOrdersChanged(req) {
-  return push("orders", "changed", {}, socketIdFrom(req));
+function broadcastOrdersChanged(req, orderIds) {
+  const ids = [...new Set((Array.isArray(orderIds) ? orderIds : [orderIds])
+    .map((id) => parseInt(id, 10))
+    .filter(Number.isFinite))];
+  // 주문번호가 있으면 다른 패드는 전체 주문판이 아니라 그 문서만 `_id`로
+  // 읽는다(public/js/admin.js). 번호가 없는 옛 호출/여러 종류의 일괄 변경은
+  // 빈 payload로 남겨 전체 새로고침 안전망을 탄다.
+  return push("orders", "changed", ids.length ? { order_ids: ids } : {}, socketIdFrom(req));
 }
 
 /**

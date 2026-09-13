@@ -121,7 +121,7 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   const created = await req("POST", "/api/orders", { tableNumber: "7", items: [{ itemId: item.id, qty: 1 }] });
   check("주문이 만들어진다", created.status === 201, `${created.status}`);
   check("주문 한 건이 orders 컬렉션에 쓰인다",
-    io.some((c) => c.col === "orders" && c.op === "replaceOne"), JSON.stringify(io.map((c) => `${c.col}.${c.op}`)));
+    io.some((c) => c.col === "orders" && c.op === "insertOne"), JSON.stringify(io.map((c) => `${c.col}.${c.op}`)));
 
   await connectDB();
   const raw = await getDb().collection("store").findOne({ _id: "main" });
@@ -139,6 +139,10 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
     JSON.stringify(writes.map((w) => `${w.col}.${w.op}`)));
   check("주문 한 건만 쓴다",
     writes.filter((w) => w.col === "orders").length === 1, JSON.stringify(writes.map((w) => `${w.col}.${w.op}`)));
+  check("★ 주문번호 하나만 _id로 읽는다",
+    io.filter((c) => c.col === "orders" && c.op === "findOne").length === 1 &&
+      io.filter((c) => c.col === "orders" && c.op === "find").length === 0,
+    JSON.stringify(io.filter((c) => c.col === "orders").map((c) => `${c.op}:${JSON.stringify(c.args[0])}`)));
   // 세션 만료 갱신도 매 요청마다 나가면 안 된다(server.js 의 touchAfter).
   check("세션도 매번 다시 쓰지 않는다", writes.filter((w) => w.col === "sessions").length === 0,
     JSON.stringify(writes.map((w) => `${w.col}.${w.op}`)));
@@ -153,6 +157,19 @@ const daysAgo = (n) => taipeiDateString(new Date(Date.now() - n * 24 * 60 * 60 *
   const orderReadsForMenu = io.filter((c) => c.col === "orders" && c.op === "find");
   check("★ 메뉴 요청은 orders 컬렉션을 한 번도 읽지 않는다",
     orderReadsForMenu.length === 0, JSON.stringify(orderReadsForMenu));
+
+  out.push("\n[손님 QR은 가게 전체가 아니라 그 테이블만 읽는다]");
+  io.length = 0;
+  const party = await req("GET", "/api/tables/7/party-size");
+  const partyOrderReads = io.filter((c) => c.col === "orders" && c.op === "find");
+  check("인원 조회가 성공한다", party.status === 200, `${party.status}`);
+  check("★ 주문 질의는 한 번뿐", partyOrderReads.length === 1,
+    JSON.stringify(partyOrderReads.map((c) => c.args[0])));
+  check("★ 그 테이블 번호로 바로 좁힌다",
+    partyOrderReads.length === 1 && partyOrderReads[0].args[0].table_number === "7",
+    JSON.stringify(partyOrderReads.map((c) => c.args[0])));
+  check("가게 전체 최근 주문 $or를 다시 부르지 않는다",
+    partyOrderReads.every((c) => !c.args[0].$or), JSON.stringify(partyOrderReads.map((c) => c.args[0])));
 
   out.push("\n[주문이 쌓여도 store 문서는 커지지 않는다]");
   const sizeBefore = Buffer.byteLength(JSON.stringify(await getDb().collection("store").findOne({ _id: "main" })));

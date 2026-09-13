@@ -16,7 +16,7 @@ const express = require("express");
 const session = require("express-session");
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
-const { store } = require("../src/db");
+const { store, save } = require("../src/db");
 const { syncSessionRole } = require("../src/auth");
 const { expiryDate } = require("../src/vip");
 
@@ -85,6 +85,12 @@ function check(name, cond, extra = "") {
 }
 
 (async () => {
+  // The production server persists/loads the main store before mounting the
+  // routes. This route-only harness must do the same, otherwise the first
+  // account-index flag update creates an intentionally minimal fake document
+  // and a later refresh replaces the manually seeded settings with it.
+  await save();
+
   const alice = request.agent(app);
   const bob = request.agent(app);
   let r;

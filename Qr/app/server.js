@@ -28,6 +28,7 @@ const {
 const { applySpiceBasic20260910 } = require("./src/migrations/2026-09-10-spice-basic");
 const { applyServicePeriodBackfill20260910 } = require("./src/migrations/2026-09-10-service-period-backfill");
 const { applyRuntimeIndexes20260913 } = require("./src/migrations/2026-09-13-runtime-indexes");
+const { applyTableOrdersIndex20260913 } = require("./src/migrations/2026-09-13-table-orders-index");
 const { needsRecentOrders, needsOrderIdFloor } = require("./src/requestDataScope");
 
 const app = express();
@@ -248,7 +249,8 @@ async function storeRefreshAndFlush(req, res, next) {
     // 매 요청마다 한 줄씩 쓰면 연결 포화 때 진단 기능이 장애를 더 키운다.
     await Promise.all([
       // 설정·메뉴·로그인처럼 주문을 전혀 쓰지 않는 주소는 작은 store 문서만
-      // 읽는다. 주문/테이블/결제 주소만 최근 주문 질의 두 개를 함께 치른다.
+      // 읽는다. 주방 전체 목록처럼 실제 목록이 필요한 주소만 최근 주문 질의를
+      // 함께 치르고, 주문번호/테이블번호가 있는 경로는 라우트에서 직접 좁힌다.
       refreshStore({ includeOrders }),
       // getDb() 는 connectDB() 전에는 못 쓴다. 예전에는 첫 /api 요청에
       // 담아둔 기록이 없어서 이 자리에 오지도 않았는데, 재는 자리를 맨
@@ -302,6 +304,7 @@ async function storeRefreshAndFlush(req, res, next) {
       // DB 전체에서 딱 한 번 하는 마이그레이션으로 바꾼다.
       await applyRuntimeIndexes20260913(store, { getDb, connectDB, saveFields });
       requestLog.markIndexReady();
+      await applyTableOrdersIndex20260913(store, { getDb, connectDB, saveFields });
       migratedOnce = true;
     }
     // 실제로 주문번호를 새로 만드는 요청에서만 과거 번호 안전판을 확인한다.

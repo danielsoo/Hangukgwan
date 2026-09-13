@@ -170,18 +170,26 @@ class Collection {
   async insertOne(doc) {
     const _id = doc._id || new ObjectId();
     const full = { ...doc, _id };
-    this._checkUnique(full, _id);
+    if (this.docs.some((d) => String(d._id) === String(_id))) {
+      const err = new Error("E11000 duplicate key error: _id");
+      err.code = 11000;
+      throw err;
+    }
+    this._checkUnique(full, null);
     this.docs.push(full);
     return { insertedId: _id };
   }
   async updateOne(filter, update, opts = {}) {
-    const doc = this.docs.find((d) => matches(d, filter));
+    let doc = this.docs.find((d) => matches(d, filter));
+    let inserted = false;
     if (!doc) {
       if (opts.upsert) {
-        await this.insertOne({ ...filter, ...(update.$set || {}) });
-        return { upsertedCount: 1 };
+        doc = { ...filter };
+        this.docs.push(doc);
+        inserted = true;
+      } else {
+        return { matchedCount: 0 };
       }
-      return { matchedCount: 0 };
     }
     if (update.$set) {
       // "tables.$.zone_id" 같은 위치 지정 갱신 — $ 는 이 문서에서 필터에
@@ -270,7 +278,7 @@ class Collection {
         if (parent[last] == null || cmp(v, parent[last]) > 0) parent[last] = v;
       }
     }
-    return { matchedCount: 1 };
+    return inserted ? { matchedCount: 0, upsertedCount: 1 } : { matchedCount: 1 };
   }
 
   // src/db.js 의 reserveId 가 쓴다 — 번호를 올리고 「올린 뒤의 문서」를

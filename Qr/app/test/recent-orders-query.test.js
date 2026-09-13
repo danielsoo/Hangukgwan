@@ -93,10 +93,10 @@ function day(offset) {
   const joined = filters.join(" ");
   check("★ $nin 을 쓰지 않는다 (인덱스를 못 탄다)", !/\$nin/.test(joined), joined.slice(0, 300));
   check("★ 안 끝난 주문은 $in 으로 고른다", /\$in/.test(joined), joined.slice(0, 300));
-  check("두 번으로 나눠 묻는다 (한 $or 에 묶지 않는다)", filters.length === 2, `${filters.length}개: ${joined.slice(0, 200)}`);
-  check("$or 로 묶지 않았다", !/\$or/.test(joined), joined.slice(0, 200));
-  check("두 질의 모두 created_at 으로 범위가 잡혀 있다",
-    filters.every((f) => /created_at/.test(f)), joined.slice(0, 300));
+  check("★ 풀 1개에서도 왕복 한 번 — 단일 질의", filters.length === 1, `${filters.length}개: ${joined.slice(0, 200)}`);
+  check("인덱스를 타는 두 조건만 $or 로 합친다", /\$or/.test(joined), joined.slice(0, 200));
+  check("두 조건 모두 created_at 으로 범위가 잡혀 있다",
+    (joined.match(/created_at/g) || []).length === 2, joined.slice(0, 300));
 
   out.push("\n[상태 목록이 한 곳에서만 정해진다]");
   // 여기가 갈라지면 빠진 상태의 주문이 화면에서 조용히 사라진다.

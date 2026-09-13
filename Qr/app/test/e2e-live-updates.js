@@ -74,6 +74,12 @@ window.__emit = function (event, payload) {
   const ctx = await browser.newContext({ viewport: { width: 1500, height: 1000 } });
   await ctx.addInitScript(FAKE_PUSHER_SCRIPT);
   const page = await ctx.newPage();
+  // admin.html의 CDN 스크립트가 네트워크 상태에 따라 위 가짜를 뒤늦게
+  // 덮어쓰면 테스트가 실제 Pusher에 붙으려 한다. CDN 응답만 비워서 언제
+  // 실행해도 이 테스트가 의도한 가짜 채널을 그대로 쓰게 한다.
+  await page.route("https://js.pusher.com/**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/javascript", body: "" })
+  );
   page.on("dialog", (d) => d.dismiss());
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
   await page.evaluate(async () => {
@@ -116,6 +122,33 @@ window.__emit = function (event, payload) {
   const after = await partyOnScreen();
   // ★ 새로고침을 한 번도 안 했다.
   check("★★ 새로고침 없이 인원 7명이 화면에 뜬다", /7/.test(after), after.slice(0, 120));
+
+  // ── 새 주문 한 건 ─────────────────────────────────────────────────
+  out.push("\n[새 주문 알림은 그 주문번호 하나만 읽는다]");
+  const orderReads = [];
+  page.on("request", (r) => {
+    const u = r.url().replace(base, "");
+    if (r.method() === "GET" && u.startsWith("/api/orders")) orderReads.push(u);
+  });
+  const itemId = store.menuItems[0].id;
+  const createdOrder = await page.evaluate(async ({ tableNumber, itemId }) => {
+    const r = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tableNumber, items: [{ itemId, qty: 1 }] }),
+    });
+    return { status: r.status, body: await r.json() };
+  }, { tableNumber: T, itemId });
+  check("새 주문이 저장된다", createdOrder.status === 201, JSON.stringify(createdOrder.body));
+  orderReads.length = 0;
+  await page.evaluate((id) => window.__emit("changed", { order_ids: [id] }), createdOrder.body.id);
+  await page.waitForTimeout(900);
+  check("★ 그 주문번호 GET만 나간다",
+    orderReads.some((u) => u === `/api/orders/${createdOrder.body.id}`), JSON.stringify(orderReads));
+  check("★ 전체 /api/orders는 다시 읽지 않는다",
+    !orderReads.some((u) => u === "/api/orders"), JSON.stringify(orderReads));
+  check("★★ 그 한 건이 주문판에 바로 나타난다",
+    await page.locator(`.order-card[data-order-id="${createdOrder.body.id}"]`).count() === 1);
 
   // ── 메뉴 ──────────────────────────────────────────────────────────
   out.push("\n[다른 기기에서 메뉴를 추가한다]");

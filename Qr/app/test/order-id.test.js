@@ -98,14 +98,31 @@ function check(name, cond, extra = "") {
     check("옆 자리 인원수는 그대로 있다", tU.party_size === 4, String(tU.party_size));
   }
 
+  out.push("\n[VIP 카드 판매 주문도 같은 안전한 길]");
+  {
+    const sale = await agent.post("/api/vip-cards/sell").send({ tableNumber: tables[2].number });
+    check("카드 판매 주문이 만들어진다", sale.status === 201, `${sale.status} ${JSON.stringify(sale.body)}`);
+    const saved = sale.body.order
+      ? await getDb().collection("orders").findOne({ _id: sale.body.order.id })
+      : null;
+    check("카드 판매도 orders에 한 문서로 insert된다",
+      !!saved && saved.kind === "vip_card_sale" && saved.payment_method === "cash",
+      JSON.stringify(saved));
+  }
+
   out.push("\n[규칙이 되돌아오지 않게]");
   const dbSrc = fs.readFileSync(path.join(__dirname, "..", "src", "db.js"), "utf8");
   const ordersSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "orders.js"), "utf8");
+  const vipSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "vipCards.js"), "utf8");
   check("주문 만들 때 번호를 데이터베이스에서 받는다", /await reserveId\("orders"/.test(ordersSrc));
   check("주문 만들 때 store 문서를 통째로 쓰지 않는다",
     !/Promise\.all\(\[saveOrder\(order\), save\(\)\]\)/.test(ordersSrc),
     "카운터 하나 때문에 문서 전체를 갈아끼우고 있다");
-  check("번호는 $inc 로 원자적으로", /\$inc: \{ \[key\]: 1 \}/.test(dbSrc));
+  check("새 주문은 insert라서 같은 번호의 기존 주문을 덮지 않는다", /await insertOrder\(order\)/.test(ordersSrc));
+  check("VIP 카드 판매 주문도 insert라서 기존 주문을 덮지 않는다", /await insertOrder\(order\)/.test(vipSrc));
+  check("번호는 독립 counters 문서에서 $inc 로 원자적으로",
+    /collection\("counters"\)[\s\S]{0,500}\$inc: \{ value: 1 \}/.test(dbSrc));
+  check("store 전체 저장이 주문번호 카운터를 덮을 수 없다", /const counters = db\.collection\("counters"\)/.test(dbSrc));
   check("뒤로 간 카운터를 올려주는 안전판이 있다", /ensureOrderIdFloor/.test(dbSrc));
   check("인원수는 그 자리 네 칸만 쓴다", /savePartySize\(store, order\.table_number\)/.test(ordersSrc));
 

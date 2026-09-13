@@ -88,8 +88,8 @@ out.push("\n[4] 화면이 한 번에 부르고 현금만 따로 뗀다 (public/j
 out.push("\n[5] 카드 판매가 store 문서를 통째로 쓰지 않는다");
 {
   const src = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "vipCards.js"), "utf8");
-  check("★ saveOrder 만 쓴다 (save() 동반 X)", !/Promise\.all\(\[saveOrder\(order\), save\(\)\]\)/.test(src), "");
-  check("주문 줄 하나만 쓴다", /await saveOrder\(order\);/.test(src), "");
+  check("★ 주문 한 건만 쓴다 (save() 동반 X)", !/Promise\.all\(\[insertOrder\(order\), save\(\)\]\)/.test(src), "");
+  check("새 주문을 insert로 쓴다", /await insertOrder\(order\);/.test(src), "");
 }
 
 console.log(out.join("\n"));

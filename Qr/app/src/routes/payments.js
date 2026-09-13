@@ -7,8 +7,9 @@
 // (Admin > 설정 > 온라인 결제), none of this is reachable from the customer
 // page and nothing here changes existing behavior.
 const express = require("express");
-const { store, save, nextId, saveOrders, findDocs, saveDoc } = require("../db");
-const { clearPartySizeIfSettled } = require("../partySize");
+const { store, save, nextId, saveOrders, findOrders, findDocs, saveDoc } = require("../db");
+const { clearPartySizeIfSettled, savePartySize } = require("../partySize");
+const { openOrdersForTable } = require("../orderQueries");
 const { nowLocal } = require("../time");
 const ecpay = require("../ecpay");
 
@@ -18,12 +19,6 @@ const router = express.Router();
 // (application/x-www-form-urlencoded), not JSON — the app-wide body parser
 // in server.js only handles JSON, so this router needs its own.
 router.use(express.urlencoded({ extended: false }));
-
-function unpaidOrdersForTable(tableNumber) {
-  return store.orders.filter(
-    (o) => String(o.table_number) === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
-  );
-}
 
 // Customer taps "온라인 결제" on their table's receipt/history sheet — this
 // builds a signed ECPay order for their table's current unpaid total and
@@ -35,7 +30,7 @@ router.get("/checkout", async (req, res) => {
   const tableNumber = String(req.query.table || "").trim();
   if (!tableNumber) return res.status(400).send("잘못된 요청입니다 (테이블 번호 없음).");
 
-  const orders = unpaidOrdersForTable(tableNumber);
+  const orders = await openOrdersForTable(store, tableNumber);
   if (orders.length === 0) return res.status(400).send("결제할 미결제 주문이 없습니다.");
 
   const amount = orders.reduce((sum, o) => sum + o.total, 0);
@@ -105,8 +100,11 @@ router.post("/callback", async (req, res) => {
     payment.ecpay_trade_no = body.TradeNo || null;
     payment.simulate_paid = String(body.SimulatePaid) === "1";
     const paidNow = [];
-    for (const orderId of payment.order_ids) {
-      const order = store.orders.find((o) => o.id === orderId);
+    // 결제에 적힌 주문번호들만 `_id` 인덱스로 한 번에 읽는다. 풀을 1개로
+    // 제한한 상태에서 번호마다 findOne을 보내면 주문 수만큼 직렬 왕복한다.
+    const orderIds = [...new Set(payment.order_ids.map((id) => parseInt(id, 10)).filter(Number.isFinite))];
+    const paymentOrders = await findOrders({ _id: { $in: orderIds } });
+    for (const order of paymentOrders) {
       if (order && order.status !== "paid") {
         paidNow.push(order);
         order.status = "paid";
@@ -126,10 +124,10 @@ router.post("/callback", async (req, res) => {
     // silently inheriting this party's headcount. (If a new order came in
     // for this table after checkout started, this stays untouched — the
     // party is evidently still there.)
-    clearPartySizeIfSettled(store, payment.table_number);
-    // 결제된 주문들은 자기 컬렉션으로, store 문서는 결제 기록(payments)과
-    // 인원수 때문에 한 번. 둘 다 작아서 나란히 보낸다.
-    await Promise.all([saveOrders(paidNow), saveDoc("payments", payment), save()]);
+    await Promise.all([saveOrders(paidNow), saveDoc("payments", payment)]);
+    const remaining = await openOrdersForTable(store, payment.table_number);
+    const partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, payment.table_number);
+    if (partyCleared) await savePartySize(store, payment.table_number);
   } else if (!success && payment.status === "pending") {
     payment.status = "failed";
     payment.failure_msg = body.RtnMsg || null;

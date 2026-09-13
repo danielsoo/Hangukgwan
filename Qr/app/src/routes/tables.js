@@ -2,7 +2,15 @@ const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
-const { hasUnpaidOrder, partyOfTable, liveOrdersOf, partyPatchOf, ordersOfSeating, clearPartyFields } = require("../partySize");
+const {
+  hasUnpaidOrder,
+  partyOfTable,
+  liveOrdersOf,
+  partyPatchOf,
+  ordersOfSeating,
+  clearPartyFields,
+} = require("../partySize");
+const { openOrdersForTable, openOrdersForAll, ordersForSeating } = require("../orderQueries");
 const testMode = require("../testMode");
 const minSpend = require("../minSpend");
 const seating = require("../seating");
@@ -62,15 +70,32 @@ async function getOrCreateCounterTable() {
  * 결제 화면은 빈 자리로 보여준다.
  */
 router.get("/", requireAdmin, async (req, res) => {
+  // 자리 목록 복구에는 결제완료/취소/최근 주문이 필요 없다. 아직 받을 돈이
+  // 있는 주문만 한 번 읽어, 가게 전체 최근 주문 묶음을 끌고 오지 않는다.
+  const scopedStore = {
+    ...store,
+    orders: await openOrdersForAll(store, {
+      projection: {
+        id: 1,
+        table_number: 1,
+        status: 1,
+        created_at: 1,
+        party_size: 1,
+        party_adults: 1,
+        party_children: 1,
+        test_session: 1,
+      },
+    }),
+  };
   const repairs = [];
   const rows = [...store.tables]
     .sort((a, b) => a.sort_order - b.sort_order)
     .map((t) => {
-      const party = partyOfTable(store, t);
+      const party = partyOfTable(scopedStore, t);
       if (party.from === "order") {
         // 자리에 되돌려 놓는다. 「언제 앉았는가」는 그 주문이 들어온 시각으로
         // 본다 — 자리 이동 안내와 손님 주문 내역이 그 시각을 기준으로 삼는다.
-        const live = liveOrdersOf(store, t.number).filter((o) => o.party_size);
+        const live = liveOrdersOf(scopedStore, t.number).filter((o) => o.party_size);
         const newest = live.length ? live.reduce((a, b) => (b.id > a.id ? b : a)) : null;
         t.party_size = party.size;
         t.party_adults = party.adults;
@@ -303,9 +328,28 @@ router.post("/:tableNumber/seat", (req, res) => {
   res.json({ seating: cur });
 });
 
-router.get("/:tableNumber/party-size", (req, res) => {
+router.get("/:tableNumber/party-size", async (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });
+  // 공통 미들웨어에서 가게 전체의 최근 주문을 읽지 않는다. 이 화면이 실제로
+  // 필요한 것은 지금 QR을 연 테이블 한 곳뿐이다. 운영에서 전체 조회는 약
+  // 6초였지만, 아래 질의는 table_number 복합 인덱스로 바로 좁혀진다.
+  const scopedStore = {
+    ...store,
+    orders: await ordersForSeating(store, table, {
+      projection: {
+        id: 1,
+        table_number: 1,
+        status: 1,
+        created_at: 1,
+        total: 1,
+        party_size: 1,
+        party_adults: 1,
+        party_children: 1,
+        test_session: 1,
+      },
+    }),
+  };
   // is_counter tells the customer page (see initPartySize in public/js/order.js)
   // this QR is the 포장 카운터, not a real table — it skips the headcount
   // prompt entirely rather than treating a missing party_size as "not asked yet".
@@ -320,7 +364,7 @@ router.get("/:tableNumber/party-size", (req, res) => {
   // 있는 주문이 있으면 그 손님은 앉아 계신 것이고, 그때 인원을 다시 물으면
   // 앞 손님 밥값이 남은 자리에 새 인원이 찍힌다(2026-09-10 사장님:
   // "인원과 메뉴는 하나의 세트야").
-  const party = partyOfTable(store, table);
+  const party = partyOfTable(scopedStore, table);
   // partyOfTable 은 자리와 주문을 함께 본 결과다. 低消도 같은 숫자를 봐야
   // 한다 — 자리 쪽이 비어 있어도 살아 있는 주문이 있으면 손님은 앉아 계신다.
   const tableForMinSpend = {
@@ -328,7 +372,7 @@ router.get("/:tableNumber/party-size", (req, res) => {
     party_size: party.size || 0,
     party_adults: party.size ? party.adults : null,
   };
-  const seatingOrders = ordersOfSeating(store, table);
+  const seatingOrders = ordersOfSeating(scopedStore, table);
   res.json({
     party_size: party.size || null,
     // 구분이 생기기 전에 앉은 손님도 같은 모양으로 내려간다(전부 어른).
@@ -427,7 +471,8 @@ router.delete("/:id", canEditTables, async (req, res) => {
   const table = store.tables.find((t) => t.id === id);
   if (!table) return res.status(404).json({ error: "table_not_found" });
   if (table.is_counter) return res.status(400).json({ error: "counter_not_deletable" });
-  if (hasUnpaidOrder(store, table.number)) {
+  const tableOrders = await openOrdersForTable(store, table.number);
+  if (hasUnpaidOrder({ ...store, orders: tableOrders }, table.number)) {
     return res.status(400).json({ error: "table_has_unpaid_orders", table_number: table.number });
   }
   if (table.party_size) {

@@ -187,8 +187,13 @@ async function loadRecentOrders() {
   //
   // 어떻게 고치나 — 「끝나지 않은 것」을 「이 셋 중 하나」로 뒤집는다.
   // `$in` 은 인덱스를 탄다(`{status:1, created_at:1}`). 그리고 「최근 사흘」은
-  // 원래부터 `{created_at:1}` 로 탈 수 있었다. 둘을 **따로, 나란히** 묻고
-  // 합친다. `$or` 하나로 묶어 두면 계획을 짜는 쪽 마음이라 둘 다 훑을 수 있다.
+  // 원래부터 `{created_at:1}` 로 탈 수 있다.
+  //
+  // 처음 고칠 때는 두 조건을 별도 질의로 나눠 동시에 보냈다. 그러나 연결
+  // 폭주를 막으려고 풀을 1개로 줄인 뒤에는 두 질의가 실제로는 직렬이 됐다.
+  // 운영에서 이 경로가 5.9초였고, 주문과 설정을 같이 읽는 모든 요청이 그
+  // 시간을 기다렸다(2026-09-13 배포 직후 실측). 이제 두 가지 모두 색인을
+  // 탈 수 있으므로 하나의 `$or`로 합쳐 왕복과 커서 생성을 한 번만 한다.
   //
   // 뒤집으면서 위험해지는 자리가 하나 있다. 목록에서 빠진 상태가 있으면 그
   // 주문은 화면에서 **사라진다.** 이 가게에서 그건 받을 돈이 사라지는 것이다.
@@ -211,17 +216,12 @@ async function loadRecentOrders() {
   // (나) 최근 며칠 — 상태와 무관하게. {created_at:1} 인덱스를 탄다.
   const recentFilter = { created_at: { $gte: from } };
 
-  const col = db.collection(ORDERS_COLLECTION);
-  const [openRows, recentRows] = await Promise.all([
-    col.find(openFilter).toArray(),
-    col.find(recentFilter).toArray(),
-  ]);
-
-  // 둘에 다 걸린 주문은 한 번만. _id 는 주문 번호 그대로다(saveOrder).
-  const byId = new Map();
-  for (const r of openRows) byId.set(r._id, r);
-  for (const r of recentRows) byId.set(r._id, r);
-  return [...byId.values()].map(stripMongoId).sort((a, b) => a.id - b.id);
+  const rows = await db
+    .collection(ORDERS_COLLECTION)
+    .find({ $or: [openFilter, recentFilter] })
+    .toArray();
+  // MongoDB의 $or는 두 조건에 동시에 맞는 문서도 한 번만 돌려준다.
+  return rows.map(stripMongoId).sort((a, b) => a.id - b.id);
 }
 
 function stripMongoId(row) {
@@ -236,11 +236,21 @@ function stripMongoId(row) {
  */
 async function findOrders(filter, opts = {}) {
   await connectDB();
-  let cur = db.collection(ORDERS_COLLECTION).find(filter);
+  let cur = db.collection(ORDERS_COLLECTION).find(
+    filter,
+    opts.projection ? { projection: opts.projection } : undefined
+  );
   if (opts.sort) cur = cur.sort(opts.sort);
   if (opts.limit) cur = cur.limit(opts.limit);
   const rows = await cur.toArray();
   return rows.map(stripMongoId);
+}
+
+/** 주문번호가 정해진 요청은 `_id` 기본 인덱스로 그 문서 하나만 읽는다. */
+async function findOrderById(id) {
+  await connectDB();
+  const row = await db.collection(ORDERS_COLLECTION).findOne({ _id: id });
+  return stripMongoId(row);
 }
 
 /** 주문 한 건만 저장한다. store 문서 전체를 다시 쓰지 않는다. */
@@ -249,6 +259,13 @@ async function saveOrder(order) {
   await db
     .collection(ORDERS_COLLECTION)
     .replaceOne({ _id: order.id }, { ...order, _id: order.id }, { upsert: true });
+  return order;
+}
+
+/** 새 주문은 insert로만 만든다. 번호가 겹치면 기존 주문을 덮지 않는다. */
+async function insertOrder(order) {
+  await connectDB();
+  await db.collection(ORDERS_COLLECTION).insertOne({ ...order, _id: order.id });
   return order;
 }
 
@@ -321,7 +338,7 @@ async function refreshStore({ includeOrders = true } = {}) {
   // 다루는 API만 읽는다(server.js 의 needsRecentOrders).
   //
   // 2026-09-12 사장님: "로그인도 그렇고 버튼 누르는 것도 그렇고 다" 느리다.
-  // 예전에는 설정 한 칸, 메뉴 한 번, 로그인 한 번도 주문 컬렉션 질의 두 개를
+  // 예전에는 설정 한 칸, 메뉴 한 번, 로그인 한 번도 주문 컬렉션 질의를
   // 함께 치렀다. 주문 질의가 느려지면 주문과 아무 상관없는 화면까지 똑같이
   // 5~15초씩 멈춘 이유다. includeOrders=false 면 store 문서만 읽고, 이
   // 인스턴스가 이미 들고 있던 store.orders 는 건드리지 않는다.
@@ -421,7 +438,7 @@ let lastRefreshAt = 0;
 async function refreshAndSave(mutate) {
   // refreshAndSave 의 모든 호출은 menuItems/tables/zones/vipCards 같은
   // store 문서 안의 값만 바꾼다. 주문은 별도 컬렉션에 있고 save()도 주문을
-  // 쓰지 않으므로, 저장 직전 안전 확인 때문에 주문 두 질의를 다시 할 이유가
+  // 쓰지 않으므로, 저장 직전 안전 확인 때문에 최근 주문 질의를 다시 할 이유가
   // 없다. 주문이 필요한 라우트는 요청 시작 때 따로 읽는다(server.js).
   if (Date.now() - lastRefreshAt > REFRESH_FRESH_MS) await refreshStore({ includeOrders: false });
   await mutate(store);
@@ -512,26 +529,32 @@ async function saveFields(fields) {
  *   - 관리자 화면은 그 번호를 이미 본 것으로 알고 있어서 빌지를 안 찍는다.
  * 9번 테이블에서 일어난 일이 정확히 이것이다.
  *
- * 그래서 번호는 메모리가 아니라 데이터베이스에서 원자적으로 받아온다.
- * $inc 는 서버 한 곳에서 일어나므로 두 요청이 같은 번호를 받을 수 없다.
- * floor 는 안전판이다 — 이미 카운터가 뒤로 가 있는 상태로 배포되더라도,
- * 지금 알고 있는 가장 큰 번호보다는 반드시 위에서 시작한다.
+ * 그래서 번호는 메모리가 아니라 `counters` 컬렉션의 독립 문서에서 원자적으로
+ * 받아온다. store 전체 저장이 이 문서를 덮을 수 없고, $inc 는 서버 한 곳에서
+ * 일어나므로 두 요청이 같은 번호를 받을 수 없다. floor 는 안전판이다 — 이미
+ * 카운터가 뒤로 가 있는 상태라도 지금 알고 있는 가장 큰 번호 위에서 시작한다.
  */
 async function reserveId(collection, floor) {
   await connectDB();
-  const key = `nextId.${collection}`;
+  const counters = db.collection("counters");
   if (floor && Number.isFinite(floor)) {
-    await db.collection("store").updateOne({ _id: "main" }, { $max: { [key]: floor } });
+    await counters.updateOne(
+      { _id: collection },
+      { $max: { value: Math.max(0, floor - 1) } },
+      { upsert: true }
+    );
   }
-  const res = await db
-    .collection("store")
-    .findOneAndUpdate({ _id: "main" }, { $inc: { [key]: 1 } }, { returnDocument: "after", upsert: true });
+  const res = await counters.findOneAndUpdate(
+    { _id: collection },
+    { $inc: { value: 1 } },
+    { returnDocument: "after", upsert: true }
+  );
   // 드라이버 판마다 모양이 다르다(v4~v5 는 {value}, v6 는 문서 그대로).
-  const doc = res && res.value !== undefined ? res.value : res;
-  const after = doc && doc.nextId ? doc.nextId[collection] : null;
-  if (typeof after === "number" && after > 1) {
-    store.nextId[collection] = after;
-    return after - 1;
+  const doc = res && res.value && typeof res.value === "object" ? res.value : res;
+  const issued = doc && typeof doc.value === "number" ? doc.value : null;
+  if (typeof issued === "number" && issued >= 1) {
+    store.nextId[collection] = issued + 1;
+    return issued;
   }
   // 데이터베이스가 답을 못 준 아주 예외적인 경우에만 메모리로 돌아간다 —
   // 번호가 없어서 주문을 못 받는 것보다는 낫다.
@@ -548,9 +571,13 @@ async function reserveId(collection, floor) {
  * 주문 컬렉션에서 가장 큰 번호를 한 번만 읽어 그 위로 올린다. 요청마다
  * 하지 않는다(주문 하나에 왕복 하나가 더 붙는다).
  */
+const ORDER_ID_FLOOR_FLAG = "order_id_floor_repaired_2026_09_13";
 let orderIdFloorEnsured = false;
 async function ensureOrderIdFloor() {
-  if (orderIdFloorEnsured) return;
+  if (orderIdFloorEnsured || (store.settings && store.settings[ORDER_ID_FLOOR_FLAG])) {
+    orderIdFloorEnsured = true;
+    return;
+  }
   await connectDB();
   const rows = await db
     .collection(ORDERS_COLLECTION)
@@ -559,10 +586,35 @@ async function ensureOrderIdFloor() {
     .limit(1)
     .toArray();
   const top = rows && rows[0];
-  if (top && typeof top.id === "number") {
-    await db.collection("store").updateOne({ _id: "main" }, { $max: { "nextId.orders": top.id + 1 } });
-    if (!(store.nextId.orders > top.id)) store.nextId.orders = top.id + 1;
+  // 실제 주문의 최대값과 예전 store 카운터 중 큰 쪽을 쓴다. 테스트 주문을
+  // 지운 직후처럼 최고 번호 문서가 없어졌어도 이미 발급했던 번호를 되쓰지
+  // 않는다.
+  const lastIssued = Math.max(
+    top && typeof top.id === "number" ? top.id : 0,
+    Math.max(0, (store.nextId.orders || 1) - 1)
+  );
+  const floor = lastIssued + 1;
+  const appliedAt = new Date().toISOString();
+  // 실제 최대 번호 복구는 운영 DB 전체에서 한 번이면 된다. 예전에는 새
+  // Vercel 인스턴스의 첫 주문마다 같은 최대값 질의를 반복해 주문 버튼에
+  // 불필요한 왕복을 하나 더 붙였다. 완료 표도 같은 부분 갱신에 함께 쓴다.
+  await db.collection("counters").updateOne(
+    { _id: "orders" },
+    { $max: { value: lastIssued } },
+    { upsert: true }
+  );
+  await db.collection("store").updateOne(
+    { _id: "main" },
+    {
+      $max: { "nextId.orders": floor },
+      $set: { [`settings.${ORDER_ID_FLOOR_FLAG}`]: appliedAt },
+    }
+  );
+  if (top && typeof top.id === "number" && !(store.nextId.orders > top.id)) {
+    store.nextId.orders = top.id + 1;
   }
+  store.settings = store.settings || {};
+  store.settings[ORDER_ID_FLOOR_FLAG] = appliedAt;
   orderIdFloorEnsured = true;
 }
 
@@ -612,10 +664,10 @@ function getDb() {
 
 module.exports = {
   connectDB, getDb, getClient, refreshStore, store, save, refreshAndSave, patchArrayItem, nextId,
-  saveFields, saveNextId, reserveId, ensureOrderIdFloor,
+  saveFields, saveNextId, reserveId, ensureOrderIdFloor, ORDER_ID_FLOOR_FLAG,
   savePhoto, getPhoto, deletePhoto,
   firstConnectMs,
   loadRecentOrders,
-  findOrders, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
+  findOrders, findOrderById, insertOrder, saveOrder, saveOrders, ORDERS_COLLECTION, RECENT_DAYS, recentCutoff,
   findDocs, saveDoc, deleteDoc, DOC_COLLECTIONS, OUT_OF_DOCUMENT,
 };

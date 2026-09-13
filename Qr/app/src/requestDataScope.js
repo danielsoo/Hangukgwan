@@ -1,8 +1,8 @@
 // 어느 API가 최근 주문 배열(store.orders)을 실제로 쓰는가.
 //
 // store 문서(메뉴·설정·테이블·VIP 카드)는 작지만, 최근 주문은 별도
-// 컬렉션에서 인덱스 질의 두 개로 읽는다(src/db.js loadRecentOrders). 예전에는
-// 모든 API가 그 두 질의를 무조건 치러서, 주문 DB가 잠깐 밀리면 로그인·설정·
+// 컬렉션에서 인덱스 질의로 읽는다(src/db.js loadRecentOrders). 예전에는 모든
+// API가 그 질의를 무조건 치러서, 주문 DB가 잠깐 밀리면 로그인·설정·
 // 메뉴까지 함께 5~15초씩 멈췄다.
 //
 // 안전을 위해 "주문이 필요 없는 것이 확실한" 경로만 아래에 적고, 모르는 새
@@ -40,21 +40,37 @@ function needsRecentOrders(reqOrPath) {
     : String((reqOrPath && reqOrPath.method) || "GET").toUpperCase();
 
   if (under(path, "/api/tables")) {
-    // 목록 GET은 사라진 인원수를 살아 있는 주문에서 복구하고, party-size GET은
-    // 현재 착석의 주문/최소금액을 함께 계산하며, 테이블 DELETE는 미결제 주문이
-    // 있으면 막는다. 그 세 경우만 주문이 필요하다.
-    if (path === "/api/tables") return method === null || method === "GET";
+    // 목록 GET은 사라진 인원수를 살아 있는 주문에서 복구하고, 테이블 DELETE는
+    // 미결제 주문이 있으면 막는다. party-size GET은 해당 테이블 하나만 라우트
+    // 안에서 직접 질의하므로 가게 전체 최근 주문은 읽지 않는다.
+    if (path === "/api/tables") return false;
     if (/^\/api\/tables\/[^/]+\/party-size$/.test(path)) {
-      return method === null || method === "GET";
+      return false;
     }
-    if (/^\/api\/tables\/[^/]+$/.test(path) && method === "DELETE") return true;
+    if (/^\/api\/tables\/[^/]+$/.test(path) && method === "DELETE") return false;
     return false;
   }
 
-  // VIP 카드 관리 자체는 store 문서만 보지만, 카드 "판매"는 결산에 들어갈
-  // paid 주문을 하나 만들고 현재 최대 주문번호도 본다.
-  if (under(path, "/api/vip-cards/sell")) return true;
+  if (under(path, "/api/orders")) {
+    // 주방 전체 주문판만 목록이 필요하다. 새 주문, 손님의 내 주문, 주문번호
+    // 하나 조회는 각 라우트가 `_id` 또는 table_number로 직접 읽는다.
+    if (path === "/api/orders") return method === null || method === "GET";
+    if (under(path, "/api/orders/history")) return false;
+    if (under(path, "/api/orders/table")) return false;
+    if (/^\/api\/orders\/\d+$/.test(path) && (method === null || method === "GET")) return false;
+    if (path === "/api/orders/reorder" && method === "PATCH") return false;
+    if (path === "/api/orders/move" && method === "POST") return false;
+    if (/^\/api\/orders\/\d+(?:\/items|\/split-pay)?$/.test(path) && method === "PATCH") return false;
+    // 모르는 새 주문 쓰기 경로는 안전하게 전체 목록을 유지한다.
+    return true;
+  }
+
+  // VIP 카드 판매도 paid 주문 한 건을 직접 insert한다.
+  if (under(path, "/api/vip-cards/sell")) return false;
   if (under(path, "/api/vip-cards")) return false;
+
+  // 온라인 결제도 해당 테이블/결제에 적힌 주문번호만 직접 읽는다.
+  if (under(path, "/api/payment")) return false;
 
   return !ORDER_FREE_PREFIXES.some((prefix) => under(path, prefix));
 }

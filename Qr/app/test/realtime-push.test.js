@@ -144,15 +144,20 @@ const src = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
 
   out.push("\n[6] 주문 알림도 응답보다 먼저 나간다");
   const ordersSrc = src("src/routes/orders.js");
-  const bare = (ordersSrc.match(/\n {2}broadcastOrdersChanged\(req\);/g) || []).length;
-  const awaited = (ordersSrc.match(/\n {2}await broadcastOrdersChanged\(req\);/g) || []).length;
+  const bare = (ordersSrc.match(/\n {2}broadcastOrdersChanged\(req,/g) || []).length;
+  const awaited = (ordersSrc.match(/\n {2}await broadcastOrdersChanged\(req,/g) || []).length;
   check(`★ 주문 알림 ${awaited}곳이 전부 await 다`, awaited >= 6 && bare === 0, `await ${awaited} / bare ${bare}`);
   check("★ VIP 카드 판매도 마찬가지",
-    /await broadcastOrdersChanged\(req\);/.test(src("src/routes/vipCards.js")) &&
-    !/\n {2}broadcastOrdersChanged\(req\);/.test(src("src/routes/vipCards.js")));
+    /await broadcastOrdersChanged\(req,/.test(src("src/routes/vipCards.js")) &&
+    !/\n {2}broadcastOrdersChanged\(req,/.test(src("src/routes/vipCards.js")));
 
   out.push("\n[7] 화면이 그 알림을 듣고 다시 불러온다");
   const adminJs = src("public/js/admin.js");
+  check("★ 주문번호 알림은 그 주문 하나만 읽는다",
+    /channel\.bind\("changed", \(payload\) => refreshChangedOrders\(payload\)\)/.test(adminJs) &&
+    /fetch\(`\/api\/orders\/\$\{id\}`\)/.test(adminJs));
+  check("번호가 없는 알림은 전체 목록 안전망으로 돌아간다",
+    /if \(ids\.length !== 1\) return loadOrders\(\);/.test(adminJs));
   check("★ data 이벤트를 듣는다", /channel\.bind\("data",/.test(adminJs));
   check("메뉴가 바뀌면 메뉴를 다시 부른다", /what === "menu"\)\s*\{\s*\n\s*await loadMenu\(\);/.test(adminJs));
   check("그 밖에는 테이블을 다시 부른다", /await loadTables\(\);/.test(adminJs));

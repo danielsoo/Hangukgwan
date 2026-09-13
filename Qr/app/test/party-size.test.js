@@ -58,7 +58,7 @@ const fs = require("fs");
 const path = require("path");
 const ordersSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "orders.js"), "utf8");
 check("주문 상태 변경에서 결제일 때만 인원수를 정리한다",
-  /status === "paid" && clearPartySizeIfSettled\(/.test(ordersSrc));
+  /if \(status === "paid"\)[\s\S]{0,400}clearPartySizeIfSettled\(/.test(ordersSrc));
 check("예전의 \"살아 있는 주문이 없으면 지운다\" 규칙이 남아 있지 않다",
   !/party_size = null/.test(ordersSrc), "orders.js 안에서 직접 지우는 코드가 남아 있다");
 
@@ -92,7 +92,7 @@ const partySrc = fs.readFileSync(path.join(__dirname, "..", "src", "partySize.js
 check("만료 시간 상수가 없다", !/STALE|EXPIR|60 \* 60 \* 1000/.test(partySrc), "시간 기반 만료가 다시 들어왔다");
 const tablesSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "tables.js"), "utf8");
 check("인원수를 물어볼지 정하는 GET 은 아무것도 지우지 않는다",
-  /router\.get\("\/:tableNumber\/party-size", \(req, res\) => \{/.test(tablesSrc));
+  /router\.get\("\/:tableNumber\/party-size", async \(req, res\) => \{/.test(tablesSrc));
 
 out.push("\n[직원이 직접 비우는 길]");
 // 결제 없이 손님이 나간 테이블(인원수만 찍고 안 시켰거나, 주문이 전부

@@ -73,9 +73,12 @@ check("여러 줄이면 null (헤더 주입)", socketIdFrom(reqWith("123.456\n78
 
 out.push("\n[2] 누른 기기 하나만 빼고 나머지에게 쏜다");
 calls.length = 0;
-broadcastOrdersChanged(reqWith("123456.7890123"));
+broadcastOrdersChanged(reqWith("123456.7890123"), [731]);
 check("한 번 쏜다", calls.length === 1, JSON.stringify(calls));
 check("orders 채널의 changed", calls[0] && calls[0].channel === "orders" && calls[0].event === "changed");
+check("바뀐 주문번호를 싣는다",
+  calls[0] && Array.isArray(calls[0].data.order_ids) && calls[0].data.order_ids[0] === 731,
+  JSON.stringify(calls[0] && calls[0].data));
 check(
   "그 소켓을 제외한다",
   calls[0] && calls[0].params && calls[0].params.socket_id === "123456.7890123",
@@ -106,7 +109,7 @@ check("trigger 가 동기적으로 던져도 밖으로 새지 않는다", !threw
 
 out.push("\n[5] 라우트가 req 를 넘기지 않으면 위의 모든 것이 무의미하다");
 const ordersSrc = fs.readFileSync(path.join(__dirname, "../src/routes/orders.js"), "utf8");
-const withReq = (ordersSrc.match(/broadcastOrdersChanged\(req\)/g) || []).length;
+const withReq = (ordersSrc.match(/broadcastOrdersChanged\(req,/g) || []).length;
 const withoutReq = (ordersSrc.match(/broadcastOrdersChanged\(\s*\)/g) || []).length;
 check(`호출부가 전부 req 를 넘긴다 (${withReq}곳)`, withReq >= 6, `req 없이 부르는 곳 ${withoutReq}`);
 check("req 없이 부르는 곳이 없다", withoutReq === 0);

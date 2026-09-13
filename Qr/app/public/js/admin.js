@@ -3122,7 +3122,10 @@
     try {
       pusherClient = new Pusher(cfg.key, { cluster: cfg.cluster });
       const channel = pusherClient.subscribe("orders");
-      channel.bind("changed", () => loadOrders());
+      // 보통 알림에는 바뀐 주문번호 하나가 온다. 그 한 문서만 `_id`로 읽어
+      // 화면에 합치고, 번호가 없는 옛 알림/여러 건 일괄 변경만 전체 목록을
+      // 다시 읽는다. 새 주문 하나 때문에 가게 주문판 전체를 읽지 않는다.
+      channel.bind("changed", (payload) => refreshChangedOrders(payload));
       // 주문 말고 나머지(인원수·테이블·메뉴)가 바뀐 것도 여기로 온다.
       //
       // 사장님(2026-09-11): "현재 뭐가 바뀌거나 인원이 추가되거나 메뉴가
@@ -4008,6 +4011,40 @@
     const fresh = await res.json();
     if (seq !== ordersRequestSeq) return; // a newer request has since been sent — this response is stale, discard it
 
+    applyFreshOrders(fresh);
+  }
+
+  // Pusher 알림에 주문번호 하나가 있으면 전체 /api/orders 대신 그 문서만
+  // 읽는다. 최초 화면/30초 안전망/여러 주문 일괄 변경은 loadOrders()가 맡는다.
+  async function refreshChangedOrders(payload) {
+    const ids = [...new Set(((payload && payload.order_ids) || [])
+      .map((id) => parseInt(id, 10))
+      .filter(Number.isFinite))];
+    if (ids.length !== 1) return loadOrders();
+
+    // 이미 나가 있던 전체 목록 응답이 이 한 건보다 늦게 도착해 옛 상태로
+    // 덮지 못하게 무효화한다. 동시에 온 다른 주문번호 응답은 각각 현재 배열에
+    // 합쳐지므로 서로를 지우지 않는다.
+    ordersRequestSeq++;
+    try {
+      const id = ids[0];
+      const res = await fetch(`/api/orders/${id}`);
+      if (res.status === 401) return showLogin();
+      if (res.status === 404) {
+        applyFreshOrders(orders.filter((o) => o.id !== id));
+        return;
+      }
+      if (!res.ok) return loadOrders();
+      const changed = await res.json();
+      const fresh = orders.filter((o) => o.id !== changed.id);
+      fresh.push(changed);
+      applyFreshOrders(fresh);
+    } catch (e) {
+      return loadOrders();
+    }
+  }
+
+  function applyFreshOrders(fresh) {
     // 이 기기가 아직 판단하지 않은 신규 주문. 기준은 메모리가 아니라
     // 기기에 남는 기록이라(decidedOrderIds), 새로고침 중에 들어온 주문도
     // 여기에 잡힌다 — 그게 9번 테이블 빌지가 안 나온 이유였다.
