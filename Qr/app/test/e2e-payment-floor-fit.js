@@ -76,25 +76,48 @@ async function tiles(page) {
 
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
   // 씨앗 자료는 첫 /api 요청 때 만들어진다. 위의 화면 열기가 그걸 부른다.
-  // 씨앗 자료는 자리를 구역에 안 붙여 둔다(zone_id 없음). 그러면 배치도에
-  // 자리 타일이 하나도 안 그려져서, 이 테스트가 재려는 것 자체가 없어진다.
-  // 실제 가게처럼 구역 안에 자리를 몇 개 놓아 준다.
+  // **실제 가게 배치를 본떠서 놓는다.**
+  //
+  // 2026-09-13 사장님: "아니 로컬대로 하는 게 아니라 실제 배포된 애들을
+  // 기준으로 바꿔야 하는 거 아니야?"
+  //
+  // 맞는 지적이었다. 처음엔 씨앗 자료(같은 크기의 빈 구역 4개, 거의
+  // 정사각형)로 맞춰 놓고 됐다고 했다. 그런데 배포본의 실제 배치는 모양이
+  // 아주 다르다 — 전면·중앙1·중앙2·후면이 **옆으로 늘어서 있어서 가로로 길고
+  // 세로로 짧다**(대략 2.5 : 1). 그 모양에서는 가로에 맞춰 커지고 남는 세로가
+  // 전부 아래에 몰린다. 정사각형 자료로만 보면 그 일이 안 일어난다.
+  //
+  // 그래서 여기서는 실제 배치의 **비율과 생김새**를 본뜬다: 크기가 제각각인
+  // 구역 넷이 옆으로, 자리 옆에 포장 타일이 붙는 자리도(1-1, 2-1 처럼 구역
+  // 밖으로 삐져나갈 수 있는 것) 함께.
   await db.connectDB();
   {
     const handle = db.getDb();
     const doc = await handle.collection("store").findOne({ _id: "main" });
     const zones = doc.zones || [];
     const tables = doc.tables || [];
-    if (!zones.length || !tables.length) throw new Error("씨앗 자료에 구역이나 자리가 없다");
-    // 첫 구역 안에 가로로 여섯 개.
-    for (let i = 0; i < 6 && i < tables.length; i++) {
-      tables[i].zone_id = zones[0].id;
-      tables[i].x = 10 + (i % 3) * 90;
-      tables[i].y = 30 + Math.floor(i / 3) * 90;
-      tables[i].width = 70;
-      tables[i].height = 70;
+    if (zones.length < 4 || tables.length < 12) throw new Error("씨앗 자료에 구역이나 자리가 모자란다");
+
+    // 전면(넓다) · 중앙1(작다) · 중앙2(작다) · 후면(중간) — 옆으로 늘어선다.
+    const layout = [
+      { z: 0, x: 10, y: 20, w: 470, h: 380, seats: [[20, 40], [110, 90], [200, 90], [290, 90], [20, 180], [110, 180]] },
+      { z: 1, x: 500, y: 10, w: 260, h: 170, seats: [[20, 40], [140, 40]] },
+      { z: 2, x: 500, y: 195, w: 260, h: 250, seats: [[20, 40], [140, 40], [20, 140]] },
+      { z: 3, x: 780, y: 45, w: 250, h: 320, seats: [[20, 40], [130, 40], [20, 140]] },
+    ];
+    let t = 0;
+    for (const L of layout) {
+      const zone = zones[L.z];
+      zone.x = L.x; zone.y = L.y; zone.width = L.w; zone.height = L.h;
+      for (const [sx, sy] of L.seats) {
+        if (t >= tables.length) break;
+        tables[t].zone_id = zone.id;
+        tables[t].x = sx; tables[t].y = sy;
+        tables[t].width = 70; tables[t].height = 70;
+        t++;
+      }
     }
-    await handle.collection("store").updateOne({ _id: "main" }, { $set: { tables } });
+    await handle.collection("store").updateOne({ _id: "main" }, { $set: { zones, tables } });
   }
 
   await page.locator("#loginPassword").pressSequentially("ownerpass123", { delay: 5 });
@@ -147,6 +170,46 @@ async function tiles(page) {
   check("★★ 아래로 삐져나간 자리가 없다", overflowBottom.length === 0, `${overflowBottom.length}개`);
   check("★★ 화면 밖으로 나간 자리가 없다", offScreen.length === 0, `${offScreen.length}개`);
   check("모든 자리가 보이는 크기다", after.tiles.every((t) => t.w > 4 && t.h > 4), JSON.stringify(after.tiles.slice(0, 3)));
+
+  out.push("\n[★ 남는 자리를 한쪽에 몰지 않는다 — 가운데로 모은다]");
+  // 실제 배치는 가로로 길고 세로로 짧다. 그러면 가로에 맞춰 커지고 남는
+  // 세로가 전부 **아래**에 몰려서 화면 아래쪽이 통째로 빈다. 사장님이
+  // 「꽉차게」라고 한 것이 그 빈 자리였다. 위아래로 나눠 가운데에 놓는다.
+  const box = await page.evaluate(() => {
+    const wrap = document.querySelector("#paymentFloorPlan");
+    const tiles = [...document.querySelectorAll("#paymentFloorPlan .table-block")];
+    const zones = [...document.querySelectorAll("#paymentFloorPlan .zone-block")];
+    const all = tiles.concat(zones).map((e) => e.getBoundingClientRect());
+    const w = wrap.getBoundingClientRect();
+    return {
+      wrap: { top: w.top, bottom: w.bottom, left: w.left, right: w.right, h: w.height, w: w.width },
+      content: {
+        top: Math.min(...all.map((r) => r.top)),
+        bottom: Math.max(...all.map((r) => r.bottom)),
+        left: Math.min(...all.map((r) => r.left)),
+        right: Math.max(...all.map((r) => r.right)),
+      },
+    };
+  });
+  const gapTop = box.content.top - box.wrap.top;
+  const gapBottom = box.wrap.bottom - box.content.bottom;
+  const gapLeft = box.content.left - box.wrap.left;
+  const gapRight = box.wrap.right - box.content.right;
+  check(
+    "★ 위아래 빈 자리가 비슷하다 (아래로 몰리지 않는다)",
+    Math.abs(gapTop - gapBottom) <= Math.max(24, box.wrap.h * 0.06),
+    `위 ${Math.round(gapTop)} / 아래 ${Math.round(gapBottom)}`
+  );
+  check(
+    "좌우 빈 자리도 비슷하다",
+    Math.abs(gapLeft - gapRight) <= Math.max(24, box.wrap.w * 0.06),
+    `왼 ${Math.round(gapLeft)} / 오른 ${Math.round(gapRight)}`
+  );
+  check(
+    "★ 배치도 칸이 화면 아래까지 쓴다",
+    box.wrap.bottom >= after.viewportH - 40,
+    `칸 바닥 ${Math.round(box.wrap.bottom)} / 화면 ${after.viewportH}`
+  );
 
   out.push("\n[누를 수 있는가 — 키운 뒤에도 그 자리가 열려야 한다]");
   await page.locator("#paymentFloorPlan .table-block").first().click();

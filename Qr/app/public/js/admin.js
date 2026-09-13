@@ -8620,17 +8620,25 @@
     // 너무 작을 때도 키운다(그게 부탁받은 것). 다만 끝없이 키우지는 않는다.
     const scale = Math.min(availW / right, availH / bottom, 4);
 
-    // 가로·세로 비율이 화면과 다르면 한쪽에 빈 띠가 남는다. 그 띠를 오른쪽
-    // 에 몰아두면 배치도가 왼쪽으로 치우쳐 보인다 — 가운데로 모은다.
-    // (늘려서 채우지는 않는다. 비율이 틀어지면 자리 사이의 거리가 실제
-    //  가게와 달라 보이고, 그 배치도를 보고 자리를 찾는 것이 어려워진다.)
+    // 비율이 화면과 다르면 한쪽에 빈 띠가 남는다. 늘려서 채우지는 않는다 —
+    // 비율이 틀어지면 자리 사이의 거리가 실제 가게와 달라 보이고, 그 배치도로
+    // 자리를 찾는 것이 어려워진다.
+    //
+    // 대신 그 띠를 **가로 세로 둘 다 가운데로 모은다.** 2026-09-13: 처음엔
+    // 가로만 모아 뒀는데, 그건 내가 로컬 씨앗 자료(빈 구역 4개, 거의 정사각형)
+    // 로만 보고 정한 것이었다. **실제 가게 배치는 가로로 길고 세로로 짧다**
+    // (전면·중앙1·중앙2·후면이 옆으로 늘어서 있다). 그 모양에서는 가로에 맞춰
+    // 커지고 남는 세로가 전부 아래에 몰려서, 화면 아래쪽이 통째로 빈다.
+    // 사장님이 「꽉차게」라고 한 것은 그 빈 자리를 말한 것이다.
     const offsetX = Math.max(0, (availW - right * scale) / 2);
+    const offsetY = Math.max(0, (availH - bottom * scale) / 2);
 
     stage.style.width = right + "px";
     stage.style.height = bottom + "px";
-    stage.style.transform = `translateX(${offsetX}px) scale(${scale})`;
-    // 확대한 만큼 칸도 키워야 스크롤이 안 생긴다.
-    wrap.style.height = Math.ceil(bottom * scale) + PAD * 2 + "px";
+    stage.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+    // 칸 자체는 쓸 수 있는 자리를 다 차지한다. 그래야 배치도가 화면 가운데에
+    // 놓이고, 바탕 격자도 화면을 채운다.
+    wrap.style.height = Math.ceil(availH) + "px";
   }
 
   // 화면 크기가 바뀌면 다시 맞춘다. 태블릿을 돌리거나 창을 줄일 때.
