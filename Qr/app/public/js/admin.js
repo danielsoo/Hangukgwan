@@ -8571,10 +8571,84 @@
   // 이어진다 (item 23에서 통일한 "상태 무관 결제 완료" 버튼과 그대로
   // 이어짐). renderFloorPlan()과 달리 canTableEdit() 분기 자체가 없다 —
   // 사장님이든 직원이든 이 탭에서는 절대 배치가 흐트러지지 않는다.
+  // 결제 탭의 배치도를 남는 공간에 꽉 차게 키운다.
+  //
+  // 2026-09-13 사장님: "결제 화면을 화면에 꽉차게 키워줄 수 있어?"
+  // (어느 화면인지 여쭤보니 "실시간 주문 탭 바로 옆에 있는 결재탭")
+  //
+  // 배치도는 「테이블 / QR 코드」 탭에서 잡은 좌표(픽셀) 그대로 그린다.
+  // 그 좌표는 배치를 만들 때의 화면 크기에 맞춰져 있어서, 큰 화면에서는
+  // 왼쪽 위에 작게 몰려 있고 나머지가 전부 빈 자리가 된다. 영업 중에
+  // 자리를 눌러야 하는 화면인데 표적이 작으면 그만큼 잘못 누른다.
+  //
+  // 좌표를 다시 계산하지 않고 **통째로 확대**한다(transform: scale).
+  // 이 탭은 보기 전용이라 그래도 된다 — 끌어서 옮기는 배치도였다면 누르는
+  // 위치와 좌표가 어긋나서 이렇게 못 한다(.payment-floor-plan 은 항상
+  // 보기 전용이라고 CSS 에 적혀 있다).
+  //
+  // 글자도 같이 커진다. 그게 목적이다.
+  function fitPaymentFloorPlan() {
+    const wrap = $("#paymentFloorPlan");
+    const stage = wrap && wrap.querySelector(".floor-stage");
+    if (!wrap || !stage) return;
+    // 탭이 숨어 있으면 폭이 0이라 계산이 안 된다. 탭을 열 때 다시 부른다.
+    if (!wrap.clientWidth) return;
+
+    // 실제로 그려진 것들의 오른쪽·아래 끝. 자료의 width/height 로 계산하지
+    // 않는 이유는 포장 타일이 구역 밖으로 삐져나갈 수 있기 때문이다
+    // (아래 nextLeft). 그리 놓고 재면 그 타일이 잘린다.
+    let right = 0;
+    let bottom = 0;
+    for (const zone of stage.children) {
+      right = Math.max(right, zone.offsetLeft + zone.offsetWidth);
+      bottom = Math.max(bottom, zone.offsetTop + zone.offsetHeight);
+      for (const tile of zone.children) {
+        if (!tile.offsetWidth) continue;
+        right = Math.max(right, zone.offsetLeft + tile.offsetLeft + tile.offsetWidth);
+        bottom = Math.max(bottom, zone.offsetTop + tile.offsetTop + tile.offsetHeight);
+      }
+    }
+    if (right <= 0 || bottom <= 0) return;
+
+    // 쓸 수 있는 자리: 가로는 칸의 폭, 세로는 이 칸 위쪽부터 화면 바닥까지.
+    const PAD = 12;
+    const top = wrap.getBoundingClientRect().top;
+    const availW = Math.max(120, wrap.clientWidth - PAD * 2);
+    const availH = Math.max(240, window.innerHeight - top - PAD * 2);
+
+    // 가로·세로 중 작은 쪽에 맞춘다 — 한쪽에 맞추면 다른 쪽이 잘린다.
+    // 너무 작을 때도 키운다(그게 부탁받은 것). 다만 끝없이 키우지는 않는다.
+    const scale = Math.min(availW / right, availH / bottom, 4);
+
+    // 가로·세로 비율이 화면과 다르면 한쪽에 빈 띠가 남는다. 그 띠를 오른쪽
+    // 에 몰아두면 배치도가 왼쪽으로 치우쳐 보인다 — 가운데로 모은다.
+    // (늘려서 채우지는 않는다. 비율이 틀어지면 자리 사이의 거리가 실제
+    //  가게와 달라 보이고, 그 배치도를 보고 자리를 찾는 것이 어려워진다.)
+    const offsetX = Math.max(0, (availW - right * scale) / 2);
+
+    stage.style.width = right + "px";
+    stage.style.height = bottom + "px";
+    stage.style.transform = `translateX(${offsetX}px) scale(${scale})`;
+    // 확대한 만큼 칸도 키워야 스크롤이 안 생긴다.
+    wrap.style.height = Math.ceil(bottom * scale) + PAD * 2 + "px";
+  }
+
+  // 화면 크기가 바뀌면 다시 맞춘다. 태블릿을 돌리거나 창을 줄일 때.
+  let floorFitTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(floorFitTimer);
+    floorFitTimer = setTimeout(fitPaymentFloorPlan, 120);
+  });
+
   function renderPaymentFloorPlan() {
     const wrap = $("#paymentFloorPlan");
     if (!wrap) return;
     wrap.innerHTML = "";
+    // 확대는 이 안쪽 층에만 건다. 바깥 칸에 걸면 칸 자체가 커져서 화면
+    // 밖으로 밀려난다.
+    const stage = document.createElement("div");
+    stage.className = "floor-stage";
+    wrap.appendChild(stage);
     [...zones].sort((a, b) => a.sort_order - b.sort_order).forEach((z) => {
       const zoneEl = document.createElement("div");
       zoneEl.className = "zone-block";
@@ -8583,7 +8657,7 @@
       zoneEl.style.width = z.width + "px";
       zoneEl.style.height = z.height + "px";
       zoneEl.innerHTML = `<span class="zone-label">${z.name}</span>`;
-      wrap.appendChild(zoneEl);
+      stage.appendChild(zoneEl);
 
       tables
         .filter((t) => t.zone_id === z.id)
@@ -8651,6 +8725,9 @@
           });
         });
     });
+
+    // 다 그린 뒤에 크기를 맞춘다. 그리기 전에는 잴 것이 없다.
+    fitPaymentFloorPlan();
   }
 
   $("#viewListBtn").onclick = () => {

@@ -490,6 +490,13 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
 /* 결제 탭 배치도(payment-floor-plan)는 항상 보기 전용 — 좌석을 잡아서
    옮기는 게 아니라 터치해서 결제 화면을 여는 용도라, 기본 .table-block의
    grab 커서 대신 pointer로 표시한다 (item 22). */
+/* 결제 탭 배치도는 남는 자리에 꽉 차게 키운다 (2026-09-13 사장님: "결제
+   화면을 화면에 꽉차게 키워줄 수 있어?"). 확대는 안쪽 .floor-stage 에만
+   걸고, 바깥 칸은 그 크기에 맞춰 자바스크립트가 높이를 잡는다
+   (admin.js fitPaymentFloorPlan). 확대한 뒤에도 스크롤이 생기면 안 되므로
+   넘치는 것은 숨긴다 — 어차피 화면에 맞춰 줄인 것이라 잘릴 것이 없다. */
+.payment-floor-plan { overflow: hidden; min-height: 0; }
+.floor-stage { position: absolute; top: 0; left: 0; transform-origin: top left; }
 .payment-floor-plan .table-block { cursor: pointer; }
 .payment-floor-plan .table-block:active { cursor: pointer; }
 .payment-floor-plan .zone-block { cursor: default; }
