@@ -1396,6 +1396,24 @@
       activeOrderId = order.id;
       hasPriorOrder = true;
       saveOrderToHistory(order.id);
+      // 포장 카운터는 「주문 한 건 = 손님 한 분」이다. 전화로 오는 포장 주문은
+      // 직원이 같은 화면에서 계속 받는데, 이름과 전화번호가 sessionStorage 에
+      // 남아 있으면 다음 손님 주문도 앞 손님 이름으로 찍힌다 (2026-09-13
+      // 사장님: "그 다음주문부터 안물어봐서 같은 사람으로 찍혀").
+      //
+      // 특히 키오스크 앱에서는 수기 주문이 새 탭을 못 열고 같은 탭에서
+      // 이동하므로(admin.js manualOrderBtn) sessionStorage 가 그대로 살아
+      // 있다. 주문이 들어간 순간 비워서, 다음 주문은 반드시 다시 묻게 한다.
+      if (isCounterTable) {
+        counterCustomerName = null;
+        counterCustomerPhone = null;
+        try {
+          sessionStorage.removeItem(COUNTER_NAME_KEY);
+          sessionStorage.removeItem(COUNTER_PHONE_KEY);
+        } catch (err) {
+          /* 저장이 막힌 기기 */
+        }
+      }
       cart = [];
       renderCartFab();
       $("#cartBackdrop").hidden = true;
@@ -1890,14 +1908,19 @@
   // Counter/takeout QR: instead of a headcount, every order needs the
   // customer's name — that's what staff call out at pickup, alongside the
   // auto-assigned pickup number the server stamps onto the order (see
-  // src/routes/orders.js). Kept in sessionStorage (not localStorage) so it's
-  // asked fresh for a genuinely new visit but survives an accidental reload
-  // of the same tab/visit.
+  // src/routes/orders.js). Kept in sessionStorage (not localStorage) so it
+  // survives an accidental reload mid-order but never leaks into the next
+  // browser session — and cleared outright the moment an order goes through
+  // (see #submitOrderBtn), so every counter order asks again from scratch.
   const COUNTER_NAME_KEY = "hgk_counter_name";
   // Phone number requested alongside the name (2026-09 피드백) so staff can
   // reach a takeout customer if there's an issue with their order — kept in
   // the same sessionStorage-per-visit pattern as the name above.
   const COUNTER_PHONE_KEY = "hgk_counter_phone";
+  // 이 기기에서 마지막으로 등록한 카운터 손님("이름|번호"). 위 두 개와 달리
+  // localStorage 다 — 탭을 새로 열어도 「앞 손님이 누구였나」는 알아야
+  // 주문 기록을 끊을지 이어갈지 판단할 수 있다. 아래 #counterNameConfirmBtn.
+  const COUNTER_LAST_KEY = "hgk_counter_last";
   function showCounterNameModal() {
     $("#counterNameInput").value = "";
     $("#counterPhoneInput").value = "";
@@ -2088,8 +2111,31 @@
     }
     counterCustomerName = name.slice(0, 20);
     counterCustomerPhone = phone.slice(0, 20);
-    sessionStorage.setItem(COUNTER_NAME_KEY, counterCustomerName);
-    sessionStorage.setItem(COUNTER_PHONE_KEY, counterCustomerPhone);
+    // 앞 손님과 다른 분인가. 포장 카운터 화면은 기기 하나를 여러 손님이
+    // 나눠 쓴다 — 직원이 전화 주문을 받을 때가 특히 그렇다. 이름과 번호가
+    // 앞 손님과 다르면 이 기기에 쌓인 주문 기록(hgk_orders_*)을 끊는다.
+    // 안 끊으면 「내역」에 남의 주문이 섞여 합계와 온라인 결제 금액까지
+    // 그 사람 것이 더해지고, hasPriorOrder 가 계속 참이라 불판 첫 주문
+    // 최소수량도 그냥 넘어간다.
+    //
+    // 같은 이름·번호면 한 분이 이어서 주문하는 것이므로 그대로 둔다 —
+    // 방금 넣은 주문을 내역에서 못 보게 되면 온라인 결제를 못 한다.
+    const counterWho = `${counterCustomerName}|${counterCustomerPhone}`;
+    try {
+      if (localStorage.getItem(COUNTER_LAST_KEY) !== counterWho) {
+        localStorage.removeItem(`hgk_orders_${tableNumber}`);
+        hasPriorOrder = false;
+      }
+      localStorage.setItem(COUNTER_LAST_KEY, counterWho);
+    } catch (err) {
+      /* 저장이 막힌 기기 — 기록만 못 끊는다. 주문 자체는 그대로 들어간다 */
+    }
+    try {
+      sessionStorage.setItem(COUNTER_NAME_KEY, counterCustomerName);
+      sessionStorage.setItem(COUNTER_PHONE_KEY, counterCustomerPhone);
+    } catch (err) {
+      /* 저장이 막힌 기기 */
+    }
     $("#counterNameBackdrop").hidden = true;
     resetIdleTimer();
   };
