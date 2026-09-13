@@ -3965,19 +3965,43 @@
   };
 
   // ---------- Orders ----------
-  // loadOrders() now gets called from two places that can overlap: the
-  // steady 4-second poll below, and a one-off call right after a drag
-  // changes an order's status (see wireCardDrag) so the board updates
-  // immediately instead of waiting out the rest of the poll interval.
-  // Two in-flight requests can resolve out of order — if the poll's
-  // request happened to be sent just before the drag's PATCH landed, its
-  // response can still arrive AFTER the drag's own follow-up loadOrders(),
-  // carrying the pre-drag status and silently snapping the card back to
-  // its old column a moment later. ordersRequestSeq makes only the most
-  // recently SENT request's response actually get applied; anything that
-  // resolves late gets dropped instead of overwriting fresher data.
+  // loadOrders() 는 Pusher, 안전망 폴링, 새로고침 버튼에서 동시에 불릴 수
+  // 있다. 평소에는 문제가 없지만 DB 가 느려져 한 요청이 5초 걸리는 동안
+  // 2초 폴링이 계속 새 요청을 만들면, 한 패드가 스스로 여러 요청을 겹쳐
+  // 보내 Atlas 연결 부족을 더 악화시킨다.
+  //
+  // 실제 GET 은 한 번에 하나만 보낸다. 기다리는 동안 여러 알림이 와도
+  // 「끝나고 한 번 더」로 합쳐서, 새 주문 알림은 놓치지 않으면서 요청이
+  // 무한히 쌓이지 않게 한다. ordersRequestSeq 는 드래그/상태 변경 도중 이미
+  // 날아간 응답이 옛 상태를 덮는 것을 계속 막는다.
   let ordersRequestSeq = 0;
-  async function loadOrders() {
+  let ordersLoadInFlight = null;
+  let ordersReloadQueued = false;
+
+  function loadOrders() {
+    if (ordersLoadInFlight) {
+      ordersReloadQueued = true;
+      return ordersLoadInFlight;
+    }
+
+    const run = loadOrdersOnce();
+    ordersLoadInFlight = run;
+    const finish = () => {
+      // 혹시 이후 실행으로 바뀐 뒤라면 그 실행의 상태를 건드리지 않는다.
+      if (ordersLoadInFlight !== run) return;
+      ordersLoadInFlight = null;
+      if (ordersReloadQueued) {
+        ordersReloadQueued = false;
+        loadOrders().catch((e) => console.error("[orders] queued refresh failed:", e));
+      }
+    };
+    // finally()가 만드는 별도 rejected Promise를 방치하지 않도록 성공/실패
+    // 양쪽에서 같은 정리 함수를 부른다.
+    run.then(finish, finish);
+    return run;
+  }
+
+  async function loadOrdersOnce() {
     const seq = ++ordersRequestSeq;
     const res = await fetch("/api/orders");
     if (res.status === 401) return showLogin();

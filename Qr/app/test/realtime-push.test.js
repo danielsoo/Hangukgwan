@@ -162,6 +162,10 @@ const src = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
   // 되돌아가지 않게, 가끔 스스로 다시 불러오는 안전망이 있어야 한다.
   check("★ 알림이 못 올 때를 위한 안전망 타이머가 있다",
     /dataTimer = setInterval\(/.test(adminJs) && /DATA_REFRESH_MS/.test(adminJs));
+  check("★ 느릴 때 주문 조회를 겹쳐 보내지 않고 한 번으로 합친다",
+    /let ordersLoadInFlight = null;/.test(adminJs) &&
+    /if \(ordersLoadInFlight\) \{\s*ordersReloadQueued = true;\s*return ordersLoadInFlight;/.test(adminJs) &&
+    /const run = loadOrdersOnce\(\);/.test(adminJs));
   check("로그아웃하면 그 타이머도 멈춘다", /clearInterval\(dataTimer\)/.test(adminJs));
 
   console.log(out.join("\n"));

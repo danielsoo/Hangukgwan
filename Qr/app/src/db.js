@@ -66,12 +66,21 @@ function getClient() {
     );
   }
   if (!clientPromise) {
-    // maxPoolSize: 서버리스에서는 인스턴스 하나가 동시에 처리하는 요청이
-    // 몇 개뿐인데, 드라이버 기본값은 100이라 인스턴스가 뜰 때마다 최대
-    // 100개의 연결을 열 수 있다. Vercel 이 인스턴스를 여러 개 띄우면 그게
-    // 금방 Atlas 의 연결 한도에 닿고(무료 M0 는 500), 한도 근처에서는
-    // 연결을 새로 여는 데 시간이 걸리기 시작한다. 10이면 충분하다.
-    const client = new MongoClient(uri, { maxPoolSize: 10 });
+    // 서버리스에서는 요청이 느려질수록 Vercel 이 인스턴스를 더 띄운다.
+    // 인스턴스마다 연결 10개를 가질 수 있게 두었더니 M0 의 500개 한도
+    // 직전(약 480개)까지 치솟았고, 연결을 기다리는 모든 API 가 다시 느려져
+    // 인스턴스와 연결이 더 늘어나는 악순환이 생겼다.
+    //
+    // refreshStore 의 세 읽기는 나란히 실행되므로 인스턴스당 3개면 요청을
+    // 직렬화하지 않으면서도 전체 연결 상한을 종전의 30%로 낮춘다. 유휴
+    // 연결은 다음 서버리스 호출까지 계속 점유하지 않게 닫고, 새 연결도 한
+    // 번에 하나씩만 열어 배포/콜드 스타트 때의 연결 폭주를 누른다.
+    const client = new MongoClient(uri, {
+      maxPoolSize: 3,
+      minPoolSize: 0,
+      maxConnecting: 1,
+      maxIdleTimeMS: 30000,
+    });
     clientPromise = client.connect();
   }
   return clientPromise;

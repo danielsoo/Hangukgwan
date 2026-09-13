@@ -402,9 +402,12 @@ class Db {
 }
 
 const theDb = new Db();
+let lastClientOptions = null;
 
 class MongoClient {
-  constructor() {}
+  constructor(uri, options) {
+    lastClientOptions = { uri, options: { ...(options || {}) } };
+  }
   async connect() {
     return this;
   }
@@ -417,4 +420,9 @@ class MongoClient {
   }
 }
 
-module.exports = { MongoClient, ObjectId, __db: theDb };
+module.exports = {
+  MongoClient,
+  ObjectId,
+  __db: theDb,
+  __lastClientOptions: () => lastClientOptions,
+};
