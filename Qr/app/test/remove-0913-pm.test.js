@@ -122,6 +122,29 @@ const mk = (id, over = {}) => ({
   check("★ 원본 24건이 그대로 있다", f3.cols.orders.length === 24, String(f3.cols.orders.length));
   check("★ 표를 안 남긴다 — 다음에 다시 시도한다", !store3.settings[MIGRATION_FLAG]);
 
+  out.push("\n[이미 지워진 것이 섞여 있어도 남은 것만 옮긴다]");
+  // 2026-09-14 에 실제로 이 상황이 났다. 20건짜리 판이 먼저 배포되어 돌았고,
+  // 24건으로 고친 판은 표가 이미 있어서 안 돌았다. 표 이름에 v2 를 붙여 다시
+  // 돌게 했는데, 그때 orders 에는 취소 4건만 남아 있다.
+  const leftovers = [
+    mk(613, { status: "cancelled", total: 100 }),
+    mk(615, { status: "cancelled", total: 200 }),
+    mk(600, { service_period: "am", total: 5000 }), // 오전 — 남아야 한다
+  ];
+  const f4 = fakeDb(leftovers);
+  const store4 = { settings: {} };
+  await applyRemove0913Pm20260914(store4, {
+    getDb: () => f4.handle, connectDB: async () => {}, saveFields: async () => {},
+  });
+  check("★ 남아 있던 것만 옮긴다", f4.cols[ARCHIVE].length === 2, JSON.stringify(f4.cols[ARCHIVE].map((r) => r._id)));
+  check("★ 이미 없는 번호를 찾지 못해도 죽지 않는다", f4.cols.orders.length === 1 && f4.cols.orders[0]._id === 600);
+  check("표를 남긴다", !!store4.settings[MIGRATION_FLAG]);
+
+  out.push("\n[표 이름이 내용과 함께 움직인다]");
+  // 마이그레이션이 「무엇을 할지」가 바뀌면 표도 새로 달아야 한다. 같은 표로
+  // 내용만 고치면 이미 돈 데이터베이스에는 영영 안 닿는다.
+  check("★ 24건으로 바뀐 판은 v2 표를 쓴다", /_v2$/.test(MIGRATION_FLAG), MIGRATION_FLAG);
+
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
