@@ -12,6 +12,35 @@
   let categories = [];
   let cart = []; // { itemId, qty, option, spice, note, orderType, addons, item }
 
+  // 담긴 것 한 벌을 가리키는 표.
+  //
+  // 2026-09-14 사장님: "폰주문시 주문송출버튼 누르면 로딩이라는 화면없이 그냥
+  // 잠깐 멈추고 있어. 그래서 다시 누르게 되는데" — 오늘 52건 중 6건.
+  //
+  // 화면에서 버튼을 잠그는 것만으로는 부족하다. 손님 폰이 답을 잃어버리면
+  // 「보냈는데 못 받은」 상태가 되고, 그때 다시 누르는 것은 잘못이 아니다.
+  // 그래서 서버가 같은 표를 두 번 받으면 두 번째는 새로 만들지 않고 처음
+  // 만든 주문을 그대로 돌려준다 (src/routes/orders.js).
+  //
+  // 담긴 것이 바뀌면 표도 바뀐다 — 같은 것을 일부러 한 번 더 시키는 손님을
+  // 막으면 안 되고, 그건 담긴 것을 다시 채우는 일이기 때문이다.
+  let cartToken = newCartToken();
+  let submitting = false;
+
+  function newCartToken() {
+    try {
+      if (window.crypto && typeof crypto.randomUUID === "function") return crypto.randomUUID();
+    } catch (e) {
+      /* 오래된 WebView */
+    }
+    return (
+      Date.now().toString(36) +
+      "-" +
+      Math.random().toString(36).slice(2, 10) +
+      Math.random().toString(36).slice(2, 10)
+    );
+  }
+
   // Mirrors src/addons.js's server-side parser exactly — a menu item's
   // `addons` field is "Name:Price" pairs separated by commas (e.g.
   // "볶음밥 추가:80,사리면 추가:50", or a free swap like "飯換冬粉:0").
@@ -1089,7 +1118,7 @@
       });
     }
     $("#itemSheetBackdrop").hidden = true;
-    renderCartFab();
+    cartChanged();
   };
 
   function cartTotal() {
@@ -1110,6 +1139,17 @@
     return pct ? Math.round((subtotal * (100 - pct)) / 100) : subtotal;
   }
 
+  // 담긴 것이 바뀌었다. 표를 새로 만든다 — 「같은 것을 다시 보내는 것」과
+  // 「내용을 바꿔 새로 보내는 것」이 여기서 갈린다.
+  //
+  // renderCartFab() 안에 두면 안 된다. 그 함수는 VIP 상태가 바뀔 때도,
+  // 통화를 바꿀 때도, 화면을 처음 그릴 때도 불린다. 답을 못 받아 다시
+  // 누르는 손님이 그 사이에 표를 새로 달면 서버가 두 번째를 못 알아본다.
+  function cartChanged() {
+    cartToken = newCartToken();
+    renderCartFab();
+  }
+
   function renderCartFab() {
     const fab = $("#cartFab");
     if (cart.length === 0) {
@@ -1124,6 +1164,10 @@
   $("#cartFab").onclick = () => {
     renderCart();
     $("#cartBackdrop").hidden = false;
+    // 위치를 미리 잡아둔다. 버튼을 누른 뒤에 잡기 시작하면 그 자리에서 몇
+    // 초가 그냥 멈추는데, 손님 눈에는 아무 일도 안 일어난 것으로 보인다.
+    // 장바구니를 여는 순간 잡아두면 누를 때는 이미 답이 있다.
+    warmGeolocation();
   };
   $("#cartClose").onclick = () => ($("#cartBackdrop").hidden = true);
   $("#cartBackdrop").addEventListener("click", (e) => {
@@ -1168,17 +1212,17 @@
         // if the cart ends up under it.
         c.qty = Math.max(1, c.qty - 1);
         renderCart();
-        renderCartFab();
+        cartChanged();
       };
       row.querySelector('[data-act="plus"]').onclick = () => {
         c.qty = Math.min(20, c.qty + 1);
         renderCart();
-        renderCartFab();
+        cartChanged();
       };
       row.querySelector('[data-act="remove"]').onclick = () => {
         cart.splice(idx, 1);
         renderCart();
-        renderCartFab();
+        cartChanged();
       };
       wrap.appendChild(row);
     });
@@ -1193,6 +1237,28 @@
     }
     $("#cartTotalBig").textContent = money(estimatedCartTotal());
     $("#submitOrderBtn").disabled = cart.length === 0;
+  }
+
+  // 마지막으로 미리 잡아본 시각. 장바구니를 여닫을 때마다 다시 잡지 않는다
+  // (getCurrentPosition 의 maximumAge 가 5분이라 어차피 그 값을 쓴다).
+  let warmGeoAt = 0;
+  function warmGeolocation() {
+    if (storeLat == null || storeLng == null) return;
+    if (Date.now() - warmGeoAt < 60000) return;
+    warmGeoAt = Date.now();
+    // 실패해도 아무것도 하지 않는다. 여기서 잡히면 빠른 것이고, 안 잡혀도
+    // 주문은 좌표 없이 들어간다(아래 submitOrderRequest 주석).
+    getGeolocation().catch(() => {});
+  }
+
+  // 보내는 중이라는 것을 눈에 보이게 한다. 잠그기만 하고 아무 말이 없으면
+  // 손님은 「안 눌렸구나」로 읽고 한 번 더 누른다.
+  function setSubmitBusy(on) {
+    const btn = $("#submitOrderBtn");
+    if (!btn) return;
+    btn.disabled = on || cart.length === 0;
+    btn.classList.toggle("is-busy", on);
+    btn.textContent = on ? t("submitting") : t("placeOrder");
   }
 
   // Resolves { lat, lng } from the browser, or rejects. Only called when
@@ -1265,7 +1331,11 @@
 
   async function submitOrderFlow(skipPartyWarning) {
     if (cart.length === 0) return;
-    const btn = $("#submitOrderBtn");
+    // 이미 보내는 중이면 아무것도 하지 않는다. 예전에는 위치를 다 잡은
+    // **뒤에야** 버튼을 잠갔다 — 그 사이 최대 8초 동안 버튼은 멀쩡히 살아
+    // 있었고 화면에는 아무 표시도 없었다. 그 8초에 한 번 더 눌리면 두 흐름이
+    // 나란히 돌아 같은 주문이 두 번 들어갔다.
+    if (submitting) return;
 
     // Belt-and-suspenders: party size is required before an order can go
     // through, even if something let the modal get skipped/dismissed.
@@ -1281,18 +1351,34 @@
       return;
     }
 
+    // 여기서부터 네트워크를 탄다. 누른 그 순간에 잠그고, 그 순간에
+    // 「送出中…」 으로 바꾼다.
+    submitting = true;
+    setSubmitBusy(true);
+    try {
+      await submitOrderRequest(skipPartyWarning);
+    } finally {
+      submitting = false;
+      setSubmitBusy(false);
+      // 위에서 무조건 풀어준 잠금을, 영업시간 밖이면 다시 건다.
+      applyOrderingState();
+    }
+  }
+
+  async function submitOrderRequest(skipPartyWarning) {
     // 低消 안내 (2026-09-11 사장님). 예전에는 「메뉴 개수 < 어른 수」였다.
     //
     // 막지는 않는다 — 확인을 누르면 그대로 주문된다. 低消는 가게 규칙이고
     // 직원이 사정에 따라 넘어가 주기도 하는데, 화면이 손님을 가로막아 버리면
     // 그 여지가 없어진다. 사장님도 「안내 문구」라고 하셨다.
     if (!skipPartyWarning && !isCounterTable) {
-      // 물어보는 동안 버튼이 살아 있으면 두 번 눌린다.
-      btn.disabled = true;
       const spent = await refreshMinSpend();
-      btn.disabled = false;
       const have = spent + cartTotal();
       if (minSpendRequired > 0 && have < minSpendRequired) {
+        // 안내를 읽는 동안은 보내는 중이 아니다. 확인을 누르면 이 흐름이
+        // 처음부터 다시 들어온다(그때 다시 잠근다).
+        submitting = false;
+        setSubmitBusy(false);
         showPartyWarningModal(have, minSpendRequired, () => submitOrderFlow(true));
         return;
       }
@@ -1322,8 +1408,6 @@
       }
     }
 
-    btn.disabled = true;
-    btn.textContent = t("submitting");
     let grillMinBody = null;
     // Signed-in customers carry their Firebase ID token along so the server
     // can independently verify it and look up their linked VIP card itself
@@ -1346,6 +1430,8 @@
         headers: authHeaders,
         body: JSON.stringify({
           tableNumber,
+          // 두 번 눌렸을 때 두 번째를 새 주문으로 만들지 않기 위한 표.
+          clientRequestId: cartToken,
           // Each cart line carries its own orderType now (chosen per dish in
           // the item sheet) — see src/routes/orders.js, which validates and
           // stores order_type per item instead of once for the whole order.
@@ -1409,7 +1495,7 @@
         }
       }
       cart = [];
-      renderCartFab();
+      cartChanged();
       $("#cartBackdrop").hidden = true;
       showConfirmation(order);
     } catch (e) {
@@ -1441,17 +1527,16 @@
         const name = mi ? nameFor(mi) : "";
         alert((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(grillMinBody.min) + (name ? ` (${name})` : ""));
       } else alert(t("submitFailed"));
-    } finally {
-      btn.disabled = false;
-      btn.textContent = t("placeOrder");
-      // 위에서 무조건 풀어준 잠금을, 영업시간 밖이면 다시 건다.
-      applyOrderingState();
     }
-  };
+  }
 
   function saveOrderToHistory(id) {
     const key = `hgk_orders_${tableNumber}`;
     const list = JSON.parse(localStorage.getItem(key) || "[]");
+    // 같은 번호를 두 번 적지 않는다. 두 번 눌렀을 때 서버는 처음 만든 주문을
+    // 그대로 돌려주는데(src/routes/orders.js), 그것을 그냥 밀어 넣으면 내
+    // 주문 내역에 같은 것이 두 줄로 보인다.
+    if (list.includes(id)) return;
     list.push(id);
     localStorage.setItem(key, JSON.stringify(list.slice(-10)));
   }

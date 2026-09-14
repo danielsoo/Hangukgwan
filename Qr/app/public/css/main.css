@@ -516,6 +516,15 @@ button.is-closed:hover {
   padding: 14px; font-size: 15px; font-weight: 700; cursor: pointer;
 }
 .submit-btn:disabled { opacity: 0.6; }
+/* 보내는 중. 글자만으로는 「멈춘 것」과 「일하는 중」이 구별되지 않아서,
+   돌아가는 것을 하나 붙인다 (2026-09-14: 손님이 한 번 더 눌렀다). */
+.submit-btn.is-busy { opacity: 1; }
+.submit-btn.is-busy::after {
+  content: ""; display: inline-block; width: 15px; height: 15px; margin-left: 10px;
+  vertical-align: -2px; border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff; border-radius: 50%; animation: hg-spin 0.7s linear infinite;
+}
+@keyframes hg-spin { to { transform: rotate(360deg); } }
 
 /* Confirmation */
 .confirm-sheet { text-align: center; }

@@ -147,6 +147,10 @@ class Collection {
       if (clash) {
         const err = new Error(`E11000 duplicate key error: ${field}`);
         err.code = 11000;
+        // 진짜 드라이버가 같이 주는 것들. 어느 인덱스에서 겹쳤는지 보고
+        // 판단하는 코드가 시험에서도 같은 길을 타야 한다.
+        err.keyPattern = { [field]: 1 };
+        err.keyValue = { [field]: val };
         throw err;
       }
     }

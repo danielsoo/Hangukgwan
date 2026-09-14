@@ -182,6 +182,26 @@ function checkLocation(lat, lng) {
   return dist > radius ? "out_of_range" : null;
 }
 
+/**
+ * 손님 화면이 「담긴 것 한 벌」마다 만들어 보내는 표
+ * (public/js/order.js 의 cartToken).
+ *
+ * 2026-09-14 사장님: "폰주문시 주문송출버튼 누르면 로딩이라는 화면없이 그냥
+ * 잠깐 멈추고 있어. 그래서 다시 누르게 되는데" — 그날 52건 중 6건이 그랬다.
+ *
+ * 화면 쪽에서 버튼을 잠그는 것은 고쳤지만, 그것만으로는 부족하다. 손님 폰이
+ * 답을 못 받는 경우 — 터널, 엘리베이터, 와이파이가 바뀌는 순간 — 에는
+ * 주문이 들어갔는지 화면이 알 방법이 없고, 그때 다시 누르는 것은 잘못이
+ * 아니다. 그러니 **서버가** 두 번째를 알아보고 새로 만들지 않아야 한다.
+ *
+ * 형식에 안 맞는 것은 없는 것으로 친다. 이 표 때문에 주문이 막히면 안 된다 —
+ * 옛 화면은 아예 안 보내고, 그 주문도 그대로 들어가야 한다.
+ */
+function requestIdOf(body) {
+  const raw = String((body || {}).clientRequestId || "").trim();
+  return /^[A-Za-z0-9_-]{8,64}$/.test(raw) ? raw : null;
+}
+
 // Customer: place a new order
 router.post("/", async (req, res) => {
   const { tableNumber, items, note, lat, lng } = req.body || {};
@@ -194,6 +214,21 @@ router.post("/", async (req, res) => {
   const isTestDevice = testMode.isTest(req, store);
   if (!tableNumber || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "invalid_order" });
+  }
+
+  // 같은 표를 단 주문이 이미 있으면 그것을 그대로 돌려준다. 두 번째 누름은
+  // **아무 일도 하지 않는다** — 빌지도 다시 안 나가고 번호도 안 늘어난다.
+  // 손님 화면은 이것을 정상 응답으로 받아 확인 화면을 띄우므로, 손님 눈에는
+  // 그냥 「주문됐다」로 보인다.
+  //
+  // 아래 insert 에서 한 번 더 막는다(고유 인덱스). 여기 조회는 정말로
+  // 나란히 들어온 두 요청 중 뒤엣것이 이미 끝난 앞엣것을 보는 흔한 경우를
+  // 값싸게 처리하는 것이고, 같은 순간에 둘 다 조회를 통과하는 경우는
+  // 데이터베이스가 막는다.
+  const clientRequestId = requestIdOf(req.body);
+  if (clientRequestId) {
+    const already = await findOrders({ client_request_id: clientRequestId }, { limit: 1 });
+    if (already.length) return res.status(200).json(already[0]);
   }
 
   // 영업시간 밖에는 손님이 주문할 수 없다 (2026-09-10 사장님: "영업시간이
@@ -481,6 +516,9 @@ router.post("/", async (req, res) => {
     // 테스트 기기가 넣은 것이면 표를 남긴다. 이 한 칸이 있는 주문만
     // 「테스터 모드 종료」때 지워진다 — 없으면 진짜 주문이다.
     ...testMode.tag(req, store),
+    // 두 번 눌린 것을 알아보는 표(위 requestIdOf). 안 보낸 화면의 주문에는
+    // 이 칸을 안 만든다 — 고유 인덱스가 부분 인덱스라 없는 것끼리는 안 겹친다.
+    ...(clientRequestId ? { client_request_id: clientRequestId } : {}),
   };
   // 이 기기를 이 착석에 묶어 둔다. 자리 화면을 거치지 않고 들어온 기기도
   // 이 순간부터는 「이 착석의 기기」가 되고, 다음 손님이 앉으면 걸린다.
@@ -506,8 +544,25 @@ router.post("/", async (req, res) => {
       await insertOrder(order);
       break;
     } catch (e) {
-      if (!(e && e.code === 11000) || attempt >= 4) throw e;
+      if (!(e && e.code === 11000)) throw e;
+      // 겹친 것이 「같은 표」인지 「같은 주문번호」인지를, 드라이버가 알려주는
+      // 오류 모양(keyPattern 같은 것)에 기대지 않고 직접 물어본다. 그 모양은
+      // 드라이버 판마다 다르고, 틀리면 손님 주문이 500 으로 사라진다.
+      //
+      // 표를 단 주문이 이미 있다 = 정확히 같은 순간에 두 번 눌린 것이다.
+      // 위 조회는 둘 다 통과했지만 데이터베이스는 하나만 받는다. 처음 것을
+      // 그대로 돌려준다 — 빌지도 다시 안 나가고 번호도 안 늘어난다.
+      if (clientRequestId) {
+        const already = await findOrders({ client_request_id: clientRequestId }, { limit: 1 });
+        if (already.length) return res.status(200).json(already[0]);
+      }
+      if (attempt >= 4) throw e;
+      // 표를 단 주문이 없다 = 겹친 것은 주문번호다. 새 번호로 다시 넣는다
+      // (배포 교체 순간의 옛 인스턴스가 같은 번호를 잡은 경우).
       order.id = await reserveId("orders");
+      // 번호를 바꿔도 계속 겹친다면 표 쪽이 문제다. 여기까지 왔으면 표를
+      // 떼고 넣는다 — 드물게 둘이 되는 편이 하나도 안 들어가는 것보다 낫다.
+      if (attempt >= 2) delete order.client_request_id;
     }
   }
   rememberOrder(order);

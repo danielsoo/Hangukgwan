@@ -32,6 +32,7 @@ const { applyServicePeriodBackfill20260910 } = require("./src/migrations/2026-09
 const { applyRuntimeIndexes20260913 } = require("./src/migrations/2026-09-13-runtime-indexes");
 const { applyTableOrdersIndex20260913 } = require("./src/migrations/2026-09-13-table-orders-index");
 const { applyBoardOrdersIndex20260914 } = require("./src/migrations/2026-09-14-board-orders-index");
+const { applyOrderRequestIdIndex20260914 } = require("./src/migrations/2026-09-14-order-request-id-index");
 const { needsRecentOrders, needsOrderIdFloor } = require("./src/requestDataScope");
 
 const app = express();
@@ -339,6 +340,7 @@ async function storeRefreshAndFlush(req, res, next) {
       requestLog.markIndexReady();
       await applyTableOrdersIndex20260913(store, { getDb, connectDB, saveFields });
       await applyBoardOrdersIndex20260914(store, { getDb, connectDB, saveFields });
+      await applyOrderRequestIdIndex20260914(store, { getDb, connectDB, saveFields });
       migratedOnce = true;
     }
     // 실제로 주문번호를 새로 만드는 요청에서만 과거 번호 안전판을 확인한다.
