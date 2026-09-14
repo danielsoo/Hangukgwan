@@ -62,17 +62,23 @@ function instrument(handle) {
       col.findOne = async (...args) => {
         // 판 번호 한 칸만 읽은 것인지, 문서를 통째로 읽은 것인지 구분한다.
         const proj = (args[1] && args[1].projection) || {};
-        if (activeLog) activeLog.push({ what: `${name}.findOne`, at: Date.now(), revOnly: proj.rev === 1 });
+        const entry = { what: `${name}.findOne`, at: Date.now(), revOnly: proj.rev === 1, end: null };
+        if (activeLog) activeLog.push(entry);
         await sleep(DELAY);
-        return realFindOne(...args);
+        const r = await realFindOne(...args);
+        entry.end = Date.now();
+        return r;
       };
       col.find = (...args) => {
         const cur = realFind(...args);
         const realToArray = cur.toArray.bind(cur);
         cur.toArray = async () => {
-          if (activeLog) activeLog.push({ what: `${name}.find`, at: Date.now() });
+          const entry = { what: `${name}.find`, at: Date.now(), end: null };
+          if (activeLog) activeLog.push(entry);
           await sleep(DELAY);
-          return realToArray();
+          const r = await realToArray();
+          entry.end = Date.now();
+          return r;
         };
         return cur;
       };
@@ -109,18 +115,25 @@ function instrument(handle) {
   // 시각의 간격을 아주 좁게 잡으면 기계가 바쁜 날 그냥 깜빡인다 —
   // 2026-09-12 에 실제로 한 번 깜빡였다(간격 30ms, 기준 30ms). 진짜 증거는
   // 아래의 전체 시간이고, 이 줄은 그 보조다.
+  // **겹쳤는가**를 본다. 시작 간격이나 전체 시간으로 재면 기계가 바쁜 날
+  // 그냥 깜빡인다 — 2026-09-12 과 2026-09-14 에 실제로 그랬다. 두 번째가
+  // 첫 번째가 **끝나기 전에** 출발했다면 그것이 나란히 갔다는 증거고, 그
+  // 사실은 기계가 느려도 빨라도 변하지 않는다.
   check(
-    "★ 둘째가 첫째를 기다리지 않고 출발한다",
-    reads.length >= 2 && Math.abs(reads[0].at - reads[1].at) < DELAY,
-    `간격 ${reads.length >= 2 ? Math.abs(reads[0].at - reads[1].at) : "?"}ms (지연 ${DELAY}ms)`
+    "★ 둘째가 첫째가 끝나기 전에 출발한다 (겹친다)",
+    reads.length >= 2 && reads[0].end !== null && reads[1].at < reads[0].end,
+    reads.length >= 2 ? `첫째 ${reads[0].at}~${reads[0].end}, 둘째 시작 ${reads[1].at}` : "읽기가 둘이 아니다"
   );
   // 처음 한 번은 두 값이다 — 판 번호를 묻고(나란히 주문도), 모르는 판이니
   // 통째로 한 번 더 받는다. 여기서 줄이려던 것은 이 첫 번이 아니라 **그
   // 다음부터 매번** 내던 37KB 다.
+  // 줄줄이 섰다면 전체가 「읽기 하나하나의 합」에 가까워진다. 나란히 갔다면
+  // 그보다 뚜렷하게 짧다. 기계 속도가 아니라 **관계**를 본다.
+  const sumOfReads = reads.reduce((a, r) => a + Math.max(0, (r.end || r.at) - r.at), 0);
   check(
-    `★ 처음에는 두 값 안에 끝난다 (${DELAY * 2}ms)`,
-    took < DELAY * 2.8,
-    `${took}ms`
+    "★ 전체가 「하나하나의 합」보다 짧다 (줄줄이 서지 않았다)",
+    took < sumOfReads,
+    `전체 ${took}ms, 합 ${sumOfReads}ms`
   );
 
   out.push("\n[두 번째부터는 37KB 를 다시 받지 않는다]");

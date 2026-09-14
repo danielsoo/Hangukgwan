@@ -16,6 +16,7 @@ const { applyMenuFixes20260904 } = require("./src/migrations/2026-09-04-menu-fix
 const { applyTakeoutOptions20260907 } = require("./src/migrations/2026-09-07-takeout-options");
 const { applyOrdersCollection20260910 } = require("./src/migrations/2026-09-10-orders-collection");
 const { applyStoreRev20260914 } = require("./src/migrations/2026-09-14-store-rev");
+const { applyRemove0913Pm20260914 } = require("./src/migrations/2026-09-14-remove-0913-pm-orders");
 const { applyServiceStart20260910 } = require("./src/migrations/2026-09-10-service-start");
 const { applySplitCollections20260910 } = require("./src/migrations/2026-09-10-split-collections");
 const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-hours");
@@ -282,6 +283,9 @@ async function storeRefreshAndFlush(req, res, next) {
       // store 문서에 판 번호를 달아준다 — 이게 있어야 매 요청이 37KB 를
       // 다시 안 받는다(src/db.js STORE_REV).
       await applyStoreRev20260914(store, { storeWrite, saveFields });
+      // 9/13 오후 주문 20건을 장부에서 뺀다 (사장님 요청, 2026-09-14).
+      // 지우지 않고 보관함으로 옮긴다 — 그 파일 맨 위 주석에 이유가 있다.
+      await applyRemove0913Pm20260914(store, { getDb, connectDB, saveFields });
       // 9/8 저녁 이전은 테스트 — 결산과 주문 목록에서 뺀다(src/serviceStart.js).
       await applyServiceStart20260910(store, { save });
       // 결제기록·정산·예약도 밖으로 — 지금은 옮길 게 몇 줄뿐이라 가장 싸다.
