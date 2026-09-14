@@ -80,6 +80,27 @@ const read = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8")
   check("★ 끝나는 시각을 보고 정한다", /until > Date\.now\(\)/.test(html), "시각을 안 보고 짐작한다");
   check("표를 단다", /setAttribute\("data-admin-seen", "1"\)/.test(html), "");
   check("★ 표가 있으면 로그인 화면을 안 그린다", /html\[data-admin-seen="1"\] #loginScreen \{ display: none; \}/.test(css), "");
+  // 이 두 줄이 순서를 잃으면 고침이 **조용히** 안 듣는다.
+  //
+  // 표는 인라인 스크립트가 달지만, 실제로 로그인 화면을 안 그리게 하는 것은
+  // CSS 다. 그 CSS 가 <head> 에서 먼저 읽히지 않으면 로그인 화면이 한 번
+  // 그려진 뒤에 사라진다 — 고치기 전과 똑같아 보인다.
+  const cssLinkAt = html.indexOf('href="/css/admin.css"');
+  const headEndAt = html.indexOf("</head>");
+  check("★ 스타일이 head 안에서 먼저 읽힌다", cssLinkAt > 0 && cssLinkAt < headEndAt, `${cssLinkAt}, ${headEndAt}`);
+  check("★ 짐작이 body 맨 앞에서 돈다", scriptAt > headEndAt, `${scriptAt}, ${headEndAt}`);
+
+  // 가게 태블릿은 앱(WebView) 안에서 돈다. 거기서 DOM 저장이 꺼져 있으면
+  // localStorage 가 통째로 막혀 이 고침이 아무 일도 안 한다 — 사장님이
+  // 문제를 보시는 곳이 정확히 그 앱이다.
+  let mainActivity = "";
+  try {
+    mainActivity = read("..", "..", "kiosk-app", "src", "tw", "hangukgwan", "kiosk", "MainActivity.java");
+  } catch (e) {
+    mainActivity = ""; // 못 찾으면 아래에서 실패로 적는다 — 조용히 넘어가지 않는다
+  }
+  check("★ 앱에서 DOM 저장이 켜져 있다", /setDomStorageEnabled\(true\)/.test(mainActivity), "앱에서는 기억이 안 된다");
+
   check(
     "저장이 막힌 기기에서도 화면은 뜬다",
     /try \{[\s\S]{0,400}hg_admin_until[\s\S]{0,400}catch/.test(html),
