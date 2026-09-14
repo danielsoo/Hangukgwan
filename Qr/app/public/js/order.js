@@ -599,7 +599,10 @@
     // 사장님이 위치 확인을 꺼두셨으면 좌표를 아예 안 들고 온다. 그러면
     // 아래 주문 흐름에서 위치를 묻는 단계 자체가 사라진다 — 권한 창도 안
     // 뜨고, 잡히기를 기다리는 시간도 없다.
-    const locationOn = s.location_check_enabled !== false;
+    // 서버는 참/거짓으로 내려준다(src/locationGate.js). 글자 "false" 까지
+    // 같이 보는 것은, 배포 사이에 옛 서버가 내려준 값을 들고 있는 화면이
+    // 있을 수 있어서다 — 그때 위치 제한이 조용히 되살아나면 안 된다.
+    const locationOn = s.location_check_enabled !== false && s.location_check_enabled !== "false";
     storeLat = !locationOn || Number.isNaN(lat) ? null : lat;
     storeLng = !locationOn || Number.isNaN(lng) ? null : lng;
     onlinePaymentEnabled = !!s.online_payment_enabled;

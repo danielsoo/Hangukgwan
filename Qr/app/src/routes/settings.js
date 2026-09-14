@@ -7,6 +7,7 @@ const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, servic
 const { nowLocal } = require("../time");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const { normalize: normalizeOrderHours, orderingState } = require("../openHours");
+const locationGate = require("../locationGate");
 const { hhmm } = require("../availability");
 const canEditSettings = requirePermission("settingsEdit");
 
@@ -53,9 +54,9 @@ function publicSettings() {
   // Whether the customer-facing "온라인 결제" button should show at all —
   // see /payment routes below and public/js/order.js.
   map.online_payment_enabled = !!store.settings.online_payment_enabled;
-  // 저장된 적이 없으면 켜진 것으로 본다 — 지금까지 쓰던 대로다. 끄는 것은
-  // 사장님이 직접 끈 경우뿐이어야 한다.
-  map.location_check_enabled = store.settings.location_check_enabled !== false;
+  // 켜졌는지 꺼졌는지는 한 곳에서만 답한다(src/locationGate.js). 이미
+  // 저장돼 있는 글자 "false" 도 거기서 제대로 읽는다.
+  map.location_check_enabled = locationGate.isOn(store.settings);
   // Header logo mode (order.html store-avatar, and this settings page's own
   // live preview) — see public/js/season.js. "auto" (default) picks the
   // season from today's date; it can also be forced to one specific season
@@ -121,7 +122,11 @@ router.put("/", canEditSettings, async (req, res) => {
   for (const key of PUBLIC_KEYS) {
     if (key === "store_cover_photo" || key === "store_logo") continue; // set only via the photo upload routes
     if (key === "soldout_release_time") continue; // 형식을 확인해서 아래에서 따로 넣는다
-    if (b[key] != null) store.settings[key] = String(b[key]);
+    // 참/거짓은 참/거짓으로 둔다. 예전에는 여기서 전부 String() 으로
+    // 감쌌는데, 다른 칸이 전부 글자라 그게 자연스러워 보였다. 그 바람에
+    // 체크박스의 false 가 글자 "false" 가 됐고, 읽는 쪽의 `!== false` 가
+    // 전부 「켜짐」으로 답했다 — 껐다고 믿은 위치 제한이 살아 있었다.
+    if (b[key] != null) store.settings[key] = typeof b[key] === "boolean" ? b[key] : String(b[key]);
   }
   if (releasePicked) store.settings.soldout_release_time = releasePicked;
   else if (releaseBlank) delete store.settings.soldout_release_time;

@@ -32,6 +32,7 @@ function resolveSelectedAddons(mi, requestedNames) {
 }
 
 const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
+const locationGate = require("../locationGate");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
 const { openOrdersForTable, operationalOrderById, ordersForSeating, ordersForNewOrder, paidInSeating } = require("../orderQueries");
@@ -169,7 +170,7 @@ function checkLocation(lat, lng) {
   // 사장님이 끌 수 있다 (2026-09-10: "위치 기반을 on off 할 수 있게도 해줘").
   // 꺼두면 손님 폰에 위치 권한을 묻지도 않는다(public/js/order.js) — 주문
   // 화면이 그만큼 빨라지고, 권한 창 때문에 멈칫하는 손님도 없어진다.
-  if (store.settings.location_check_enabled === false) return null;
+  if (!locationGate.isOn(store.settings)) return null;
   const storeLat = parseFloat(store.settings.store_lat);
   const storeLng = parseFloat(store.settings.store_lng);
   if (Number.isNaN(storeLat) || Number.isNaN(storeLng)) return null; // feature not configured yet
