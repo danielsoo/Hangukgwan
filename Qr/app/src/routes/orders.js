@@ -1168,7 +1168,15 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
     // 집계해줘".
     if (paymentMethod) order.items[i].payment_method = paymentMethod;
   });
-  if (paymentMethod) order.payment_method = paymentMethod;
+  // ★ 주문 전체에는 아직 도장을 찍지 않는다.
+  //
+  // 2026-09-14 사장님: 19번 테이블이 740 중 250 만 받았는데 결산 목록에는
+  // 「결제: 현금」이 떠서 740 을 다 받은 것처럼 보였다. 여기서 주문 전체에
+  // payment_method 를 박고 있었기 때문이다. 250 만 냈는데 주문 한 건이
+  // 통째로 「현금으로 결제된 주문」의 모양을 갖는다.
+  //
+  // 결제수단은 품목마다 이미 적고 있다(위 forEach). 주문 전체의 값은
+  // **전부 결제됐을 때** 정해도 늦지 않고, 그래야 화면이 거짓말을 안 한다.
   if (vipDiscountType || manualDiscount) {
     recordDiscount(order, vipDiscountType, manualDiscount, computeDiscountAmount(vipDiscountType, manualDiscount, order.items, selectedIdx));
   }
@@ -1180,6 +1188,11 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   const allPaid = order.items.every((it) => it.paid);
   if (allPaid) {
     order.status = "paid";
+    // 이제 주문 전체의 결제수단을 정한다. 나눠 낸 것이 전부 같은 수단이면
+    // 그것이고, 섞여 있으면 마지막에 누른 것을 쓴다. 결산의 결제수단별
+    // 집계가 이 값을 본다(src/settlement.js).
+    const methods = [...new Set(order.items.map((it) => it.payment_method).filter(Boolean))];
+    order.payment_method = methods.length === 1 ? methods[0] : paymentMethod || order.payment_method || null;
   }
 
   await saveOrder(order);

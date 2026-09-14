@@ -944,6 +944,9 @@
       settlementPaidCount: "결제 완료 주문",
       settlementProblemCount: "⚠️ 미결제/문제 주문",
       settlementCancelledCount: "취소된 주문",
+      settlementPartialPaid: "부분결제로 미리 받은 돈",
+      settlementPartialNotCounted: "아직 매출에 안 잡힘",
+      settlementPartialOutstanding: "남은 돈",
       settlementProblemTitle: "⚠️ 결제되지 않은 주문",
       settlementProblemHint: "아래 주문들은 선택한 기간 기준 아직 결제 완료 처리가 안 되어 있어요. 언제 주문했고 무엇을 시켰는지 확인해서 놓친 결제가 있는지 확인해주세요.",
       settlementItemsTitle: "품목별 판매 현황",
@@ -1665,6 +1668,9 @@
       settlementPaidCount: "已結帳訂單",
       settlementProblemCount: "⚠️ 未結帳/異常訂單",
       settlementCancelledCount: "已取消訂單",
+      settlementPartialPaid: "部分結帳已先收款",
+      settlementPartialNotCounted: "尚未計入營業額",
+      settlementPartialOutstanding: "尚未收款",
       settlementProblemTitle: "⚠️ 尚未結帳的訂單",
       settlementProblemHint: "以下訂單在選定的期間內目前尚未標記為已結帳。請確認下單時間與內容，避免漏收款項。",
       settlementItemsTitle: "品項銷售明細",
@@ -12204,6 +12210,22 @@
     }
     if (data.cancelled_order_count > 0) {
       alerts.push(`<div class="stl-alert info">${T("settlementCancelledCount")} ${data.cancelled_order_count}${T("settlementCountSuffix")} · ${nt(data.cancelled_amount)}</div>`);
+    }
+    // 부분결제로 미리 받은 돈 — 매출에는 아직 안 잡혀 있다.
+    //
+    // 2026-09-14 사장님: 19번 테이블이 740 중 250 만 냈는데 결산 어디에도
+    // 그 250 이 없었다. 매출은 「상태 = 결제완료」인 주문만 세기 때문이다.
+    // 마감에 현금을 세면 그만큼 안 맞는데, 화면에는 안 맞는 이유가 안 적혀
+    // 있었다. 이 줄이 그 이유다.
+    const partial = data.partial_paid || {};
+    if ((partial.received || 0) > 0) {
+      const where = (partial.orders || [])
+        .map((o) => `${fmtOrderTableTag(o.table_number)} ${nt(o.outstanding)}`)
+        .join(", ");
+      alerts.push(
+        `<div class="stl-alert warn">💵 ${T("settlementPartialPaid")} ${nt(partial.received)} · ${T("settlementPartialNotCounted")}` +
+          ` · ${T("settlementPartialOutstanding")} ${nt(partial.outstanding)} (${where})</div>`
+      );
     }
     const alertsEl = $("#settlementAlerts");
     alertsEl.innerHTML = alerts.join("");

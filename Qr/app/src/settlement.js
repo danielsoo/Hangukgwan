@@ -204,6 +204,44 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     return nowMs - placedMs >= STALE_OPEN_ORDER_MS;
   });
 
+  // 부분결제로 **미리 받은 돈.**
+  //
+  // 2026-09-14 사장님: 19번 테이블이 740 중 250 만 냈는데 결산에는 그 250 이
+  // 한 푼도 안 잡혀 있었다. 매출은 「상태 = 결제완료」인 주문만 세는데, 그
+  // 주문은 아직 조리중이라 세어지지 않는다. 서랍에는 250 이 들어와 있고
+  // 장부에는 0 이다. 마감에 현금을 세면 그만큼 안 맞는다.
+  //
+  // 매출 숫자에 섞지 않는다. 그 주문이 다 결제되면 740 **전체**가 그때
+  // 매출로 잡히는데, 여기서 250 을 미리 더해두면 같은 돈이 두 번 세어진다.
+  // 대신 **따로 한 줄**로 보여준다.
+  //
+  //     결산 매출 + 부분결제로 받은 돈 = 서랍에 있어야 할 돈
+  //
+  // 그리고 「아직 못 받은 돈」도 같이 적는다. 손님이 나머지를 안 내고 가면
+  // 그 자리가 사장님 눈에 걸려야 한다.
+  const lineAmount = (it) =>
+    ((it.unit_price || 0) + (it.selected_addons || []).reduce((a, x) => a + (x.price || 0), 0)) * (it.qty || 0);
+  const partialPaidOrders = rangeOrders
+    .filter((o) => OPEN_STATUSES.includes(o.status) && (o.items || []).some((it) => it.paid))
+    .map((o) => {
+      const items = o.items || [];
+      return {
+        id: o.id,
+        table_number: o.table_number,
+        created_at: o.created_at,
+        total: o.total || 0,
+        received: items.filter((it) => it.paid).reduce((a, it) => a + lineAmount(it), 0),
+        outstanding: items.filter((it) => !it.paid).reduce((a, it) => a + lineAmount(it), 0),
+        last_paid_at: items.map((it) => it.paid_at).filter(Boolean).sort().pop() || null,
+      };
+    })
+    .sort((a, b) => a.id - b.id);
+  const partialPaid = {
+    orders: partialPaidOrders,
+    received: partialPaidOrders.reduce((a, o) => a + o.received, 0),
+    outstanding: partialPaidOrders.reduce((a, o) => a + o.outstanding, 0),
+  };
+
   const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
   // 결제수단별 집계 (2026-09-07 사장님 요청: "결제종류... 정산에서도 서로
@@ -592,6 +630,8 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     paid_order_count: paidOrders.length,
     cancelled_order_count: cancelledOrders.length,
     problem_order_count: problemOrders.length,
+    // 부분결제로 미리 받았지만 아직 매출에 안 잡힌 돈 (위 주석 참고).
+    partial_paid: partialPaid,
     item_breakdown: itemBreakdown,
     payment_method_breakdown: paymentMethodBreakdown,
     payment_method_total: paymentMethodTotal,
