@@ -34,6 +34,11 @@ input, select, button, textarea { font-family: inherit; }
 
    대시보드(로그인 후)는 손대지 않았다 — 매일 몇 시간씩 보는 업무
    화면이라 밝은 쪽이 낫고, 이번 요청은 "로그인하는 페이지"였다. */
+/* 지난번 로그인이 아직 살아 있으면 로그인 화면을 그리지 않는다. 위
+   admin.html 의 인라인 스크립트가 이 표를 단다. 짐작이 틀렸으면
+   showLogin() 이 표를 떼고 평소대로 보여준다. */
+html[data-admin-seen="1"] #loginScreen { display: none; }
+
 .login-screen {
   min-height: 100vh;
   display: flex;

@@ -2747,20 +2747,82 @@
   async function checkAuth() {
     // 아래에서 부르는 열세 개의 답을 한 번에 받아 둔다. 여기서 실패해도
     // 그냥 예전처럼 하나씩 나갈 뿐이라, 이 줄이 화면을 막지는 않는다.
-    await primeBoot();
-    const res = await fetch("/api/auth/me");
-    const data = await res.json();
-    if (data.isAdmin) {
-      currentRole = data.role || "owner";
-      staffPermissions = data.permissions || staffPermissions;
-      renderStaffPasswordStatus(data.staffPasswordSet !== false);
-      showDashboard();
-    } else {
-      showLogin();
+    // 「누구인가」와 「열세 개의 답」을 **나란히** 물어본다.
+    //
+    // 예전에는 primeBoot() 를 먼저 다 기다렸다. 그 한 번의 응답에는 주문
+    // 목록과 메뉴까지 들어 있어서 제일 큰 것인데, 화면을 로그인에서
+    // 대시보드로 바꾸는 데 필요한 것은 그중 auth/me 한 조각뿐이다. 큰 것을
+    // 기다리는 동안 로그인 화면이 그대로 떠 있었다.
+    //
+    // 이제 작은 것 하나만 기다려 화면을 바꾸고, 큰 것은 뒤에서 계속 받는다.
+    // 화면을 채우기 전에는 그것도 기다린다 — 안 기다리면 화면이 열세 개를
+    // 하나씩 따로 부르게 되어, 고쳐둔 것이 도로 풀린다.
+    const booting = primeBoot();
+    let data;
+    try {
+      const res = await nativeFetch("/api/auth/me");
+      data = await res.json();
+    } catch (e) {
+      // 못 물어봤다. 화면을 건드리지 않는다 — 네트워크가 한 번 끊겼다고
+      // 로그인 화면으로 내보내면, 멀쩡히 로그인돼 있는 직원이 장사 중에
+      // 비밀번호를 다시 쳐야 한다.
+      console.warn("auth check failed:", e);
+      await booting.catch(() => {});
+      return;
     }
+    if (!data.isAdmin) {
+      await booting.catch(() => {});
+      showLogin();
+      return;
+    }
+    currentRole = data.role || "owner";
+    staffPermissions = data.permissions || staffPermissions;
+    // 다음에 이 기기가 열릴 때는 기다림 없이 바로 대시보드로 뜬다.
+    rememberSignedIn(data.expiresAt);
+    renderStaffPasswordStatus(data.staffPasswordSet !== false);
+    // 화면부터 바꾼다. 내용을 채우는 것은 큰 것이 도착한 뒤다.
+    $("#loginScreen").hidden = true;
+    $("#dashboard").hidden = false;
+    await booting.catch(() => {});
+    showDashboard();
+  }
+
+  // 「지난번에 로그인돼 있었다」는 짐작을 적고 지우는 한 곳.
+  //
+  // 2026-09-14 사장님: "로딩할 때마다 로그인 화면이 떠. 그거 없애줄 수 있어?"
+  //
+  // 로그아웃된 게 아니었다 — 세션은 12시간짜리다. 화면이 뜰 때 로그인 화면인
+  // 채로 시작해서, /api/auth/me 답을 받아야 대시보드로 바뀌었다. 그 사이가
+  // 사장님이 보신 그 화면이다.
+  //
+  // 끝나는 시각은 서버가 알려준다(src/routes/auth.js 의 expiresAt). 그래서
+  // 이 짐작은 세션보다 오래 살지 않는다 — 오래 살면 반대로 「대시보드가
+  // 떴다가 로그인으로 튕기는」 화면이 된다.
+  const ADMIN_SEEN_KEY = "hg_admin_until";
+  function rememberSignedIn(expiresAt) {
+    try {
+      // 서버가 시각을 안 주는 옛 배포와 섞여 돌 수 있다. 그때는 짐작하지
+      // 않는다 — 모르는 채로 오래 믿는 것보다 한 번 더 기다리는 게 낫다.
+      const until = expiresAt ? Date.parse(expiresAt) : 0;
+      if (until > Date.now()) localStorage.setItem(ADMIN_SEEN_KEY, String(until));
+      else localStorage.removeItem(ADMIN_SEEN_KEY);
+    } catch (e) {
+      /* 저장이 막힌 기기 */
+    }
+  }
+  function forgetSignedIn() {
+    try {
+      localStorage.removeItem(ADMIN_SEEN_KEY);
+    } catch (e) {
+      /* 저장이 막힌 기기 */
+    }
+    document.documentElement.removeAttribute("data-admin-seen");
   }
 
   function showLogin() {
+    // 짐작이 틀렸다(또는 로그아웃했다). 표를 떼야 CSS 가 로그인 화면을
+    // 다시 그린다 — 안 떼면 hidden 을 풀어도 계속 숨어 있다.
+    forgetSignedIn();
     $("#loginScreen").hidden = false;
     $("#dashboard").hidden = true;
   }
@@ -2904,6 +2966,9 @@
   $("#logoutBtn").onclick = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     stopPolling();
+    // 「지난번에 로그인돼 있었다」는 짐작을 지운다. 안 지우면 다음에 열 때
+    // 대시보드가 떴다가 로그인으로 튕긴다 — 고치려던 것의 정확히 반대다.
+    forgetSignedIn();
     // 화면을 **통째로 새로 연다.** showLogin() 만 부르면 앞사람이 보던 것이
     // DOM 에 그대로 남고, 다음 사람이 로그인하면 그 화면을 그대로 물려받는다.
     //

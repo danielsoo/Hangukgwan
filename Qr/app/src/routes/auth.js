@@ -93,7 +93,25 @@ router.get("/me", (req, res) => {
         };
   // staffPasswordSet: 사장 화면이 "직원 비밀번호가 아직 정해지지 않았다" 를
   // 띄우기 위한 것. 해시 자체는 절대 내보내지 않는다.
-  res.json({ isAdmin: true, role, permissions, staffPasswordSet: !!store.settings.staff_password_hash });
+  // 이 세션이 언제 끝나는가.
+  //
+  // 2026-09-14 사장님: "로딩할 때마다 로그인 화면이 떠. 그거 없애줄 수 있어?"
+  //
+  // 관리자 화면은 뜰 때 「로그인 화면」인 채로 시작해서, 이 답을 받아야
+  // 대시보드로 바꾼다. 그 사이가 사장님이 보신 그 화면이다. 화면이 지난번
+  // 답을 기억해 두면 그 사이를 없앨 수 있는데, 기억이 세션보다 오래 살면
+  // 반대로 「대시보드가 떴다가 로그인으로 튕기는」 화면이 된다.
+  //
+  // 그래서 끝나는 시각을 같이 준다. 화면은 그 시각까지만 기억을 믿는다.
+  // 비밀도 아니다 — 자기 세션이 언제 끝나는지 본인에게 알려주는 것뿐이다.
+  const expires = req.session.cookie && req.session.cookie.expires;
+  res.json({
+    isAdmin: true,
+    role,
+    permissions,
+    staffPasswordSet: !!store.settings.staff_password_hash,
+    expiresAt: expires ? new Date(expires).toISOString() : null,
+  });
 });
 
 // Each role changes its own password (owner changes the owner password,

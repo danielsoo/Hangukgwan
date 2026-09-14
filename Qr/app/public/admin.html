@@ -17,6 +17,20 @@
 <body>
 
 <!-- LOGIN -->
+<script>
+  // 지난번에 로그인돼 있었고 그 세션이 아직 안 끝났으면, 로그인 화면을
+  // 아예 그리지 않는다 — 2026-09-14 사장님: "로딩할 때마다 로그인 화면이 떠."
+  //
+  // 이건 **자물쇠가 아니라 짐작**이다. 진짜 확인은 /api/auth/me 가 하고
+  // (public/js/admin.js checkAuth), 짐작이 틀렸으면 그때 제자리로 돌린다.
+  // 끝나는 시각은 서버가 알려준 것이라 짐작이 세션보다 오래 살지 않는다.
+  try {
+    var until = Number(localStorage.getItem("hg_admin_until") || 0);
+    if (until > Date.now()) document.documentElement.setAttribute("data-admin-seen", "1");
+  } catch (e) {
+    /* 저장이 막힌 기기 — 예전처럼 로그인 화면부터 보인다 */
+  }
+</script>
 <div id="loginScreen" class="login-screen">
   <div class="login-shell">
     <a class="login-brand" href="/">
