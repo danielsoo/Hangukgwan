@@ -136,7 +136,8 @@ const body = (token) => ({ tableNumber: "7", items: CART, ...(token ? { clientRe
 
   const lockAt = flow.indexOf("submitting = true");
   const busyAt = flow.indexOf("setSubmitBusy(true)");
-  const geoAt = flow.indexOf("getGeolocation()");
+  // 주문 흐름이 위치를 기다리기 시작하는 자리.
+  const geoAt = flow.indexOf("locationOrNothing()");
   const minSpendAt = flow.indexOf("refreshMinSpend()");
   const fetchAt = flow.indexOf('fetch("/api/orders"');
   check("다시 누르면 그냥 돌아간다", /if \(submitting\) return;/.test(flow), "재진입 잠금이 없다");
@@ -189,11 +190,15 @@ const body = (token) => ({ tableNumber: "7", items: CART, ...(token ? { clientRe
     showPartyWarningModal() {},
     storeLat: 24.83,
     storeLng: 121.0,
-    getGeolocation() {
+    // 주문 흐름이 부르는 것은 locationOrNothing 이다(그 안에서 기다림에
+    // 상한을 두고 acquireGeolocation 을 공유한다 — 그쪽은
+    // test/order-submit-speed.test.js 가 따로 잰다).
+    locationOrNothing() {
       geoStarted++;
       busyAtGeoStart = busy;
       return new Promise((resolve) => geoWaiting.push(() => resolve({ lat: 24.83, lng: 121.0 })));
     },
+    authHeadersNow: async () => ({ "Content-Type": "application/json" }),
     firebaseAuth: null,
     fetch: async (url, opt) => {
       posts.push(JSON.parse(opt.body));

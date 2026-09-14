@@ -25,6 +25,7 @@ function check(name, cond, extra = "") {
   else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
 }
 const read = (...p) => fs.readFileSync(path.join(__dirname, "..", ...p), "utf8");
+const pending = [];
 const orders = read("src", "routes", "orders.js");
 const orderJs = read("public", "js", "order.js");
 const adminJs = read("public", "js", "admin.js");
@@ -46,12 +47,43 @@ out.push("[1] 서버 — 멀 때만 막는다");
 
 out.push("\n[2] 손님 화면 — 위치를 못 잡아도 주문이 나간다");
 {
-  const failBlock = orderJs.slice(orderJs.indexOf("coords = await getGeolocation()"));
-  check("★ 실패해도 되돌아가지 않는다", !/alert\(t\("locationErrorMsg"\)\);\s*\n\s*return;/.test(failBlock.slice(0, 1500)), "");
-  check("좌표 없이 보낸다", /coords = null;/.test(failBlock.slice(0, 1500)), "");
+  // 여기는 원래 코드 글자를 보고 있었다("coords = null; 이라고 적혀 있는가").
+  // 그 검사는 2026-09-14 에 이 부분을 고쳤을 때 찾던 글자가 사라지면서
+  // **조용히 무의미해졌다** — slice(-1) 이 되어 아무것도 안 재는데 초록으로
+  // 남았다. 같은 날 location-toggle 시험이 통째로 그래서 고장을 못 잡았다.
+  //
+  // 그래서 실제 코드를 꺼내 돌린다. 권한을 거부하는 폰을 흉내내고, 정말로
+  // 주문이 나가는지 본다.
+  const helpers = orderJs.slice(
+    orderJs.indexOf("  let warmGeoAt = 0;"),
+    orderJs.indexOf("  function setSubmitBusy(on) {")
+  );
+  check("위치 헬퍼를 찾는다", helpers.length > 200, `${helpers.length}자`);
+
+  const denied = () => Promise.reject(new Error("PERMISSION_DENIED"));
+  const api = new Function(
+    "getGeolocation", "storeLat", "storeLng",
+    `${helpers}
+     return { locationOrNothing };`
+  )(denied, 24.83, 121.0);
+
+  pending.push(
+    api.locationOrNothing().then(
+      (coords) => {
+        check("★ 권한을 거부해도 오류로 끝나지 않는다", true, "");
+        check("★ 좌표 없이 보낸다", coords === null, JSON.stringify(coords));
+      },
+      (e) => {
+        check("★ 권한을 거부해도 오류로 끝나지 않는다", false, String(e && e.message));
+        check("★ 좌표 없이 보낸다", false, "거절됐다");
+      }
+    )
+  );
+
+  // 위치를 못 잡는 흔한 이유가 실내다. 이 두 줄이 그 대책이다.
   check("★ 실내에서 안 잡히는 고정밀 위치를 끈다", /enableHighAccuracy: false/.test(orderJs), "");
   check("한 번 잡은 위치를 다시 쓴다", /maximumAge: 300000/.test(orderJs), "");
-  check("멀다는 응답은 그대로 손님에게 알린다", /out_of_range.*locationOutOfRangeMsg|locationOutOfRangeMsg/.test(orderJs), "");
+  check("멀다는 응답은 그대로 손님에게 알린다", /locationOutOfRangeMsg/.test(orderJs), "");
 }
 
 out.push("\n[3] 직원 화면 — 사실만 적는다");
@@ -63,6 +95,24 @@ out.push("\n[3] 직원 화면 — 사실만 적는다");
   check("★ 경고가 아니라 사실 표시로 보인다 (빨강 아님)", /\.order-card-loc-unverified[\s\S]{0,200}#eef1f5/.test(css), "");
 }
 
-console.log(out.join("\n"));
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+// 기다리다 안 끝나면 **실패로 적는다.** 그냥 기다리면 노드가 조용히 0 으로
+// 빠져나가 아무 줄도 안 남는다 — 고장 난 것이 통과처럼 보인다. 2026-09-14 에
+// 이걸로 한 번 속았다.
+Promise.race([
+  Promise.all(pending).then(() => true),
+  new Promise((r) => setTimeout(() => r(false), 5000)),
+]).then((finished) => {
+  check("확인이 전부 끝난다", finished === true, "위치 확인 하나가 안 끝났다");
+  console.log(out.join("\n"));
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+});
+
+// 던져진 거절이 아무도 안 받는 채로 남으면 그것도 고장이다 — 조용히 넘어가지
+// 않게 여기서 잡아 실패로 적는다.
+process.on("unhandledRejection", (e) => {
+  check("처리 안 된 거절이 없다", false, String((e && e.message) || e));
+  console.log(out.join("\n"));
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(1);
+});

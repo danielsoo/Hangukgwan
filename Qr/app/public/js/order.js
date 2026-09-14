@@ -1250,8 +1250,85 @@
     if (Date.now() - warmGeoAt < 60000) return;
     warmGeoAt = Date.now();
     // 실패해도 아무것도 하지 않는다. 여기서 잡히면 빠른 것이고, 안 잡혀도
-    // 주문은 좌표 없이 들어간다(아래 submitOrderRequest 주석).
-    getGeolocation().catch(() => {});
+    // 주문은 좌표 없이 들어간다(아래 locationOrNothing 주석).
+    acquireGeolocation().catch(() => {});
+  }
+
+  // 잡고 있는 중이면 그것을 같이 쓴다.
+  //
+  // 미리 잡기 시작해 놓고 주문할 때 getGeolocation() 을 새로 부르면, 미리
+  // 잡아둔 보람이 없다 — 브라우저는 새 요청을 처음부터 다시 처리한다.
+  let geoInFlight = null;
+  function acquireGeolocation() {
+    if (geoInFlight) return geoInFlight;
+    const p = getGeolocation();
+    geoInFlight = p;
+    const clear = () => {
+      if (geoInFlight === p) geoInFlight = null;
+    };
+    // then 의 두 갈래를 다 채운다 — 아무도 안 기다리는 사이에 실패하면
+    // 「처리 안 된 거절」이 된다.
+    p.then(clear, clear);
+    return p;
+  }
+
+  // 위치를 **얼마나** 기다릴 것인가.
+  //
+  // 2026-09-14 사장님: "손님이 qr 을 읽고 주문했을 때 주문완료를 보는 시간이
+  // 너무 길다고 피드백이 왔어."
+  //
+  // getCurrentPosition 의 제한 시간은 8초다. 실내에서 안 잡히면 그 8초를 다
+  // 쓰고 실패하는데, 그 8초는 **손님이 완료 화면을 못 보고 기다리는 시간**
+  // 그대로다. 그리고 8초를 기다려서 얻는 것이 없다 — 못 잡으면 어차피 좌표
+  // 없이 보내고, 서버는 그런 주문을 받아 표만 달아 직원에게 보여준다
+  // (claude/2026-09-10-location-gate.md: "확인이 안 되는 것을 위반으로 세지
+  // 않는다"). 오래 기다릴수록 손해만 커지는 기다림이다.
+  //
+  // 기지국·와이파이 기반 위치는 잡힐 것이면 1~2초 안에 잡힌다. 그래서 여기서
+  // 끊는다. 끊어도 뒤에서는 계속 잡고 있고, 잡히면 브라우저가 그 값을 5분간
+  // 들고 있으므로(maximumAge) **다음 주문**은 그 값을 바로 쓴다.
+  const GEO_WAIT_MS = 2500;
+  function locationOrNothing() {
+    if (storeLat == null || storeLng == null) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => {
+        if (done) return;
+        done = true;
+        resolve(v);
+      };
+      const timer = setTimeout(() => finish(null), GEO_WAIT_MS);
+      const settle = (v) => {
+        clearTimeout(timer);
+        finish(v);
+      };
+      // 여기서 막지 않는다.
+      //
+      // 2026-09-10 저녁, 사장님: "이런 오류가 꽤 많은 테이블에서 일어나" —
+      // 「無法取得您的位置」 창이 뜨고 주문 버튼이 아무것도 안 했다. 자리에
+      // 앉아 계신 손님이 밥을 못 시킨다.
+      //
+      // 위치를 보는 목적은 「QR 사진을 찍어 집에서 주문하는 것」을 막는
+      // 것이지 앞에 앉은 손님을 돌려보내는 게 아니다. 못 잡는 이유는 대개
+      // 손님 잘못이 아니다 — 실내, 권한 거부, 새 도메인이라 권한이 처음부터
+      // 다시, 기기 설정. 그 전부를 「주문 불가」로 묶으면 잃는 게 훨씬 크다.
+      acquireGeolocation().then(settle, () => settle(null));
+    });
+  }
+
+  // 로그인한 손님의 Firebase 토큰. 서버가 직접 확인해서 VIP 카드를 찾는다
+  // (src/routes/orders.js) — 할인은 화면이 주장하는 값이 아니다. 토큰을 못
+  // 새로 받으면 그냥 일반 주문으로 보낸다. 그것 때문에 주문을 막지 않는다.
+  async function authHeadersNow() {
+    const headers = { "Content-Type": "application/json" };
+    if (firebaseAuth && firebaseAuth.currentUser) {
+      try {
+        headers.Authorization = `Bearer ${await firebaseAuth.currentUser.getIdToken()}`;
+      } catch (e) {
+        /* 토큰 갱신 실패 — 일반 주문으로 보낸다 */
+      }
+    }
+    return headers;
   }
 
   // 보내는 중이라는 것을 눈에 보이게 한다. 잠그기만 하고 아무 말이 없으면
@@ -1369,6 +1446,15 @@
   }
 
   async function submitOrderRequest(skipPartyWarning) {
+    // 기다려야 하는 것 셋을 **동시에** 시작한다.
+    //
+    // 예전에는 하나씩 줄을 세웠다 — 低消를 물어보고, 그게 끝나야 위치를
+    // 잡기 시작하고, 위치가 잡혀야 주문을 보냈다. 셋은 서로 아무 상관이
+    // 없는데도 손님은 그 합을 다 기다렸다. 이제는 제일 오래 걸리는 하나만큼만
+    // 기다린다.
+    const coordsPromise = locationOrNothing();
+    const headersPromise = authHeadersNow();
+
     // 低消 안내 (2026-09-11 사장님). 예전에는 「메뉴 개수 < 어른 수」였다.
     //
     // 막지는 않는다 — 확인을 누르면 그대로 주문된다. 低消는 가게 규칙이고
@@ -1387,29 +1473,7 @@
       }
     }
 
-    let coords = null;
-    if (storeLat != null && storeLng != null) {
-      try {
-        coords = await getGeolocation();
-      } catch (e) {
-        // 여기서 막지 않는다.
-        //
-        // 2026-09-10 저녁, 사장님: "이런 오류가 꽤 많은 테이블에서 일어나"
-        // — 「無法取得您的位置」 창이 뜨고 주문 버튼이 아무것도 안 했다.
-        // 자리에 앉아 계신 손님이 밥을 못 시킨다.
-        //
-        // 위치를 막는 목적은 「QR 사진을 찍어 집에서 주문하는 것」을 멈추는
-        // 것이지 앞에 앉은 손님을 돌려보내는 게 아니다. 위치를 못 잡는 이유는
-        // 대개 손님 잘못이 아니다 — 실내, 브라우저 권한 거부, 새 도메인이라
-        // 권한이 처음부터 다시, 기기 설정. 그걸 전부 「주문 불가」로 처리하면
-        // 얻는 것보다 잃는 게 훨씬 크다.
-        //
-        // 그래서 좌표 없이 보낸다. 서버는 「멀리 있다」가 확인된 경우에만
-        // 막고, 확인이 안 된 주문에는 표를 달아 직원 화면에 보여준다.
-        // 자리에 손님이 앉아 있는지는 직원이 눈으로 안다.
-        coords = null;
-      }
-    }
+    const coords = await coordsPromise;
 
     let grillMinBody = null;
     // Signed-in customers carry their Firebase ID token along so the server
@@ -1418,15 +1482,7 @@
     // client asserts. Harmless to always attempt this when signed in, even
     // with no card linked yet: the server just finds nothing and charges
     // full price, same as any other customer.
-    const authHeaders = { "Content-Type": "application/json" };
-    if (firebaseAuth && firebaseAuth.currentUser) {
-      try {
-        const idToken = await firebaseAuth.currentUser.getIdToken();
-        authHeaders.Authorization = `Bearer ${idToken}`;
-      } catch (e) {
-        /* couldn't refresh the token — submit as a normal (non-VIP) order rather than blocking checkout over it */
-      }
-    }
+    const authHeaders = await headersPromise;
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
