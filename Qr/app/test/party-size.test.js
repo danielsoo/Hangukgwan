@@ -57,8 +57,25 @@ out.push("\n[취소로는 절대 지우지 않는다]");
 const fs = require("fs");
 const path = require("path");
 const ordersSrc = fs.readFileSync(path.join(__dirname, "..", "src", "routes", "orders.js"), "utf8");
-check("주문 상태 변경에서 결제일 때만 인원수를 정리한다",
+check("결제일 때 인원수를 정리한다",
   /if \(status === "paid"\)[\s\S]{0,400}clearPartySizeIfSettled\(/.test(ordersSrc));
+
+// 취소에도 **딱 하나의 예외**가 생겼다 (2026-09-14).
+//
+// 6번 테이블: 결제가 끝난 뒤 남아 있던 주문 하나가 취소되면서, 받을 돈이
+// 하나도 없는데 자리만 잡힌 채로 멈췄다. 다음 손님 폰이 인원수를 묻지 않고
+// 앞 손님의 착석 시각을 물려받아 **앞 손님 계산서를 보여줬다.**
+//
+// 그래서 취소도 자리를 비울 수 있게 하되, 조건 둘이 **모두** 맞아야 한다.
+//   · 남은 미결제 주문이 없다
+//   · 이 착석에서 돈을 낸 적이 있다 (paidInSeating)
+// 결제가 한 번도 없는 자리는 여전히 안 건드린다 — 앉아 계신 손님이 한 접시
+// 취소한 경우다. 그게 이 규칙이 원래 지키려던 것이다.
+check("★ 취소는 「다 내고 나간 자리」에서만 인원수를 정리한다",
+  /status === "cancelled"[\s\S]{0,900}!remaining\.length[\s\S]{0,400}paidInSeating\([\s\S]{0,300}clearPartySizeIfSettled\(/.test(ordersSrc),
+  "취소 경로가 조건 없이 지우면 앉아 계신 손님이 쫓겨난다");
+check("★ 취소 경로가 「돈 낸 적 있나」를 반드시 본다",
+  /status === "cancelled"[\s\S]{0,900}paidInSeating\(/.test(ordersSrc));
 check("예전의 \"살아 있는 주문이 없으면 지운다\" 규칙이 남아 있지 않다",
   !/party_size = null/.test(ordersSrc), "orders.js 안에서 직접 지우는 코드가 남아 있다");
 

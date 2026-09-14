@@ -45,6 +45,43 @@ async function operationalOrderById(store, id) {
   return created >= from ? order : null;
 }
 
+/**
+ * 지금 착석에서 **돈을 낸 주문이 하나라도 있었나.** 있으면 하나만 돌려준다.
+ *
+ * 2026-09-14 사장님(손님 폰 사진과 함께): "이미 먹고 나간 손님것까지 주문
+ * 내용에 떠."
+ *
+ * 6번 테이블 기록이 이랬다.
+ *
+ *     12:05:47  4명 착석
+ *     12:06:20  주문 658 (1,640)
+ *     12:09:07  주문 660 (650)
+ *     12:09:23  658 결제완료   ← 660 이 남아 있어 자리를 안 비운다 (맞다)
+ *     12:13:21  660 취소       ← 여기서 멈췄다
+ *
+ * 취소는 일부러 자리를 안 비운다 — 재료가 떨어져 한 접시를 취소했다고 앉아
+ * 계신 손님을 내보내면 안 되니까. 그 규칙 자체는 옳다.
+ *
+ * 그런데 이 경우는 **결제된 주문이 있고 남은 미결제가 없다.** 손님은 다 내고
+ * 나갔는데 자리만 잡혀 있다. 그러면 다음 손님 폰은 인원수를 묻지 않고 앞
+ * 손님의 착석 시각을 그대로 물려받아, 앞 손님의 「已結帳 1,640」이 그대로
+ * 뜬다. 남의 계산서를 보게 되는 것이다.
+ *
+ * 「돈을 낸 적이 있는가」가 그 둘을 가른다. 결제가 한 번도 없는 자리는
+ * 아직 앉아 계신 손님이므로 건드리지 않는다.
+ *
+ * 한 건만 있으면 되므로 limit 1 에 번호만 가져온다.
+ */
+async function paidInSeating(store, table) {
+  if (!table || table.is_counter) return [];
+  const seat = seatingStartOf(table);
+  if (!seat) return [];
+  return findOrders(
+    { table_number: String(table.number), status: "paid", created_at: { $gte: seat } },
+    { limit: 1, projection: { id: 1 } }
+  );
+}
+
 async function ordersForSeating(store, table, opts = {}) {
   if (!table || table.is_counter) return [];
   const seat = seatingStartOf(table);
@@ -78,6 +115,7 @@ async function ordersForNewOrder(store, table, today) {
 
 module.exports = {
   openFilter,
+  paidInSeating,
   openOrdersForTable,
   openOrdersForAll,
   operationalOrderById,

@@ -34,7 +34,7 @@ function resolveSelectedAddons(mi, requestedNames) {
 const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
-const { openOrdersForTable, operationalOrderById, ordersForSeating, ordersForNewOrder } = require("../orderQueries");
+const { openOrdersForTable, operationalOrderById, ordersForSeating, ordersForNewOrder, paidInSeating } = require("../orderQueries");
 
 const router = express.Router();
 
@@ -932,6 +932,26 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   if (status === "paid") {
     const remaining = await openOrdersForTable(store, order.table_number);
     partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, order.table_number);
+  } else if (status === "cancelled") {
+    // 취소는 원래 자리를 안 비운다 — 재료가 떨어져 한 접시를 취소했다고 앉아
+    // 계신 손님을 내보내면 안 되니까. 그 규칙은 그대로다.
+    //
+    // 다만 **다 내고 나간 자리**는 예외다. 2026-09-14 에 6번 테이블이 그랬다.
+    // 결제가 끝난 뒤 남아 있던 주문 하나가 취소되면서, 받을 돈이 하나도 없는데
+    // 자리만 잡힌 채로 멈췄다. 그러면 다음 손님 폰이 인원수를 묻지 않고 앞
+    // 손님의 착석 시각을 물려받아 **앞 손님 계산서를 보여준다**
+    // (src/orderQueries.js paidInSeating 주석에 그날 기록이 있다).
+    //
+    // 가르는 기준은 「이 착석에서 돈을 낸 적이 있는가」다. 한 번도 없으면
+    // 아직 앉아 계신 손님이므로 건드리지 않는다.
+    const remaining = await openOrdersForTable(store, order.table_number);
+    if (!remaining.length) {
+      const table = store.tables.find((t) => String(t.number) === String(order.table_number));
+      const paid = await paidInSeating(store, table);
+      if (paid.length) {
+        partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, order.table_number);
+      }
+    }
   }
   // 인원수는 그 테이블의 네 칸만 쓴다 — 문서를 통째로 쓰면 그 사이 들어온
   // 주문이 방금 지운 인원수를 되살린다(src/partySize.js savePartySize).
