@@ -60,15 +60,17 @@ const mk = (id, over = {}) => ({
   check("★ 9/13 오후 결제완료면 대상", isTarget(mk(1)));
   check("★ 오전 것은 대상 아님", !isTarget(mk(1, { service_period: "am" })));
   check("★ 다른 날은 대상 아님", !isTarget(mk(1, { created_at: "2026-09-14 17:30:00" })));
-  check("★ 취소된 것은 대상 아님", !isTarget(mk(1, { status: "cancelled" })));
-  check("★ 안 끝난 주문은 대상 아님", !isTarget(mk(1, { status: "served" })));
-  check("번호 20개", ORDER_IDS.length === 20, String(ORDER_IDS.length));
+  check("★ 취소된 것도 대상 (오후 전부를 뺀다)", isTarget(mk(1, { status: "cancelled" })));
+  // 안 끝난 주문은 아직 받을 돈이다. 그 번호에 앉아 있어도 지우지 않는다.
+  check("★ 안 끝난 주문은 대상 아님 — 받을 돈이다", !isTarget(mk(1, { status: "served" })));
+  check("★ 조리중도 대상 아님", !isTarget(mk(1, { status: "preparing" })));
+  check("번호 24개 (결제 20 + 취소 4)", ORDER_IDS.length === 24, String(ORDER_IDS.length));
 
-  out.push("\n[돌리면 그 20건만 빠진다]");
+  out.push("\n[돌리면 그 24건만 빠진다]");
   const rows = [
     ...ORDER_IDS.map((id) => mk(id)),
     mk(600, { service_period: "am", total: 5000 }),     // 9/13 오전 — 남아야 한다
-    mk(626, { status: "cancelled" }),                   // 9/13 오후 취소 — 남아야 한다
+    mk(626, { status: "served", total: 3000 }),         // 오후지만 안 끝난 주문 — 남아야 한다
     mk(700, { created_at: "2026-09-14 11:00:00", service_period: "am" }), // 오늘 — 남아야 한다
   ];
   const { cols, handle } = fakeDb(rows);
@@ -79,9 +81,9 @@ const mk = (id, over = {}) => ({
   });
   check("★ orders 에 3건만 남는다", cols.orders.length === 3, JSON.stringify(cols.orders.map((r) => r._id)));
   check("★ 9/13 오전 매출은 그대로", cols.orders.some((r) => r._id === 600));
-  check("★ 9/13 오후 취소건은 그대로", cols.orders.some((r) => r._id === 626));
+  check("★ 안 끝난 오후 주문은 그대로 (받을 돈)", cols.orders.some((r) => r._id === 626));
   check("★ 오늘 주문은 그대로", cols.orders.some((r) => r._id === 700));
-  check("보관함에 20건", cols[ARCHIVE].length === 20, String(cols[ARCHIVE].length));
+  check("보관함에 24건", cols[ARCHIVE].length === 24, String(cols[ARCHIVE].length));
   check("★ 보관함에 원본 금액이 남아 있다", cols[ARCHIVE].every((r) => r.total === 1000));
   check("언제·왜 지웠는지 적어둔다", cols[ARCHIVE].every((r) => r.removed_at && r.removed_reason));
   check("표를 남긴다", !!store.settings[MIGRATION_FLAG] && !!saved);
@@ -117,7 +119,7 @@ const mk = (id, over = {}) => ({
   await applyRemove0913Pm20260914(store3, {
     getDb: () => f3.handle, connectDB: async () => {}, saveFields: async () => {},
   });
-  check("★ 원본 20건이 그대로 있다", f3.cols.orders.length === 20, String(f3.cols.orders.length));
+  check("★ 원본 24건이 그대로 있다", f3.cols.orders.length === 24, String(f3.cols.orders.length));
   check("★ 표를 안 남긴다 — 다음에 다시 시도한다", !store3.settings[MIGRATION_FLAG]);
 
   console.log(out.join("\n"));

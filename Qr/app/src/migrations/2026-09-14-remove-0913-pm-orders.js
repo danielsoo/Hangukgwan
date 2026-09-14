@@ -1,18 +1,22 @@
 // 9/13 오후 주문 20건을 장부에서 뺀다 (2026-09-14).
 //
 // 사장님(2026-09-14): "어제 (9/13 오후) 결제 및 미결제, 토탈 20건에 대한
-// 자료를 삭제해줘. 즉, 9/13 오후자료를 오늘 9/14 오전자료로 모두 통합하려고."
+// 자료를 삭제해줘." → 이어서 "그냥 13일 오후 전부를 없애줘."
+//
+// 그래서 결제 20건만이 아니라 **오후 24건 전부**다(취소 4건 포함).
 //
 // 실제 매출 기록을 지우는 일이라 지우기 전에 확인한 값들을 여기 남긴다.
 // 나중에 "이게 왜 없지"가 되었을 때 이 파일이 답이 되어야 한다.
 //
-//     9/13 오전   결제 43건  35,335
-//     9/13 오후   결제 20건  17,145   ← 이것
-//     9/13 오후   취소  4건           ← 손대지 않는다
+//     9/13 오전   결제 43건  35,335   취소 5건   ← 그대로 둔다
+//     9/13 오후   결제 20건  17,145   취소 4건   ← 24건 전부 뺀다
 //     9/14        0건
 //
-//     대상 20건 전부: 날짜 2026-09-13 / service_period "pm" / status "paid"
-//     생성 시각 17:01 ~ 17:58
+//     대상 24건 전부: 날짜 2026-09-13 / service_period "pm"
+//     상태는 paid 20 + cancelled 4, 생성 시각 17:01 ~ 17:58
+//
+// 오전 구분이 안 붙은 주문이 하루에 하나 있었는데(578번, 11:37, 300원)
+// 시각이 오전이라 손대지 않는다. 「오후」는 service_period 가 정한다.
 //
 // ★ 지우지 않고 **옮긴다.**
 //
@@ -30,19 +34,26 @@ const ARCHIVE = "orders_removed_2026_09_14";
 // 지울 것을 번호로 못 박는다. "9/13 오후를 전부"처럼 조건으로 쓰면, 나중에
 // 누가 이 파일을 다시 돌렸을 때 그때의 9/13 오후를 지운다. 번호는 안 변한다.
 const ORDER_IDS = [
-  614, 616, 617, 618, 619, 621, 622, 623, 624, 625,
-  627, 628, 629, 630, 631, 632, 633, 635, 636, 637,
+  613, 614, 615, 616, 617, 618, 619, 620, 621, 622,
+  623, 624, 625, 627, 628, 629, 630, 631, 632, 633,
+  634, 635, 636, 637,
 ];
 
-// 번호만 믿지 않는다. 아래 넷이 전부 맞는 것만 옮긴다. 번호가 겹치는
-// 사고가 이 가게에 실제로 있었다(2026-09-10, 9번 테이블). 엉뚱한 주문이
-// 같은 번호를 달고 있으면 그건 손대면 안 되는 남의 매출이다.
+// 번호만 믿지 않는다. 아래가 전부 맞는 것만 옮긴다. 번호가 겹치는 사고가
+// 이 가게에 실제로 있었다(2026-09-10, 9번 테이블). 엉뚱한 주문이 같은
+// 번호를 달고 있으면 그건 손대면 안 되는 남의 매출이다.
+//
+// 상태를 끝난 것 둘로 한정하는 이유: 그날 오후는 실제로 paid 20 + cancelled
+// 4 뿐이었다. 혹시 안 끝난 주문(new/preparing/served)이 그 번호에 앉아
+// 있다면 그건 **아직 받을 돈**이므로 조용히 지우면 안 된다.
+const REMOVABLE = new Set(["paid", "cancelled"]);
+
 function isTarget(o) {
   return (
     o &&
     String(o.created_at || "").slice(0, 10) === "2026-09-13" &&
     o.service_period === "pm" &&
-    o.status === "paid"
+    REMOVABLE.has(o.status)
   );
 }
 
@@ -73,7 +84,7 @@ async function applyRemove0913Pm20260914(store, { getDb, connectDB, saveFields }
       targets.map((o) => ({
         replaceOne: {
           filter: { _id: o._id },
-          replacement: { ...o, removed_at: new Date().toISOString(), removed_reason: "9/13 오후 정리 (사장님 요청)" },
+          replacement: { ...o, removed_at: new Date().toISOString(), removed_reason: "9/13 오후 전부 정리 (사장님 요청)" },
           upsert: true,
         },
       }))
@@ -96,4 +107,4 @@ async function applyRemove0913Pm20260914(store, { getDb, connectDB, saveFields }
   await saveFields({ [`settings.${MIGRATION_FLAG}`]: appliedAt });
 }
 
-module.exports = { applyRemove0913Pm20260914, MIGRATION_FLAG, ARCHIVE, ORDER_IDS, isTarget };
+module.exports = { applyRemove0913Pm20260914, MIGRATION_FLAG, ARCHIVE, ORDER_IDS, isTarget, REMOVABLE };
