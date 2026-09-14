@@ -76,7 +76,21 @@ out.push("\n[3] 카드값이 할인에 휩쓸리지 않는다");
 out.push("\n[4] 화면이 한 번에 부르고 현금만 따로 뗀다 (public/js/admin.js)");
 {
   const admin = fs.readFileSync(path.join(__dirname, "..", "public", "js", "admin.js"), "utf8");
-  check("결제 버튼 금액에 카드값이 더해진다", /const footerPayTotal = footerSelectedTotal \+ pendingCardAmount;/.test(admin), "");
+  // 2026-09-14: 밥값 쪽이 할인을 반영하도록 바뀌면서 이름이
+  // footerSelectedTotal → footerSelectedPayable 이 됐다. 여기서 지키는 것은
+  // 이름이 아니라 **카드값은 할인 없이 그대로 더해진다**는 것이다 — 카드는
+  // 파는 물건이지 밥이 아니라서 VIP 할인 대상이 아니다.
+  // 밥값 쪽 금액이 할인을 반영하는지는 test/pay-button-total.test.js 가 잰다.
+  check(
+    "결제 버튼 금액에 카드값이 그대로 더해진다",
+    /const footerPayTotal = footerSelectedPayable \+ pendingCardAmount;/.test(admin),
+    ""
+  );
+  check(
+    "카드값은 할인 계산에 안 들어간다",
+    !/tableDiscountFor\([^)]*pendingCardAmount/.test(admin) && !/pendingCardAmount[^;]*tableDiscountFor/.test(admin),
+    "카드값이 할인 대상에 섞였다"
+  );
   check("★ 고르는 결제수단은 밥값 것이라고 적는다", /아래에서 고르는 결제수단은 밥값/.test(admin), "");
   check("★ 카드값은 무조건 현금이라고 적는다", /VIP 카드 NT\$\$\{cardAmount\} \(무조건 현금\)/.test(admin), "");
   check("★ 밥값이 결제된 뒤에 카드를 판다", /if \(cardAmount && !results\.some\(\(r\) => !r\.ok\)\)/.test(admin), "");

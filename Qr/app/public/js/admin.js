@@ -6905,12 +6905,18 @@
     // 주문이 1건뿐이라 isGrid가 false인 경우(포커스로 들어온 개별 픽업
     // 등)도 여전히 이 합산 버튼 대상이 아니어야 하기 때문.
     const isCounterTable = !!(table && table.is_counter);
+    // 미결제 합계도 할인을 넣어 보여준다. 위 합계가 216 인데 여기만 240 이면
+    // 어느 쪽이 받을 돈인지 화면만 보고는 알 수 없다.
+    const unpaidDiscountAmount = isCounterTable
+      ? 0
+      : tableDiscountFor(unpaidSelectionsOf(unpaidOrders)).breakdown.total;
     const footerSelections = isCounterTable ? [] : collectSelectedItemsByOrder(unpaidOrders);
-    const footerSelectedTotal = footerSelections.reduce((s, x) => s + x.total, 0);
+    // 할인을 넣은 값이어야 한다. 이 숫자가 직원이 손님에게 부르는 숫자다.
+    const footerSelectedPayable = tableDiscountFor(footerSelections).payable;
     // 얹어 둔 VIP 카드값은 결제 버튼 금액에 더해진다 — 직원이 손님에게
-    // 부르는 숫자가 하나여야 한다.
+    // 부르는 숫자가 하나여야 한다. 카드값에는 할인이 안 걸린다.
     const pendingCardAmount = pendingVipCardAmountFor(tableNumber);
-    const footerPayTotal = footerSelectedTotal + pendingCardAmount;
+    const footerPayTotal = footerSelectedPayable + pendingCardAmount;
     const footerPayBtn = isCounterTable
       ? ""
       : footerSelections.length > 0
@@ -6943,7 +6949,7 @@
         <div class="table-detail-footer">
           <div class="table-detail-footer-left">
             ${activeOrders.length
-              ? `<p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>NT$${unpaidTotal}</strong></p>`
+              ? `<p style="font-size:16px;margin:0;">${T("unpaidTotalLabel2")} <strong>${vipTotalHtml(unpaidTotal, unpaidDiscountAmount)}</strong></p>`
               : ""}
             ${vipSellBtnHtml}
           </div>
@@ -7239,9 +7245,7 @@
           // 特約95折/VIP9折와 직접 입력을 같이 걸 수 있으므로(2026-09-10)
           // 두 기준 금액을 모두 모아 한 번에 계산한다 — 서버(orders.js
           // computeDiscountAmount)와 같은 순서: VIP 먼저, 남은 금액에서 재량.
-          const fullTotalAll = selections.reduce((s, x) => s + fullEligibleClientTotal(x.order, x.indexes), 0);
-          const vipEligibleAll = selections.reduce((s, x) => s + discountEligibleClientTotal(x.order, x.indexes), 0);
-          const breakdown = computeCombinedDiscountClient(discountType, manualValue, fullTotalAll, vipEligibleAll);
+          const breakdown = tableDiscountFor(selections).breakdown;
           // 얹어 둔 VIP 카드가 있으면 팝업이 두 몫을 갈라 보여준다.
           // 고르는 결제수단은 밥값 것이고, 카드값은 언제나 현금이다.
           const cardAmount = pendingVipCardAmountFor(tableNumber);
@@ -7575,6 +7579,44 @@
       })
       .filter(Boolean);
   }
+  /**
+   * 이 묶음에 지금 걸려 있는 **테이블 할인**을 적용했을 때 실제로 받을 돈.
+   *
+   * 2026-09-14 사장님(스크린샷과 함께): "지금 빨간 결제완료 버튼이 합계를
+   * 적용 안하는 거 같아. 간단하게 각 모든 소계를 합친 걸 적용해야 하는데
+   * 할인이 전혀 적용이 안되어있어."
+   *
+   * 받은 돈은 맞았다 — 결제할 때 서버가 다시 계산한다(src/routes/orders.js).
+   * 틀린 것은 **버튼에 적힌 숫자**였다. 화면 위 합계는 NT$216 인데 버튼은
+   * NT$240 이라, 직원이 손님에게 부르는 숫자가 둘이 됐다.
+   *
+   * 원인은 같은 값을 세 군데서 따로 더하고 있었던 것이다 — 합계는 할인을
+   * 넣어 더하고, 미결제 합계와 결제 버튼은 안 넣고 더했다. 한 함수로 모은다.
+   * 세 자리가 이 함수를 같이 쓰는 한 다시 어긋날 수 없다.
+   *
+   * selections: [{ order, indexes }] — collectSelectedItemsByOrder 와 같은 꼴.
+   */
+  function tableDiscountFor(selections) {
+    const full = selections.reduce((sum, x) => sum + fullEligibleClientTotal(x.order, x.indexes), 0);
+    if (!tableVipDiscountType && !tableManualDiscountValue) {
+      return { full, breakdown: { vipAmount: 0, manualAmount: 0, afterVip: full, total: 0 }, payable: full };
+    }
+    const vipEligible = selections.reduce((sum, x) => sum + discountEligibleClientTotal(x.order, x.indexes), 0);
+    const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, full, vipEligible);
+    return { full, breakdown, payable: full - breakdown.total };
+  }
+
+  /** 아직 안 받은 품목 전부 — 「미결제 합계」가 재는 것과 같은 범위. */
+  function unpaidSelectionsOf(orders) {
+    return orders
+      .map((o) => {
+        if (isCounterOrder(o) || o.status === "paid" || o.status === "cancelled") return null;
+        const indexes = o.items.map((_, i) => i).filter((i) => !o.items[i].paid);
+        return indexes.length ? { order: o, indexes } : null;
+      })
+      .filter(Boolean);
+  }
+
   function buildOrderRoundParts(o, withDismiss) {
     const createdAt = new Date(o.created_at.replace(" ", "T"));
     // 2026-09-05 피드백: "시간 왼쪽에 간단하게 날짜까지 넣어줄래? 연도랑" —

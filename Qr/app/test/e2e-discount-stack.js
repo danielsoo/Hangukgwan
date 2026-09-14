@@ -150,7 +150,20 @@ const digits = (s) => (String(s).match(/\d+/g) || []).map(Number);
   out.push("\n[결제 팝업이 두 할인을 순서대로 보여준다]");
   await page.locator("#tableDetailSelectAll").check();
   await page.waitForTimeout(400);
-  await page.locator("#tableDetailBody .pay-selected-items-btn").first().click();
+
+  // 버튼에 적힌 숫자가 곧 직원이 손님에게 부르는 숫자다.
+  //
+  // 2026-09-14 사장님(스크린샷과 함께): "지금 빨간 결제완료 버튼이 합계를
+  // 적용 안하는 거 같아." 화면 위 합계는 216 인데 버튼은 240 이었다. 받은
+  // 돈은 맞았지만(서버가 다시 계산한다) 한 화면에 두 숫자가 떠 있었다.
+  const payBtn = page.locator("#tableDetailBody .pay-selected-items-btn").first();
+  const payBtnText = await payBtn.innerText();
+  check(`★ 결제 버튼에 실수령액 ${expectedPayable}이 적힌다`, digits(payBtnText).includes(expectedPayable), payBtnText);
+  check("★ 결제 버튼에 할인 전 금액이 적히지 않는다", !digits(payBtnText).includes(fullTotal), payBtnText);
+  const footerText = await page.locator(".table-detail-footer").innerText();
+  check(`★ 미결제 합계도 ${expectedPayable}을 보여준다`, digits(footerText).includes(expectedPayable), footerText);
+
+  await payBtn.click();
   await page.waitForTimeout(500);
   const popup = await page.locator("#paymentMethodBackdrop").innerText();
   check("VIP 할인액이 적힌다", popup.includes(`-NT$${vipAmount}`), popup);
