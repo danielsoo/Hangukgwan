@@ -6316,7 +6316,41 @@
 
   function populateCategorySelect() {
     const sel = $("#f_category_id");
+    // 지금 고른 것을 기억했다가 되돌린다.
+    //
+    // 2026-09-14 사장님: "메뉴관리에서 메뉴수정하면 항목이 저절로 밥류로
+    // 바뀌어 저장됨."
+    //
+    // 이 함수는 메뉴를 다시 불러올 때마다 돈다 — 품절이 풀릴 시각에 맞춰
+    // 걸어둔 알람, 다른 태블릿이 메뉴를 고쳤다는 실시간 알림, 품절 배지
+    // 저장, 언어 바꾸기. 그런데 <option> 을 통째로 다시 만들면 고른 것이
+    // 풀리고 **맨 앞 항목**이 골라진다. 그게 밥류다(src/seed.js, sort_order 1).
+    //
+    // 수정 폼을 열어둔 채 그중 하나라도 오면, 사장님이 손도 안 댄 분류가
+    // 조용히 밥류로 바뀌어 저장된다. 폼이 열려 있는지 볼 것도 없이, 고른
+    // 것은 언제나 지킨다.
+    const keep = sel.value;
     sel.innerHTML = categories.map((c) => `<option value="${c.id}">${catName(c)}</option>`).join("");
+    if (keep && Array.from(sel.options).some((o) => o.value === keep)) sel.value = keep;
+  }
+
+  /**
+   * 분류 칸을 이 값으로 맞춘다.
+   *
+   * 고르려는 분류가 목록에 없으면 <select> 는 **아무것도 안 고른 상태**가
+   * 된다(value 가 ""). 그대로 저장하면 분류가 통째로 날아간다. 없어진 분류에
+   * 매달린 옛 메뉴가 그 경우다 — 칸을 하나 만들어서라도 지금 값을 지킨다.
+   */
+  function setCategorySelect(id) {
+    const sel = $("#f_category_id");
+    const want = id == null || id === "" ? "" : String(id);
+    if (want && !Array.from(sel.options).some((o) => o.value === want)) {
+      const opt = document.createElement("option");
+      opt.value = want;
+      opt.textContent = `#${want}`;
+      sel.appendChild(opt);
+    }
+    sel.value = want;
   }
 
   $("#addItemBtn").onclick = () => openItemModal(null);
@@ -6465,7 +6499,7 @@
     editingItemPhotoUrl = item ? item.photo_url : null;
     selectedPhotoFile = null;
     $("#itemModalTitle").textContent = item ? T("itemModalEditTitle") : T("itemModalAddTitle");
-    $("#f_category_id").value = item ? item.category_id : categories[0] ? categories[0].id : "";
+    setCategorySelect(item ? item.category_id : categories[0] ? categories[0].id : "");
     $("#f_code").value = item?.code || "";
     $("#f_name_zh").value = item?.name_zh || "";
     $("#f_name_ko").value = item?.name_ko || "";

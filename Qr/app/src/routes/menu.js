@@ -152,8 +152,10 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
 router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const b = req.body || {};
+  // category_id 는 여기 없다. 아래에서 숫자일 때만 덮어쓴다 — 화면에서 고른
+  // 것이 풀려 빈 값이 오면 지금 분류를 지우는 게 아니라 그대로 둬야 한다.
   const fields = [
-    "category_id", "code", "name_zh", "name_ko", "name_en",
+    "code", "name_zh", "name_ko", "name_en",
     "desc_zh", "desc_ko", "desc_en", "price", "price_note", "original_price", "options",
     "spice_options", "takeout_options", "addons", "min_first_order_qty", "sort_order",
   ];
@@ -167,7 +169,14 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
     const item = s.menuItems.find((i) => i.id === id);
     if (!item) return;
     for (const f of fields) if (b[f] !== undefined) item[f] = b[f];
-    if (b.category_id !== undefined) item.category_id = parseInt(b.category_id, 10);
+    // 2026-09-14 사장님: "메뉴관리에서 메뉴수정하면 항목이 저절로 밥류로
+    // 바뀌어 저장됨." 진짜 원인은 화면 쪽이었지만(populateCategorySelect),
+    // 분류가 통째로 날아가는 것은 데이터가 망가지는 일이라 여기서도 막는다.
+    // 숫자가 아닌 것이 오면 **안 바꾼다.**
+    if (b.category_id !== undefined) {
+      const catId = parseInt(b.category_id, 10);
+      if (Number.isFinite(catId)) item.category_id = catId;
+    }
     if (b.allergens !== undefined) item.allergens = Array.isArray(b.allergens) ? b.allergens : [];
     if (b.mix_options !== undefined) item.mix_options = b.mix_options ? 1 : 0;
     if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
