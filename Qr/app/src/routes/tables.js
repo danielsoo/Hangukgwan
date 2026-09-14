@@ -275,10 +275,32 @@ router.put("/:tableNumber/party-size", async (req, res) => {
   if (!isStaff && seating.isStale(req, table)) {
     return res.status(409).json({ error: "seating_stale" });
   }
+  // 착석 시각은 **새 손님이 앉을 때만** 찍는다.
+  //
+  // 2026-09-14 사장님: "고객 폰에 이미 주문 완료되어서 주문하신 내역이
+  // 없습니다. 인가? 그런 내용의 중국어가 안내돼."
+  //
+  // 이 한 줄이 예전에는 무조건 지금 시각으로 덮어썼다. 그런데 손님 화면의
+  // 「我的訂單」은 이 시각 이후에 들어온 주문만 보여준다
+  // (GET /api/orders/table/:n 의 created_at >= seatingStart — 앞 손님
+  // 계산서가 다음 손님에게 보이던 것을 막은 그 조건이다).
+  //
+  // 그래서 밥 먹는 중에 인원수를 고치면 — "아이 한 명 더 왔어요", 주문이
+  // 안 들어가 화면이 인원수를 다시 묻는 경우 — 그 순간 시각이 앞으로 밀리고,
+  // 방금 시킨 것이 통째로 그 앞이 되어 버린다. 손님 화면에는 「尚未點餐」
+  // (아직 주문 내역이 없습니다)만 남는다. 주문은 멀쩡히 들어가 있는데.
+  //
+  // 지금 앉아 계신 그 손님이 인원만 고치는 것이면 시각은 그대로 둔다.
+  // 「그 손님인가」는 이미 착석 토큰이 알고 있다(src/seating.js) — 이 기기가
+  // 지금 착석에 묶여 있으면 그 손님이다. 직원도 같다: 살아 있는 착석의
+  // 인원수를 고치는 것은 대신 고쳐주는 것이지 새로 앉히는 것이 아니다.
+  const currentSeating = seating.seatingOf(table);
+  const samePartyFixingCount =
+    !!currentSeating && (isStaff || seating.boundTo(req, table.number) === currentSeating);
   table.party_size = size;
   table.party_adults = adults;
   table.party_children = children;
-  table.party_size_updated_at = new Date().toISOString();
+  if (!samePartyFixingCount) table.party_size_updated_at = new Date().toISOString();
   // 이 착석이 테스터 모드에서 만들어진 것인가(src/testMode.js).
   //
   // 2026-09-11 사장님: "테스터 모드가 지워지도록 되어있는데 인원은 그대로
