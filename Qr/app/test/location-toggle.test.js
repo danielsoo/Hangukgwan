@@ -123,13 +123,40 @@ const TABLE = "7";
   r = await orderFar();
   check("막힌다", r.status === 403, `${r.status}`);
 
-  out.push("\n[손님 화면 — 꺼져 있으면 위치를 묻는 단계가 사라진다]");
-  // 서버만 통과시키고 화면은 그대로 물어보면, 손님은 권한 창을 보고 잡히기를
-  // 기다린 뒤 아무 쓸모 없는 좌표를 보낸다. 끈다는 것은 그 단계 자체가
-  // 없어진다는 뜻이어야 한다.
+  out.push("\n[손님 화면 — 꺼져 있으면 아무것도 안 묻고, 안 기다린다]");
+  //
+  // 2026-09-14 사장님: "위치는 그냥 잡지 말자 그거때문에 고객이 기다릴 이유는
+  // 없는 거 같아." — 그리고 "설정에서 키고 끄는 게 있잖아 그거 사용하자."
+  //
+  // 그러니 이 스위치를 끈 상태가 곧 사장님이 원하신 상태다. 껐을 때 정말로
+  // **묻지도 않고 기다리지도 않는지**를 실제 코드로 확인한다. 서버만
+  // 통과시키고 화면은 그대로 물어보면, 손님은 권한 창을 보고 잡히기를 기다린
+  // 뒤 아무 쓸모 없는 좌표를 보낸다.
   const orderJs = read("public", "js", "order.js");
-  check("★ 꺼져 있으면 가게 좌표를 아예 안 들고 온다", /const locationOn = s\.location_check_enabled[\s\S]{0,200}storeLat = !locationOn/.test(orderJs), "");
+  check("★ 꺼져 있으면 가게 좌표를 아예 안 들고 온다", /const locationOn = s\.location_check_enabled[\s\S]{0,300}storeLat = !locationOn/.test(orderJs), "");
   check("옛 서버가 내려준 글자도 꺼짐으로 읽는다", /s\.location_check_enabled !== "false"/.test(orderJs), "");
+  {
+    // 가게 좌표가 없는 상태 = 스위치가 꺼진 상태다(위 한 줄이 그렇게 만든다).
+    const helpers = orderJs.slice(
+      orderJs.indexOf("  let warmGeoAt = 0;"),
+      orderJs.indexOf("  function setSubmitBusy(on) {")
+    );
+    check("위치 헬퍼를 찾는다", helpers.length > 200, `${helpers.length}자`);
+    let asked = 0;
+    const api = new Function(
+      "getGeolocation", "storeLat", "storeLng",
+      `${helpers}
+       return { warmGeolocation, locationOrNothing };`
+    )(() => { asked++; return new Promise(() => {}); }, null, null);
+
+    api.warmGeolocation();
+    const t0 = Date.now();
+    const coords = await api.locationOrNothing();
+    const waited = Date.now() - t0;
+    check("★ 손님 폰에 위치를 아예 안 묻는다 (권한 창도 안 뜬다)", asked === 0, `${asked}번 물었다`);
+    check("★ 기다림이 없다", waited < 50, `${waited}ms`);
+    check("좌표 없이 보낸다", coords === null, JSON.stringify(coords));
+  }
 
   out.push("\n[관리자 화면]");
   const adminJs = read("public", "js", "admin.js");
