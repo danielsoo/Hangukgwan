@@ -278,6 +278,70 @@
   // being dragged, and which column body it started in, so a drop is only
   // honored as a same-column reorder and never as a sneaky status change.
   let draggingOrderId = null;
+
+  // ---- 새 배포가 나가면 조용한 순간에 스스로 새로고침한다 ----
+  //
+  // 2026-09-14 사장님: 부모님이 대만을 떠나신다. 지금까지 웹 쪽을 고치면
+  // "태블릿 새로고침 한 번만 눌러줘"로 닿았는데, 이제 옆에 아무도 없다.
+  // 가게 태블릿은 주문판을 하루 종일 켜두므로 **새로고침을 누를 일이 없고**,
+  // 그러면 고쳐도 안 닿는다. 안 고친 것과 같다.
+  //
+  // 서버가 응답마다 배포 지문을 적어 보내고(X-App-Version), clientTiming.js 가
+  // 그것이 바뀐 것을 두 번 확인하면 이 자리로 알려준다. 요청은 하나도 안 는다.
+  //
+  // 다만 **아무 때나 새로고침하면 안 된다.** 주문을 넣는 중이거나, 결제 창이
+  // 열려 있거나, 배치도를 끌고 있거나, 새 주문 알림이 울리는 중에 화면이
+  // 사라지면 그건 고장으로 보인다. 조용해질 때까지 기다린다.
+  let pendingReload = false;
+  const RELOAD_CHECK_MS = 15000;
+
+  function busyReason() {
+    try {
+      return busyReasonInner();
+    } catch (e) {
+      // 판단하다 터졌으면 **바쁜 것으로 친다.** 새로고침은 미루면 그만이지만,
+      // 잘못 새로고침하면 사장님이 누르던 것이 사라진다.
+      return "상태를 못 읽음 (" + e.message + ")";
+    }
+  }
+
+  function busyReasonInner() {
+    if (window.HG_INFLIGHT > 0) return "요청 " + window.HG_INFLIGHT + "건이 날아가 있음";
+    if (draggingOrderId || floorPlanDragging) return "끌고 있는 중";
+    // 열려 있는 창 — 모달이든 확인창이든. hidden 이 아니면 열린 것이다.
+    const open = [...document.querySelectorAll(".modal, .modal-backdrop")].find(
+      (el) => !el.hidden && el.offsetParent !== null
+    );
+    if (open) return "창이 열려 있음 (" + (open.id || open.className) + ")";
+    // 새 주문 알림이 울리는 중
+    const stop = $("#alarmStopBtn");
+    if (stop && !stop.hidden) return "알림이 울리는 중";
+    // 뭔가 입력하던 중
+    const el = document.activeElement;
+    if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.disabled) return "입력 중";
+    // 저장 안 된 설정
+    const dirty = [...document.querySelectorAll(".settings-dirty")].find((d) => !d.hidden);
+    if (dirty) return "저장 안 된 설정이 있음 (" + dirty.id + ")";
+    return null;
+  }
+
+  function reloadWhenIdle() {
+    const why = busyReason();
+    if (why) {
+      console.log("[새 배포] 아직 바쁨:", why, "— 15초 뒤 다시 봅니다");
+      setTimeout(reloadWhenIdle, RELOAD_CHECK_MS);
+      return;
+    }
+    console.log("[새 배포] 조용해졌습니다. 새로고침합니다.");
+    location.reload();
+  }
+
+  window.addEventListener("hg:new-build", () => {
+    if (pendingReload) return;
+    pendingReload = true;
+    console.log("[새 배포] 새 버전이 올라왔습니다:", window.HG_NEW_BUILD);
+    reloadWhenIdle();
+  });
   let dragSourceColumnBody = null;
   // 테이블 상세 modal: which sub-view is showing — 진행중 (still-open orders)
   // or 완료 내역 (already-paid ones for this table). Kept separate so a

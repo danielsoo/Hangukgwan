@@ -48,6 +48,13 @@ const DELAY = 60;
 // 감싸기는 한 번만 하고, 기록할 곳만 갈아끼운다.
 let activeLog = null;
 let instrumented = false;
+// 특정 읽기를 우리가 쥐고 있다가 놓아주는 장치. 시간 대신 순서를 재는 데 쓴다.
+const gates = new Map();
+function gateFor(what, promise) {
+  if (promise) gates.set(what, promise);
+  else gates.delete(what);
+}
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 function instrument(handle) {
   activeLog = [];
   if (instrumented) return activeLog;
@@ -64,7 +71,9 @@ function instrument(handle) {
         const proj = (args[1] && args[1].projection) || {};
         const entry = { what: `${name}.findOne`, at: Date.now(), revOnly: proj.rev === 1, end: null };
         if (activeLog) activeLog.push(entry);
-        await sleep(DELAY);
+        const gate = gates.get(`${name}.findOne`);
+        if (gate) await gate;
+        else await sleep(DELAY);
         const r = await realFindOne(...args);
         entry.end = Date.now();
         return r;
@@ -75,7 +84,9 @@ function instrument(handle) {
         cur.toArray = async () => {
           const entry = { what: `${name}.find`, at: Date.now(), end: null };
           if (activeLog) activeLog.push(entry);
-          await sleep(DELAY);
+          const gate = gates.get(`${name}.find`);
+          if (gate) await gate;
+          else await sleep(DELAY);
           const r = await realToArray();
           entry.end = Date.now();
           return r;
@@ -106,35 +117,34 @@ function instrument(handle) {
   const log = instrument(handle);
 
   out.push("\n[두 번 읽는 것을 나란히 보낸다]");
-  const t0 = Date.now();
-  await refreshStore();
-  const took = Date.now() - t0;
+  // **시간이 아니라 순서를 잰다.**
+  //
+  // 예전에는 「전체가 지연 두 배 안에 끝나는가」로 봤다. 그 값은 기계가 바쁘면
+  // 그냥 흔들린다 — 2026-09-12 과 09-14 에 실제로 멀쩡한 코드를 두고 깨졌고,
+  // 한 번은 진짜 원인(첫 Intl 생성 388ms)을 찾느라 한참을 돌아갔다. 벽시계로
+  // 재면 무엇이 틀렸는지가 아니라 기계가 얼마나 바쁜지가 보인다.
+  //
+  // 지켜야 하는 성질은 하나다: **store 읽기가 끝나기 전에 주문 읽기가
+  // 출발했는가.** 그래서 store 읽기를 우리가 쥐고 있다가, 그동안 주문 읽기가
+  // 이미 출발했는지 본 뒤에 놓아준다. 기계 속도와 아무 상관이 없다.
+  let releaseStore;
+  const storeGate = new Promise((r) => (releaseStore = r));
+  gateFor("store.findOne", storeGate);
+
+  const refreshing = refreshStore();
+  await tick(5);
+  const started = log.map((l) => l.what);
+  check("store 읽기가 출발했다", started.includes("store.findOne"), JSON.stringify(started));
+  check(
+    "★ store 읽기가 끝나기 전에 주문 읽기가 출발한다 (나란히 간다)",
+    started.includes("orders.find"),
+    `store 를 붙잡고 있는 동안 나간 것: ${JSON.stringify(started)}`
+  );
+  releaseStore();
+  await refreshing;
+  gateFor("store.findOne", null);
   const reads = log.filter((l) => l.what === "store.findOne" || l.what.endsWith(".find"));
-  check("읽기가 두 번 일어난다 (store 문서 + 최근 주문)", reads.length >= 2, JSON.stringify(log.map((l) => l.what)));
-  // 지켜야 하는 성질은 「둘째가 첫째가 끝나기 전에 출발했다」다. 시작
-  // 시각의 간격을 아주 좁게 잡으면 기계가 바쁜 날 그냥 깜빡인다 —
-  // 2026-09-12 에 실제로 한 번 깜빡였다(간격 30ms, 기준 30ms). 진짜 증거는
-  // 아래의 전체 시간이고, 이 줄은 그 보조다.
-  // **겹쳤는가**를 본다. 시작 간격이나 전체 시간으로 재면 기계가 바쁜 날
-  // 그냥 깜빡인다 — 2026-09-12 과 2026-09-14 에 실제로 그랬다. 두 번째가
-  // 첫 번째가 **끝나기 전에** 출발했다면 그것이 나란히 갔다는 증거고, 그
-  // 사실은 기계가 느려도 빨라도 변하지 않는다.
-  check(
-    "★ 둘째가 첫째가 끝나기 전에 출발한다 (겹친다)",
-    reads.length >= 2 && reads[0].end !== null && reads[1].at < reads[0].end,
-    reads.length >= 2 ? `첫째 ${reads[0].at}~${reads[0].end}, 둘째 시작 ${reads[1].at}` : "읽기가 둘이 아니다"
-  );
-  // 처음 한 번은 두 값이다 — 판 번호를 묻고(나란히 주문도), 모르는 판이니
-  // 통째로 한 번 더 받는다. 여기서 줄이려던 것은 이 첫 번이 아니라 **그
-  // 다음부터 매번** 내던 37KB 다.
-  // 줄줄이 섰다면 전체가 「읽기 하나하나의 합」에 가까워진다. 나란히 갔다면
-  // 그보다 뚜렷하게 짧다. 기계 속도가 아니라 **관계**를 본다.
-  const sumOfReads = reads.reduce((a, r) => a + Math.max(0, (r.end || r.at) - r.at), 0);
-  check(
-    "★ 전체가 「하나하나의 합」보다 짧다 (줄줄이 서지 않았다)",
-    took < sumOfReads,
-    `전체 ${took}ms, 합 ${sumOfReads}ms`
-  );
+  check("읽기가 두 번 이상 일어난다 (store 문서 + 최근 주문)", reads.length >= 2, JSON.stringify(log.map((l) => l.what)));
 
   out.push("\n[두 번째부터는 37KB 를 다시 받지 않는다]");
   // 2026-09-14. 운영에서 이 문서를 꺼내는 데 9ms, 37KB 를 실어 보내는 데

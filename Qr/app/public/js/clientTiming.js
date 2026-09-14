@@ -29,6 +29,8 @@
 // 섞이면 그 순간부터 그 기기의 모든 요청이 죽는다.
 (function () {
   if (window.HG_TIMING) return; // 두 번 걸면 시간이 두 겹으로 세어진다
+  // 지금 답을 기다리는 /api 요청 수. 새로고침해도 되는 순간인지 가리는 데 쓴다.
+  window.HG_INFLIGHT = 0;
 
   var MAX_ENTRIES = 25;
   var MAX_BYTES = 1400;
@@ -116,6 +118,7 @@
   }
 
   function beginRequest() {
+    window.HG_INFLIGHT++;
     if (!action || action.done) return null;
     clearTimeout(action.settleTimer);
     action.inflight++;
@@ -124,6 +127,7 @@
   }
 
   function endRequest(owner) {
+    if (window.HG_INFLIGHT > 0) window.HG_INFLIGHT--;
     if (!owner || owner.done) return;
     owner.inflight--;
     if (action === owner) maybeFinishAction();
@@ -156,6 +160,62 @@
    * 받아둔 답). 이것을 **먼저** 걸고 그 위에 감싸므로, 캐시로 끝난 요청은
    * 여기까지 오지 않는다 — 네트워크에 안 나갔으니 그게 맞다.
    */
+  // ---- 새 배포가 나갔는지 ----
+  //
+  // 가게 태블릿은 주문판을 하루 종일 켜둔다. 껐다 켜는 일이 거의 없어서,
+  // 새 배포가 나가도 어제 받은 자바스크립트를 계속 쓴다 — 누가 새로고침을
+  // 누르기 전까지 영영. 옆에 사람이 있을 때는 "한 번만 눌러줘"로 넘어갔지만,
+  // 없으면 고쳐도 안 닿는다(2026-09-14).
+  //
+  // 서버가 응답마다 지금 배포의 지문을 적어 보낸다(X-App-Version). 이 화면이
+  // 들고 있는 지문은 자기 <script> 주소의 ?v= 다. 둘이 다르면 새 배포가
+  // 나간 것이다. 요청을 더 만들지 않는다 — 이미 오가는 답에 얹혀 온다.
+  var MY_BUILD = (function () {
+    try {
+      var me = document.currentScript || document.querySelector('script[src*="clientTiming.js"]');
+      var m = me && /[?&]v=([^&]+)/.exec(me.getAttribute("src") || "");
+      return m ? m[1] : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  // 배포가 굴러가는 몇 분 동안은 인스턴스마다 옛것/새것이 섞여 나온다. 한 번
+  // 다르다고 바로 새로고침하면 그 사이에 몇 번씩 깜빡일 수 있다. **같은 새
+  // 지문을 두 번, 30초 넘게 떨어져서** 봤을 때만 진짜로 친다.
+  var STEADY_MS = 30000;
+  var seenBuild = null;
+  var seenAt = 0;
+  var announced = false;
+
+  function noteBuild(res) {
+    if (!MY_BUILD || announced) return;
+    var v;
+    try {
+      v = res && res.headers && res.headers.get("X-App-Version");
+    } catch (e) {
+      return;
+    }
+    if (!v || v === MY_BUILD) {
+      seenBuild = null; // 옛 인스턴스를 다시 만났다 — 세던 것을 접는다
+      return;
+    }
+    var now = Date.now();
+    if (seenBuild !== v) {
+      seenBuild = v;
+      seenAt = now;
+      return;
+    }
+    if (now - seenAt < STEADY_MS) return;
+    announced = true;
+    window.HG_NEW_BUILD = v;
+    try {
+      window.dispatchEvent(new CustomEvent("hg:new-build", { detail: { from: MY_BUILD, to: v } }));
+    } catch (e) {
+      // CustomEvent 를 못 만드는 아주 옛 웹뷰 — HG_NEW_BUILD 로도 알 수 있다.
+    }
+  }
+
   function installFetchWrapper() {
     if (window.__hgTimingFetch) return;
     window.__hgTimingFetch = true;
@@ -188,6 +248,7 @@
       return nativeFetch(input, opts).then(
         function (res) {
           done(res && res.status);
+          noteBuild(res);
           return res;
         },
         function (err) {
