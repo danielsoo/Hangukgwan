@@ -533,6 +533,8 @@ button.is-closed:hover {
   display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 6px auto 14px;
 }
 .confirm-sheet h2 { margin: 0 0 6px; }
+/* 수기 주문을 넣은 직원에게만 보이는 줄 — 곧 관리자 화면으로 돌아간다. */
+.confirm-return-note { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
 .confirm-sheet p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
 .order-status-track { display: flex; justify-content: space-between; margin: 0 6px 22px; position: relative; }
 .order-status-track::before {

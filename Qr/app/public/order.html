@@ -183,6 +183,9 @@
       <h2 data-i18n="orderPlaced">訂單已送出！</h2>
       <p data-i18n="orderPlacedDesc">餐點正在準備中，請稍候</p>
       <div class="order-status-track" id="orderStatusTrack"></div>
+      <!-- 직원이 단말기에서 넣은 수기 주문일 때만 보인다 — 곧 관리자 화면으로
+           돌아간다는 알림. 손님 주문에는 안 뜬다. -->
+      <p class="confirm-return-note" id="confirmReturnNote" hidden></p>
       <button class="submit-btn" id="backToMenuBtn" data-i18n="orderMore">繼續加點</button>
     </div>
   </div>

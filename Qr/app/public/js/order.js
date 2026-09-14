@@ -227,6 +227,29 @@
     en: (n) => `On your first order, this dish needs at least ${n} servings total (mix the ratio however you like)`,
   };
 
+  // 직원이 단말기에서 들어온 수기 주문인가 (admin.js 의 수기 주문 버튼이
+  // ?fromAdmin=1 을 붙인다). 손님이 벽의 QR 로 들어온 화면에는 절대 안 붙는다.
+  const fromAdmin = new URLSearchParams(location.search).get("fromAdmin") === "1";
+
+  // 주문을 넣고 나면 관리자 화면으로 **저절로** 돌아간다.
+  //
+  // 2026-09-14 사장님: "단말기로 수기주문완료후 실시간주문탭으로 자동
+  // 복귀되도록."
+  //
+  // 이 화면은 직원이 손님 대신 주문을 넣으려고 잠깐 들어온 곳이다. 넣고 나면
+  // 볼 일이 없는데 지금까지는 「관리자로」를 직접 눌러야 했다. /admin 은 열
+  // 때마다 실시간 주문 탭에서 시작하므로(admin.html 의 .admin-tabs), 그냥
+  // 돌아가면 사장님이 말한 그 탭이다.
+  //
+  // 곧바로 튕기지는 않는다. 넣자마자 화면이 사라지면 들어갔는지 못 본다.
+  // 완료 화면을 잠깐 보여주고 돌아간다.
+  const ADMIN_RETURN_MS = 1500;
+  const ADMIN_RETURN_NOTE = {
+    zh: "即將返回管理畫面…",
+    ko: "관리자 화면으로 돌아갑니다…",
+    en: "Returning to the admin screen…",
+  };
+
   const SEATING_STALE_MSG = {
     zh: "這個畫面是上一位客人開啟的。已為您重新整理，請再點一次餐。",
     ko: "이 화면은 앞 손님이 열어두신 것이에요. 새로 불러올게요. 다시 주문해 주세요.",
@@ -1557,6 +1580,7 @@
       cartChanged();
       $("#cartBackdrop").hidden = true;
       showConfirmation(order);
+      if (fromAdmin) returnToAdminAfterOrder();
     } catch (e) {
       if (e.message === "closed_now") alert(closedMessage());
       else if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
@@ -1601,6 +1625,27 @@
   }
 
   const STATUS_STEPS = ["new", "preparing", "served", "paid"];
+  // 완료 화면을 잠깐 보여준 뒤 관리자 화면으로. 「계속 추가」를 누르면
+  // 직원이 더 넣겠다는 뜻이므로 돌아가지 않는다.
+  let adminReturnTimer = null;
+  function returnToAdminAfterOrder() {
+    const note = $("#confirmReturnNote");
+    if (note) {
+      note.textContent = ADMIN_RETURN_NOTE[lang] || ADMIN_RETURN_NOTE.zh;
+      note.hidden = false;
+    }
+    clearTimeout(adminReturnTimer);
+    adminReturnTimer = setTimeout(() => {
+      location.href = "/admin";
+    }, ADMIN_RETURN_MS);
+  }
+  function cancelAdminReturn() {
+    clearTimeout(adminReturnTimer);
+    adminReturnTimer = null;
+    const note = $("#confirmReturnNote");
+    if (note) note.hidden = true;
+  }
+
   function showConfirmation(order) {
     renderStatusTrack(order.status);
     $("#confirmBackdrop").hidden = false;
@@ -1618,6 +1663,9 @@
     });
   }
   $("#backToMenuBtn").onclick = () => {
+    // 더 넣겠다는 뜻이다. 돌아가려던 것을 멈춘다 — 메뉴를 고르는 중에 화면이
+    // 관리자로 넘어가면 담던 것이 사라진다.
+    cancelAdminReturn();
     $("#confirmBackdrop").hidden = true;
     stopStatusPolling();
   };
@@ -1760,7 +1808,7 @@
   // (MainActivity.java's onCreateWindow), so admin.js appends ?fromAdmin=1
   // and we show a way back. Ordinary customers scanning the table QR code
   // never carry this param, so this stays hidden for them.
-  if (new URLSearchParams(location.search).get("fromAdmin") === "1") {
+  if (fromAdmin) {
     const backBtn = $("#backToAdminBtn");
     backBtn.hidden = false;
     backBtn.onclick = () => {
