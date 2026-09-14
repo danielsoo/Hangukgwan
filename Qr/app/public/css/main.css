@@ -462,7 +462,32 @@ button.is-closed:hover {
 .cart-item-meta { font-size: 12px; color: var(--muted); }
 .cart-item-right { text-align: right; white-space: nowrap; }
 .cart-item-qty-ctrl { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.cart-item-qty-ctrl button { width: 24px; height: 24px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; }
+.cart-item-qty-ctrl button {
+  width: 28px; height: 28px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0;
+}
+/* 「삭제」는 −/+ 와 같은 버튼이 아니다.
+   2026-09-14 사장님이 손님 화면 사진을 보내셨다. 「移除」가 두 글자인데 위
+   규칙의 24px 동그라미를 그대로 물려받아 移 / 除 로 쪼개져 있었다. 한국어
+   「삭제」도 두 글자고 영어 「Remove」는 여섯 글자라, 세 언어 모두 깨진다.
+   글자 수에 맞춰 가로로 늘어나는 알약으로 따로 둔다. */
+.cart-item-qty-ctrl .cart-item-remove {
+  width: auto; min-width: 0; height: 28px;
+  padding: 0 14px; margin-left: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px; font-weight: 600; line-height: 1;
+  white-space: nowrap;      /* 글자를 쪼개지 않는다 — 이게 핵심이다 */
+  flex: none;               /* 좁은 화면에서 눌려 찌그러지지 않게 */
+  cursor: pointer;
+}
+.cart-item-qty-ctrl .cart-item-remove:hover,
+.cart-item-qty-ctrl .cart-item-remove:active {
+  color: var(--red); border-color: var(--red);
+}
 .cart-empty { text-align: center; color: var(--muted); padding: 30px 0; }
 .cart-total-row { display: flex; justify-content: space-between; font-weight: 800; font-size: 16px; margin-bottom: 14px; }
 .cart-vip-row { display: flex; justify-content: flex-end; font-size: 12px; font-weight: 700; color: var(--red); margin: -6px 0 8px; }

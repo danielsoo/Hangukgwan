@@ -1156,7 +1156,7 @@
             <button data-act="minus">−</button>
             <span>${c.qty}</span>
             <button data-act="plus">+</button>
-            <button data-act="remove" style="margin-left:8px;">${t("remove")}</button>
+            <button class="cart-item-remove" data-act="remove">${t("remove")}</button>
           </div>
         </div>
         <div class="cart-item-right">${money((c.item.price + addonsPriceFor(c.item, c.addons)) * c.qty)}</div>
