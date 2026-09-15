@@ -115,6 +115,35 @@ function codeConflict(items, code, selfId) {
   return activeItems(items).find((m) => m.id !== selfId && String(m.code || "").trim() === want) || null;
 }
 
+/**
+ * 휴지통에 **같은 메뉴**가 있는가.
+ *
+ * 2026-09-15 사장님: "만약에 지웠다가 같은 메뉴를 넣으면 어떻게 돼? 제대로
+ * 인식 돼?" — 안 된다. 새로 넣으면 새 번호를 받고, 결산은 메뉴를 번호로
+ * 묶으므로(src/settlement.js) **같은 메뉴가 두 줄로 갈라진다.** 「육개장
+ * 25개」와 「육개장 15개」가 따로 뜨고 합쳐지지 않는다.
+ *
+ * 되살리면 번호가 그대로라 그 일이 없다. 그래서 새로 넣기 전에 휴지통을
+ * 먼저 본다 — 막는 게 아니라 **물어본다.** 진짜로 다른 메뉴인데 이름만
+ * 같을 수도 있으므로(force_new), 고르는 것은 사장님이다.
+ *
+ * 코드가 같거나 이름이 같으면 같은 메뉴로 본다. 코드가 제일 확실하다.
+ */
+function trashedTwin(items, b) {
+  const norm = (v) => String(v == null ? "" : v).trim().toLowerCase();
+  const code = norm(b.code);
+  const zh = norm(b.name_zh);
+  const ko = norm(b.name_ko);
+  return (
+    deletedItems(items).find((m) => {
+      if (code && norm(m.code) === code) return true;
+      if (zh && norm(m.name_zh) === zh) return true;
+      if (ko && norm(m.name_ko) === ko) return true;
+      return false;
+    }) || null
+  );
+}
+
 // 화면이 보내온 품절 설정을 저장 형태로 옮긴다. 화면은 네 가지 중 하나를
 // 고르고(판매 중 / 오늘만 / 기간 / 계속), 여기서 available 과 날짜 두 개로
 // 편다. 규칙을 서버가 정해야 관리자 화면과 나중에 생길 다른 경로가
@@ -178,6 +207,21 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
   const clash = codeConflict(store.menuItems, b.code, null);
   if (clash) {
     return res.status(409).json({ error: "code_taken", code: String(b.code).trim(), itemId: clash.id, name_zh: clash.name_zh, name_ko: clash.name_ko });
+  }
+  // 휴지통에 같은 메뉴가 있으면 새로 만들기 전에 한 번 물어본다(위
+  // trashedTwin 참고). force_new 가 오면 사장님이 이미 고른 것이다.
+  if (!b.force_new) {
+    const twin = trashedTwin(store.menuItems, b);
+    if (twin) {
+      return res.status(409).json({
+        error: "trash_match",
+        itemId: twin.id,
+        code: twin.code || null,
+        name_zh: twin.name_zh,
+        name_ko: twin.name_ko,
+        deleted_at: twin[DELETED_AT],
+      });
+    }
   }
   const maxSort = store.menuItems.reduce((m, i) => Math.max(m, i.sort_order), 0);
   // 번호는 데이터베이스가 준다.
@@ -405,6 +449,25 @@ router.get("/admin/trash", requireAdmin, (req, res) => {
  */
 router.post("/admin/items/:id/restore", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // 되살리기 전에 코드를 본다.
+  //
+  // 버린 것은 코드가 안 겹친 것으로 치므로(codeConflict), 버린 사이에 같은
+  // 코드로 새 메뉴가 들어와 있을 수 있다. 그대로 되살리면 **같은 「77」을
+  // 쓰는 메뉴가 두 개 동시에 살아난다** — 주방 빌지에 똑같이 77 로 찍히는
+  // 서로 다른 메뉴가 생긴다. 여기서 막고 어느 메뉴가 쓰는지 알려준다.
+  const target = (store.menuItems || []).find((i) => i.id === id);
+  if (target) {
+    const clash = codeConflict(store.menuItems, target.code, id);
+    if (clash) {
+      return res.status(409).json({
+        error: "code_taken",
+        code: String(target.code).trim(),
+        itemId: clash.id,
+        name_zh: clash.name_zh,
+        name_ko: clash.name_ko,
+      });
+    }
+  }
   let restored = null;
   await refreshAndSave((s) => {
     const item = s.menuItems.find((i) => i.id === id);

@@ -1444,6 +1444,10 @@
     <p id="appDialogMessage"></p>
     <div class="modal-actions">
       <button class="danger-btn" id="appDialogCancel" data-i18n="appDialogCancel">취소</button>
+      <!-- 세 갈래로 물어볼 때만 보이는 가운데 버튼(showChoice). 예: 휴지통에
+           같은 메뉴가 있을 때 「되살리기 / 새 메뉴로 넣기 / 취소」.
+           문구는 showChoice 가 그때그때 넣는다. -->
+      <button class="ghost-btn" id="appDialogAlt" hidden></button>
       <button class="primary-btn" id="appDialogOk" data-i18n="appDialogOk">확인</button>
     </div>
   </div>

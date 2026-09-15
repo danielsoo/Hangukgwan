@@ -130,10 +130,60 @@ const byId = (id) => store.menuItems.find((m) => m.id === id);
   r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: "코드재사용", code: String(byId(secondId).code || "") || undefined });
   check("버린 것과는 코드가 안 겹친 것으로 친다", r.status === 201, `${r.status} ${JSON.stringify(r.body)}`);
 
+  out.push("\n[지웠다가 같은 메뉴를 다시 넣으면]");
+  //
+  // 사장님(2026-09-15): "만약에 지웠다가 같은 메뉴를 넣으면 어떻게 돼? 제대로
+  // 인식 돼?" — 그냥 새로 넣으면 안 된다. 새 번호를 받고, 결산은 메뉴를
+  // 번호로 묶으므로(src/settlement.js) 같은 메뉴가 두 줄로 갈라진다.
+  // 되살리면 번호가 그대로다. 그래서 새로 넣기 전에 휴지통을 먼저 본다.
+  const twinName = "쌍둥이메뉴";
+  const twinCode = "ZZ7";
+  r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: twinName, code: twinCode });
+  const twinId = r.body.id;
+  check("메뉴를 하나 만든다", r.status === 201, `${r.status}`);
+  r = await staff.delete(`/api/menu/admin/items/${twinId}`);
+  check("버린다", r.status === 200, `${r.status}`);
+
+  r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: twinName });
+  check("★ 이름이 같으면 휴지통에 있다고 알려준다", r.status === 409 && r.body.error === "trash_match", `${r.status} ${JSON.stringify(r.body)}`);
+  check("★ 어느 것인지 번호로 알려준다", r.body.itemId === twinId, `${r.body.itemId} vs ${twinId}`);
+  r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: "전혀다른이름", code: twinCode });
+  check("★ 코드가 같아도 알려준다", r.status === 409 && r.body.error === "trash_match", `${r.status} ${JSON.stringify(r.body)}`);
+  check("★ 그냥 만들어지지 않았다", store.menuItems.filter((m) => m.name_zh === twinName).length === 1, "");
+
+  r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: "상관없는메뉴" });
+  check("상관없는 메뉴는 안 물어보고 그냥 들어간다", r.status === 201, `${r.status} ${JSON.stringify(r.body)}`);
+
+  out.push("\n[그래도 새로 넣겠다고 하면 넣어준다]");
+  // 이름만 같고 진짜로 다른 메뉴일 수 있다. 막는 게 아니라 물어보는 것이다.
+  r = await staff.post("/api/menu/admin/items").send({ ...base, name_zh: twinName, force_new: true });
+  check("★ force_new 면 새로 만든다", r.status === 201, `${r.status} ${JSON.stringify(r.body)}`);
+  const newTwinId = r.body.id;
+  check("★ 번호가 다르다 — 결산이 갈라지는 쪽이다", newTwinId !== twinId, `${newTwinId} vs ${twinId}`);
+
+  out.push("\n[되살릴 때도 코드를 본다]");
+  // 버린 사이에 같은 코드로 새 메뉴가 들어와 있으면, 그대로 되살리면 같은
+  // 코드를 쓰는 메뉴가 둘 다 살아난다 — 빌지에 똑같이 찍힌다.
+  r = await staff.put(`/api/menu/admin/items/${newTwinId}`).send({ code: twinCode });
+  check("버린 것과 같은 코드를 새 메뉴가 가져간다", r.status === 200, `${r.status} ${JSON.stringify(r.body)}`);
+  r = await staff.post(`/api/menu/admin/items/${twinId}/restore`);
+  check("★ 그 상태에서 되살리면 막는다", r.status === 409 && r.body.error === "code_taken", `${r.status} ${JSON.stringify(r.body)}`);
+  check("★ 누가 쓰는지 알려준다", r.body.itemId === newTwinId, `${r.body.itemId} vs ${newTwinId}`);
+  check("★ 되살아나지 않았다", !!byId(twinId).deleted_at, "");
+  r = await staff.put(`/api/menu/admin/items/${newTwinId}`).send({ code: "ZZ8" });
+  check("새 메뉴의 코드를 바꿔준다", r.status === 200, `${r.status}`);
+  r = await staff.post(`/api/menu/admin/items/${twinId}/restore`);
+  check("★ 비켜주면 되살아난다", r.status === 200 && r.body.id === twinId, `${r.status} ${JSON.stringify(r.body)}`);
+
   out.push("\n[화면이 거절을 본다]");
   const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
-  const saveIdx = admin.indexOf("/api/menu/admin/items`, {");
-  const saveSrc = saveIdx > 0 ? admin.slice(saveIdx, saveIdx + 1600) : "";
+  // 저장 버튼 한 덩어리를 통째로 본다. 예전에는 fetch 한 줄을 기준으로
+  // 1600자만 잘라 봤는데, 그 사이에 코드가 늘어나자 검사 범위 밖으로
+  // 밀려나 **멀쩡한 코드를 고장났다고 했다.** 기준을 함수 시작점으로 옮긴다.
+  const saveIdx = admin.indexOf("const send = (body) =>");
+  const saveEnd = saveIdx > 0 ? admin.indexOf("itemModalBackdrop", saveIdx) : -1;
+  const saveSrc = saveIdx > 0 && saveEnd > 0 ? admin.slice(saveIdx, saveEnd + 400) : "";
+  check("저장 버튼 코드를 찾았다", saveSrc.length > 500, `idx=${saveIdx} end=${saveEnd}`);
   check(
     "★ 저장 응답의 res.ok 를 본다",
     /if\s*\(\s*!res\.ok\s*\)/.test(saveSrc),
@@ -150,7 +200,27 @@ const byId = (id) => store.menuItems.find((m) => m.id === id);
     /function menuSaveErrorMsg/.test(admin) && /menuErrCodeTaken/.test(admin),
     ""
   );
-  for (const key of ["menuErrCodeTaken", "menuErrPrice", "menuErrCategory", "menuErrInTrash", "menuErrSaveFailed"]) {
+  check(
+    "★ 휴지통에 같은 메뉴가 있으면 세 갈래로 물어본다",
+    /trash_match/.test(saveSrc) && /showChoice\(/.test(saveSrc),
+    "예/아니오로는 「되살리기 / 새로 넣기 / 그만두기」를 못 고른다"
+  );
+  check(
+    "★ 되살리기를 고르면 친 내용을 그대로 얹는다",
+    /\/restore`,\s*\{\s*method:\s*"POST"\s*\}\)[\s\S]{0,400}?send\(payload\)/.test(saveSrc),
+    "되살리고 끝내면 방금 고쳐 넣은 값이 버려진다"
+  );
+  check(
+    "★ 새로 넣기를 고르면 force_new 로 다시 보낸다",
+    /force_new:\s*true/.test(saveSrc),
+    ""
+  );
+  check(
+    "★ 휴지통 되살리기 버튼도 409 를 사장님 말로 옮긴다",
+    /status === 409[\s\S]{0,300}?menuSaveErrorMsg/.test(admin.slice(admin.indexOf("menu-trash-restore"))),
+    "「실패했습니다」만 뜨면 왜 안 되는지 알 수 없다"
+  );
+  for (const key of ["menuErrCodeTaken", "menuErrPrice", "menuErrCategory", "menuErrInTrash", "menuErrSaveFailed", "menuTrashMatch", "menuTrashRestoreIt", "menuTrashMakeNew"]) {
     const hits = admin.split(`${key}:`).length - 1;
     check(`${key} 가 한국어/중국어 둘 다 있다`, hits >= 2, `${hits}`);
   }

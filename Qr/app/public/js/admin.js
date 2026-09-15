@@ -443,6 +443,7 @@
     return new Promise((resolve) => {
       $("#appDialogMessage").textContent = message;
       $("#appDialogCancel").hidden = false;
+      $("#appDialogAlt").hidden = true;
       $("#appDialogBackdrop").hidden = false;
       const finish = (result) => {
         $("#appDialogBackdrop").hidden = true;
@@ -458,12 +459,50 @@
     return new Promise((resolve) => {
       $("#appDialogMessage").textContent = message;
       $("#appDialogCancel").hidden = true;
+      $("#appDialogAlt").hidden = true;
       $("#appDialogBackdrop").hidden = false;
       $("#appDialogOk").onclick = () => {
         $("#appDialogBackdrop").hidden = true;
         $("#appDialogOk").onclick = null;
         resolve();
       };
+    });
+  }
+
+  // 같은 팝업으로 **세 갈래**를 묻는다. 예/아니오로 안 되는 자리가 있다:
+  // 휴지통에 같은 메뉴가 있을 때는 「되살리기」와 「새 메뉴로 넣기」가 둘 다
+  // 정상적인 답이고, 그냥 그만두는 길도 있어야 한다. 취소를 「새로 넣기」로
+  // 쓰면 실수로 결산이 갈라진다.
+  //
+  // "ok" | "alt" | "cancel" 중 하나를 돌려준다. 버튼 문구는 원래대로
+  // 되돌려놓는다 — 다음에 열리는 showConfirm 이 이 문구를 물려받으면 안 된다.
+  function showChoice(message, okLabel, altLabel, cancelLabel) {
+    return new Promise((resolve) => {
+      const ok = $("#appDialogOk");
+      const alt = $("#appDialogAlt");
+      const cancel = $("#appDialogCancel");
+      const okWas = ok.textContent;
+      const cancelWas = cancel.textContent;
+      $("#appDialogMessage").textContent = message;
+      ok.textContent = okLabel;
+      alt.textContent = altLabel;
+      cancel.textContent = cancelLabel;
+      cancel.hidden = false;
+      alt.hidden = false;
+      $("#appDialogBackdrop").hidden = false;
+      const finish = (result) => {
+        $("#appDialogBackdrop").hidden = true;
+        alt.hidden = true;
+        ok.textContent = okWas;
+        cancel.textContent = cancelWas;
+        ok.onclick = null;
+        alt.onclick = null;
+        cancel.onclick = null;
+        resolve(result);
+      };
+      ok.onclick = () => finish("ok");
+      alt.onclick = () => finish("alt");
+      cancel.onclick = () => finish("cancel");
     });
   }
 
@@ -812,6 +851,11 @@
       confirmZeroPrice: "가격이 0원입니다. 이대로 저장할까요?",
       menuPhotoFailed: "메뉴는 저장했지만 사진은 못 올렸어요. 사진만 다시 올려주세요.",
       menuErrCodeTaken: "코드 {code} 는 이미 「{name}」 이 쓰고 있어요. 다른 코드를 넣어주세요.",
+      // 휴지통에 같은 메뉴가 있을 때. 「왜 물어보는지」까지 한 줄로 말해줘야
+      // 사장님이 고를 수 있다. 새로 넣으면 결산이 갈라진다는 것이 요점이다.
+      menuTrashMatch: "휴지통에 「{name}」(코드 {code})이 있어요. 새 메뉴로 넣으면 번호가 달라져서 결산에서 두 줄로 갈라집니다. 어떻게 할까요?",
+      menuTrashRestoreIt: "되살리기",
+      menuTrashMakeNew: "새 메뉴로 넣기",
       menuErrPrice: "가격을 숫자로 넣어주세요. 음수는 안 됩니다.",
       menuErrOriginalPrice: "정가를 숫자로 넣어주세요. 음수는 안 됩니다.",
       menuErrMinQty: "첫 주문 최소 수량을 숫자로 넣어주세요. 음수는 안 됩니다.",
@@ -1556,6 +1600,9 @@
       confirmZeroPrice: "價格是 0 元，確定要這樣儲存嗎？",
       menuPhotoFailed: "菜品已儲存，但照片上傳失敗，請重新上傳照片。",
       menuErrCodeTaken: "代碼 {code} 已由「{name}」使用，請換一個代碼。",
+      menuTrashMatch: "垃圾桶裡有「{name}」（代碼 {code}）。建立新品項會取得新編號，結算會分成兩列。要怎麼處理？",
+      menuTrashRestoreIt: "還原",
+      menuTrashMakeNew: "建立新品項",
       menuErrPrice: "請輸入數字的價格，不能是負數。",
       menuErrOriginalPrice: "請輸入數字的原價，不能是負數。",
       menuErrMinQty: "請輸入數字的首次點餐最低份數，不能是負數。",
@@ -6661,17 +6708,52 @@
     if (!payload.price && !(await showConfirm(T("confirmZeroPrice")))) return;
 
     let itemId = editingItemId;
-    const res = itemId
-      ? await fetch(`/api/menu/admin/items/${itemId}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      : await fetch(`/api/menu/admin/items`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+    const send = (body) =>
+      itemId
+        ? fetch(`/api/menu/admin/items/${itemId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          })
+        : fetch(`/api/menu/admin/items`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+    let res = await send(payload);
+
+    // 휴지통에 같은 메뉴가 있을 때.
+    //
+    // 2026-09-15 사장님: "만약에 지웠다가 같은 메뉴를 넣으면 어떻게 돼?"
+    // 새로 넣으면 새 번호를 받고 결산이 두 줄로 갈라진다. 되살리면 번호가
+    // 그대로다. 어느 쪽인지는 사장님만 아니까 **막지 않고 물어본다.**
+    if (res.status === 409) {
+      const body = await res.clone().json().catch(() => ({}));
+      if (body && body.error === "trash_match") {
+        const name = adminLang === "zh" ? body.name_zh || body.name_ko : body.name_ko || body.name_zh;
+        const pick = await showChoice(
+          T("menuTrashMatch").replace("{name}", name || "").replace("{code}", body.code || "-"),
+          T("menuTrashRestoreIt"),
+          T("menuTrashMakeNew"),
+          T("appDialogCancel")
+        );
+        if (pick === "cancel") return; // 창을 닫지 않는다
+        if (pick === "ok") {
+          // 되살린 다음, 방금 고쳐 넣은 값을 그대로 얹는다 — 사장님이 친
+          // 것이 버려지면 안 된다.
+          const rr = await fetch(`/api/menu/admin/items/${body.itemId}/restore`, { method: "POST" });
+          if (!rr.ok) {
+            await showAlert(menuSaveErrorMsg(await rr.json().catch(() => ({}))));
+            return;
+          }
+          itemId = body.itemId;
+          res = await send(payload);
+        } else {
+          res = await send({ ...payload, force_new: true });
+        }
+      }
+    }
 
     // 저장 결과를 **본다.**
     //
@@ -6768,6 +6850,14 @@
         btn.disabled = true;
         try {
           const res = await fetch(`/api/menu/admin/items/${m.id}/restore`, { method: "POST" });
+          // 버린 사이에 같은 코드로 새 메뉴가 들어와 있으면 서버가 막는다.
+          // 그냥 "실패했습니다" 로 끝내면 사장님이 왜 안 되는지 알 수 없으므로
+          // 어느 메뉴가 그 코드를 쓰고 있는지 그대로 알려준다.
+          if (res.status === 409) {
+            btn.disabled = false;
+            await showAlert(menuSaveErrorMsg(await res.json().catch(() => ({}))));
+            return;
+          }
           if (!res.ok) throw new Error(String(res.status));
           // 되살아났으니 메뉴 목록과 휴지통을 둘 다 다시 읽는다.
           await loadMenu();
