@@ -231,7 +231,11 @@ html[data-admin-seen="1"] #loginScreen { display: none; }
 @keyframes flash { 0%,100% { box-shadow: 0 1px 3px rgba(0,0,0,0.06);} 50% { box-shadow: 0 0 0 4px rgba(181,35,44,0.35);} }
 
 /* Menu management */
-.menu-toolbar { margin-bottom: 14px; }
+.menu-toolbar { margin-bottom: 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+/* 휴지통은 곁들이다. 「메뉴 추가」와 같은 빨강이면 둘 다 중요해 보인다. */
+.menu-toolbar .ghost-btn {
+  background: #fff; color: var(--muted); border: 1px solid var(--line); font-weight: 700;
+}
 .menu-toolbar button, .tables-toolbar button, .print-qr-btn {
   padding: 10px 16px; border-radius: 8px; border: none; background: var(--red); color: #fff; cursor: pointer; font-weight: 700; text-decoration: none; display: inline-block; font-size: 17px;
 }
@@ -2100,3 +2104,16 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 @keyframes stl-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .stl-spinner { animation: none; } }
+
+/* ── 메뉴 휴지통 ──────────────────────────────────────────────────────
+   2026-09-15 사장님: "삭제는 휴지통을 하나 만들어서 복원 버튼을". */
+.menu-trash-list { max-height: 52vh; overflow-y: auto; }
+.menu-trash-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 2px; border-bottom: 1px solid var(--line);
+}
+.menu-trash-row:last-child { border-bottom: none; }
+.menu-trash-info { min-width: 0; }
+.menu-trash-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.menu-trash-meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.menu-trash-restore { flex: none; padding: 8px 16px; font-size: 14px; }

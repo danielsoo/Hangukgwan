@@ -1516,6 +1516,20 @@
   </div>
 </div>
 
+<!-- 메뉴 휴지통 — 지운 메뉴는 없어지지 않고 여기로 온다. -->
+<div id="menuTrashBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal">
+    <h2 style="margin-top:0;" data-i18n="menuTrashTitle">휴지통</h2>
+    <p style="color:var(--muted);font-size:14px;margin:0 0 14px;" data-i18n="menuTrashHint">
+      지운 메뉴는 여기에 남습니다. 되살리면 번호가 그대로라 결산도 이어집니다.
+    </p>
+    <div id="menuTrashList" class="menu-trash-list"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <button type="button" id="menuTrashClose" data-i18n="closeBtn">닫기</button>
+    </div>
+  </div>
+</div>
+
 <div id="soldOutBackdrop" class="modal-backdrop" hidden>
   <div class="modal app-dialog-modal">
     <h2 style="margin-top:0;" data-i18n="soldOutTitle">품절 설정</h2>

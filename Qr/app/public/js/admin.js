@@ -808,7 +808,17 @@
       itemModalAddTitle: "메뉴 추가",
       itemModalEditTitle: "메뉴 수정",
       alertMenuNameRequired: "메뉴 이름을 입력하세요",
-      confirmDeleteItem: "이 메뉴를 삭제하시겠습니까? 되돌릴 수 없습니다.",
+      confirmDeleteItem: "이 메뉴를 휴지통으로 보낼까요? 손님 화면과 메뉴 목록에서 사라집니다. 휴지통에서 되살릴 수 있어요.",
+      menuTrashBtn: "🗑 휴지통",
+      menuTrashBtnCount: "🗑 휴지통 ({n})",
+      menuTrashTitle: "휴지통",
+      menuTrashHint: "지운 메뉴는 여기에 남습니다. 되살리면 번호가 그대로라 결산도 이어집니다.",
+      menuTrashEmpty: "휴지통이 비어 있습니다.",
+      menuTrashRestore: "되살리기",
+      menuTrashRestored: "되살렸습니다.",
+      menuTrashFailed: "되살리지 못했어요. 다시 시도해 주세요.",
+      menuTrashDeletedAt: "버린 날",
+      closeBtn: "닫기",
       newTableNumberPlaceholder: "테이블 번호 (예: 12)",
       newTableLabelPlaceholder: "표시 이름 (선택사항)",
       addTableBtn: "+ 테이블 추가",
@@ -1532,7 +1542,17 @@
       itemModalAddTitle: "新增菜品",
       itemModalEditTitle: "編輯菜品",
       alertMenuNameRequired: "請輸入菜品名稱",
-      confirmDeleteItem: "確定要刪除這個菜品嗎？此操作無法復原。",
+      confirmDeleteItem: "要將這個菜品移到回收桶嗎？顧客點餐畫面與菜單列表將不再顯示，之後可以從回收桶還原。",
+      menuTrashBtn: "🗑 回收桶",
+      menuTrashBtnCount: "🗑 回收桶 ({n})",
+      menuTrashTitle: "回收桶",
+      menuTrashHint: "刪除的菜品會留在這裡。還原後編號不變，結算資料也會接續。",
+      menuTrashEmpty: "回收桶是空的。",
+      menuTrashRestore: "還原",
+      menuTrashRestored: "已還原。",
+      menuTrashFailed: "還原失敗，請再試一次。",
+      menuTrashDeletedAt: "刪除日期",
+      closeBtn: "關閉",
       newTableNumberPlaceholder: "桌號（例如：12）",
       newTableLabelPlaceholder: "顯示名稱（選填）",
       addTableBtn: "+ 新增桌號",
@@ -6192,6 +6212,8 @@
     renderMenuAdmin();
     populateCategorySelect();
     scheduleSoldOutRefresh();
+    // 휴지통 버튼의 숫자 — 다른 태블릿이 버린 것도 여기서 보인다.
+    loadMenuTrash();
   }
 
   // 품절이 풀리는 시각에 목록을 스스로 다시 불러온다.
@@ -6639,12 +6661,92 @@
     loadMenu();
   };
 
+  // ── 메뉴 휴지통 ──────────────────────────────────────────────────
+  //
+  // 2026-09-15 사장님: "삭제는 휴지통을 하나 만들어서 복원 버튼을
+  // 만들어줬으면 좋겠어."
+  //
+  // 지운 메뉴는 없어지지 않고 번호를 달고 여기 남는다. 되살리면 같은 번호로
+  // 돌아오므로 결산의 「이 메뉴 얼마나 팔렸나」가 안 갈라진다
+  // (src/menuItems.js 첫머리).
+  let menuTrash = [];
+  async function loadMenuTrash() {
+    try {
+      const res = await fetch("/api/menu/admin/trash");
+      menuTrash = res.ok ? await res.json() : [];
+    } catch (e) {
+      menuTrash = [];
+    }
+    renderMenuTrashBtn();
+  }
+  function renderMenuTrashBtn() {
+    const btn = $("#menuTrashBtn");
+    if (!btn) return;
+    // 버린 것이 없으면 버튼도 안 보인다 — 쓸 일 없는 것이 늘 떠 있으면 방해다.
+    btn.hidden = menuTrash.length === 0;
+    btn.textContent = T("menuTrashBtnCount").replace("{n}", menuTrash.length);
+  }
+  function renderMenuTrash() {
+    const wrap = $("#menuTrashList");
+    if (!wrap) return;
+    if (!menuTrash.length) {
+      wrap.innerHTML = `<p style="color:var(--muted);padding:18px 0;text-align:center;">${T("menuTrashEmpty")}</p>`;
+      return;
+    }
+    wrap.innerHTML = "";
+    menuTrash.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "menu-trash-row";
+      const name = adminLang === "zh" ? m.name_zh || m.name_ko : m.name_ko || m.name_zh;
+      row.innerHTML = `
+        <div class="menu-trash-info">
+          <div class="menu-trash-name">${m.code ? `${escapeHtml(m.code)} ` : ""}${escapeHtml(name || "")}</div>
+          <div class="menu-trash-meta">NT$${m.price} · ${T("menuTrashDeletedAt")} ${escapeHtml(String(m.deleted_at || "").slice(0, 16))}</div>
+        </div>
+        <button type="button" class="menu-trash-restore">${T("menuTrashRestore")}</button>
+      `;
+      row.querySelector(".menu-trash-restore").onclick = async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const res = await fetch(`/api/menu/admin/items/${m.id}/restore`, { method: "POST" });
+          if (!res.ok) throw new Error(String(res.status));
+          // 되살아났으니 메뉴 목록과 휴지통을 둘 다 다시 읽는다.
+          await loadMenu();
+          await loadMenuTrash();
+          renderMenuTrash();
+        } catch (err) {
+          btn.disabled = false;
+          await showAlert(T("menuTrashFailed"));
+        }
+      };
+      wrap.appendChild(row);
+    });
+  }
+  if ($("#menuTrashBtn")) {
+    $("#menuTrashBtn").onclick = async () => {
+      await loadMenuTrash();
+      renderMenuTrash();
+      $("#menuTrashBackdrop").hidden = false;
+    };
+  }
+  if ($("#menuTrashClose")) {
+    $("#menuTrashClose").onclick = () => ($("#menuTrashBackdrop").hidden = true);
+  }
+  if ($("#menuTrashBackdrop")) {
+    $("#menuTrashBackdrop").addEventListener("click", (e) => {
+      if (e.target.id === "menuTrashBackdrop") $("#menuTrashBackdrop").hidden = true;
+    });
+  }
+
   $("#deleteItemBtn").onclick = async () => {
     if (!editingItemId) return;
     if (!(await showConfirm(T("confirmDeleteItem")))) return;
     await fetch(`/api/menu/admin/items/${editingItemId}`, { method: "DELETE" });
     $("#itemModalBackdrop").hidden = true;
-    loadMenu();
+    await loadMenu();
+    // 방금 버린 것이 휴지통에 들어갔다. 버튼의 숫자를 바로 맞춘다.
+    await loadMenuTrash();
   };
 
   // ---------- Tables ----------

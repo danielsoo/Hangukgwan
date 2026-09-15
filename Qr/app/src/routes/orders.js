@@ -33,6 +33,7 @@ function resolveSelectedAddons(mi, requestedNames) {
 
 const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
 const locationGate = require("../locationGate");
+const { isDeleted: isDeletedMenuItem } = require("../menuItems");
 const { isAvailableNow } = require("../availability");
 const { serviceStartedAt } = require("../serviceStart");
 const { openOrdersForTable, operationalOrderById, ordersForSeating, ordersForNewOrder, paidInSeating } = require("../orderQueries");
@@ -353,6 +354,9 @@ router.post("/", async (req, res) => {
     const mi = store.menuItems.find(
       (m) =>
         m.id === parseInt(it.itemId, 10) &&
+        // 휴지통에 있는 메뉴는 주소를 알아도 주문될 수 없다. 테스트 기기도
+        // 예외가 아니다 — 품절과 달리 이건 「없는 메뉴」다.
+        !isDeletedMenuItem(m) &&
         (testMode.isTest(req, store) || isAvailableNow(m, store.settings))
     );
     if (!mi) continue;
@@ -411,6 +415,7 @@ router.post("/", async (req, res) => {
     const qtyByItem = {};
     for (const v of validated) qtyByItem[v.item_id] = (qtyByItem[v.item_id] || 0) + v.qty;
     for (const mi of store.menuItems) {
+      if (isDeletedMenuItem(mi)) continue;
       if (!mi.min_first_order_qty) continue;
       const orderedQty = qtyByItem[mi.id] || 0;
       if (orderedQty > 0 && orderedQty < mi.min_first_order_qty) {
@@ -1061,6 +1066,9 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     const mi = store.menuItems.find(
       (m) =>
         m.id === parseInt(it.itemId, 10) &&
+        // 휴지통에 있는 메뉴는 주소를 알아도 주문될 수 없다. 테스트 기기도
+        // 예외가 아니다 — 품절과 달리 이건 「없는 메뉴」다.
+        !isDeletedMenuItem(m) &&
         (testMode.isTest(req, store) || isAvailableNow(m, store.settings))
     );
     if (!mi) continue;

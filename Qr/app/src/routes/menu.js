@@ -4,6 +4,8 @@ const { store, save, refreshAndSave, nextId, savePhoto, deletePhoto } = require(
 const { requireAdmin, requirePermission } = require("../auth");
 const { withAvailability, today } = require("../availability");
 const { broadcastOnWrite } = require("../realtime");
+const { DELETED_AT, activeItems, deletedItems } = require("../menuItems");
+const { nowLocal } = require("../time");
 const canEditMenu = requirePermission("menuEdit");
 
 const router = express.Router();
@@ -37,7 +39,9 @@ function categoriesWithItems(onlyAvailable) {
     // 품절 기간(src/availability.js)을 여기서 한 번 계산해 available 에
     // 담아 내보낸다. 그러면 손님 화면·관리자 화면·주문 검사까지 전부
     // 같은 판단을 보게 된다 — 화면마다 따로 계산하면 반드시 어긋난다.
-    let items = store.menuItems
+    // 휴지통에 있는 것은 어디에도 안 보인다 — 손님 화면도, 메뉴 관리 표도.
+    // 번호만 살려둔 것이지 메뉴로 살아 있는 게 아니다(src/menuItems.js).
+    let items = activeItems(store.menuItems)
       .filter((i) => i.category_id === c.id)
       .map((i) => withAvailability(i, store.settings));
     if (onlyAvailable) items = items.filter((i) => i.available);
@@ -251,11 +255,73 @@ router.patch("/admin/items/:id/move", canEditMenu, async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * 지우기 = 휴지통으로 보내기.
+ *
+ * 2026-09-15 사장님: "삭제는 휴지통을 하나 만들어서 복원 버튼을 만들어줬으면
+ * 좋겠어."
+ *
+ * 예전에는 배열에서 빼고 store 문서를 **통째로** 다시 썼다(save()). 두 가지가
+ * 나빴다.
+ *
+ *  1. 다시 읽지 않고 썼다. 이 인스턴스가 들고 있던 낡은 사본이 통째로 나가서,
+ *     그 사이 다른 태블릿이 고친 인원수·품절이 되살아날 수 있었다 —
+ *     2026-09-10 인원수 사고와 똑같은 모양이다. 이제 refreshAndSave 로
+ *     저장 직전에 다시 읽는다(수정·이동 라우트는 이미 그렇게 하고 있었다).
+ *  2. 번호가 사라졌다. 다시 등록하면 새 번호를 받아 결산이 갈라진다
+ *     (src/menuItems.js 첫머리).
+ */
 router.delete("/admin/items/:id", canEditMenu, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  store.menuItems = store.menuItems.filter((i) => i.id !== id);
-  await save();
+  let found = false;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    found = true;
+    item[DELETED_AT] = nowLocal();
+  });
+  if (!found) return res.status(404).json({ error: "not_found" });
   res.json({ ok: true });
+});
+
+/** 휴지통에 무엇이 있나. 버린 순서대로. */
+router.get("/admin/trash", requireAdmin, (req, res) => {
+  res.json(
+    deletedItems(store.menuItems).map((m) => ({
+      id: m.id,
+      code: m.code,
+      name_zh: m.name_zh,
+      name_ko: m.name_ko,
+      name_en: m.name_en,
+      price: m.price,
+      category_id: m.category_id,
+      deleted_at: m[DELETED_AT],
+    }))
+  );
+});
+
+/**
+ * 되살리기. 번호가 그대로라 결산도 그대로 이어진다.
+ *
+ * 분류가 그 사이 없어졌으면 되살려도 목록에 안 보인다(분류별로 그리므로).
+ * 그래서 그 경우는 첫 분류로 옮겨 놓는다 — 안 보이는 채로 「복원됐다」고
+ * 하면 사장님은 사라진 줄 안다.
+ */
+router.post("/admin/items/:id/restore", canEditMenu, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  let restored = null;
+  await refreshAndSave((s) => {
+    const item = s.menuItems.find((i) => i.id === id);
+    if (!item) return;
+    delete item[DELETED_AT];
+    const cats = s.categories || [];
+    if (!cats.some((c) => c.id === item.category_id) && cats.length) {
+      item.category_id = [...cats].sort((a, b) => a.sort_order - b.sort_order)[0].id;
+    }
+    restored = item;
+  });
+  if (!restored) return res.status(404).json({ error: "not_found" });
+  res.json(withAvailability(restored, store.settings));
 });
 
 router.post("/admin/items/:id/photo", canEditMenu, upload.single("photo"), async (req, res) => {

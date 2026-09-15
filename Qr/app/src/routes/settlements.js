@@ -1,4 +1,5 @@
 const express = require("express");
+const { activeItems } = require("../menuItems");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf, halfOf } = require("../settlement");
@@ -147,7 +148,9 @@ function menuForSettlement() {
     const c = catById.get(m.category_id);
     return [(c && c.sort_order) || 999, m.sort_order || 0, m.id];
   };
-  return [...(store.menuItems || [])]
+  // 휴지통에 있는 메뉴는 「안 팔린 메뉴」 목록에 안 낀다. 판 적이 있는
+  // 메뉴는 주문 쪽에서 집계되므로 지웠다고 기록이 사라지지는 않는다.
+  return activeItems(store.menuItems)
     .sort((a, b) => {
       const x = orderOf(a);
       const y = orderOf(b);
