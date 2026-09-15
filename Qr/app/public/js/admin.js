@@ -809,6 +809,16 @@
       itemModalEditTitle: "메뉴 수정",
       alertMenuNameRequired: "메뉴 이름을 입력하세요",
       confirmDeleteItem: "이 메뉴를 휴지통으로 보낼까요? 손님 화면과 메뉴 목록에서 사라집니다. 휴지통에서 되살릴 수 있어요.",
+      confirmZeroPrice: "가격이 0원입니다. 이대로 저장할까요?",
+      menuPhotoFailed: "메뉴는 저장했지만 사진은 못 올렸어요. 사진만 다시 올려주세요.",
+      menuErrCodeTaken: "코드 {code} 는 이미 「{name}」 이 쓰고 있어요. 다른 코드를 넣어주세요.",
+      menuErrPrice: "가격을 숫자로 넣어주세요. 음수는 안 됩니다.",
+      menuErrOriginalPrice: "정가를 숫자로 넣어주세요. 음수는 안 됩니다.",
+      menuErrMinQty: "첫 주문 최소 수량을 숫자로 넣어주세요. 음수는 안 됩니다.",
+      menuErrCategory: "분류를 다시 골라주세요. 고른 분류가 지금은 없습니다.",
+      menuErrInTrash: "이 메뉴는 휴지통에 있어요. 먼저 되살린 뒤에 고쳐주세요.",
+      menuErrGone: "이 메뉴를 찾을 수 없어요. 다른 기기에서 지웠을 수 있습니다.",
+      menuErrSaveFailed: "저장하지 못했어요. 다시 시도해 주세요.",
       menuTrashBtn: "🗑 휴지통",
       menuTrashBtnCount: "🗑 휴지통 ({n})",
       menuTrashTitle: "휴지통",
@@ -1543,6 +1553,16 @@
       itemModalEditTitle: "編輯菜品",
       alertMenuNameRequired: "請輸入菜品名稱",
       confirmDeleteItem: "要將這個菜品移到回收桶嗎？顧客點餐畫面與菜單列表將不再顯示，之後可以從回收桶還原。",
+      confirmZeroPrice: "價格是 0 元，確定要這樣儲存嗎？",
+      menuPhotoFailed: "菜品已儲存，但照片上傳失敗，請重新上傳照片。",
+      menuErrCodeTaken: "代碼 {code} 已由「{name}」使用，請換一個代碼。",
+      menuErrPrice: "請輸入數字的價格，不能是負數。",
+      menuErrOriginalPrice: "請輸入數字的原價，不能是負數。",
+      menuErrMinQty: "請輸入數字的首次點餐最低份數，不能是負數。",
+      menuErrCategory: "請重新選擇分類，目前找不到所選的分類。",
+      menuErrInTrash: "這個菜品在回收桶裡，請先還原再修改。",
+      menuErrGone: "找不到這個菜品，可能已在其他裝置上刪除。",
+      menuErrSaveFailed: "儲存失敗，請再試一次。",
       menuTrashBtn: "🗑 回收桶",
       menuTrashBtnCount: "🗑 回收桶 ({n})",
       menuTrashTitle: "回收桶",
@@ -6636,30 +6656,68 @@
       await showAlert(T("alertMenuNameRequired"));
       return;
     }
+    // 0원은 막지 않는다 — 서비스로 주는 메뉴가 있을 수 있다. 다만 가격 칸을
+    // 비워두고 저장하면 화면이 0 을 보내므로, 실수인지 한 번 물어본다.
+    if (!payload.price && !(await showConfirm(T("confirmZeroPrice")))) return;
+
     let itemId = editingItemId;
-    if (itemId) {
-      await fetch(`/api/menu/admin/items/${itemId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    } else {
-      const res = await fetch(`/api/menu/admin/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const created = await res.json();
-      itemId = created.id;
+    const res = itemId
+      ? await fetch(`/api/menu/admin/items/${itemId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+      : await fetch(`/api/menu/admin/items`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+    // 저장 결과를 **본다.**
+    //
+    // 2026-09-15 사장님: "메뉴가 삭제되거나 수정되거나 업데이트 될 때 문제가
+    // 생기지 않게 보안장치를 넣자는 거야."
+    //
+    // 지금까지 여기서 응답을 아예 안 봤다. 서버가 거절해도 창이 닫히고 목록을
+    // 다시 불러오니, 사장님 눈에는 **고친 것이 그냥 사라진 것**으로 보인다.
+    // 저장됐다고 믿고 넘어가는 게 제일 나쁘다.
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      await showAlert(menuSaveErrorMsg(body));
+      return; // 창을 닫지 않는다 — 고친 내용을 그대로 두고 다시 손보게
+    }
+    if (!itemId) {
+      const created = await res.json().catch(() => null);
+      itemId = created && created.id;
     }
     if (selectedPhotoFile && itemId) {
       const fd = new FormData();
       fd.append("photo", selectedPhotoFile);
-      await fetch(`/api/menu/admin/items/${itemId}/photo`, { method: "POST", body: fd });
+      const pr = await fetch(`/api/menu/admin/items/${itemId}/photo`, { method: "POST", body: fd });
+      // 사진만 실패하는 경우가 있다(파일이 너무 크거나 형식이 안 맞을 때).
+      // 나머지는 저장됐으므로 창은 닫되, 사진이 안 올라갔다는 것은 알린다.
+      if (!pr.ok) await showAlert(T("menuPhotoFailed"));
     }
     $("#itemModalBackdrop").hidden = true;
     loadMenu();
   };
+
+  /** 서버가 거절한 이유를 사장님 말로 옮긴다. */
+  function menuSaveErrorMsg(body) {
+    const e = (body && body.error) || "";
+    if (e === "code_taken") {
+      const name = adminLang === "zh" ? body.name_zh || body.name_ko : body.name_ko || body.name_zh;
+      return T("menuErrCodeTaken").replace("{code}", body.code || "").replace("{name}", name || "");
+    }
+    if (e === "name_required") return T("alertMenuNameRequired");
+    if (e === "invalid_price") return T("menuErrPrice");
+    if (e === "invalid_original_price") return T("menuErrOriginalPrice");
+    if (e === "invalid_min_first_order_qty") return T("menuErrMinQty");
+    if (e === "invalid_category") return T("menuErrCategory");
+    if (e === "item_in_trash") return T("menuErrInTrash");
+    if (e === "not_found") return T("menuErrGone");
+    return T("menuErrSaveFailed");
+  }
 
   // ── 메뉴 휴지통 ──────────────────────────────────────────────────
   //

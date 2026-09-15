@@ -4,7 +4,8 @@ const { store, save, refreshAndSave, nextId, savePhoto, deletePhoto } = require(
 const { requireAdmin, requirePermission } = require("../auth");
 const { withAvailability, today } = require("../availability");
 const { broadcastOnWrite } = require("../realtime");
-const { DELETED_AT, activeItems, deletedItems } = require("../menuItems");
+const { DELETED_AT, activeItems, deletedItems, isDeleted } = require("../menuItems");
+const { reserveId } = require("../db");
 const { nowLocal } = require("../time");
 const canEditMenu = requirePermission("menuEdit");
 
@@ -48,6 +49,70 @@ function categoriesWithItems(onlyAvailable) {
     items = items.sort((a, b) => a.sort_order - b.sort_order);
     return { ...c, items };
   });
+}
+
+/**
+ * 메뉴 한 줄이 성립하는가.
+ *
+ * 2026-09-15 사장님: "메뉴가 삭제되거나 수정되거나 업데이트 될 때 문제가
+ * 생기지 않게 보안장치를 넣자는 거야."
+ *
+ * 여기서 막는 것은 전부 **조용히 망가지는** 것들이다. 화면이 실수를 그대로
+ * 보내고 서버가 그대로 받으면, 사장님은 저장됐다고 믿고 넘어간다.
+ *
+ *   · 이름이 비면 손님 화면에 빈 줄이 뜬다
+ *   · 가격이 숫자가 아니면 그 뒤의 모든 금액 계산이 NaN 이 된다
+ *   · 없는 분류로 저장하면 어느 분류에도 안 걸려 **목록에서 사라진다**
+ *     (categoriesWithItems 가 분류별로 그린다). 지운 것도 아닌데 없어진다.
+ *
+ * 고칠 값만 보내는 수정(PUT)도 있으므로, 보내온 칸만 본다.
+ *
+ * 0원은 막지 않는다. 서비스로 주는 메뉴가 있을 수 있다 — 대신 화면이 한 번
+ * 물어본다(admin.js). 음수는 막는다. 그건 실수 말고는 없다.
+ */
+function validateItemFields(b, cats, { requireAll } = {}) {
+  const has = (k) => b[k] !== undefined;
+  const wantName = requireAll || has("name_zh");
+  if (wantName && !String(b.name_zh == null ? "" : b.name_zh).trim()) {
+    return "name_required";
+  }
+  if (requireAll || has("price")) {
+    const price = Number(b.price);
+    if (!Number.isFinite(price) || price < 0) return "invalid_price";
+  }
+  for (const k of ["original_price", "min_first_order_qty"]) {
+    if (!has(k) || b[k] == null || b[k] === "") continue;
+    const v = Number(b[k]);
+    if (!Number.isFinite(v) || v < 0) return "invalid_" + k;
+  }
+  // 수정에서 분류가 빈 값/null 로 오는 것은 **거절하지 않는다.** 화면에서
+  // 고른 것이 풀렸을 뿐일 수 있고(2026-09-14 「저절로 밥류로 바뀜」 건),
+  // 그때는 아래 PUT 이 지금 분류를 그대로 둔다. 여기서 400 을 내면 멀쩡한
+  // 수정까지 막힌다. 진짜 값이 왔는데 그런 분류가 없을 때만 막는다.
+  const catSent = requireAll || (has("category_id") && b.category_id !== null && b.category_id !== "");
+  if (catSent) {
+    const cid = parseInt(b.category_id, 10);
+    if (!Number.isFinite(cid) || !cats.some((c) => c.id === cid)) return "invalid_category";
+  }
+  return null;
+}
+
+/**
+ * 메뉴 코드(77번 같은)가 다른 메뉴와 겹치는가.
+ *
+ * 겹치면 주방 빌지에 **똑같이 「77」로 찍히는 서로 다른 메뉴**가 생긴다.
+ * 손님 화면 검색도 둘 다 걸린다. 지웠다 다시 넣을 때 정확히 이렇게 된다.
+ *
+ * 이미 그 코드를 쓰고 있던 메뉴가 자기 자신이면 통과시킨다 — 안 그러면
+ * 예전에 만들어진 중복 때문에 **상관없는 수정까지 막힌다.** 새로 겹치게
+ * 만드는 것만 막는다.
+ *
+ * 휴지통에 있는 것과는 안 겹친 것으로 친다. 되살릴 때 다시 본다.
+ */
+function codeConflict(items, code, selfId) {
+  const want = String(code == null ? "" : code).trim();
+  if (!want) return null;
+  return activeItems(items).find((m) => m.id !== selfId && String(m.code || "").trim() === want) || null;
 }
 
 // 화면이 보내온 품절 설정을 저장 형태로 옮긴다. 화면은 네 가지 중 하나를
@@ -108,9 +173,25 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
   if (!b.category_id || !b.name_zh || b.price == null) {
     return res.status(400).json({ error: "missing_fields" });
   }
+  const bad = validateItemFields(b, store.categories || [], { requireAll: true });
+  if (bad) return res.status(400).json({ error: bad });
+  const clash = codeConflict(store.menuItems, b.code, null);
+  if (clash) {
+    return res.status(409).json({ error: "code_taken", code: String(b.code).trim(), itemId: clash.id, name_zh: clash.name_zh, name_ko: clash.name_ko });
+  }
   const maxSort = store.menuItems.reduce((m, i) => Math.max(m, i.sort_order), 0);
+  // 번호는 데이터베이스가 준다.
+  //
+  // 예전에는 nextId() — 메모리에서 ++ 하고 문서를 쓰는 방식이었다. 인스턴스가
+  // 둘이면 **같은 번호를 두 번 줄 수 있다.** 주문 번호가 실제로 그래서 겹쳤고
+  // (2026-09-10), 그때 reserveId 로 바꿨다. 메뉴만 옛 방식으로 남아 있었다.
+  // 번호가 겹치면 결산이 두 메뉴를 한 줄로 합친다 — 조용히.
+  //
+  // floor 를 같이 준다: 이 카운터를 처음 쓰는 가게에서도 이미 있는 번호를
+  // 다시 내주지 않는다.
+  const maxId = store.menuItems.reduce((m, i) => Math.max(m, i.id || 0), 0);
   const item = {
-    id: nextId("menuItems"),
+    id: await reserveId("menuItems", maxId + 1),
     category_id: parseInt(b.category_id, 10),
     code: b.code || null,
     name_zh: b.name_zh,
@@ -168,10 +249,24 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
   // top — narrows the window for another concurrent save (an incoming
   // order, another admin edit) to overwrite this change or get overwritten
   // by it.
+  const bad = validateItemFields(b, store.categories || []);
+  if (bad) return res.status(400).json({ error: bad });
+  const clash = codeConflict(store.menuItems, b.code, id);
+  if (clash) {
+    return res.status(409).json({ error: "code_taken", code: String(b.code).trim(), itemId: clash.id, name_zh: clash.name_zh, name_ko: clash.name_ko });
+  }
+
   let updated = null;
+  let gone = false;
   await refreshAndSave((s) => {
     const item = s.menuItems.find((i) => i.id === id);
     if (!item) return;
+    // 휴지통에 있는 것은 고칠 수 없다. 먼저 되살려야 한다 — 안 그러면 안
+    // 보이는 메뉴를 고치고 저장됐다고 믿는다.
+    if (isDeleted(item)) {
+      gone = true;
+      return;
+    }
     for (const f of fields) if (b[f] !== undefined) item[f] = b[f];
     // 2026-09-14 사장님: "메뉴관리에서 메뉴수정하면 항목이 저절로 밥류로
     // 바뀌어 저장됨." 진짜 원인은 화면 쪽이었지만(populateCategorySelect),
@@ -190,6 +285,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
     if (b.soldoutMode !== undefined) applySoldOut(item, b.soldoutMode, b.soldoutFrom, b.soldoutUntil);
     updated = item;
   });
+  if (gone) return res.status(409).json({ error: "item_in_trash" });
   if (!updated) return res.status(404).json({ error: "not_found" });
   res.json(updated);
 });
