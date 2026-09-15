@@ -132,6 +132,43 @@ async function wipeSnapshot() {
   r = await staff.get(`/api/settlements?start=2026-01-01&end=${today()}`);
   check("기간을 여러 날로 잡으면 안 준다 — 어느 날인지 답할 수 없다", r.body.line_status == null, JSON.stringify(r.body.line_status));
 
+  out.push("\n[못 받은 문자를 다시 보낸다]");
+  //
+  // 2026-09-15 에 저녁 문자를 한 통 못 받았다. 숫자는 결산 탭에 그대로
+  // 있었지만 문자를 다시 받을 길이 없었다 — 크론은 그날 하루치고, 정산
+  // 버튼은 오늘 것만 누른다.
+  store.settings.line_notify_enabled = false; // 토글과 무관해야 한다
+  await save();
+  pushes = [];
+  r = await staff.post("/api/settlements/resend-line").send({ date: today() });
+  check("★ 다시 보내진다", r.status === 200, `${r.status} ${JSON.stringify(r.body)}`);
+  check("★ 문자가 한 통 나간다", pushes.length === 1, `${pushes.length}`);
+  check(
+    "★ 다시 보낸 것이라고 적힌다 — 지난 날짜가 오늘 마감으로 읽히면 안 된다",
+    /다시 보낸 것입니다/.test(pushes[0] || ""),
+    (pushes[0] || "").slice(-80)
+  );
+  check(
+    "★ 자동 알림 토글과 상관없이 나간다 — 사장님이 직접 누른 것이다",
+    store.settings.line_notify_enabled === false && pushes.length === 1,
+    ""
+  );
+  s = await snap();
+  check("★ 보냈다고 기록이 바뀐다", s && s.line_day_ok === true, `${s && s.line_day_ok}`);
+
+  pushes = [];
+  r = await staff.post("/api/settlements/resend-line").send({ date: "어제" });
+  check("날짜가 이상하면 거절한다", r.status === 400, `${r.status}`);
+  check("그때는 안 보낸다", pushes.length === 0, `${pushes.length}`);
+
+  store.settings.line_targets = [];
+  await save();
+  pushes = [];
+  r = await staff.post("/api/settlements/resend-line").send({ date: today() });
+  check("★ 받는 사람이 없으면 이유를 돌려준다", r.status === 502 && r.body.error === "no_targets", `${r.status} ${JSON.stringify(r.body)}`);
+  store.settings.line_targets = [{ userId: "U_owner", name: "사장님" }];
+  await save();
+
   out.push("\n[화면에 한 줄로 보인다]");
   const fs = require("fs");
   const path = require("path");
@@ -140,6 +177,21 @@ async function wipeSnapshot() {
   check("자리가 있다", /id="settlementLineNote"/.test(adminHtml), "");
   check("★ 결산을 그릴 때 같이 그린다", /renderSettlementLineNote\(data\)/.test(adminJs), "");
   check("★ 안 간 이유를 사장님 말로 옮긴다", /lineWhyDisabled/.test(adminJs) && /lineWhyNoTargets/.test(adminJs), "");
+  check("다시 보내기 버튼이 있다", /id="settlementResendLineBtn"/.test(adminHtml), "");
+  check(
+    "★ 하루를 볼 때만 눌린다 — 기간에는 「그 날」이 없다",
+    /resendBtn\.disabled = !data\.date/.test(adminJs),
+    ""
+  );
+  check("★ 보내기 전에 한 번 물어본다 — 여러 사람 폰이 울린다", /settlementResendConfirm/.test(adminJs), "");
+  check(
+    "★ 보낸 뒤 보던 날짜를 그대로 다시 읽는다",
+    /loadSettlement\(currentSettlementDate, currentSettlementDate\)/.test(adminJs),
+    "빈 손으로 부르면 서버가 오늘로 답해서 화면이 튄다"
+  );
+  for (const k of ["settlementResendLineBtn", "settlementResendConfirm", "settlementResendDone", "settlementResendFailed"]) {
+    check(`${k} 가 한국어/중국어 둘 다 있다`, adminJs.split(`${k}:`).length - 1 >= 2, "");
+  }
   for (const k of ["lineShiftAm", "lineShiftDay", "lineSentAt", "lineNotSent"]) {
     check(`${k} 가 한국어/중국어 둘 다 있다`, adminJs.split(`${k}:`).length - 1 >= 2, "");
   }

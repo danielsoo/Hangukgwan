@@ -1009,6 +1009,11 @@
       settlementAllBtn: "전체 기간",
       settlementCsvBtn: "⬇️ CSV 다운로드",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
+      settlementResendLineBtn: "📩 이 날짜 LINE 다시 보내기",
+      settlementResendConfirm: "{date} 마감 내용을 LINE 으로 다시 보낼까요? 등록된 분들께 모두 갑니다.",
+      settlementResendSending: "보내는 중…",
+      settlementResendDone: "보냈어요.",
+      settlementResendFailed: "보내지 못했어요",
       settlementCloseRangeHint: "하루를 선택했을 때만 저장할 수 있어요 (시작일 = 종료일).",
       settlementTodayOnlyNote: "오늘 하루만 보여요",
       settlementSavedMsg: "✔ 저장됨",
@@ -1763,6 +1768,11 @@
       settlementAllBtn: "全部期間",
       settlementCsvBtn: "⬇️ 下載 CSV",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
+      settlementResendLineBtn: "📩 重新傳送這天的 LINE",
+      settlementResendConfirm: "要重新用 LINE 傳送 {date} 的結算嗎？會傳給所有已登記的人。",
+      settlementResendSending: "傳送中…",
+      settlementResendDone: "已傳送。",
+      settlementResendFailed: "傳送失敗",
       settlementCloseRangeHint: "只有選擇單一天（開始日期＝結束日期）時才能儲存。",
       settlementTodayOnlyNote: "僅顯示今日",
       settlementSavedMsg: "✔ 已儲存",
@@ -12638,6 +12648,12 @@
     const closeBtn = $("#settlementCloseBtn");
     closeBtn.disabled = !data.date;
     closeBtn.title = data.date ? "" : T("settlementCloseRangeHint");
+    // 다시 보내기도 하루를 볼 때만. 기간에는 「그 날」이 없다.
+    const resendBtn = $("#settlementResendLineBtn");
+    if (resendBtn) {
+      resendBtn.disabled = !data.date;
+      resendBtn.title = data.date ? "" : T("settlementCloseRangeHint");
+    }
     // 직원 계정에는 날짜를 고르는 길이 없다(.settlement-date-label 은 owner-only).
     // 그러면 지금 무엇을 보고 있는지도 알 수 없으니, 그 자리에 날짜를 적어준다.
     // 서버가 today_only 를 붙여 보낸다 — 「오늘만 보인다」를 정하는 쪽은 서버다.
@@ -13802,6 +13818,44 @@
     loadSettlementHistory();
     setTimeout(() => (btn.textContent = original), 2000);
   };
+
+  // 못 받은 마감 문자를 다시 보낸다.
+  //
+  // 2026-09-15 저녁 문자가 한 통 안 나갔다. 숫자는 이 화면에 그대로 있었지만
+  // **문자를 다시 받을 길이 없었다.** 크론은 그날 하루치고 정산 버튼은 오늘
+  // 것만 누른다.
+  //
+  // 한 번 물어본다. 받는 사람이 여럿이면 여러 사람 폰이 동시에 울린다.
+  const resendLineBtn = $("#settlementResendLineBtn");
+  if (resendLineBtn) {
+    resendLineBtn.onclick = async () => {
+      if (!currentSettlementDate) return;
+      if (!(await showConfirm(T("settlementResendConfirm").replace("{date}", currentSettlementDate)))) return;
+      const btn = resendLineBtn;
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = T("settlementResendSending");
+      try {
+        const res = await fetch("/api/settlements/resend-line", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: currentSettlementDate }),
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          await showAlert(`${T("settlementResendFailed")} (${(body && body.error) || res.status})`);
+        } else {
+          await showAlert(T("settlementResendDone"));
+          // 보낸 기록이 생겼으니 그 한 줄을 다시 그린다. 보던 날짜를 그대로
+          // 넘긴다 — 빈 손으로 부르면 서버가 오늘로 답해서 화면이 튄다.
+          loadSettlement(currentSettlementDate, currentSettlementDate);
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    };
+  }
 
   // ---------- Reservations (예약) ----------
   // Visible to any logged-in staff (like the table list) — adding/editing/

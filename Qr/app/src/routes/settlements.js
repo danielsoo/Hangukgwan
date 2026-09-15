@@ -650,6 +650,56 @@ async function runAutoAmClose(req) {
 // Sends a one-off test message using whatever LINE settings are currently
 // saved, so the owner can confirm the channel access token actually works
 // right after entering it, instead of waiting until the next cron run.
+/**
+ * 지난 날짜의 마감 문자를 다시 보낸다.
+ *
+ * 2026-09-15 사장님이 저녁 마감 문자를 한 통 못 받았다(위 day_closed_at 건).
+ * 숫자는 결산 탭에 그대로 있었지만 **문자를 다시 받을 길이 없었다.** 크론은
+ * 그날 하루치고, 정산 버튼은 오늘 것만 누른다.
+ *
+ * 「마감 알림 사용」 토글은 보지 않는다. 그 토글은 **자동으로** 나가는 것을
+ * 켜고 끄는 것이고, 이건 사장님이 그 자리에서 직접 누른 것이다. 토큰과 받는
+ * 사람이 없으면 sendLineMessage 가 그 이유를 돌려준다.
+ *
+ * 보낼 때 「다시 보낸 것」이라고 적는다. 안 적으면 지난 날짜 숫자가 오늘
+ * 마감으로 읽힌다 — 문자에는 앞뒤 맥락이 없다.
+ */
+router.post("/resend-line", requireOwner, async (req, res) => {
+  const date = String((req.body && req.body.date) || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "bad_date" });
+  // 테스터 모드에서는 안 보낸다. 직원 폰으로 가는 것이라 시험으로 보낼 수 없다.
+  if (testMode.currentId(req, store)) return res.status(409).json({ error: "test_mode" });
+
+  const opts = await halfOpts(date, date, req);
+  const orders = await ordersInRange(date, date, req);
+  const snapshot = computeSettlement(orders, date, date, opts);
+  const amClosedAt = (opts.amClosedAt || {})[date] || null;
+
+  // 오전/오후 가르기는 그날 마감 때와 같은 방법으로 한다(위 shift-close).
+  let amPart = null;
+  let pmPart = null;
+  if (amClosedAt) {
+    const paid = orders.filter((o) => o.status === "paid");
+    const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
+    const amRevenue = amPaid.reduce((sum, o) => sum + (o.total || 0), 0);
+    amPart = { revenue: amRevenue, count: amPaid.length };
+    pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
+  }
+
+  const [snap] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
+  const closedAt = (snap && (snap.day_closed_at || snap.last_shift_closed_at)) || `${date} 23:59:59`;
+  const text = [
+    formatShiftSummary(snapshot, { shift: "day", closedAt, amPart, pmPart }),
+    "",
+    `※ ${nowLocal().slice(0, 16)} 에 다시 보낸 것입니다.`,
+  ].join("\n");
+
+  const result = await sendLineMessage(store, text);
+  await recordLineSend(date, "day", result, null);
+  if (!result.ok) return res.status(502).json({ error: result.error, detail: result.detail || null });
+  res.json({ ok: true, date });
+});
+
 router.post("/line-test", requireOwner, async (req, res) => {
   const result = await sendLineMessage(store, "✅ 한국관 어드민 LINE 알림 테스트입니다. 이 메시지가 보이면 마감 자동 알림이 정상적으로 연결된 거예요!");
   if (!result.ok) return res.status(400).json(result);

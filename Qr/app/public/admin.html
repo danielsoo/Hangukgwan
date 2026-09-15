@@ -279,6 +279,10 @@
             <button id="settlementAllBtn" type="button" class="owner-only" data-i18n="settlementAllBtn">전체 기간</button>
             <button id="settlementCsvBtn" type="button" class="owner-only" data-i18n="settlementCsvBtn">⬇️ CSV 다운로드</button>
             <button id="settlementCloseBtn" type="button" class="settlement-close-btn owner-only" data-i18n="settlementCloseBtn">📌 이 날짜 정산 기록 저장</button>
+            <!-- 못 받은 마감 문자를 다시 받는 길. 2026-09-15 에 저녁 문자가
+                 한 통 안 나갔는데, 숫자는 여기 그대로 있어도 문자를 다시
+                 받을 방법이 없었다. 하루를 볼 때만 눌린다. -->
+            <button id="settlementResendLineBtn" type="button" class="owner-only" data-i18n="settlementResendLineBtn">📩 이 날짜 LINE 다시 보내기</button>
             <!-- 직원 계정에는 날짜를 고르는 길이 없다. 그러면 지금 무엇을 보고
                  있는지도 알 수 없으니, 그 자리에 날짜를 적어준다. -->
             <span class="settlement-today-only staff-only" id="settlementTodayOnly"></span>
