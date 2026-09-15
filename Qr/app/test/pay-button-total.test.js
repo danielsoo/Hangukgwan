@@ -46,7 +46,10 @@ const fnEnd = src.indexOf("\n  /** 아직 안 받은 품목 전부", fnAt);
 check("화면 쪽 할인율표를 찾는다", ratesAt > 0, String(ratesAt));
 check("tableDiscountFor 를 찾는다", fnAt > 0 && fnEnd > fnAt, `${fnAt}, ${fnEnd}`);
 
-const mathAt = src.indexOf("  function discountEligibleClientTotal(order, indexes) {");
+// 2026-09-14: 할인에서 빠지는 분류가 음료뿐이 아니게 되면서
+// (discountExcludedItemIdSet) 이 묶음의 시작이 앞으로 당겨졌다. 그 함수까지
+// 같이 꺼내야 산수가 돈다.
+const mathAt = src.indexOf("  function discountExcludedItemIdSet() {");
 const mathEnd = src.indexOf("\n  // buildReceiptBodyHtml()", mathAt);
 check("화면 쪽 산수 묶음을 찾는다", mathAt > 0 && mathEnd > mathAt, `${mathAt}, ${mathEnd}`);
 
@@ -56,16 +59,22 @@ const code = [
   src.slice(fnAt, fnEnd),
 ].join("\n");
 
-// 음료 판정은 화면에서 drinkItemIdSet() 이 한다. 여기서는 시험이 정한다.
+// 빠지는 분류는 서버가 알려준다(storeSettings.vip_discount_excluded_categories).
+// 여기서는 시험이 그 자리를 채운다 — 음료로 넣은 품목만 빠지게.
 function makeClient(vipType, manualValue, drinkIds) {
   return new Function(
-    "tableVipDiscountType", "tableManualDiscountValue", "drinkItemIdSet", "lineTotalOf",
+    "tableVipDiscountType", "tableManualDiscountValue", "storeSettings", "categories", "lineTotalOf",
     `${code}
      return { tableDiscountFor };`
   )(
     vipType,
     manualValue,
-    () => new Set(drinkIds),
+    { vip_discount_excluded_categories: ["drink", "other"] },
+    [
+      { key: "drink", items: drinkIds.map((id) => ({ id })) },
+      { key: "other", items: [] },
+      { key: "rice", items: [] },
+    ],
     (it) => ((it.unit_price || 0) + (it.selected_addons || []).reduce((s, a) => s + (a.price || 0), 0)) * (it.qty || 0)
   );
 }

@@ -106,7 +106,22 @@ function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes, 
   return { vipAmount, manualAmount, afterVip, total: vipAmount + manualAmount };
 }
 
+// 特約95折/VIP9折 이 **빼는** 분류.
+//
+// 2026-09-14 사장님: "지금은 음료 주류만 빠지는데 기타 항목도 모두 할인
+// 안하게 해줘."
+//
+// 이 매장은 주류를 따로 안 나누고 음료(drink) 안에 같이 둔다. 기타(其他)는
+// key "other" 다 — 2026-09-10 에 남는 항목이 없으면 지우도록 돼 있지만
+// (src/migrations/2026-09-10-traditional-category.js), 그 사이 새 메뉴가
+// 들어가 있었으면 살아 있다.
+//
+// 목록을 여기 한 곳에만 두고 서버도 화면도 이것을 받아 쓴다. 두 군데서 따로
+// 적으면 화면이 보여주는 금액과 실제로 받는 금액이 언젠가 갈린다.
+const DISCOUNT_EXCLUDED_CATEGORY_KEYS = ["drink", "other"];
+
 module.exports = {
+  DISCOUNT_EXCLUDED_CATEGORY_KEYS,
   VIP_DISCOUNT_RATES,
   lineTotalOf,
   discountEligibleTotal,

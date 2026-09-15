@@ -5180,8 +5180,8 @@
     <div class="meta-row"><span class="table-no">${
       isCounterOrder(o)
         ? o.pickup_number && o.customer_name
-          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
-          : "外帶櫃檯"
+          ? `<span class="takeout-box">外</span>${o.pickup_number}號 · ${o.customer_name}`
+          : `<span class="takeout-box">外</span>外帶櫃檯`
         : `桌號 ${o.table_number}${partyTag(o)}`
     }</span><span class="order-type-badge">${orderTypeLabel(o)}</span></div>
     ${isCounterOrder(o) && o.customer_phone ? `<div class="meta-row"><span class="order-time">☎ ${o.customer_phone}</span></div>` : ""}
@@ -5263,6 +5263,16 @@
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
   .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1mm; }
   .table-no { font-size: ${fs.tableNo}px; font-weight: ${fs.tableNoWeight}; }
+  /* 포장 표시 — 까만 네모에 흰 글씨. 2026-09-14 사장님: "박스모양 아이콘
+     대신". 이모지는 글꼴 그림이라 프린터에서 찌그러졌다. 네모는 안 그런다.
+     print-color-adjust: 브라우저가 인쇄할 때 배경색을 빼버리지 않게 한다 —
+     빼버리면 흰 글씨만 남아 아무것도 안 보인다. */
+  .takeout-box {
+    display: inline-block; width: 1.35em; height: 1.35em; line-height: 1.35em;
+    text-align: center; background: #000; color: #fff; font-weight: 900;
+    margin-right: 8px; vertical-align: -0.18em;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
   .order-type-badge { display: inline-block; font-size: ${fs.orderTypeBadge}px; font-weight: ${fs.orderTypeBadgeWeight}; border: 1.5px solid #000; padding: 0.5mm 2mm; border-radius: 3px; }
   .order-time { font-size: ${fs.time}px; font-weight: ${fs.timeWeight}; }
   .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
@@ -7459,16 +7469,32 @@
   // 트리(각 카테고리에 items 배열)라 여기서 그대로 재사용한다. 실제
   // 반영/저장은 항상 서버(src/routes/orders.js)가 다시 계산하므로, 여기
   // 계산은 결제 방식 팝업에 보여줄 미리보기용일 뿐이다.
-  function drinkItemIdSet() {
-    const drinkCat = categories.find((c) => c.key === "drink");
-    return new Set(drinkCat ? drinkCat.items.map((i) => i.id) : []);
+  /**
+   * 特約95折/VIP9折 에서 **빠지는** 품목 번호.
+   *
+   * 2026-09-14 사장님: "지금은 음료 주류만 빠지는데 기타 항목도 모두 할인
+   * 안하게 해줘."
+   *
+   * 어느 분류를 빼는지는 서버가 알려준다(/api/settings 의
+   * vip_discount_excluded_categories — 원본은 src/discounts.js). 여기서 따로
+   * 적으면 화면에 뜬 금액과 실제로 받는 금액이 언젠가 갈린다. 배포 사이에
+   * 옛 서버가 안 내려주면 예전처럼 음료만 뺀다.
+   */
+  function discountExcludedItemIdSet() {
+    const keys = (storeSettings && storeSettings.vip_discount_excluded_categories) || ["drink"];
+    const ids = new Set();
+    for (const c of categories || []) {
+      if (!keys.includes(c.key)) continue;
+      for (const it of c.items || []) ids.add(it.id);
+    }
+    return ids;
   }
   function discountEligibleClientTotal(order, indexes) {
-    const drinkIds = drinkItemIdSet();
+    const excludedIds = discountExcludedItemIdSet();
     const idxs = indexes || order.items.map((_, i) => i);
     return idxs.reduce((s, i) => {
       const it = order.items[i];
-      if (!it || drinkIds.has(it.item_id)) return s;
+      if (!it || excludedIds.has(it.item_id)) return s;
       return s + lineTotalOf(it);
     }, 0);
   }
@@ -7748,7 +7774,9 @@
     // isManualDiscount일 때 vipPriceHtml 자체를 건너뛴다(품목당 취소선은
     // 特約95折/VIP9折 전용, 재량 할인은 소계/합계에서만 보여준다 — 정액
     // 할인은 품목 하나하나에 고르게 나눌 수 없어서).
-    const vipDrinkIds = vipDiscountActive && !isManualDiscount && vipRate ? drinkItemIdSet() : new Set();
+    // 품목별 취소선도 같은 목록을 본다 — 화면에서 줄이 그어진 품목과 실제로
+    // 깎이는 품목이 다르면 사장님이 그 차이를 손으로 찾아내야 한다.
+    const vipExcludedIds = vipDiscountActive && !isManualDiscount && vipRate ? discountExcludedItemIdSet() : new Set();
     // amount(=이 줄의 원래 가격)를 받아, 할인 대상이면 "회색 취소선 원래가 +
     // 새 가격", 아니면(할인 꺼짐/드링크/이미 결제됨/재량 할인) 원래 표시
     // 그대로 반환.
@@ -7812,7 +7840,7 @@
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
-          <span>${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipDrinkIds.has(it.item_id))}</span>
+          <span>${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
         </div>`;
     });
     // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고
@@ -11739,10 +11767,15 @@
       const counter = isCounterOrder(o);
       const tableLabel = counter
         ? o.pickup_number && o.customer_name
-          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          ? `${o.pickup_number}號 · ${o.customer_name}`
           : "外帶櫃檯"
         : `桌號 ${o.table_number}${partyTag(o)}`;
-      const labelInfo = { tableLabel, phoneLine: counter && o.customer_phone ? `☎ ${o.customer_phone}` : null };
+      // 포장 표시는 글자가 아니라 그림으로 그린다(escpos.js 의 row badge).
+      const labelInfo = {
+        tableLabel,
+        takeoutBox: counter ? "外" : null,
+        phoneLine: counter && o.customer_phone ? `☎ ${o.customer_phone}` : null,
+      };
 
       // 바뀐 줄만 찍는다. 전체를 다시 찍으면 이미 만들고 있는 요리를 또
       // 만들게 된다.
@@ -11797,11 +11830,11 @@
       const counter = isCounterOrder(o);
       const tableLabel = counter
         ? o.pickup_number && o.customer_name
-          ? `📦 ${o.pickup_number}號 · ${o.customer_name}`
+          ? `${o.pickup_number}號 · ${o.customer_name}`
           : "外帶櫃檯"
         : `桌號 ${o.table_number}${partyTag(o)}`;
       const phoneLine = counter && o.customer_phone ? `☎ ${o.customer_phone}` : null;
-      const labelInfo = { tableLabel, phoneLine };
+      const labelInfo = { tableLabel, takeoutBox: counter ? "外" : null, phoneLine };
 
       // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용,
       // 다른 한장은 각각의 가격이 나오게" — 주방용 비트맵을 먼저 내보내고

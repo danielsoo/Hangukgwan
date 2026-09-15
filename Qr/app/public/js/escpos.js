@@ -404,9 +404,19 @@
       opts = opts || {};
       mctx.font = rasterFont(px, weight);
       const rightWidth = mctx.measureText(right).width;
-      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD * 2 - rightWidth - 16;
+      // 포장 표시는 글자가 아니라 **그림**이다. 그 자리만큼 왼쪽 글자를 민다.
+      //
+      // 2026-09-14 사장님: "포장주문 빌지에 박스모양 아이콘 대신" — 지금까지는
+      // 📦 이모지였다. 열전사 프린터는 점이 찍히거나 안 찍히거나(1비트)라
+      // 밝기 절반에서 자르는데(rasterCanvasToEscPos 의 lum < 128), 이모지는
+      // 가는 선과 옅은 부분이 많아 그때 뭉갠다. 사장님이 본 「찌그러진 박스」가
+      // 그것이다. 직접 그리면 그럴 일이 없다.
+      const badge = opts.badge || null;
+      const badgeSize = badge ? Math.round(px * PX_TO_DOTS * 1.35) : 0;
+      const badgeGap = badge ? 14 : 0;
+      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD * 2 - rightWidth - 16 - badgeSize - badgeGap;
       const fittedLeft = fitText(mctx, left, leftMax);
-      ops.push({ type: "row", left: fittedLeft, right, px, weight, y });
+      ops.push({ type: "row", left: fittedLeft, right, px, weight, y, badge, badgeSize, badgeGap });
       y += Math.round(px * PX_TO_DOTS * 1.4) + (opts.gapAfter || 0);
     }
     function divider() {
@@ -444,7 +454,9 @@
 
     line(`${storeName} ${notice ? (priceCopy ? "通知單 · 結帳" : "通知單 · 廚房") : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
-    row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700));
+    row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700), {
+      badge: labelInfo.takeoutBox || null,
+    });
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
     line(new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW"), sz("time", 13), wt("time", 700));
     divider();
@@ -544,8 +556,27 @@
       }
       if (op.type === "row") {
         ctx.font = rasterFont(op.px, op.weight);
+        let leftX = RASTER_PAD;
+        if (op.badge) {
+          // 꽉 찬 검정이라 1비트로 잘려도 잃을 것이 없다. 좌표를 점 경계에
+          // 맞춘다 — 반 점에 걸치면 자를 때 가장자리가 들쭉날쭉해진다.
+          const s = op.badgeSize;
+          const x = RASTER_PAD;
+          const top = Math.round(op.y);
+          ctx.fillStyle = "#000";
+          ctx.fillRect(x, top, s, s);
+          ctx.fillStyle = "#fff";
+          ctx.font = rasterFont(Math.round(op.px * 1.05), 900);
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(op.badge, x + Math.round(s / 2), top + Math.round(s / 2) + 1);
+          ctx.textBaseline = "top";
+          ctx.fillStyle = "#000";
+          ctx.font = rasterFont(op.px, op.weight);
+          leftX = x + s + op.badgeGap;
+        }
         ctx.textAlign = "left";
-        ctx.fillText(op.left, RASTER_PAD, op.y);
+        ctx.fillText(op.left, leftX, op.y);
         ctx.textAlign = "right";
         ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
         return;

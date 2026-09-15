@@ -62,10 +62,12 @@ function rememberOrder(order) {
 // test/discounts.test.js 가 직접 검증한다.
 const {
   VIP_DISCOUNT_RATES,
+  DISCOUNT_EXCLUDED_CATEGORY_KEYS,
   computeDiscountAmount: computeDiscountAmountPure,
   parseManualDiscount,
   discountTypeKey,
 } = require("../discounts");
+const EXCLUDED_KEYS = new Set(DISCOUNT_EXCLUDED_CATEGORY_KEYS);
 // 사장님 요청(2026-09-07): "결제종류 현금, 라인페이, 신용카드, 기타" — "기타"
 // 하나 추가. 이 목록은 결제 방식 팝업(직원이 직접 고르는 값)에서 허용되는
 // 값만 담는다 — "online"(손님이 직접 결제하는 온라인 결제, src/routes/
@@ -87,10 +89,12 @@ function categoryKeyOf(it) {
   return cat ? cat.key : null;
 }
 
-// 特約95折/VIP9折이 빼는 "음료·주류"의 판정 — 카테고리 key "drink"
-// (src/seed.js 참고, 이 매장은 주류를 따로 분리하지 않고 drink 안에 함께
-// 둔다). 실제 합산은 src/discounts.js가 이 함수를 받아서 한다.
-const isDrinkItem = (it) => categoryKeyOf(it) === "drink";
+// 特約95折/VIP9折이 **빼는** 품목인가.
+//
+// 어느 분류를 빼는지는 src/discounts.js 한 곳에 적혀 있다
+// (DISCOUNT_EXCLUDED_CATEGORY_KEYS — 음료·주류와 기타). 실제 합산은
+// src/discounts.js 가 이 함수를 받아서 한다.
+const isDiscountExcludedItem = (it) => EXCLUDED_KEYS.has(categoryKeyOf(it));
 
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을
@@ -128,7 +132,7 @@ function resolvePaymentFields(body) {
 // 여기서는 "음료·주류가 무엇인가"(메뉴 카테고리를 봐야 알 수 있는, 이
 // 라우트만 아는 것)만 넣어주고 금액을 받아온다.
 function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes) {
-  return computeDiscountAmountPure(vipDiscountType, manualDiscount, items, indexes, isDrinkItem);
+  return computeDiscountAmountPure(vipDiscountType, manualDiscount, items, indexes, isDiscountExcludedItem);
 }
 
 // 이번 결제의 할인을 주문에 기록한다.

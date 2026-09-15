@@ -9,6 +9,7 @@ const { buildQrSvg, getLogoDataUri } = require("../qr");
 const { normalize: normalizeOrderHours, orderingState } = require("../openHours");
 const locationGate = require("../locationGate");
 const { hhmm } = require("../availability");
+const { DISCOUNT_EXCLUDED_CATEGORY_KEYS } = require("../discounts");
 const canEditSettings = requirePermission("settingsEdit");
 
 const router = express.Router();
@@ -62,6 +63,10 @@ function publicSettings() {
   // season from today's date; it can also be forced to one specific season
   // regardless of the real month, or turned "off" entirely.
   map.taegeuk_season_mode = store.settings.taegeukSeasonMode || "auto";
+  // 特約95折/VIP9折 이 빼는 분류. 관리자 화면이 결제 팝업에 미리 보여주는
+  // 금액을 이걸로 계산한다 — 서버와 같은 목록을 써야 화면에 뜬 금액과 실제로
+  // 받는 금액이 안 갈린다(src/discounts.js 에 한 번만 적혀 있다).
+  map.vip_discount_excluded_categories = DISCOUNT_EXCLUDED_CATEGORY_KEYS;
   // 실시간 주문 알림 (Pusher Channels) — 2026-09-07 성능 개선 작업, 자세한
   // 배경은 src/realtime.js 참고. key/cluster는 공개해도 안전한 값이다
   // (Pusher 공식 문서 기준 app key는 공개 식별자이고, 비밀로 지켜야 하는
