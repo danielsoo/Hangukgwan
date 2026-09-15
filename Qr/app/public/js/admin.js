@@ -856,6 +856,14 @@
       menuTrashMatch: "휴지통에 「{name}」(코드 {code})이 있어요. 새 메뉴로 넣으면 번호가 달라져서 결산에서 두 줄로 갈라집니다. 어떻게 할까요?",
       menuTrashRestoreIt: "되살리기",
       menuTrashMakeNew: "새 메뉴로 넣기",
+      // 결산 탭의 LINE 한 줄. 결산이 됐다고 문자가 간 것은 아니다.
+      lineShiftAm: "오전",
+      lineShiftDay: "하루",
+      lineSentAt: "{time} 보냄",
+      lineNotSent: "안 감",
+      lineWhyDisabled: "알림 꺼짐",
+      lineWhyNoTargets: "받는 사람 없음",
+      lineWhyNotConfigured: "토큰 없음",
       menuErrPrice: "가격을 숫자로 넣어주세요. 음수는 안 됩니다.",
       menuErrOriginalPrice: "정가를 숫자로 넣어주세요. 음수는 안 됩니다.",
       menuErrMinQty: "첫 주문 최소 수량을 숫자로 넣어주세요. 음수는 안 됩니다.",
@@ -1603,6 +1611,13 @@
       menuTrashMatch: "垃圾桶裡有「{name}」（代碼 {code}）。建立新品項會取得新編號，結算會分成兩列。要怎麼處理？",
       menuTrashRestoreIt: "還原",
       menuTrashMakeNew: "建立新品項",
+      lineShiftAm: "上午",
+      lineShiftDay: "整日",
+      lineSentAt: "{time} 已傳送",
+      lineNotSent: "未傳送",
+      lineWhyDisabled: "通知已關閉",
+      lineWhyNoTargets: "沒有收件人",
+      lineWhyNotConfigured: "沒有權杖",
       menuErrPrice: "請輸入數字的價格，不能是負數。",
       menuErrOriginalPrice: "請輸入數字的原價，不能是負數。",
       menuErrMinQty: "請輸入數字的首次點餐最低份數，不能是負數。",
@@ -2732,6 +2747,42 @@
   //
   // 걸러놓은 화면에서 이 표가 없으면, 사장님은 그 숫자를 하루 매출로 읽는다.
   // 그건 화면이 거짓말을 하는 것이다.
+  /**
+   * 그날 LINE 마감 문자가 나갔는지 한 줄로.
+   *
+   * 2026-09-15 사장님: "15일 저녁 장사 마치고 보니까 정산이 되어있는 거
+   * 같은데 line으로는 안오네?" — 확인할 자리가 아무 데도 없었다. 결산이
+   * 됐다고 문자가 간 것은 아니다. 둘은 다른 일이고, 다른 이유로 안 된다.
+   *
+   * 기간을 여러 날로 잡으면 안 보인다(서버가 line_status 를 null 로 준다).
+   * 「어느 날 안 갔나」는 날짜를 하나 골라야 답할 수 있는 질문이다.
+   */
+  function renderSettlementLineNote(data) {
+    const el = $("#settlementLineNote");
+    if (!el) return;
+    const st = data && data.line_status;
+    if (!st || (!st.am && !st.day)) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    const why = (e) => {
+      if (!e) return "";
+      if (e === "disabled") return T("lineWhyDisabled");
+      if (e === "no_targets") return T("lineWhyNoTargets");
+      if (e === "not_configured") return T("lineWhyNotConfigured");
+      return e;
+    };
+    const one = (label, r) => {
+      if (!r) return `${label}: ${T("lineNotSent")}`;
+      if (r.ok) return `${label}: ${T("lineSentAt").replace("{time}", String(r.at || "").slice(11, 16))}`;
+      return `${label}: ${T("lineNotSent")} (${why(r.error)})`;
+    };
+    const parts = [one(T("lineShiftAm"), st.am), one(T("lineShiftDay"), st.day)];
+    el.textContent = `📩 LINE — ${parts.join(" · ")}`;
+    el.hidden = false;
+  }
+
   function renderSettlementShiftBadge(data) {
     const shift = data && (data.shift === "am" || data.shift === "pm") ? data.shift : null;
     const total = $("#settlementTotalBadge");
@@ -12596,6 +12647,7 @@
         ? `${data.start_date} · ${T("settlementTodayOnlyNote")}`
         : "";
     }
+    renderSettlementLineNote(data);
     const share = (v, total) => (total > 0 ? Math.round((v / total) * 100) : 0);
 
     // ── 1. 오늘 한눈에 ────────────────────────────────────────────

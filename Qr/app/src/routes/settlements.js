@@ -21,6 +21,38 @@ const router = express.Router();
 // 같은 날짜라도 진짜 마감과 테스트 마감은 **다른 줄**이어야 한다. 한 줄을
 // 나눠 쓰면 테스터 모드를 끄면서 그 줄을 지울 때 그날의 진짜 마감까지 같이
 // 사라진다. 장부에서 하루가 통째로 없어지는 것이라 되돌릴 방법이 없다.
+/**
+ * LINE 마감 문자가 실제로 나갔는지 그날 칸에 적어둔다.
+ *
+ * 2026-09-15 사장님: "15일 저녁 장사 마치고 보니까 정산이 되어있는 거 같은데
+ * line으로는 안오네?" — 그때 남은 기록이 **하나도 없었다.** 갔는지 안 갔는지
+ * 알 길이 없어 코드를 거꾸로 읽어야 했다.
+ *
+ * 문자가 안 나가는 길은 여럿이다(알림 토글이 꺼짐, 받는 사람이 없음, 토큰
+ * 만료, LINE 쪽 오류, 아래 크론의 건너뛰기). 어느 쪽이었는지는 나중에
+ * 알아낼 수 없으므로 그 자리에서 적는다.
+ *
+ * 오전과 하루를 따로 적는다. 한 칸에 몰아 적으면 저녁 것이 아침 것을 덮어
+ * "오전 문자는 갔는가"를 다시 알 수 없게 된다.
+ */
+async function recordLineSend(date, shift, result, testId) {
+  const p = shift === "am" ? "line_am" : "line_day";
+  try {
+    await saveSettlementSnapshot(
+      {
+        date,
+        [`${p}_at`]: nowLocal(),
+        [`${p}_ok`]: !!(result && result.ok),
+        [`${p}_error`]: (result && result.error) || null,
+      },
+      testId
+    );
+  } catch (e) {
+    // 기록이 실패해도 마감 자체는 끝난 것이다.
+    console.warn("LINE 발송 기록 실패:", e && e.message);
+  }
+}
+
 async function saveSettlementSnapshot(snapshot, testId) {
   const key = testId
     ? { date: snapshot.date, test_session: testId }
@@ -89,6 +121,10 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
   const shift = shiftQ;
   res.json(
     Object.assign(computeSettlement(orders, start, end, { ...opts, shift, menu: menuForSettlement() }), {
+      // 하루만 볼 때는 그날 LINE 마감 문자가 나갔는지도 같이 준다.
+      // 안 나갔으면 왜인지까지 — 사장님이 「정산은 됐는데 문자는 안 왔다」를
+      // 다음부터는 그 화면에서 바로 본다(2026-09-15).
+      line_status: start === end ? (opts.lineByDate || {})[start] || { am: null, day: null } : null,
       // 「전체 기간」 버튼이 시작일로 쓸 날짜 (아래 allTimeStartDate).
       // 직원에게는 어차피 오늘뿐이라 계산하지 않는다.
       all_time_start: allTimeStart,
@@ -177,8 +213,18 @@ async function halfOpts(start, end, req) {
     ...(testId ? { test_session: testId } : { test_session: { $exists: false } }),
   });
   const amClosedAt = {};
-  for (const d of snaps || []) if (d && d.date && d.am_closed_at) amClosedAt[d.date] = d.am_closed_at;
-  return { amClosedAt, eveningStartsAt: eveningStartHm() };
+  // 그날 문자가 나갔는지도 같이 담아 온다. 이 질의는 어차피 돌고 있으므로
+  // 왕복이 늘지 않는다 — 결산 탭이 느리다는 말을 들은 적이 있다(2026-09-12).
+  const lineByDate = {};
+  for (const d of snaps || []) {
+    if (!d || !d.date) continue;
+    if (d.am_closed_at) amClosedAt[d.date] = d.am_closed_at;
+    lineByDate[d.date] = {
+      am: d.line_am_at ? { at: d.line_am_at, ok: !!d.line_am_ok, error: d.line_am_error || null } : null,
+      day: d.line_day_at ? { at: d.line_day_at, ok: !!d.line_day_ok, error: d.line_day_error || null } : null,
+    };
+  }
+  return { amClosedAt, eveningStartsAt: eveningStartHm(), lineByDate };
 }
 
 /**
@@ -352,8 +398,20 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     testId ? { date, test_session: testId } : { date, test_session: { $exists: false } }
   );
   const amClosedAt = shift === "am" ? closedAt : (prev && prev.am_closed_at) || null;
+  // day_closed_at 은 **하루 정산을 눌렀을 때만** 찍힌다.
+  //
+  // 밤 크론이 "오늘은 사람이 마감했으니 문자를 건너뛴다"를 판단하는 근거가
+  // 이것이다. 예전에는 last_shift_closed_at(오전이든 하루든 눌리면 찍힘)을
+  // 봤는데, **오전 정산만 누르고 저녁에 안 누른 날**이면 크론이 그날 결산은
+  // 만들면서 문자는 건너뛰었다. 사장님 눈에는 「정산은 되어 있는데 LINE 은
+  // 안 온 날」로 보인다. 2026-09-15 이 그랬다.
   await saveSettlementSnapshot(
-    { ...snapshot, am_closed_at: amClosedAt, last_shift_closed_at: closedAt },
+    {
+      ...snapshot,
+      am_closed_at: amClosedAt,
+      last_shift_closed_at: closedAt,
+      ...(shift === "day" ? { day_closed_at: closedAt } : {}),
+    },
     testId
   );
   await save();
@@ -408,6 +466,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     const result = await sendLineMessage(store, lines.join("\n"));
     line = result.ok ? { sent: true } : { sent: false, error: result.error };
   }
+  if (!testId) await recordLineSend(date, shift, { ok: line.sent, error: line.error }, testId);
 
   res.json({
     ok: true,
@@ -567,14 +626,16 @@ async function runAutoAmClose(req) {
     // 오전 몫을 정산된 것으로 내린다 — 직접 누른 것과 같은 처리다.
     await markSettled(date, cut, "am", null);
 
+    let amLine = { ok: false, error: "disabled" };
     if (store.settings.line_notify_enabled) {
       const lines = [
         formatShiftSummary(snapshot, { shift: "am", closedAt: cut, amPart: null, pmPart: null }),
         "",
         `※ 오전 정산 버튼을 누르지 않아 ${cut.slice(11, 16)} 에 자동으로 마감했습니다.`,
       ];
-      await sendLineMessage(store, lines.join("\n"));
+      amLine = await sendLineMessage(store, lines.join("\n"));
     }
+    await recordLineSend(date, "am", amLine, null);
 
     // 실제 스냅샷·주문 표시·LINE까지 끝난 뒤에만 완료 표를 남긴다. 중간에
     // 실패했는데 먼저 표를 세우면 다음 인스턴스가 이어서 끝낼 수 없게 된다.
@@ -623,13 +684,26 @@ router.get("/cron-close", async (req, res) => {
   // shift-close). 이 크론은 예비다 — 그날 정산을 누른 적이 있으면 같은
   // 내용을 한 번 더 보내지 않는다. 사장님이 받기로 한 건 하루에 두 통
   // (오전·하루)이지 세 통이 아니다.
+  //
+  // 보는 것은 **하루 정산**(day_closed_at) 하나다. 오전 정산만 누른 날은
+  // 저녁 마감 문자를 아직 아무도 못 받았으므로 여기서 보내야 한다. 예전에는
+  // last_shift_closed_at 을 봐서, 오전만 누른 날이면 그날 결산은 만들면서
+  // 문자는 건너뛰었다 — 2026-09-15 사장님: "정산이 되어있는 거 같은데
+  // line으로는 안오네?"
   const [todaySnapshot] = await findDocs("daily_settlements", { date });
-  const alreadyClosedByHand = !!(todaySnapshot && todaySnapshot.last_shift_closed_at);
-  if (store.settings.line_notify_enabled && !alreadyClosedByHand) {
-    const lines = [formatSettlementSummary(snapshot)];
-    const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
-    if (warn) lines.push("", warn);
-    await sendLineMessage(store, lines.join("\n"));
+  const alreadyClosedByHand = !!(todaySnapshot && todaySnapshot.day_closed_at);
+  // 건너뛸 때는 **아무것도 적지 않는다.** 건너뛴다는 것은 정산 버튼이 이미
+  // 마감했다는 뜻이고, 그때 「보냄」이 적혔다. 여기서 덮어쓰면 문자가 나간
+  // 날이 「안 감」으로 바뀐다.
+  if (!alreadyClosedByHand) {
+    let lineResult = { ok: false, error: "disabled" };
+    if (store.settings.line_notify_enabled) {
+      const lines = [formatSettlementSummary(snapshot)];
+      const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
+      if (warn) lines.push("", warn);
+      lineResult = await sendLineMessage(store, lines.join("\n"));
+    }
+    await recordLineSend(date, "day", lineResult, null);
   }
 
   res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count, line_skipped: alreadyClosedByHand });
