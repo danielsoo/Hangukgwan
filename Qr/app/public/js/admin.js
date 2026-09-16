@@ -7390,7 +7390,12 @@
         </div>
       `
       : "";
-    $("#tableDetailBody").innerHTML = header + tabsHtml + body + footer;
+    // 가운데만 굴린다. 머리(테이블 번호·미결제 합계·탭)와 발(미결제
+    // 합계·결제 완료)은 늘 같은 자리에 있어야 한다 — 2026-09-16 사장님:
+    // "결제완료 행은 언제든 고정된 위치에서 편하게 누를 수 있게 하는 게
+    // 맞는 거 같아." (자리 맞추기는 admin.css 의 .table-detail-scroll)
+    $("#tableDetailBody").innerHTML =
+      header + tabsHtml + `<div class="table-detail-scroll">${body}</div>` + footer;
     // 카드가 여러 개 격자로 뜨는 화면은 기본 480px 폭으로는 한 줄에 하나도
     // 넉넉히 안 들어가 "독립된 창"처럼 안 보이므로(위 admin.css의
     // .table-detail-modal.wide 참고) 이때만 폭을 넓힌다.
@@ -8203,7 +8208,7 @@
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
-          <span>${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
+          <span class="pay-amount-cell">${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
         </div>`;
     });
     // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고
@@ -8388,9 +8393,9 @@
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
           </div>
-          <div style="text-align:right;font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.vipDiscountAmount)}</div>
+          <div class="pay-total-row" style="font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);"><span>${T("subtotalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(p.total, p.vipDiscountAmount)}</span></div>
           ${p.vipDiscountToggleHtml ? `<div style="display:flex;justify-content:flex-end;padding:8px 0;">${p.vipDiscountToggleHtml}</div>` : ""}
-          <div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} ${vipTotalHtml(o.total, p.vipDiscountAmount)}</div>
+          <div class="pay-total-row" style="font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);"><span>${T("totalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(o.total, p.vipDiscountAmount)}</span></div>
         </div>
       </div>
     `;
@@ -8529,7 +8534,7 @@
     // 직접입력 할인이 활성화돼 있으면 위에서 계산한 tableDiscountAmount로
     // 취소선+할인가를 같이 보여준다 — 부분 결제 여부와는 여전히 무관.)
     const grandTotal = orders.reduce((s, o) => s + o.total, 0);
-    const grandTotalHtml = `<div style="text-align:right;font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);">${T("totalLabel")} ${vipTotalHtml(grandTotal, tableDiscountAmount)}</div>`;
+    const grandTotalHtml = `<div class="pay-total-row" style="font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);"><span>${T("totalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(grandTotal, tableDiscountAmount)}</span></div>`;
     return `<div class="table-order-block">${roundsHtml}${discountRowHtml}${grandTotalHtml}</div>`;
   }
   $("#tableDetailClose").onclick = () => {

@@ -38,9 +38,17 @@ out.push("[결제수단 합계가 실제 받은 돈과 맞는가]");
   check("할인이 없으면 당연히 맞는다", plain.total_revenue === plain.payment_method_total,
     `${plain.total_revenue} vs ${plain.payment_method_total}`);
 
-  // 할인이 걸린 주문 — 예전에는 여기서 어긋났다
+  // 할인이 걸린 주문 — 예전에는 여기서 어긋났다.
+  //
+  // 2026-09-16: 이 자리의 예시가 원래 { total: 900, discount_amount: 100 } 에
+  // 품목 합계 1000 이었다. **진짜 주문은 그렇게 안 생겼다** — total 은 할인
+  // 전 금액이라 1000 이어야 하고, 깎은 100 은 discount_amount 에만 있다
+  // (src/routes/orders.js recordDiscount). 예시가 「total 은 이미 할인이
+  // 반영된 값」이라는 잘못된 전제로 만들어져 있었고, 결산 코드도 같은 전제로
+  // 짜여 있어서 서로 맞아떨어졌다 — 그래서 아무도 몰랐다.
+  // 이제 예시를 진짜 주문 모양으로 고친다. 기대값(750/450)은 그대로다.
   const withDiscount = computeSettlement([
-    order({ id: 1, total: 900, discount_amount: 100, discount_type: "vip10",
+    order({ id: 1, total: 1000, discount_amount: 100, discount_type: "vip10",
       items: [it(500, 1, "cash"), it(500, 1, "card")] }),
     order({ id: 2, total: 300, items: [it(300, 1, "cash")] }),
   ], D);
@@ -56,7 +64,7 @@ out.push("[결제수단 합계가 실제 받은 돈과 맞는가]");
 
   // 반올림이 생기는 경우 — 1원도 새거나 남으면 안 된다
   const rounding = computeSettlement([
-    order({ id: 1, total: 333, discount_amount: 67,
+    order({ id: 1, total: 400, discount_amount: 67,
       items: [it(200, 1, "cash"), it(200, 1, "card")] }),
   ], D);
   check("반올림이 생겨도 한 원도 안 어긋난다",
@@ -67,7 +75,7 @@ out.push("[결제수단 합계가 실제 받은 돈과 맞는가]");
   const many = computeSettlement(
     Array.from({ length: 50 }, (_, i) => order({
       id: 100 + i,
-      total: 1000 - (i % 7) * 37,
+      total: 1000,
       discount_amount: (i % 3) * 37,
       items: [it(600, 1, ["cash", "card", "linepay", "other"][i % 4]), it(400, 1, ["cash", "online"][i % 2])],
     })), D);

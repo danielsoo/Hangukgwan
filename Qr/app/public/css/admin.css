@@ -361,7 +361,79 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
 .table-order-badge.active { background: var(--red); color: #fff; }
 .table-order-badge.empty { background: #f2ede2; color: var(--muted); font-weight: 500; }
 .table-party-badge { margin-top: 4px; font-size: 14px; color: var(--muted); font-weight: 600; }
-.table-detail-modal { max-width: 480px; }
+/* 태블릿 한 화면 기준으로 짠다.
+ *
+ * 2026-09-16 사장님: "테블릿 가로 세로 넓이를 항상 고려해줬으면 좋겠어.
+ * 지금 모든 창이나 그런 걸 태블릿이 주로 돌아간다고 생각하면 좋을 것
+ * 같아. 테블릿 한 화면 안에 왠만하면 전체가 들어왔으면 좋겠어."
+ *
+ * 폭: 480px 은 할인이 걸리는 순간 좁았다. 금액 칸이 「NT$230 NT$207」로
+ * 두 배가 되면서 메뉴 이름을 밀어냈다 — "글자 많아져서 왼쪽으로 빠지는데
+ * 오른쪽이 고정이 되었으면 좋겠어. 그래서 차라리 처음부터 그 공간을
+ * 고려해서 넓직하게." 할인이 걸리든 안 걸리든 자리가 안 움직이도록,
+ * 처음부터 그만큼 잡아둔다. 720px 은 태블릿 세로(768px)에도 들어간다.
+ *
+ * 높이: 모달 전체가 스크롤되면 「결제 완료」 버튼이 목록 끝까지 내려가야
+ * 나온다. 주문이 많은 자리일수록 그렇다 — 정작 제일 자주 누르는 버튼이
+ * 제일 찾기 어려워진다. 그래서 세로 flex 로 짜고 **가운데 목록만** 굴린다
+ * (아래 .table-detail-scroll). 머리(테이블 번호·미결제 합계·탭)와
+ * 발(미결제 합계·결제 완료)은 늘 같은 자리에 붙어 있다. */
+/* .modal 이 뒤에서 max-width:560px 을 주므로(같은 한 칸짜리 선택자라 나중
+   것이 이긴다) 여기서 .modal 을 같이 적어 더 구체적으로 만든다. 이걸 안
+   하면 아래 720px 이 조용히 무시된다 — 예전 480px 도 사실 안 먹고 있었다. */
+.modal.table-detail-modal {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 굴리는 것은 안쪽 .table-detail-scroll 하나뿐 */
+}
+.table-detail-modal > #tableDetailBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0; /* 없으면 flex 자식이 안 줄어들어 스크롤이 안 생긴다 */
+}
+.table-detail-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* 굴러가는 내용이 발밑으로 사라지는 경계를 눈에 보이게 */
+  padding-bottom: 4px;
+}
+/* 발은 늘 바닥에. 사장님: "저 미결제 합계랑 결제완료 의 가장 아래 행은
+   스크롤 안되고 중간에 있는 메뉴들만 스크롤로 해서 결제완료 행은 언제든
+   고정된 위치에서 편하게 누를 수 있게 하는 게 맞는 거 같아." */
+.table-detail-modal .table-detail-footer {
+  flex: none;
+  background: #fff;
+}
+
+/* 금액 칸은 **폭이 고정**이다.
+ *
+ * 할인이 걸리면 「NT$230」이 「NT$230 NT$207」이 된다. 폭을 안 잡아두면 그
+ * 두 배가 된 칸이 메뉴 이름 쪽을 밀어서, 할인을 켜고 끌 때마다 줄이
+ * 좌우로 출렁인다. 그리고 품목 줄·소계·합계·미결제 합계의 숫자가 서로
+ * 다른 세로선에 서서 눈으로 훑어 검산할 수가 없다.
+ *
+ * 처음부터 「NT$230 NT$207」이 들어갈 만큼 잡아두고 오른쪽 정렬한다.
+ * 할인이 없는 평소에는 그냥 빈 자리로 남는다 — 그게 목적이다. */
+.pay-amount-cell {
+  flex: 0 0 auto;
+  min-width: 168px;
+  text-align: right;
+  white-space: nowrap;
+}
+/* 소계 / 합계 줄. 라벨은 왼쪽, 숫자는 위 금액 칸과 **같은 세로선**에. */
+.pay-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+}
+@media (max-width: 560px) {
+  /* 폰에서는 168px 을 고집하면 메뉴 이름이 짓눌린다. */
+  .pay-amount-cell { min-width: 0; }
+}
 /* 주문이 여러 건이라 아래 .order-block-grid가 뜨는 화면은 카드가 최소한
    한 줄에 하나씩은 여유 있게 들어가야 "각자 독립된 창"처럼 보이므로,
    480px보다 훨씬 넓혀준다(JS의 openTableDetail에서 isGrid일 때만 이

@@ -2,7 +2,7 @@ const express = require("express");
 const { activeItems } = require("../menuItems");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
-const { computeSettlement, taipeiDateString, paidAtOf, halfOf } = require("../settlement");
+const { computeSettlement, taipeiDateString, paidAtOf, halfOf, netTotalOf } = require("../settlement");
 const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
@@ -447,7 +447,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   if (shift === "day" && amClosedAt) {
     const paid = orders.filter((o) => o.status === "paid");
     const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
-    const amRevenue = amPaid.reduce((sum, o) => sum + (o.total || 0), 0);
+    const amRevenue = amPaid.reduce((sum, o) => sum + netTotalOf(o), 0);
     amPart = { revenue: amRevenue, count: amPaid.length };
     // 오후는 빼서 구한다 — 따로 더하면 반올림이나 경계 판정이 어긋났을 때
     // 오전+오후가 하루 매출과 안 맞는 문자가 나간다.
@@ -681,7 +681,7 @@ router.post("/resend-line", requireOwner, async (req, res) => {
   if (amClosedAt) {
     const paid = orders.filter((o) => o.status === "paid");
     const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
-    const amRevenue = amPaid.reduce((sum, o) => sum + (o.total || 0), 0);
+    const amRevenue = amPaid.reduce((sum, o) => sum + netTotalOf(o), 0);
     amPart = { revenue: amRevenue, count: amPaid.length };
     pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
   }

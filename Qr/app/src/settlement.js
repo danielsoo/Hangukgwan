@@ -139,8 +139,32 @@ function halfOf(order, opts) {
   return paidAtOf(order) <= boundary ? "am" : "pm";
 }
 
+/**
+ * 이 주문으로 **실제로 받은 돈**.
+ *
+ * 2026-09-16 사장님: "1. 할인 후(실제 받은 돈) — 매출 410, 할인은 참고로
+ * 따로 표시. 이렇게 표시해야 될 것 같아."
+ *
+ * order.total 은 할인 **전** 금액이다. 깎아준 돈은 discount_amount 에 따로
+ * 적힌다(src/routes/orders.js recordDiscount) — 결제할 때 total 을 줄이지
+ * 않는다. 이 파일은 오랫동안 total 을 「받은 돈」으로 알고 써왔고(아래
+ * 결제수단별 집계의 `const net = o.total` 주석이 그 증거다), 그래서 매출이
+ * 할인만큼 부풀어 있었다.
+ *
+ * 제일 아픈 곳은 결제수단별이었다. 마감 때 서랍의 현금을 그 숫자와 맞추는데,
+ * 깎아준 만큼 서랍이 비어 보인다.
+ *
+ * 취소/미결제 금액에는 쓰지 않는다 — 그건 「얼마짜리가 취소됐나」라서 할인을
+ * 뺄 근거가 없다(아직 아무도 할인을 걸지 않았다).
+ */
+function netTotalOf(o) {
+  const total = Number((o && o.total) || 0);
+  const off = Number((o && o.discount_amount) || 0);
+  return Math.max(0, total - off);
+}
+
 function summarize(paid, half) {
-  const revenue = paid.reduce((sum, o) => sum + (o.total || 0), 0);
+  const revenue = paid.reduce((sum, o) => sum + netTotalOf(o), 0);
   const byTableDay = new Map();
   for (const o of paid) {
     if (!o.party_size) continue;
@@ -242,7 +266,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     outstanding: partialPaidOrders.reduce((a, o) => a + o.outstanding, 0),
   };
 
-  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const totalRevenue = paidOrders.reduce((sum, o) => sum + netTotalOf(o), 0);
 
   // 결제수단별 집계 (2026-09-07 사장님 요청: "결제종류... 정산에서도 서로
   // 분류해서도 집계해줘 총합도 있고") — 품목 단위로 나눈다. 한 라운드를
@@ -275,7 +299,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     }
     const gross = [...byMethod.values()].reduce((a, b) => a + b, 0);
     // 실제 받은 금액. 할인이 없으면 gross 와 같다.
-    const net = o.total != null ? o.total : gross;
+    const net = o.total != null ? netTotalOf(o) : gross;
     const methods = [...byMethod.entries()];
     let assigned = 0;
     methods.forEach(([method, amount], idx) => {
@@ -308,7 +332,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   for (const o of paidOrders) {
     const key = o.order_type || "dine_in";
     const e = orderTypeMap.get(key) || { order_type: key, revenue: 0, order_count: 0 };
-    e.revenue += o.total || 0;
+    e.revenue += netTotalOf(o);
     e.order_count += 1;
     orderTypeMap.set(key, e);
   }
@@ -387,9 +411,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const cardSaleOrders = paidOrders.filter((o) => o.kind === "vip_card_sale");
   const vipCardProgram = {
     cards_sold: cardSaleOrders.length,
-    card_sales_revenue: cardSaleOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+    card_sales_revenue: cardSaleOrders.reduce((sum, o) => sum + netTotalOf(o), 0),
     card_discount_given: vipCardDiscountTotal,
-    net: cardSaleOrders.reduce((sum, o) => sum + (o.total || 0), 0) - vipCardDiscountTotal,
+    net: cardSaleOrders.reduce((sum, o) => sum + netTotalOf(o), 0) - vipCardDiscountTotal,
   };
 
   // 오전 / 오후.
@@ -456,7 +480,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     boundary_label: cuts.size === 1 ? [...cuts][0] : null,
     unsplit_revenue: paidOrdersAll
       .filter((o) => !halfOf(o, opts) && unsplitDates.has(o.created_at.slice(0, 10)))
-      .reduce((sum, o) => sum + (o.total || 0), 0),
+      .reduce((sum, o) => sum + netTotalOf(o), 0),
   };
 
   // 취소와 미결제는 지금까지 "몇 건"만 보였다. 금액이 있어야 얼마나 아까운
@@ -469,7 +493,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   for (const o of paidOrders) {
     const key = String(o.table_number);
     const e = tableMap.get(key) || { table_number: key, revenue: 0, order_count: 0 };
-    e.revenue += o.total || 0;
+    e.revenue += netTotalOf(o);
     e.order_count += 1;
     tableMap.set(key, e);
   }
@@ -542,7 +566,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const dayMap = new Map();
   for (const o of paidOrders) {
     const d = o.created_at.slice(0, 10);
-    dayMap.set(d, (dayMap.get(d) || 0) + (o.total || 0));
+    dayMap.set(d, (dayMap.get(d) || 0) + netTotalOf(o));
   }
   const dailyBreakdown = [...dayMap.entries()]
     .map(([date, revenue]) => ({ date, revenue }))
@@ -559,7 +583,7 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     const entry = hourMap.get(hour) || { hour, revenue: 0, order_count: 0, itemMap: new Map() };
     entry.order_count += 1;
     if (o.status === "paid") {
-      entry.revenue += o.total || 0;
+      entry.revenue += netTotalOf(o);
       for (const it of o.items || []) {
         const key = it.item_id != null ? String(it.item_id) : it.name_ko || it.name_zh;
         const prev = entry.itemMap.get(key) || { name_ko: it.name_ko, name_zh: it.name_zh, name_en: it.name_en, qty: 0 };
@@ -675,4 +699,4 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   };
 }
 
-module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor, halfOf };
+module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor, halfOf, netTotalOf };
