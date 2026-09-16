@@ -2436,3 +2436,22 @@ body:not(.role-staff) .staff-only { display: none !important; }
   line-height: 1.45;
 }
 .test-table-notice strong { font-size: 14px; font-weight: 800; }
+
+/* 지난 주문의 할인 내역 — 2026-09-16 사장님: "이전 주문 탭에서도 할인
+   내역이 보여야 해 결산에서 그 전 주문들을 볼 때도 보여야 하고."
+   결제가 끝난 라운드는 그때 깎아준 금액이 주문에 적혀 있다. 소계 옆에
+   원래 금액을 회색 취소선으로 두고, 그 아래 무슨 할인이었는지 한 줄. */
+.round-discount-note {
+  margin-top: 2px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--red);
+}
+/* 결산 목록의 지난 주문 줄 — 할인 전 금액은 회색 취소선으로 옆에 둔다. */
+.stl-order-total-was {
+  color: var(--muted);
+  text-decoration: line-through;
+  font-weight: 500;
+  margin-right: 4px;
+}

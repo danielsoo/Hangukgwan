@@ -8545,6 +8545,44 @@
   // 금액을 보여주는 공용 헬퍼(2026-09-07 피드백) — discountAmount가 0/없음
   // 이면 그냥 원래 금액만 보여준다(할인 꺼짐, 또는 이 라운드에 할인 대상
   // 품목이 없어서 결과가 원래와 같은 경우).
+  /**
+   * 할인 종류의 사람이 읽는 이름. "te95+manual" 처럼 둘을 같이 건 것도
+   * 풀어서 적는다(src/discounts.js discountTypeKey 가 그 꼴로 저장한다).
+   *
+   * 결산 막대(renderSettlement)에만 있던 것을 여기로 올렸다 — 결제창의
+   * 「이전 주문」과 결산의 지난 주문이 같은 이름을 써야 한다.
+   */
+  const discountPartLabelOf = (t) =>
+    ({
+      te95: "特約95折",
+      vip9: "VIP9折",
+      vip95: "特約95折",
+      vip10: "VIP9折",
+      manual: T("settlementDiscountManual"),
+      unspecified: T("paymentMethodUnspecified"),
+    })[t] || t;
+  const discountLabelOf = (t) =>
+    String(t || "unspecified")
+      .split("+")
+      .map(discountPartLabelOf)
+      .join(" + ");
+  /**
+   * 「이 라운드에 얼마가 어떤 이름으로 깎였는가」 한 줄.
+   *
+   * 2026-09-16 사장님: "이전 주문 탭에서도 할인 내역이 보여야 해 결산에서
+   * 그 전 주문들을 볼 때도 보여야 하고."
+   *
+   * 결제가 끝나면 그 주문에 discount_amount/discount_type 이 적혀 있는데
+   * (src/routes/orders.js recordDiscount), 화면은 결제 **전**의 미리보기만
+   * 보여주고 있었다. 그래서 「이전 주문」 탭은 전부 할인 전 금액으로 떴고,
+   * 손님이 "아까 깎아준 거 맞죠?" 하고 물으면 확인할 자리가 없었다.
+   */
+  function discountNoteHtml(o) {
+    const off = Number((o && o.discount_amount) || 0);
+    if (!(off > 0)) return "";
+    const name = discountLabelOf(o.discount_type);
+    return `<div class="round-discount-note">${name} −NT$${money(off)}</div>`;
+  }
   function vipTotalHtml(original, discountAmount) {
     if (!discountAmount) return `NT$${money(original)}`;
     const newAmount = original - discountAmount;
@@ -8908,6 +8946,17 @@
       roundSelectAllHtml,
       total: remainingAmountOf(o),
       vipDiscountAmount,
+      // 결제 전이면 지금 걸린 할인의 미리보기, 결제 뒤면 **그때 실제로
+      // 깎아준 금액**(주문에 적혀 있다). 소계 줄이 이 하나만 보면 된다.
+      shownDiscountAmount: vipDiscountActive ? vipDiscountAmount : paidOrderDiscount(o),
+      // 결제가 **끝난** 라운드의 할인액만. 라운드가 여러 개인 화면
+      // (renderMergedOrderGroup)의 소계는 이것만 본다 — 아직 결제 전인
+      // 라운드에 미리보기 할인을 라운드마다 붙이면, 정액 할인이 라운드
+      // 수만큼 곱해져 보인다(2026-09-07 에 그래서 뗐던 자리다). 결제가
+      // 끝난 뒤의 금액은 미리보기가 아니라 **그때 실제로 깎아준 사실**이라
+      // 라운드마다 붙어도 겹치지 않는다.
+      paidDiscountAmount: paidOrderDiscount(o),
+      discountNoteHtml: vipDiscountActive ? "" : discountNoteHtml(o),
     };
   }
   function renderTableOrderBlock(o, withDismiss) {
@@ -8953,7 +9002,8 @@
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
             <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
           </div>
-          <div class="pay-total-row" style="font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);"><span>${T("subtotalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(p.total, p.vipDiscountAmount)}</span></div>
+          <div class="pay-total-row" style="font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);"><span>${T("subtotalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(p.total, p.shownDiscountAmount)}</span></div>
+          ${p.discountNoteHtml}
           ${p.vipDiscountToggleHtml ? `<div style="display:flex;justify-content:flex-end;padding:8px 0;">${p.vipDiscountToggleHtml}</div>` : ""}
           <div class="pay-total-row" style="font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);"><span>${T("totalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(o.total, p.vipDiscountAmount)}</span></div>
         </div>
@@ -9040,8 +9090,9 @@
             ${p.noteHtml}
             <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
               ${p.editBtn}
-              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${money(p.total)}</div>
+              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} ${vipTotalHtml(p.total, p.paidDiscountAmount)}</div>
             </div>
+            ${p.discountNoteHtml}
           </div>
         `;
       })
@@ -13409,20 +13460,7 @@
     // 주문에 저장되는 키는 src/routes/orders.js의 discountTypeKey가 만든다
     // — 한 종류면 "te95", 둘을 같이 걸었으면 "te95+manual" 처럼 붙어서 온다.
     // vip95/vip10은 이 키가 te95/vip9로 바뀌기 전에 저장된 옛 주문용.
-    const discountPartLabel = (t) =>
-      ({
-        te95: "特約95折",
-        vip9: "VIP9折",
-        vip95: "特約95折",
-        vip10: "VIP9折",
-        manual: T("settlementDiscountManual"),
-        unspecified: T("paymentMethodUnspecified"),
-      })[t] || t;
-    const discountLabel = (t) =>
-      String(t || "unspecified")
-        .split("+")
-        .map(discountPartLabel)
-        .join(" + ");
+    const discountLabel = discountLabelOf;
     const discountRows = data.discount_breakdown || [];
     // 할인이 한 건도 없으면 이 묶음을 통째로 감춘다 — 빈 표는 자리만 먹는다.
     $("#settlementDiscountBlock").hidden = discountRows.length === 0;
@@ -14174,7 +14212,7 @@
               <span class="stl-order-time">${day} ${time}</span>
               <span class="stl-order-table">${who}</span>
               <span class="stl-order-peek">${escapeHtml(peek)}</span>
-              <span class="stl-order-total">NT$${money(Number(o.total || 0))}</span>
+              <span class="stl-order-total">${settlementOrderTotalHtml(o)}</span>
               <span class="stl-order-actions">
                 <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
                 <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
@@ -14239,6 +14277,24 @@
     });
   }
 
+  /**
+   * 결산의 지난 주문 한 줄에 적히는 금액.
+   *
+   * 2026-09-16 사장님: "이전 주문 탭에서도 할인 내역이 보여야 해 결산에서
+   * 그 전 주문들을 볼 때도 보여야 하고."
+   *
+   * order.total 은 **할인 전** 금액이다. 깎아준 돈은 discount_amount 에 따로
+   * 적힌다(src/routes/orders.js recordDiscount). 여기가 total 만 적고 있어서,
+   * 사장님이 지난 주문을 되짚을 때 실제로 받은 돈을 알 수가 없었다 —
+   * 결산 합계(netTotalOf 를 쓴다)와도 숫자가 안 맞아 보였다.
+   */
+  function settlementOrderTotalHtml(o) {
+    const gross = Number((o && o.total) || 0);
+    const off = Number((o && o.discount_amount) || 0);
+    if (!(off > 0)) return `NT$${money(gross)}`;
+    return `<span class="stl-order-total-was">NT$${money(gross)}</span> NT$${money(Math.max(0, gross - off))}`;
+  }
+
   function renderSettlementOrderBody(o) {
     const lines = (o.items || [])
       .map((it) => {
@@ -14252,7 +14308,7 @@
         return `
           <div class="stl-order-line">
             <span>${itemDisplayName(it)} <span style="color:var(--muted)">x${it.qty}</span></span>
-            <span>NT$${money(Number((it.unit_price || 0) * (it.qty || 0)))}</span>
+            <span>NT$${money(lineTotalOf(it))}</span>
           </div>
           ${extras.length ? `<div class="stl-order-line-sub">└ ${escapeHtml(extras.join(" · "))}</div>` : ""}`;
       })
@@ -14262,7 +14318,11 @@
     const meta = [
       o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentMethodLabelFor(o.payment_method)}` : null,
       o.party_size ? fmtPartyDetail(o) : null,
-      o.discount_amount ? `${T("settlementDiscountAmount")} NT$${money(Number(o.discount_amount))}` : null,
+      // 얼마가 깎였는지뿐 아니라 **무슨 할인이었는지**까지. 사장님이 지난
+      // 주문을 되짚는 이유가 대개 그것이다(2026-09-16).
+      o.discount_amount
+        ? `${T("settlementDiscountAmount")} ${discountLabelOf(o.discount_type)} −NT$${money(Number(o.discount_amount))}`
+        : null,
       o.paid_at ? `${T("settlementOrdersPaidAt")} ${String(o.paid_at).slice(5, 16)}` : null,
       `${T("settlementOrdersStatus")} ${statusLabel(o.status)}`,
     ].filter(Boolean);
