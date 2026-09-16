@@ -56,6 +56,7 @@ function check(name, cond, extra = "") {
   check("로그인된다", r.status === 200, `${r.status}`);
   await require("./disable-order-hours")();
 
+  const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
   const EXCLUDED_CAT = { discount_excluded: true };
   const NORMAL_CAT = { discount_excluded: false };
 
@@ -164,7 +165,6 @@ function check(name, cond, extra = "") {
   check("★ 도중에 풀면 바로 다시 깎인다", (o.discount_amount || 0) === 20, `${o.discount_amount}`);
 
   out.push("\n[메뉴 관리 화면에서 보이고 고칠 수 있다]");
-  const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
   const html = fs.readFileSync(path.join(__dirname, "../public/admin.html"), "utf8");
   const css = fs.readFileSync(path.join(__dirname, "../public/css/admin.css"), "utf8");
   check("★ 수정 폼에 칸이 있다", /id="f_discount_excluded"/.test(html), "");
@@ -183,7 +183,65 @@ function check(name, cond, extra = "") {
     /if \(own === null \|\| own === undefined\) return "";/.test(admin),
     "전부에 붙이면 정작 예외인 줄이 안 보인다"
   );
-  for (const k of ["itemDiscountExcludedLabel", "itemDiscountFollowCat", "itemDiscountOn", "itemDiscountOff", "itemDiscountOffBadge"]) {
+  // ── 2026-09-16, 사장님이 신라면 김밥세트 스크린샷 두 장과 함께 ──────────
+  //
+  // "신라면 세트가 분류 설정을 따른다면서 여기서는 제대로 뻈어. 빼는 게
+  // 맞긴 해 근데 그럼 설정이 저렇게 되어있어서 일정하지 않다는 거야."
+  //
+  // 수정 폼은 「분류 설정을 따름 · 지금 이 분류는 할인이 걸려요」라고 적어
+  // 놓고, 결제창에서는 안 깎였다. **둘 다 옳게 동작한 것이다** — 정가가
+  // 적힌 메뉴는 이미 깎아 파는 것이라 어떤 할인의 기준에도 안 들어간다
+  // (isSetDiscountItem). 그 규칙이 이 칸보다 먼저 걸리는데, 화면이 그
+  // 사실을 한마디도 안 했다. 화면이 거짓말을 한 것이다.
+  out.push("\n[정가가 적혀 있으면 이 칸이 무슨 값이든 할인은 안 걸린다]");
+  {
+    // 먼저 **실제 금액**으로 확인한다 — 화면 문구만 고치고 끝내면 안 된다.
+    const setItem = await mk({ name_zh: "세트밥", price: 280 });
+    await staff.put(`/api/menu/admin/items/${setItem.id}`).send({
+      name_zh: "세트밥", price: 280, original_price: 330, discount_excluded: "0", // ← 「할인 적용함」
+    });
+    const after = store.menuItems.find((m) => m.id === setItem.id);
+    check("정가가 붙었다", after.original_price === 330 && after.discount_excluded === false, `${after.original_price}/${after.discount_excluded}`);
+    const o = await payWithVip(after.id);
+    check(
+      "★ 「할인 적용함」으로 둬도 세트는 안 깎인다",
+      (o.discount_amount || 0) === 0,
+      `${o.discount_amount} — 사장님이 본 그 자리다`
+    );
+
+    // 그러니 화면이 그렇게 말해야 한다.
+    const body = (src, header) => {
+      const i = src.indexOf(header);
+      return i < 0 ? "" : src.slice(i, src.indexOf("\n  }\n", i));
+    };
+    const paint = body(admin, "  function paintDiscountExcludedHint() {");
+    check("안내 함수를 찾았다", paint.length > 50, `${paint.length}`);
+    check(
+      "★ 정가를 **먼저** 보고 답한다",
+      /original > 0 && priceNow > 0 && original > priceNow/.test(paint) &&
+        paint.indexOf("original > priceNow") < paint.indexOf('sel.value === "1"'),
+      "이 검사가 뒤에 있으면 「분류를 따름」이 먼저 말해 버린다"
+    );
+    check("★ 고를 수 없게 잠근다", /sel\.disabled = true;/.test(paint), "골라도 안 먹히는 칸이 제일 나쁘다");
+    check("정가를 지우면 다시 풀린다", /sel\.disabled = !canMenuEdit\(\);/.test(paint), "");
+    check(
+      "★ 정가·가격을 고치는 그 순간 바뀐다",
+      /for \(const id of \["f_price", "f_original_price"\]\)[\s\S]{0,200}?paintDiscountExcludedHint/.test(admin),
+      "저장하고 다시 열어야 알게 되면 붙인 뜻이 없다"
+    );
+    check(
+      "★ 얼마나 깎아 파는지 같이 적어 준다",
+      /fmtItemDiscountHintSetMenu = \(original, now\)/.test(admin),
+      "정가를 잘못 적었으면 여기서 바로 보여야 한다"
+    );
+    check(
+      "★ 메뉴 관리 표의 배지도 같은 규칙을 쓴다",
+      /if \(isSetDiscountItem\(item\)\) \{/.test(body(admin, "  function discountFlagBadgeHtml(item) {")),
+      "표에서는 「할인 적용」이라 적혀 있으면 또 갈린다"
+    );
+  }
+
+  for (const k of ["itemDiscountExcludedLabel", "itemDiscountFollowCat", "itemDiscountOn", "itemDiscountOff", "itemDiscountOffBadge", "itemDiscountSetBadge"]) {
     check(`${k} 가 한국어/중국어 둘 다 있다`, admin.split(`${k}:`).length - 1 >= 2, "");
   }
 

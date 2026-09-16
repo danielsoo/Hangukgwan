@@ -886,6 +886,8 @@
       menuTrashMatch: "휴지통에 「{name}」(코드 {code})이 있어요. 새 메뉴로 넣으면 번호가 달라져서 결산에서 두 줄로 갈라집니다. 어떻게 할까요?",
       menuTrashRestoreIt: "되살리기",
       menuTrashMakeNew: "새 메뉴로 넣기",
+      itemDiscountSetBadge: "세트 · 할인 안 함",
+      itemDiscountSetBadgeTitle: "정가가 적혀 있어서 이미 깎아 파는 메뉴예요. 그래서 할인이 또 걸리지 않아요 — 「할인 적용」 설정과 상관없이요.",
       testTableTileName: "테스트",
       testTableTileTag: "시험용",
       testTableBadge: "테스트 테이블",
@@ -1674,6 +1676,8 @@
       menuTrashMatch: "垃圾桶裡有「{name}」（代碼 {code}）。建立新品項會取得新編號，結算會分成兩列。要怎麼處理？",
       menuTrashRestoreIt: "還原",
       menuTrashMakeNew: "建立新品項",
+      itemDiscountSetBadge: "套餐・不折扣",
+      itemDiscountSetBadgeTitle: "已填原價，代表本來就是折價販售的品項，因此不再套用折扣 — 與「折扣套用」設定無關。",
       testTableTileName: "測試",
       testTableTileTag: "測試專用",
       testTableBadge: "測試桌",
@@ -2961,6 +2965,13 @@
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
   const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
+  // 정가가 적힌 메뉴 — 이미 깎아 파는 것이라 할인이 또 안 걸린다. 얼마나
+  // 깎아 파는지까지 같이 적어 준다(사장님이 정가를 잘못 적었을 때 여기서
+  // 바로 보이라고).
+  const fmtItemDiscountHintSetMenu = (original, now) =>
+    adminLang === "zh"
+      ? `已填原價 NT$${money(original)} → NT$${money(now)}，本來就是折價販售的品項，因此不再套用折扣 — 與上方設定無關。`
+      : `정가 NT$${money(original)} → NT$${money(now)} 로 이미 깎아 파는 메뉴예요. 그래서 할인이 또 걸리지 않아요 — 위 설정과 상관없이요. 할인을 걸고 싶으면 정가 칸을 비우세요.`;
   const fmtLocationSetStatus = (lat, lng) =>
     adminLang === "zh"
       ? `已設定店家位置（${lat}, ${lng}）— 超出此範圍將無法送出訂單。`
@@ -6577,6 +6588,12 @@
    * 표가 배지밭이 돼서 정작 예외인 줄이 안 보인다.
    */
   function discountFlagBadgeHtml(item) {
+    // 정가가 적힌 메뉴는 이 칸과 상관없이 할인에서 빠진다 — 표에서도 그렇게
+    // 보여야 한다(2026-09-16 사장님: "설정이 저렇게 되어있어서 일정하지
+    // 않다는 거야").
+    if (isSetDiscountItem(item)) {
+      return ` <span class="item-discount-badge off" title="${T("itemDiscountSetBadgeTitle")}">${T("itemDiscountSetBadge")}</span>`;
+    }
     const own = item ? item.discount_excluded_own : null;
     if (own === null || own === undefined) return "";
     const label = own ? T("itemDiscountOffBadge") : T("itemDiscountOnBadge");
@@ -6942,6 +6959,29 @@
     const hint = document.getElementById("discountExcludedHint");
     const sel = document.getElementById("f_discount_excluded");
     if (!hint || !sel) return;
+    // ★ 정가가 적혀 있으면 이 칸이 무슨 값이든 할인은 안 걸린다.
+    //
+    // 2026-09-16 사장님(신라면 김밥세트 스크린샷 두 장과 함께): "신라면
+    // 세트가 분류 설정을 따른다면서 여기서는 제대로 뻈어. 빼는 게 맞긴 해
+    // 근데 그럼 설정이 저렇게 되어있어서 일정하지 않다는 거야."
+    //
+    // 화면이 거짓말을 하고 있었다. 「분류 설정을 따름 · 지금 이 분류는
+    // 할인이 걸려요」라고 적어 놓고 결제창에서는 안 깎였다. 둘 다 옳게
+    // 동작한 것이다 — 정가(original_price)가 적힌 메뉴는 이미 깎아 파는
+    // 것이라 어떤 할인의 기준에도 안 들어간다(src/discounts.js
+    // isSetDiscountItem). 그 규칙이 이 칸보다 먼저 걸리는데, 이 칸은
+    // 그 사실을 한마디도 안 했다.
+    //
+    // 그래서 여기서 먼저 답한다. 고를 수도 없게 잠근다 — 고를 수 있는데
+    // 골라도 안 먹히는 칸이 제일 나쁘다.
+    const priceNow = Number(($("#f_price") || {}).value) || 0;
+    const original = Number(($("#f_original_price") || {}).value) || 0;
+    if (original > 0 && priceNow > 0 && original > priceNow) {
+      sel.disabled = true;
+      hint.textContent = fmtItemDiscountHintSetMenu(original, priceNow);
+      return;
+    }
+    sel.disabled = !canMenuEdit();
     if (sel.value === "1") {
       hint.textContent = T("itemDiscountHintOff");
       return;
@@ -6956,6 +6996,12 @@
   }
   if (document.getElementById("f_discount_excluded")) {
     document.getElementById("f_discount_excluded").addEventListener("change", paintDiscountExcludedHint);
+  }
+  // 정가·가격을 고치는 그 순간 안내도 같이 바뀐다 — 저장하고 다시 열어야
+  // 알게 되면 이 안내를 붙인 뜻이 없다.
+  for (const id of ["f_price", "f_original_price"]) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", paintDiscountExcludedHint);
   }
   if (document.getElementById("f_category_id")) {
     // 분류를 바꾸면 「분류 따름」의 뜻도 같이 바뀐다.
