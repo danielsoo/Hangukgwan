@@ -8204,12 +8204,38 @@
           // 할인을 뺀 뒤 남은 금액"(computeDiscountAmount의 afterVip)이므로,
           // 퍼센트로 환산할 때도 그 기준으로 나눠야 라운드별 합이 원래
           // 의도한 할인액과 맞는다.
-          const perCallManualValue =
-            manualValue && manualValue.mode === "amount" && selections.length > 1 && breakdown.afterVip > 0
-              ? { mode: "percent", value: Math.min(100, (breakdown.manualAmount / breakdown.afterVip) * 100) }
-              : manualValue;
+          //
+          // ★ 2026-09-16: 퍼센트로 환산하는 방법을 그만둔다.
+          //
+          // 같은 날 소수점을 전부 **내림**으로 바꾸면서(사장님: "소숫점은
+          // 그냥 다 내림으로 하려고 해") 이 환산이 깨졌다. 내림은 라운드마다
+          // 올라가는 쪽으로 어긋난다 —
+          //
+          //   690 + 500 + 310 = 1,500 에 정액 10원
+          //     반올림이던 때  5 + 3 + 2 = 10  (맞음)
+          //     내림으로 바꾼 뒤  5 + 4 + 3 = 12  (2원 더 깎임)
+          //
+          // 퍼센트를 직접 입력해도 같다(7% 면 화면 105, 실제 107).
+          //
+          // 그래서 **환산하지 않는다.** 화면에 보여준 총 할인액
+          // (breakdown.manualAmount — 사장님이 손님에게 부른 숫자)을 라운드
+          // 크기에 비례해 **정수로 쪼개서** 각 라운드에 그 금액을 그대로
+          // 보낸다. 서버는 정액을 내림만 하므로(src/discounts.js) 정수는
+          // 그대로 통과하고, 쪼갠 것들의 합은 언제나 원래 금액과 같다.
+          const manualShares =
+            manualValue && selections.length > 1
+              ? splitManualAmountAcross(breakdown.manualAmount, selections, discountType)
+              : null;
           const results = await Promise.all(
-            selections.map((x) => splitPayOrderItems(x.order.id, x.indexes, method, discountType, perCallManualValue))
+            selections.map((x, i) =>
+              splitPayOrderItems(
+                x.order.id,
+                x.indexes,
+                method,
+                discountType,
+                manualShares ? (manualShares[i] > 0 ? { mode: "amount", value: manualShares[i] } : null) : manualValue
+              )
+            )
           );
           if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
@@ -8732,6 +8758,41 @@
     const vipAmount = selections.reduce((sum, x) => sum + vipDiscountClientTotal(x.order, x.indexes, tableVipDiscountType), 0);
     const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, base, vipAmount);
     return { full: gross, breakdown, payable: gross - breakdown.total };
+  }
+
+  /**
+   * 재량 할인 한 덩어리를 라운드별 **정수** 금액으로 쪼갠다.
+   *
+   * 2026-09-16 사장님: "한 테이블 전체 결제할 때 예를 들어 직접 입력으로
+   * 10달러를 할인 했어. 그럼 한 테이블에서 총 3번을 주문했어 그럼 그게 3개로
+   * 나뉘어서 들어가 아니면 그냥 전체 액수에서 까여?"
+   *
+   * 나뉘어 들어간다. 서버는 라운드마다 따로 계산하므로(splitPayOrderItems 가
+   * 라운드 수만큼 호출된다), 10원을 그대로 세 번 보내면 30원이 깎인다.
+   *
+   * 쪼개는 방법: 라운드 금액에 비례해 나누고, 내림하고 남은 잔돈은 소수점이
+   * 큰 라운드부터 1원씩 준다(최대잉여법). **합이 언제나 원래 금액과 같다** —
+   * 그게 이 함수가 있는 이유다. 한 라운드가 자기 금액보다 많이 깎이는 일도
+   * 없게 마지막에 한 번 더 막는다.
+   */
+  function splitManualAmountAcross(totalAmount, selections, discountType) {
+    const bases = selections.map((x) =>
+      Math.max(
+        0,
+        fullEligibleClientTotal(x.order, x.indexes) - vipDiscountClientTotal(x.order, x.indexes, discountType)
+      )
+    );
+    const sum = bases.reduce((a, b) => a + b, 0);
+    const want = Math.min(Math.floor(Number(totalAmount) || 0), sum);
+    if (!(want > 0) || sum <= 0) return bases.map(() => 0);
+    const raw = bases.map((b) => (want * b) / sum);
+    const out = raw.map((v) => Math.floor(v));
+    let left = want - out.reduce((a, b) => a + b, 0);
+    const byFrac = raw
+      .map((v, i) => ({ i, frac: v - Math.floor(v), base: bases[i] }))
+      .sort((a, b) => b.frac - a.frac || b.base - a.base);
+    for (let k = 0; left > 0 && k < byFrac.length; k++, left--) out[byFrac[k].i] += 1;
+    return out.map((v, i) => Math.min(v, bases[i]));
   }
 
   /** 아직 안 받은 품목 전부 — 「미결제 합계」가 재는 것과 같은 범위. */
