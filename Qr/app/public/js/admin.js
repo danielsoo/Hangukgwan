@@ -907,6 +907,7 @@
       itemDiscountBadgeTitle: "이 메뉴만 따로 정해 둔 값이에요. 메뉴를 눌러 「가격」 탭에서 바꿀 수 있어요.",
       // 결산 탭의 LINE 한 줄. 결산이 됐다고 문자가 간 것은 아니다.
       lineShiftAm: "오전",
+      lineShiftPm: "오후",
       lineShiftDay: "하루",
       lineSentAt: "{time} 보냄",
       lineNotSent: "안 감",
@@ -1696,6 +1697,7 @@
       itemDiscountOnBadge: "折扣",
       itemDiscountBadgeTitle: "此品項單獨設定的值。點品項在「價格」分頁可修改。",
       lineShiftAm: "上午",
+      lineShiftPm: "下午",
       lineShiftDay: "整日",
       lineSentAt: "{time} 已傳送",
       lineNotSent: "未傳送",
@@ -2885,7 +2887,7 @@
     const el = $("#settlementLineNote");
     if (!el) return;
     const st = data && data.line_status;
-    if (!st || (!st.am && !st.day)) {
+    if (!st || (!st.am && !st.pm && !st.day)) {
       el.hidden = true;
       el.textContent = "";
       return;
@@ -2902,7 +2904,12 @@
       if (r.ok) return `${label}: ${T("lineSentAt").replace("{time}", String(r.at || "").slice(11, 16))}`;
       return `${label}: ${T("lineNotSent")} (${why(r.error)})`;
     };
-    const parts = [one(T("lineShiftAm"), st.am), one(T("lineShiftDay"), st.day)];
+    // 2026-09-16 부터 저녁 마감에 두 통이 나간다 — 오후 것만, 그리고 하루
+    // 전체(src/routes/settlements.js shift-close). 오전 정산을 누른 적 없는
+    // 날은 오후 문자가 아예 안 나가므로 그 칸을 만들지 않는다.
+    const parts = [one(T("lineShiftAm"), st.am)];
+    if (st.pm) parts.push(one(T("lineShiftPm"), st.pm));
+    parts.push(one(T("lineShiftDay"), st.day));
     el.textContent = `📩 LINE — ${parts.join(" · ")}`;
     el.hidden = false;
   }
@@ -4723,7 +4730,24 @@
     let lineNote = "";
     if (summary && summary.line) {
       if (summary.line.sent) {
-        lineNote = adminLang === "zh" ? "\n\n📩 已傳送 LINE 結算通知。" : "\n\n📩 LINE 정산 알림을 보냈어요.";
+        // 저녁 마감에는 두 통이 나간다 — 오후 것만, 그리고 하루 전체.
+        const two = summary.line_pm && summary.line_pm.sent;
+        lineNote =
+          adminLang === "zh"
+            ? two
+              ? "\n\n📩 已傳送 LINE 結算通知 2 則（下午 / 整日）。"
+              : "\n\n📩 已傳送 LINE 結算通知。"
+            : two
+            ? "\n\n📩 LINE 정산 알림 2통을 보냈어요 (오후 · 하루 전체)."
+            : "\n\n📩 LINE 정산 알림을 보냈어요.";
+        // 하루 것은 갔는데 오후 것만 실패했으면 그 사실을 따로 말한다 —
+        // 안 그러면 「보냈어요」만 보고 두 통 다 갔다고 믿는다.
+        if (summary.line_pm && !summary.line_pm.sent) {
+          lineNote +=
+            adminLang === "zh"
+              ? `\n⚠️ 下午結算通知傳送失敗 (${summary.line_pm.error})`
+              : `\n⚠️ 오후 정산 알림은 보내지 못했어요 (${summary.line_pm.error})`;
+        }
       } else if (summary.line.error === "disabled") {
         lineNote =
           adminLang === "zh"

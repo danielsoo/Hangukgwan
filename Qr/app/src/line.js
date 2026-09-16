@@ -168,15 +168,33 @@ function section(title, rows) {
 //   closedAt "YYYY-MM-DD HH:MM:SS" — 정산 버튼을 누른 시각
 //   amPart   { revenue, count } — 하루 정산일 때만. 그날 오전 정산까지의 몫.
 //   pmPart   { revenue, count } — 하루 정산일 때만. 그 뒤의 몫.
+// 하루에 나가는 문자는 셋이다.
+//
+// 2026-09-16 사장님: "오전 정산 메세지 보내고 오후 정산은 오후 정산만 해서
+// 보내고 하루 전체 정산을 오후 정산 끝나고 한 번 더 보내줘."
+//
+// 예전에는 저녁에 「하루 정산」 한 통만 나갔다. 그 안에 오전/오후 두 줄이
+// 있긴 했지만 매출·건수뿐이라, 저녁 장사만 따로 보려면(결제수단은 어땠나,
+// 할인은 얼마나 나갔나) 하루치에서 오전치를 손으로 빼야 했다.
+//
+// 그래서 저녁 마감에 두 통이 나간다 — 먼저 **오후 것만**, 그 다음 하루 전체.
+const SHIFT_HEADS = {
+  am: { icon: "🌅", name: "오전 정산" },
+  pm: { icon: "🌆", name: "오후 정산" },
+  day: { icon: "🌙", name: "하루 정산" },
+};
+
 function formatShiftSummary(snapshot, opts = {}) {
-  const isAm = opts.shift === "am";
+  const shift = SHIFT_HEADS[opts.shift] ? opts.shift : "day";
+  const isDay = shift === "day";
   const clock = clockOf(opts.closedAt);
   const blocks = [];
 
   // 머리말 — 무슨 정산인지, 언제 마감했는지. 두 줄로 나눈다.
+  const headName = SHIFT_HEADS[shift];
   blocks.push(
     [
-      `${isAm ? "🌅" : "🌙"} ${isAm ? "오전 정산" : "하루 정산"} · ${shortDate(snapshot.date)}${weekdayOf(snapshot.date)}`,
+      `${headName.icon} ${headName.name} · ${shortDate(snapshot.date)}${weekdayOf(snapshot.date)}`,
       clock ? `${clock} 마감` : null,
     ]
       .filter(Boolean)
@@ -204,7 +222,8 @@ function formatShiftSummary(snapshot, opts = {}) {
   // 하루 정산에서는 오전/오후가 각각 얼마였는지. 오전 정산을 누른 적이
   // 없는 날은 가를 기준이 없으므로 넣지 않는다 — 없는 경계를 지어내는
   // 것보다 안 보여주는 쪽이 낫다.
-  if (!isAm && opts.amPart && opts.pmPart) {
+  // 오후 정산 문자에는 안 넣는다 — 그 문자는 이미 오후 것만 담고 있다.
+  if (isDay && opts.amPart && opts.pmPart) {
     blocks.push(
       section("오전 / 오후", [
         `오전  ${nt(opts.amPart.revenue)} · ${opts.amPart.count}건`,

@@ -36,7 +36,8 @@ const router = express.Router();
  * "오전 문자는 갔는가"를 다시 알 수 없게 된다.
  */
 async function recordLineSend(date, shift, result, testId) {
-  const p = shift === "am" ? "line_am" : "line_day";
+  // 2026-09-16 부터 셋이다 — 오전·오후·하루(아래 shift-close).
+  const p = shift === "am" ? "line_am" : shift === "pm" ? "line_pm" : "line_day";
   try {
     await saveSettlementSnapshot(
       {
@@ -124,7 +125,7 @@ router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
       // 하루만 볼 때는 그날 LINE 마감 문자가 나갔는지도 같이 준다.
       // 안 나갔으면 왜인지까지 — 사장님이 「정산은 됐는데 문자는 안 왔다」를
       // 다음부터는 그 화면에서 바로 본다(2026-09-15).
-      line_status: start === end ? (opts.lineByDate || {})[start] || { am: null, day: null } : null,
+      line_status: start === end ? (opts.lineByDate || {})[start] || { am: null, pm: null, day: null } : null,
       // 「전체 기간」 버튼이 시작일로 쓸 날짜 (아래 allTimeStartDate).
       // 직원에게는 어차피 오늘뿐이라 계산하지 않는다.
       all_time_start: allTimeStart,
@@ -221,6 +222,7 @@ async function halfOpts(start, end, req) {
     if (d.am_closed_at) amClosedAt[d.date] = d.am_closed_at;
     lineByDate[d.date] = {
       am: d.line_am_at ? { at: d.line_am_at, ok: !!d.line_am_ok, error: d.line_am_error || null } : null,
+      pm: d.line_pm_at ? { at: d.line_pm_at, ok: !!d.line_pm_ok, error: d.line_pm_error || null } : null,
       day: d.line_day_at ? { at: d.line_day_at, ok: !!d.line_day_ok, error: d.line_day_error || null } : null,
     };
   }
@@ -444,6 +446,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   // 누른 적 없는 날은 가를 기준이 없으므로 통짜로 둔다.
   let amPart = null;
   let pmPart = null;
+  let pmSnapshot = null;
   if (shift === "day" && amClosedAt) {
     const paid = orders.filter((o) => o.status === "paid");
     const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
@@ -452,14 +455,35 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     // 오후는 빼서 구한다 — 따로 더하면 반올림이나 경계 판정이 어긋났을 때
     // 오전+오후가 하루 매출과 안 맞는 문자가 나간다.
     pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
+    // 그리고 **오후 것만** 담은 결산을 하나 더 만든다.
+    //
+    // 2026-09-16 사장님: "오후 정산은 오후 정산만 해서 보내고 하루 전체
+    // 정산을 오후 정산 끝나고 한 번 더 보내줘." 하루 문자의 「오전/오후」
+    // 두 줄은 매출·건수뿐이라, 저녁 장사의 결제수단·할인·취소를 보려면
+    // 하루치에서 오전치를 손으로 빼야 했다.
+    pmSnapshot = computeSettlement(orders.filter((o) => isAfterAmClose(o, amClosedAt)), date, date, await halfOpts(date, date, req));
   }
 
   let line = { sent: false, error: "disabled" };
+  // 저녁 마감의 첫 문자(오후 것만). 오전 정산을 누른 적 없는 날은 가를
+  // 기준이 없어서 안 나간다 — 없는 경계를 지어내는 것보다 낫다.
+  let linePm = null;
   if (testId) {
     // 테스트에서는 여기까지 다 돌고 문자만 안 보낸다. 화면에는 "테스트라
     // 안 보냈다"고 그대로 알려준다 — 조용히 안 보내면 LINE 이 고장난 줄 안다.
     line = { sent: false, error: "test_mode" };
   } else if (store.settings.line_notify_enabled) {
+    // 저녁 마감에는 **오후 것만** 담은 문자를 먼저 보내고, 그 다음 하루
+    // 전체를 보낸다(2026-09-16 사장님). 가게 크기 경고는 마지막 문자에만
+    // 붙인다 — 같은 경고가 두 번 오면 그냥 소음이다.
+    if (pmSnapshot) {
+      const pmResult = await sendLineMessage(
+        store,
+        formatShiftSummary(pmSnapshot, { shift: "pm", closedAt })
+      );
+      linePm = pmResult.ok ? { sent: true } : { sent: false, error: pmResult.error };
+      await recordLineSend(date, "pm", { ok: linePm.sent, error: linePm.error }, testId);
+    }
     const lines = [formatShiftSummary(snapshot, { shift, closedAt, amPart, pmPart })];
     const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
     if (warn) lines.push("", warn);
@@ -483,8 +507,26 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     // 결제완료 칸에서 몇 건이 내려갔는가 — 화면이 그 자리에서 알려준다.
     settled_orders: justSettled.length,
     line,
+    // 저녁 마감의 첫 문자(오후 것만). 안 보낸 날은 null.
+    line_pm: linePm,
   });
 });
+
+/**
+ * 이 주문이 **오전 정산 뒤에** 일어난 것인가 — 오후 문자에 담을 것인가.
+ *
+ * 결제된 주문은 「언제 받았는가」로, 나머지(취소·미결제)는 「언제
+ * 들어왔는가」로 가른다. 취소된 주문에는 받은 시각이 없다.
+ *
+ * 가르는 기준은 영업시간표가 아니라 **오전 정산을 누른 시각**이다 — 하루
+ * 문자의 「오전/오후」 두 줄과 같은 기준이어야 두 문자의 숫자가 맞는다
+ * (14시 20분에 눌렀으면 14시 10분 결제는 오전 몫이다).
+ */
+function isAfterAmClose(o, amClosedAt) {
+  if (!amClosedAt) return true;
+  const at = o && o.status === "paid" ? paidAtOf(o) : String((o && o.created_at) || "");
+  return String(at || "") > amClosedAt;
+}
 
 /**
  * 정산한 것을 결제완료 칸에서 내린다 (claude/... 「정산하면 결제완료 칸이
