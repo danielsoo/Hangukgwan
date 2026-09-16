@@ -767,6 +767,7 @@
       orderMemoLabel: "주문 메모",
       totalLabel: "합계",
       subtotalLabel: "소계",
+      itemTotalLabel: "품목 합계",
       addItemBtn: "+ 메뉴 추가",
       codeTh: "코드",
       nameTh: "이름",
@@ -1541,6 +1542,7 @@
       orderMemoLabel: "訂單備註",
       totalLabel: "合計",
       subtotalLabel: "小計",
+      itemTotalLabel: "品項合計",
       addItemBtn: "+ 新增菜品",
       codeTh: "代號",
       nameTh: "名稱",
@@ -5374,7 +5376,13 @@
         // 말이 없다. 사장님이 「基本(中辣)」처럼 써 넣은 것은 적으라고 넣은
         // 글자이므로 그대로 나간다(public/js/spice.js isSilentOnTicket).
         if (it.spice_choice && !window.HG_SPICE.isSilentOnTicket(it.spice_choice)) detailLines.push(`<div class="item-detail">└ ${it.spice_choice}</div>`);
-        (it.selected_addons || []).forEach((a) => detailLines.push(`<div class="item-detail">└ +${a.name}</div>`));
+        // 결제용 사본에는 값까지 찍는다 — 2026-09-16 사장님: "추가 옵션들도
+        // 하위 항목들로 가격 다 나오게 해줘." 주방용 사본은 예전대로 이름만.
+        (it.selected_addons || []).forEach((a) =>
+          detailLines.push(
+            `<div class="item-detail">└ +${a.name}${priceCopy && Number(a.price || 0) > 0 ? ` <span class="item-price-final">NT$${money(Number(a.price))}</span>` : ""}</div>`
+          )
+        );
         // 부대찌개(部隊鍋) 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy
         // 여부와 무관하게 항상 찍는다. 조리 여부는 결제 화면이 아니라
         // 주방이 판단해야 하는 정보라서 option_choice/spice_choice와 같은
@@ -5404,11 +5412,14 @@
         // 할인은 음료를 빼지 않고 품목별로도 안 나누므로(위 주석) 이
         // 블록에서는 아무 것도 달라지지 않는다.
         if (priceCopy) {
-          const amount = lineTotalOf(it);
+          // 할인이 걸리는 건 밥값뿐이다 — 옵션 값은 위에서 자기 줄에 따로
+          // 찍힌다(2026-09-16 사장님: "옵션들은 할인이 적용 안되어야 해").
+          const amount = discountBaseOfClient(it);
           const isDrink = it.category_key === "drink";
           if (isDrink) hasDrinkItem = true;
           if (discountInfo.active && discountInfo.isPercent && !isDrink) {
-            const discounted = amount - Math.round(amount * (1 - discountInfo.rate));
+            // 화면(vipPriceHtml)/서버와 같은 내림 규칙.
+            const discounted = payableAfterRateClient(amount, discountInfo.rate);
             detailLines.push(
               `<div class="item-detail item-price">└ <span class="item-price-orig">NT$${money(amount)}</span> <span class="item-price-final">NT$${money(discounted)}</span></div>`
             );
@@ -7779,7 +7790,7 @@
                     discountType,
                     manualValue,
                     fullEligibleClientTotal(o),
-                    discountEligibleClientTotal(o)
+                    vipDiscountClientTotal(o, null, discountType)
                   )
                 : { vipAmount: 0, manualAmount: 0, afterVip: 0, total: 0 };
             const method = await showPaymentMethodPopup(
@@ -8099,43 +8110,84 @@
    * 직원이 손님에게 부르는 숫자가 틀어지는 자리다.
    */
   function discountBaseOfClient(it) {
-    const optPrice = Number((it && it.option_price) || 0) || 0;
-    return (it.unit_price || 0) * (it.qty || 0) + optPrice;
+    return (it.unit_price || 0) * (it.qty || 0);
   }
-  function discountEligibleClientTotal(order, indexes) {
-    const excludedIds = discountExcludedItemIdSet();
+  /**
+   * 품목에 붙은 옵션 값들 — 화면에 하위 줄로 따로 찍고, 할인에서는 뺀다.
+   *
+   * 2026-09-16 사장님: "결제할 때 차라리 추가 옵션들도 하위 항목들로 가격 다
+   * 나오게 해줘. 그리고 옵션들은 할인이 적용 안되어야 해."
+   */
+  function optionChargesOfClient(it) {
+    const rows = [];
+    const optPrice = Number((it && it.option_price) || 0) || 0;
+    if (it && it.option_choice && optPrice > 0) rows.push({ name: optionLabel(it.option_choice), price: optPrice });
+    for (const a of (it && it.selected_addons) || []) rows.push({ name: a.name, price: Number(a.price || 0) || 0 });
+    return rows;
+  }
+  function optionChargesTotalOfClient(it) {
+    return optionChargesOfClient(it).reduce((s, r) => s + r.price, 0);
+  }
+  /**
+   * 할인 대상 줄만 골라 더한다. map(base, it)을 주면 그 값을 대신 더한다 —
+   * 줄마다 할인액을 따로 내림해서 더할 때 쓴다(아래 discountByRateClient).
+   * skipExcludedCats 가 참이면 음료·기타 분류까지 뺀다(特約95折/VIP9折).
+   */
+  function sumDiscountableClient(order, indexes, skipExcludedCats, map) {
+    const excludedIds = skipExcludedCats ? discountExcludedItemIdSet() : null;
     const idxs = indexes || order.items.map((_, i) => i);
     return idxs.reduce((s, i) => {
       const it = order.items[i];
       // 이미 깎아 파는 세트도 뺀다 — 주문에 찍힌 정가로 바로 알 수 있다.
-      if (!it || excludedIds.has(it.item_id) || isSetDiscountItem(it)) return s;
-      return s + discountBaseOfClient(it);
+      if (!it || isSetDiscountItem(it)) return s;
+      if (excludedIds && excludedIds.has(it.item_id)) return s;
+      const base = discountBaseOfClient(it);
+      return s + (map ? map(base, it) : base);
     }, 0);
+  }
+  // src/discounts.js payableAfterRate/discountByRate 와 **같은 식이어야 한다.**
+  // 소수점은 전부 내림, 기준은 「손님이 내는 금액」(2026-09-16 사장님:
+  // "소숫점은 그냥 다 내림으로 하려고 해").
+  function payableAfterRateClient(amount, rate) {
+    const base = Number(amount) || 0;
+    const r = Number(rate);
+    if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
+    return Math.floor(base * r);
+  }
+  function discountByRateClient(amount, rate) {
+    const base = Number(amount) || 0;
+    return base - payableAfterRateClient(base, rate);
   }
   function computeVipDiscountClient(type, eligibleTotal) {
     const rate = VIP_DISCOUNT_RATES_CLIENT[type];
     if (!rate) return 0;
-    return eligibleTotal - Math.round(eligibleTotal * rate);
+    return discountByRateClient(eligibleTotal, rate);
+  }
+  /**
+   * 실제로 쓰는 VIP 할인액 — 줄마다 따로 내림해서 더한다(서버의
+   * src/discounts.js computeVipDiscountItems 와 같은 식). 합계를 한 번에
+   * 내림하면 품목 줄들의 합과 소계가 1원씩 어긋난다.
+   */
+  function vipDiscountClientTotal(order, indexes, type) {
+    const rate = VIP_DISCOUNT_RATES_CLIENT[type];
+    if (!rate) return 0;
+    return sumDiscountableClient(order, indexes, true, (base) => discountByRateClient(base, rate));
   }
   // 직접 입력(재량 할인) 전용 — 特約95折/VIP9折와 달리 음료·주류를 빼지
   // 않는다(src/routes/orders.js의 fullEligibleTotal과 동일 규칙, 위
   // payment-discount-rules 참고).
   function fullEligibleClientTotal(order, indexes) {
-    const idxs = indexes || order.items.map((_, i) => i);
-    return idxs.reduce((s, i) => {
-      const it = order.items[i];
-      // 재량 할인도 세트에는 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다
-      // (2026-09-16 사장님). 추가 옵션도 여기서 빠진다.
-      if (!it || isSetDiscountItem(it)) return s;
-      return s + discountBaseOfClient(it);
-    }, 0);
+    // 재량 할인도 세트에는 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다
+    // (2026-09-16 사장님). 옵션 값도 discountBaseOfClient 에서 빠진다.
+    return sumDiscountableClient(order, indexes, false, null);
   }
   function computeManualDiscountAmountClient(manualValue, eligibleTotal) {
     if (!manualValue) return 0;
     if (manualValue.mode === "percent") {
-      return Math.min(eligibleTotal, Math.round(eligibleTotal * (manualValue.value / 100)));
+      // 「받는 금액을 내림」 — 서버 computeDiscountAmount 와 같은 식.
+      return Math.min(eligibleTotal, eligibleTotal - payableAfterRateClient(eligibleTotal, 1 - manualValue.value / 100));
     }
-    return Math.min(eligibleTotal, Math.round(manualValue.value));
+    return Math.min(eligibleTotal, Math.floor(manualValue.value));
   }
   // 特約95折/VIP9折 + 직접 입력을 같이 걸었을 때의 미리보기 계산 — 서버의
   // src/routes/orders.js computeDiscountAmount와 반드시 같은 순서/기준이어야
@@ -8144,13 +8196,15 @@
   // 실수령액(음료 포함 전체 - VIP 할인액)에서 뺀다. 둘 중 하나만 걸려
   // 있으면 예전 계산과 결과가 같다.
   //
-  // fullTotal: 이번 대상 품목의 전체 금액(음료 포함)
-  // vipEligibleTotal: 그중 음료·주류를 뺀 금액
-  function computeCombinedDiscountClient(discountType, manualValue, fullTotal, vipEligibleTotal) {
-    const vipAmount = computeVipDiscountClient(discountType, vipEligibleTotal);
-    const afterVip = Math.max(0, fullTotal - vipAmount);
+  // fullTotal: 이번 대상 품목의 할인 기준 금액(음료 포함, 옵션 값 제외)
+  // vipAmount: 줄마다 내림해서 더한 特約95折/VIP9折 할인액
+  //            (vipDiscountClientTotal 이 이미 계산해서 넘긴다 — 여기서 다시
+  //             합계를 굴리면 품목 줄들의 합과 1원씩 어긋난다)
+  function computeCombinedDiscountClient(discountType, manualValue, fullTotal, vipAmount) {
+    const afterVip = Math.max(0, fullTotal - (Number(vipAmount) || 0));
     const manualAmount = computeManualDiscountAmountClient(manualValue, afterVip);
-    return { vipAmount, manualAmount, afterVip, total: vipAmount + manualAmount };
+    const vip = Number(vipAmount) || 0;
+    return { vipAmount: vip, manualAmount, afterVip, total: vip + manualAmount };
   }
   // buildReceiptBodyHtml()의 결제용 사본(priceCopy)에서 쓰는, "이 주문의
   // 테이블/포장카운터에 지금 걸려 있는 할인"을 결제 팝업(위
@@ -8209,7 +8263,7 @@
       vipCurrentType,
       manualDiscountValue,
       fullEligibleClientTotal(o),
-      discountEligibleClientTotal(o)
+      vipDiscountClientTotal(o, null, vipCurrentType)
     );
     // isPercent는 "품목 하나하나에 할인가를 나눠 찍을 수 있느냐"는 뜻이다.
     // 정액 재량 할인이 섞이면 품목별로 고르게 나눌 수 없으므로(위
@@ -8233,7 +8287,7 @@
       discountType,
       manualValue,
       fullEligibleClientTotal(order, indexes),
-      discountEligibleClientTotal(order, indexes)
+      vipDiscountClientTotal(order, indexes, discountType)
     ).total;
   }
   // 사장님 요청(2026-09-07): "vip 할인 옆에 결제자 재량으로 특정 금액/
@@ -8381,8 +8435,8 @@
     if (!tableVipDiscountType && !tableManualDiscountValue) {
       return { full, breakdown: { vipAmount: 0, manualAmount: 0, afterVip: full, total: 0 }, payable: full };
     }
-    const vipEligible = selections.reduce((sum, x) => sum + discountEligibleClientTotal(x.order, x.indexes), 0);
-    const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, full, vipEligible);
+    const vipAmount = selections.reduce((sum, x) => sum + vipDiscountClientTotal(x.order, x.indexes, tableVipDiscountType), 0);
+    const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, full, vipAmount);
     return { full, breakdown, payable: full - breakdown.total };
   }
 
@@ -8437,8 +8491,42 @@
     // 그대로 반환.
     function vipPriceHtml(amount, isEligible) {
       if (!vipDiscountActive || isManualDiscount || !vipRate || !isEligible) return `NT$${money(amount)}`;
-      const discounted = amount - Math.round(amount * (1 - vipRate));
+      // 소수점은 내림, 기준은 「손님이 내는 금액」 — 소계/합계를 만드는
+      // vipDiscountClientTotal, 서버의 computeVipDiscountItems 와 **같은
+      // 식이다.** 여기만 다른 쪽으로 굴리면 품목 줄과 소계가 1원 어긋난다
+      // (2026-09-16 사장님: "결제창에서 할인적용시 1원단위 불일치").
+      const discounted = payableAfterRateClient(amount, vipRate);
       return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${money(amount)}</span><span style="font-weight:700;">NT$${money(discounted)}</span>`;
+    }
+    /**
+     * 품목 아래에 붙는 옵션 값 줄들.
+     *
+     * 2026-09-16 사장님: "결제할 때 차라리 추가 옵션들도 하위 항목들로 가격
+     * 다 나오게 해줘. 그리고 옵션들은 할인이 적용 안되어야 해." — 위
+     * 품목 줄은 밥값(discountBaseOfClient)만 보여주고 거기에만 할인이
+     * 걸린다. 옵션은 여기서 정가 그대로 한 줄씩 나온다. 그래서 화면에 보이는
+     * 줄들을 그냥 더하면 소계가 나온다.
+     */
+    function payItemSubLinesHtml(it, isEligible) {
+      const rows = optionChargesOfClient(it);
+      if (!rows.length) return "";
+      const lines = rows.map(
+        (r) =>
+          `<div class="pay-item-sub"><span class="pay-item-sub-name">└ ${r.name}</span><span class="pay-item-sub-price">NT$${money(r.price)}</span></div>`
+      );
+      // 2026-09-16 사장님: "메뉴 가격 밑에 옵션들 가격 해서 밑에 총 가격으로도
+      // 해야 할 것 같은데?" — 옵션이 붙은 줄은 위에 밥값, 그 아래 옵션 값들,
+      // 맨 밑에 이 품목에서 실제로 받을 돈. 직원이 손님한테 부르는 숫자가
+      // 여기 하나로 모인다. 옵션이 없으면 위 줄이 곧 그 값이라 안 붙인다.
+      const paidBase =
+        vipDiscountActive && !isManualDiscount && vipRate && isEligible
+          ? payableAfterRateClient(discountBaseOfClient(it), vipRate)
+          : discountBaseOfClient(it);
+      const itemTotal = paidBase + optionChargesTotalOfClient(it);
+      lines.push(
+        `<div class="pay-item-sub pay-item-total"><span class="pay-item-sub-name">${T("itemTotalLabel")}</span><span class="pay-item-sub-price">NT$${money(itemTotal)}</span></div>`
+      );
+      return lines.join("");
     }
     // 이 라운드에서 아직 결제 안 된 품목들의 합계 기준으로 계산한 할인액 —
     // 소계/합계 표시에 재사용(품목 줄 하나하나를 따로 더해 반올림 오차가
@@ -8453,7 +8541,7 @@
           vipCurrentType,
           manualDiscountValue,
           fullEligibleClientTotal(o, vipUnpaidIdxs),
-          discountEligibleClientTotal(o, vipUnpaidIdxs)
+          vipDiscountClientTotal(o, vipUnpaidIdxs, vipCurrentType)
         ).total
       : 0;
     const itemLines = o.items.map((it, idx) => {
@@ -8493,9 +8581,11 @@
       // 만든다. 실제 토글 처리는 아래 handler에서 체크박스의 change를
       // 그대로 재사용한다(checkbox.onchange 참고).
       const isRowClickable = withItemCheckboxes && !isPaidItem;
-      return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="display:flex;align-items:flex-start;justify-content:space-between;font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
-          <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);font-size:14px;">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
-          <span class="pay-amount-cell">${vipPriceHtml(lineTotalOf(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
+      return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+            <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
+            <span class="pay-amount-cell">${vipPriceHtml(discountBaseOfClient(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
+          </div>${payItemSubLinesHtml(it, !isPaidItem && !vipExcludedIds.has(it.item_id))}
         </div>`;
     });
     // 사장님 피드백(2026-09-05): "부분 결제 완료 너무 오래 걸려. 그리고
@@ -8780,17 +8870,17 @@
     // 기준 금액을 함께 모은다 — VIP는 음료 제외, 재량은 음료 포함 전체.
     const tableDiscountActive = !!tableVipDiscountType || !!tableManualDiscountValue;
     let tableFullTotal = 0;
-    let tableVipEligibleTotal = 0;
+    let tableVipAmount = 0;
     if (tableDiscountActive) {
       orders.forEach((o) => {
         if (o.status === "paid" || o.status === "cancelled") return;
         const unpaidIdxs = o.items.map((_, idx) => idx).filter((idx) => !o.items[idx].paid);
         tableFullTotal += fullEligibleClientTotal(o, unpaidIdxs);
-        tableVipEligibleTotal += discountEligibleClientTotal(o, unpaidIdxs);
+        tableVipAmount += vipDiscountClientTotal(o, unpaidIdxs, tableVipDiscountType);
       });
     }
     const tableDiscountAmount = tableDiscountActive
-      ? computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, tableFullTotal, tableVipEligibleTotal).total
+      ? computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, tableFullTotal, tableVipAmount).total
       : 0;
     // 토글 자체는 어느 라운드에서 만들었든 동일(테이블 전체 공유 값)하므로
     // 마지막 라운드 것을 그대로 쓴다.

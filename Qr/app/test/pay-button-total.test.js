@@ -101,8 +101,9 @@ const CASES = [
     drinks: [90],
     vip: "te95",
     manual: null,
-    // 230 - round(230*0.95) = 230 - 219 = 11. 프로젝트 문서의 예와 같다.
-    expectPayable: 260 - 11,
+    // 2026-09-16 사장님: "소숫점은 그냥 다 내림으로 하려고 해." 230 × 0.95 =
+    // 218.5 → 손님은 218 을 낸다(할인 12). 반올림이던 때는 11 이었다.
+    expectPayable: 260 - 12,
   },
   {
     name: "VIP 먼저, 남은 금액에서 재량 — 음식 230 + 음료 30, 特約95折 + 2원",
@@ -110,8 +111,8 @@ const CASES = [
     drinks: [90],
     vip: "te95",
     manual: { mode: "amount", value: 2 },
-    // 문서의 worked example 그대로 — 총 할인 13, 실수령 247.
-    expectPayable: 260 - 11 - 2,
+    // 내림으로 바뀐 뒤 총 할인 14, 실수령 246(예전 반올림으로는 247).
+    expectPayable: 260 - 12 - 2,
   },
   {
     name: "재량만 — 퍼센트",

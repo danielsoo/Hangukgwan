@@ -130,12 +130,17 @@ function check(name, cond, extra = "") {
   o = store.orders.find((x) => x.id === r.body.id);
   check("★ 없는 옵션을 보내도 주문은 들어간다 — 값만 0", o.total === 200, `${o.total}`);
 
-  out.push("\n[할인도 옵션 값을 포함한 금액에 걸린다]");
+  // 2026-09-16 사장님(결제창 스크린샷과 함께): "옵션들은 할인이 적용
+  // 안되어야 해." — 처음엔 크기 값을 「이 음식의 값 자체」로 보고 할인 기준에
+  // 넣었는데, 사장님이 그 반대로 못 박았다. 옵션 값은 결제창에서 하위 줄로
+  // 따로 나오고(payItemSubLinesHtml) 한 푼도 안 깎인다.
+  out.push("\n[할인은 밥값에만 걸린다 — 옵션 값은 빠진다]");
   const paid = await order(9, sized, "L"); // 200x2 + 150 = 550
   r = await staff.patch(`/api/orders/${paid.id}`).send({ status: "paid", paymentMethod: "cash", vipDiscountType: "vip9" });
   check("결제된다", r.status === 200, `${r.status}`);
   const after = store.orders.find((x) => x.id === paid.id);
-  check("★ 크기 값까지 넣은 550 의 10% 가 깎인다", (after.discount_amount || 0) === 55, `${after.discount_amount}`);
+  check("받을 돈은 550 그대로 적힌다", after.total === 550, `${after.total}`);
+  check("★ 크기 값 150 은 빼고 밥값 400 의 10% 만 깎인다", (after.discount_amount || 0) === 40, `${after.discount_amount} (550 기준이면 55)`);
 
   out.push("\n[세 화면이 같은 규칙을 쓴다]");
   const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");

@@ -166,6 +166,20 @@
     const addons = ((it && it.selected_addons) || []).reduce((s, a) => s + (a.price || 0), 0);
     return (it.unit_price || 0) * (it.qty || 0) + optPrice + addons;
   }
+  // 할인이 걸리는 금액 — 밥값만. 옵션 값(크기·추가 옵션)은 빠진다
+  // (src/discounts.js discountBaseOf, 2026-09-16 사장님: "옵션들은 할인이
+  // 적용 안되어야 해").
+  function discountBaseOf(it) {
+    return (it.unit_price || 0) * (it.qty || 0);
+  }
+  // 소수점은 전부 내림, 기준은 「손님이 내는 금액」(src/discounts.js
+  // payableAfterRate). 화면·서버와 같은 식이어야 종이와 화면이 안 갈린다.
+  function payableAfterRate(amount, rate) {
+    const base = Number(amount) || 0;
+    const r = Number(rate);
+    if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
+    return Math.floor(base * r);
+  }
 
   // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른
   // 한장은 각각의 가격이 나오게... 화면을 안보고 결제시도를 하게 됐을때
@@ -216,6 +230,12 @@
       // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
       if (it.option_choice) out += "  └ " + optionLine(it) + "\n";
       if (it.spice_choice) out += "  └ " + it.spice_choice + "\n";
+      // 추가 옵션도 자기 줄로 — 결제용 사본에는 값까지 찍는다(2026-09-16
+      // 사장님: "추가 옵션들도 하위 항목들로 가격 다 나오게 해줘"). 래스터
+      // 렌더러와 같은 줄 구성이라 두 종이가 같아 보인다.
+      (it.selected_addons || []).forEach((a) => {
+        out += "  └ +" + a.name + (priceCopy && Number(a.price || 0) > 0 ? " NT$" + money(Number(a.price)) : "") + "\n";
+      });
       // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
       // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
       if (it.takeout_choice) out += "  └ " + it.takeout_choice + "\n";
@@ -232,15 +252,17 @@
       // computeTicketDiscountInfo 주석 참고) 원가→할인가를 같이 찍는다.
       // 일반 텍스트 ESC/POS라 화면처럼 취소선은 못 그으니 화살표로 표시.
       if (priceCopy) {
-        const amount = lineTotalOf(it);
+        // 옵션 값은 위 「└ +이름」 줄에 자기 값으로 따로 찍힌다 — 여기는
+        // 할인이 걸리는 밥값만(2026-09-16 사장님).
+        const amount = discountBaseOf(it);
         const isDrink = it.category_key === "drink";
         if (isDrink) hasDrinkItem = true;
         if (discount.active && discount.isPercent && !isDrink) {
-          const discounted = amount - Math.round(amount * (1 - discount.rate));
-          out += "  └ NT$" + amount + "→NT$" + discounted + "\n";
+          const discounted = payableAfterRate(amount, discount.rate);
+          out += "  └ NT$" + money(amount) + "→NT$" + money(discounted) + "\n";
         } else {
           const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
-          out += "  └ NT$" + amount + mark + "\n";
+          out += "  └ NT$" + money(amount) + mark + "\n";
         }
       }
     });
@@ -497,7 +519,13 @@
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
       // (public/js/spice.js isSilentOnTicket).
       if (it.spice_choice && !window.HG_SPICE.isSilentOnTicket(it.spice_choice)) line("  └ " + it.spice_choice, sz("itemDetail", 13), wt("itemDetail", 400));
-      (it.selected_addons || []).forEach((a) => line("  └ +" + a.name, sz("itemDetail", 13), wt("itemDetail", 400)));
+      (it.selected_addons || []).forEach((a) =>
+        line(
+          "  └ +" + a.name + (priceCopy && Number(a.price || 0) > 0 ? " NT$" + money(Number(a.price)) : ""),
+          sz("itemDetail", 13),
+          wt("itemDetail", 400)
+        )
+      );
       // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
       // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
       if (it.takeout_choice) line("  └ " + it.takeout_choice, sz("itemTakeout", 13), wt("itemTakeout", 900));
@@ -510,15 +538,15 @@
       // DEFAULT_TICKET_FONT_SIZES에 새로 추가한 itemPrice/itemPriceWeight로
       // 분리해서, 결제용 금액만 따로 크게/굵게 조절할 수 있게 한다.
       if (priceCopy) {
-        const amount = lineTotalOf(it);
+        const amount = discountBaseOf(it);
         const isDrink = it.category_key === "drink";
         if (isDrink) hasDrinkItem = true;
         if (discount.active && discount.isPercent && !isDrink) {
-          const discounted = amount - Math.round(amount * (1 - discount.rate));
-          line("  └ NT$" + amount + "→NT$" + discounted, sz("itemPrice", 13), wt("itemPrice", 700));
+          const discounted = payableAfterRate(amount, discount.rate);
+          line("  └ NT$" + money(amount) + "→NT$" + money(discounted), sz("itemPrice", 13), wt("itemPrice", 700));
         } else {
           const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
-          line("  └ NT$" + amount + mark, sz("itemPrice", 13), wt("itemPrice", 700));
+          line("  └ NT$" + money(amount) + mark, sz("itemPrice", 13), wt("itemPrice", 700));
         }
       }
       y += 8; // small gap between items, echoing .item-row's CSS padding

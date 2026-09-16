@@ -73,8 +73,20 @@ function isSetDiscountItem(it) {
   return original > 0 && now > 0 && original > now;
 }
 
+/**
+ * 할인이 걸리는 금액 — **밥값만**. 옵션 값은 전부 뺀다.
+ *
+ * 2026-09-16 사장님(결제창 스크린샷과 함께): "결제할 때 차라리 추가 옵션들도
+ * 하위 항목들로 가격 다 나오게 해줘. 그리고 옵션들은 할인이 적용 안되어야
+ * 해." — 「옵션들」은 둘 다다: 하나만 고르는 옵션(option_price, 크기 등)도,
+ * 여러 개 고르는 추가 옵션(selected_addons, 泡麵·拌飯)도.
+ *
+ * 그래서 화면은 옵션을 품목 아래 하위 줄로 따로 떼어 값까지 찍고
+ * (public/js/admin.js payItemSubLinesHtml), 할인은 그 위의 밥값 줄에만
+ * 걸린다. 여기가 옵션 값을 포함하면 화면에서 안 깎인 줄이 실제로는 깎인다.
+ */
 function discountBaseOf(it) {
-  return (it.unit_price || 0) * (it.qty || 0) + optionPriceOfItem(it);
+  return (it.unit_price || 0) * (it.qty || 0);
 }
 
 // indexes를 주면 그 인덱스들만(부분 결제로 이번에 실제 결제되는 품목만),
@@ -86,7 +98,10 @@ function discountBaseOf(it) {
 // 주문 한 건으로 따로 기록되므로(src/routes/vipCards.js) 이 줄이 실제로
 // 쓰일 일은 없지만, 나중에 누가 카드를 밥값 주문에 끼워 넣더라도 돈 계산이
 // 조용히 틀리지는 않게 여기서 한 번 막아둔다.
-function sumItems(items, indexes, exclude) {
+//
+// map(base, it): 그 줄에서 실제로 더할 값. 생략하면 기준 금액 그대로 더한다.
+// 할인액을 줄 단위로 내림해서 더할 때 쓴다(아래 floorRule 주석).
+function sumItems(items, indexes, exclude, map) {
   const idxs = indexes || items.map((_, i) => i);
   return idxs.reduce((s, i) => {
     const it = items[i];
@@ -99,7 +114,8 @@ function sumItems(items, indexes, exclude) {
     // 넘기기 때문이다(아래 fullEligibleTotal).
     if (!it || isCardSaleItem(it) || isSetDiscountItem(it) || (exclude && exclude(it))) return s;
     // 할인 기준이므로 추가 옵션은 빼고 더한다(위 discountBaseOf).
-    return s + discountBaseOf(it);
+    const base = discountBaseOf(it);
+    return s + (map ? map(base, it) : base);
   }, 0);
 }
 
@@ -115,10 +131,53 @@ function fullEligibleTotal(items, indexes) {
   return sumItems(items, indexes, null);
 }
 
+// ---------------------------------------------------------------------------
+// 소수점은 **전부 내림**이다.
+//
+// 2026-09-16 사장님(결제창 스크린샷과 함께): "결제창에서 할인적용시 1원단위
+// 불일치 / 소숫점은 그냥 다 내림으로 하려고 해."
+//
+// 그 스크린샷의 자리: 韓式紫菜捲 NT$150 에 特約95折. 150 × 0.95 = 142.5 다.
+//   - 품목 줄은 「깎는 금액」을 반올림했다 — 150 - round(7.5) = 142
+//   - 소계/합계는 「받는 금액」을 반올림했다 — 150 - round(142.5) = 143
+// 같은 142.5 를 서로 다른 쪽으로 굴려서 1원이 어긋난 것이다.
+//
+// 기준을 하나로 못 박는다: **손님이 내는 금액을 내림한다.** 깎는 금액이
+// 아니라 받는 금액이다 — 손님한테 유리한 쪽이고, 화면에 실제로 크게 보이는
+// 숫자도 그쪽이다. 150 → 142(할인 8원).
+function payableAfterRate(amount, rate) {
+  const base = Number(amount) || 0;
+  const r = Number(rate);
+  if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
+  return Math.floor(base * r);
+}
+
+// 위 규칙에서 나오는 할인액 = 원래 금액 - 내림한 실수령액.
+function discountByRate(amount, rate) {
+  const base = Number(amount) || 0;
+  return base - payableAfterRate(base, rate);
+}
+// ---------------------------------------------------------------------------
+
+// 합계를 한 번에 굴리는 옛 방식 — 여기서도 내림을 쓴다. 지금 결제 경로는
+// computeVipDiscountItems(줄 단위)를 쓰지만, 품목 목록 없이 금액만 들고 있는
+// 자리(예: 옛 테스트, 외부 호출)가 남아 있어 남겨 둔다.
 function computeVipDiscount(vipDiscountType, eligibleTotal) {
   const rate = VIP_DISCOUNT_RATES[vipDiscountType];
   if (!rate) return 0;
-  return eligibleTotal - Math.round(eligibleTotal * rate);
+  return discountByRate(eligibleTotal, rate);
+}
+
+// 실제 결제에서 쓰는 VIP 할인액 — **줄마다 따로 내림해서 더한다.**
+//
+// 합계를 한 번에 내림하면 품목 줄들의 합과 소계가 또 어긋난다(150짜리 둘이면
+// 줄은 142+142=284, 합계는 floor(300×0.95)=285). 화면이 품목마다 할인가를
+// 보여주는 이상, 그 줄들을 더한 값이 곧 소계여야 한다. 그래서 기준을 줄로
+// 내린다 — 화면(public/js/admin.js vipDiscountClientTotal)도 같은 식이다.
+function computeVipDiscountItems(vipDiscountType, items, indexes, isDrink) {
+  const rate = VIP_DISCOUNT_RATES[vipDiscountType];
+  if (!rate) return 0;
+  return sumItems(items, indexes, isDrink, (base) => discountByRate(base, rate));
 }
 
 // 직원이 입력한 값이라 서버가 미리 정해둔 카탈로그가 없다. 범위만 여기서
@@ -155,14 +214,17 @@ function discountTypeKey(vipDiscountType, manualDiscount) {
 // isDrink(it): 그 품목이 음료·주류인지 판별하는 함수(호출부가 주입한다 —
 // 메뉴 카테고리를 봐야 알 수 있는데 그건 이 모듈의 관심사가 아니다).
 function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes, isDrink) {
-  const vipAmount = computeVipDiscount(vipDiscountType, discountEligibleTotal(items, indexes, isDrink));
+  const vipAmount = computeVipDiscountItems(vipDiscountType, items, indexes, isDrink);
   const afterVip = Math.max(0, fullEligibleTotal(items, indexes) - vipAmount);
   let manualAmount = 0;
   if (manualDiscount) {
+    // 퍼센트도 「받는 금액을 내림」(위 payableAfterRate) — 남은 금액 전체를
+    // 한 번에 굴린다. 재량 할인은 품목별로 나눠 보여주지 않으니(화면에도
+    // 소계/합계에만 뜬다) 줄 단위로 내릴 기준이 없다.
     manualAmount =
       manualDiscount.mode === "percent"
-        ? Math.round(afterVip * (manualDiscount.value / 100))
-        : Math.round(manualDiscount.value);
+        ? afterVip - payableAfterRate(afterVip, 1 - manualDiscount.value / 100)
+        : Math.floor(manualDiscount.value);
     // 남은 금액보다 많이 깎을 수는 없다(음수 청구 방지).
     manualAmount = Math.min(afterVip, Math.max(0, manualAmount));
   }
@@ -233,7 +295,10 @@ module.exports = {
   lineTotalOf,
   discountEligibleTotal,
   fullEligibleTotal,
+  payableAfterRate,
+  discountByRate,
   computeVipDiscount,
+  computeVipDiscountItems,
   parseManualDiscount,
   discountTypeKey,
   computeDiscountAmount,

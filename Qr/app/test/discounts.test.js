@@ -9,6 +9,7 @@ const {
   discountEligibleTotal,
   fullEligibleTotal,
   computeVipDiscount,
+  lineTotalOf,
   parseManualDiscount,
   discountTypeKey,
   computeDiscountAmount,
@@ -35,16 +36,20 @@ out.push("[기준 금액]");
 check("VIP 기준은 음료를 뺀다", discountEligibleTotal(ITEMS, null, isDrink) === 1000);
 check("재량 기준은 음료를 포함한다", fullEligibleTotal(ITEMS) === 1100);
 // 2026-09-16 사장님: "추가 옵션으로 들어가는 모든 주문은 할인을 하면 안돼."
-// 할인 기준에서 추가 옵션은 빠진다. 크기 같은 「하나만 고르는 옵션」의 값은
-// 이 음식의 값 자체라 들어간다(src/discounts.js discountBaseOf).
+// 같은 날 다시, 결제창 스크린샷과 함께: "옵션들은 할인이 적용 안되어야 해."
+// 「옵션들」은 둘 다다 — 크기 같은 하나만 고르는 옵션(option_price)도,
+// 여러 개 고르는 추가 옵션(selected_addons)도. 할인 기준은 밥값뿐이다
+// (src/discounts.js discountBaseOf, test/discount-floor-and-options.test.js).
 check("★ 할인 기준은 추가 옵션을 뺀다",
   fullEligibleTotal([{ unit_price: 100, qty: 3, selected_addons: [{ price: 50 }] }]) === 300,
   "추가 옵션까지 세면 450 이 된다");
-check("★ 크기 옵션 값은 할인 기준에 들어간다",
-  fullEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }]) === 450);
+check("★ 크기 옵션 값도 할인 기준에서 빠진다",
+  fullEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }]) === 300,
+  "옵션 값까지 세면 450 이 된다");
 // 옵션 값은 수량을 안 곱한다 — 닭갈비(첫 주문 2인분)에서 두 배가 되던 건.
+// 할인 기준에서는 빠지지만, 손님이 내는 줄 금액에는 딱 한 번 붙는다.
 check("★ 수량이 늘어도 옵션 값은 한 번",
-  fullEligibleTotal([{ unit_price: 100, qty: 5, option_price: 150 }]) === 650);
+  lineTotalOf({ unit_price: 100, qty: 5, option_price: 150 }) === 650);
 
 out.push("");
 out.push("[하나만 걸었을 때 — 2026-09-10 이전과 결과가 같아야 한다]");

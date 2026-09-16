@@ -2343,3 +2343,37 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .pv-qty span { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
 .pv-note { font-size: 12px; color: var(--muted); }
 .pv-cta { background: var(--red); color: #fff; text-align: center; font-weight: 800; padding: 14px; font-size: 15px; }
+
+/* 결제창 품목의 옵션 값 줄 — 2026-09-16 사장님: "결제할 때 차라리 추가
+   옵션들도 하위 항목들로 가격 다 나오게 해줘. 그리고 옵션들은 할인이 적용
+   안되어야 해." 위 품목 줄에는 밥값만(할인이 걸리는 금액), 여기에는 옵션
+   값이 정가 그대로 한 줄씩 나온다 — 보이는 줄을 그냥 더하면 소계가 된다.
+   (public/js/admin.js payItemSubLinesHtml) */
+.pay-item-sub {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--muted);
+  padding-left: 24px; /* 체크박스(16px) + margin(8px) 만큼 들여쓴다 */
+}
+.pay-item-sub-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pay-item-sub-price {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* 옵션이 붙은 품목의 「품목 합계」 — 2026-09-16 사장님: "메뉴 가격 밑에
+   옵션들 가격 해서 밑에 총 가격으로도 해야 할 것 같은데?" 밥값(할인가) +
+   옵션 값들을 더한, 이 품목에서 실제로 받을 돈. */
+.pay-item-sub.pay-item-total {
+  color: var(--ink);
+  font-weight: 700;
+  margin-top: 2px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--line);
+}

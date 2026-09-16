@@ -52,17 +52,21 @@ function check(name, cond, extra = "") {
   check("★ 밥값만 수량을 곱한다", lineTotalOf(line) === 300 * 2 + 150 + 50, `${lineTotalOf(line)}`);
   check("★ 수량이 늘어도 옵션 값은 그대로다", lineTotalOf({ ...line, qty: 5 }) === 300 * 5 + 150 + 50, `${lineTotalOf({ ...line, qty: 5 })}`);
   check("옵션이 없으면 예전과 같다", lineTotalOf({ unit_price: 300, qty: 2 }) === 600, "");
-  check("★ 할인 기준은 추가 옵션을 뺀다", discountBaseOf(line) === 300 * 2 + 150, `${discountBaseOf(line)}`);
-  check("★ 할인 기준에 크기 값은 들어간다 — 이 음식의 값이다", discountBaseOf(line) - 600 === 150, "");
+  // 2026-09-16 사장님이 같은 날 다시, 결제창 스크린샷과 함께: "옵션들은
+  // 할인이 적용 안되어야 해." — 처음엔 크기 값(option_price)만은 「이 음식의
+  // 값 자체」로 보고 기준에 넣었는데, 사장님이 그 반대로 못 박았다. 이제
+  // 기준은 밥값뿐이고, 옵션 값은 결제창에 하위 줄로 따로 나온다.
+  check("★ 할인 기준은 밥값뿐 — 추가 옵션도 크기 값도 뺀다", discountBaseOf(line) === 600, `${discountBaseOf(line)}`);
+  check("★ 줄 금액과는 200 차이(크기 150 + 추가 50)", lineTotalOf(line) - discountBaseOf(line) === 200, "");
 
   out.push("\n[할인 계산]");
   {
-    // 밥 600 + 크기 150 + 추가 50 = 800. 할인은 750 에만 걸린다.
+    // 밥 600 + 크기 150 + 추가 50 = 800. 할인은 600 에만 걸린다.
     const items = [line];
     const d = computeDiscountAmount("vip9", null, items, [0], () => false);
-    check("★ VIP9折은 750 의 10% = 75", d.vipAmount === 75, `${d.vipAmount} (800 기준이면 80)`);
+    check("★ VIP9折은 밥값 600 의 10% = 60", d.vipAmount === 60, `${d.vipAmount} (800 기준이면 80)`);
     const m = computeDiscountAmount(null, { mode: "percent", value: 10 }, items, [0], () => false);
-    check("★ 재량 할인도 추가 옵션은 안 깎는다", m.manualAmount === 75, `${m.manualAmount}`);
+    check("★ 재량 할인도 옵션은 안 깎는다", m.manualAmount === 60, `${m.manualAmount}`);
   }
 
   const staff = request.agent(app);
@@ -219,20 +223,19 @@ out.push("\n[이미 깎아 파는 세트에는 할인이 안 걸린다]");
     const i = src.indexOf(header);
     return i < 0 ? "" : src.slice(i, src.indexOf("\n  }\n", i));
   };
-  const eligible = bodyOf(files["관리자 화면"], "  function discountEligibleClientTotal(");
+  // 2026-09-16부터 VIP 기준도 재량 기준도 한 리듀서(sumDiscountableClient)를
+  // 지나간다 — 기준을 두 군데 적어 갈리는 걸 막으려고 합친 것이라, 여기서도
+  // 그 한 곳만 본다.
+  const reducer = bodyOf(files["관리자 화면"], "  function sumDiscountableClient(");
   const full = bodyOf(files["관리자 화면"], "  function fullEligibleClientTotal(");
-  check("두 함수를 찾았다", eligible.length > 50 && full.length > 50, `${eligible.length}/${full.length}`);
+  check("리듀서를 찾았다", reducer.length > 50, `${reducer.length}`);
   check(
     "★ 화면의 할인 기준도 추가 옵션을 뺀다",
-    /discountBaseOfClient\(it\)/.test(eligible) && !/lineTotalOf\(it\)/.test(eligible),
+    /discountBaseOfClient\(it\)/.test(reducer) && !/lineTotalOf\(it\)/.test(reducer),
     "서버는 안 깎는데 화면만 깎아 보여주면 부르는 숫자가 틀어진다"
   );
-  check(
-    "★ 재량 할인 기준도 같다",
-    /discountBaseOfClient\(it\)/.test(full) && !/lineTotalOf\(it\)/.test(full),
-    ""
-  );
-  check("★ 두 함수 다 세트를 뺀다", /isSetDiscountItem\(it\)/.test(eligible) && /isSetDiscountItem\(it\)/.test(full), "");
+  check("★ 재량 할인도 같은 리듀서를 쓴다", /sumDiscountableClient\(/.test(full), "");
+  check("★ 세트를 뺀다", /isSetDiscountItem\(it\)/.test(reducer), "");
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
