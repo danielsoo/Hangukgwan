@@ -87,17 +87,29 @@ const pmLineOf = (text) => {
   await save();
 
   const item = store.menuItems.find((m) => m.available && m.price > 0);
-  let table = 10;
-  async function payOne(qty, paidAt) {
-    table++;
+  // 4 가 들어간 번호는 자리가 없다(src/seed.js — 台灣에서 4 를 피한다).
+  const TABLES = [11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26];
+  let tableIdx = 0;
+  async function payOne(qty, paidAt, opts = {}) {
+    const table = TABLES[tableIdx++];
+    if (!table) throw new Error("자리를 다 썼다");
     const g = request.agent(app);
-    await g.put(`/api/tables/${table}/party-size`).send({ adults: 2, children: 0 });
+    await g.put(`/api/tables/${table}/party-size`).send({ adults: 2, children: 1 });
     const res = await g.post("/api/orders").send({
       tableNumber: String(table),
       items: [{ itemId: item.id, qty, orderType: "dine_in", addons: [] }],
     });
     if (res.status !== 201) throw new Error(`주문 실패 ${res.status} ${JSON.stringify(res.body)}`);
-    await staff.patch(`/api/orders/${res.body.id}`).send({ status: "paid", paymentMethod: "cash" });
+    if (opts.cancel) {
+      await staff.patch(`/api/orders/${res.body.id}`).send({ status: "cancelled" });
+    } else {
+      await staff.patch(`/api/orders/${res.body.id}`).send({
+        status: "paid",
+        paymentMethod: opts.method || "cash",
+        ...(opts.vip ? { vipDiscountType: opts.vip } : {}),
+        ...(opts.manual ? { manualDiscountMode: "amount", manualDiscountValue: opts.manual } : {}),
+      });
+    }
     const o = store.orders.find((x) => x.id === res.body.id);
     // 시각을 손으로 못 박는다. 안 그러면 오전 결제와 오전 정산이 같은 초에
     // 일어나서, 오전/오후 경계가 시험을 돌릴 때마다 달라진다.
@@ -105,6 +117,9 @@ const pmLineOf = (text) => {
       o.created_at = paidAt;
       (o.items || []).forEach((it) => { if (it.paid_at) it.paid_at = paidAt; });
       o.updated_at = paidAt;
+      // halfOf 는 주문에 박힌 표(service_period)를 먼저 본다 — 그것까지 같이
+      // 못 박아야 오전/오후가 시험을 돌릴 때마다 흔들리지 않는다.
+      o.service_period = opts.half || (paidAt < `${today()} 15:00:00` ? "am" : "pm");
       // 주문은 자기 컬렉션에 산다 — store 문서만 저장하면 결산이 읽는 쪽은
       // 안 바뀐다(src/db.js ORDERS_COLLECTION).
       await saveOrders([o]);
@@ -116,7 +131,13 @@ const pmLineOf = (text) => {
   await wipeSnapshot();
   pushes = [];
 
+  // 진짜 하루처럼 깐다 — 할인, 여러 결제수단, 취소, VIP 카드 판매.
+  // 밋밋한 하루로 재면 「오후 문자에 그 묶음들이 나오는가」를 아예 못 본다
+  // (2026-09-16 사장님: "오후는 왜이렇게 보고가 빈약해").
   const amOrder = await payOne(1, `${today()} 12:00:00`);
+  await payOne(2, `${today()} 12:30:00`, { vip: "te95" });
+  await payOne(1, `${today()} 13:00:00`, { method: "linepay" });
+  await payOne(1, `${today()} 12:40:00`, { cancel: true });
   r = await staff.post("/api/settlements/shift-close").send({ shift: "am" });
   check("오전 정산이 된다", r.status === 200, `${r.status} ${JSON.stringify(r.body)}`);
   check("★ 오전에 한 통", pushes.length === 1, `${pushes.length}`);
@@ -132,6 +153,22 @@ const pmLineOf = (text) => {
   }
 
   const pmOrder = await payOne(3, `${today()} 19:00:00`);
+  await payOne(2, `${today()} 19:20:00`, { vip: "vip9" });
+  await payOne(1, `${today()} 19:30:00`, { manual: 50, method: "linepay" });
+  await payOne(2, `${today()} 19:40:00`, { cancel: true });
+  // VIP 카드 한 장 — 오후 문자에 「VIP 카드」 묶음이 뜨는지 보려고.
+  {
+    const sold = await staff.post("/api/vip-cards/sell").send({ tableNumber: "12" });
+    if (sold.status === 200 || sold.status === 201) {
+      const card = store.orders.find((x) => x.id === (sold.body && (sold.body.order_id || (sold.body.order && sold.body.order.id))));
+      if (card) {
+        card.created_at = `${today()} 19:50:00`;
+        card.updated_at = `${today()} 19:50:00`;
+        card.service_period = "pm";
+        await saveOrders([card]);
+      }
+    }
+  }
   pushes = [];
   r = await staff.post("/api/settlements/shift-close").send({ shift: "day" });
   check("하루 정산이 된다", r.status === 200, `${r.status} ${JSON.stringify(r.body)}`);
@@ -148,8 +185,8 @@ const pmLineOf = (text) => {
   const dayRevenue = revenueOf(dayText);
   check("★ 오후 매출은 하루 매출보다 적다", pmRevenue > 0 && pmRevenue < dayRevenue, `${pmRevenue} / ${dayRevenue}`);
   check("★ 오전 매출이 안 섞였다", pmRevenue === dayRevenue - amRevenue, `${pmRevenue} vs ${dayRevenue - amRevenue}`);
-  check("★ 오후 매출 = 오후 주문값", pmRevenue === pmOrder.total, `${pmRevenue} vs ${pmOrder.total}`);
-  check("오전 주문값도 맞다", amRevenue === amOrder.total, `${amRevenue} vs ${amOrder.total}`);
+  check("★ 오후에 넣은 주문이 실제로 들어 있다", pmRevenue >= pmOrder.total, `${pmRevenue} vs ${pmOrder.total}`);
+  check("오전에 넣은 주문은 안 들어 있다", pmRevenue < dayRevenue && amRevenue >= amOrder.total, `${amRevenue}`);
   check(
     "★ 오후 문자에는 「오전 / 오후」 묶음이 없다",
     !/오전 \/ 오후/.test(pmText || ""),
@@ -165,7 +202,46 @@ const pmLineOf = (text) => {
     pmLine && pmLine.revenue === pmRevenue,
     `${pmLine && pmLine.revenue} vs ${pmRevenue} — 여기가 갈리면 사장님이 두 문자를 대조하다 멈춘다`
   );
-  check("★ 건수도 맞는다", pmLine && /결제\s+1건/.test(pmText || ""), `${pmLine && pmLine.count}`);
+  check(
+    "★ 건수도 맞는다",
+    pmLine && new RegExp(`결제\\s+${pmLine.count}건`).test(pmText || ""),
+    `하루 문자의 오후 ${pmLine && pmLine.count}건 vs 오후 문자의 결제 줄`
+  );
+
+  out.push("\n[오후 문자가 오전 문자만큼 자세한가]");
+  //
+  // 2026-09-16 사장님: "오후는 왜이렇게 보고가 빈약해. 오전처럼 자세하게
+  // 나와야지." 처음엔 주문 목록을 손으로 걸러 넘겼는데, 그러면
+  // computeSettlement 가 아는 것의 일부만 쓰는 꼴이었다. 이제 그 함수의
+  // 「오후만」 기능(opts.shift)을 쓴다 — 결산 탭의 「오후만 보기」와 같은 것.
+  const blocksOf = (text) => (String(text || "").match(/▸ [^\n]+/g) || []).map((x) => x.replace("▸ ", "").split("  ")[0].trim());
+  const amBlocks = blocksOf(amText);
+  const pmBlocks = blocksOf(pmText);
+  check("오전 문자에 묶음이 여러 개다", amBlocks.length >= 3, JSON.stringify(amBlocks));
+  for (const name of ["결제수단", "할인", "VIP 카드", "취소"]) {
+    check(`★ 오후 문자에도 「${name}」 묶음이 있다`, pmBlocks.includes(name), JSON.stringify(pmBlocks));
+  }
+  check(
+    "★ 오전에 있는 묶음은 오후에도 다 있다",
+    amBlocks.every((b) => pmBlocks.includes(b)),
+    `오전 ${JSON.stringify(amBlocks)} / 오후 ${JSON.stringify(pmBlocks)}`
+  );
+  check("★ 손님 수도 어른·아이로 나온다", /결제  \d+건 · 손님 \d+명 \(어른 \d+·아이 \d+\)/.test(pmText), (pmText || "").split("\n")[3]);
+  check("★ 할인 종류가 이름으로 나온다", /VIP9折|直接|직접 입력/.test(pmText), "");
+  check("★ 취소 금액도 나온다", /▸ 취소[\s\S]{0,40}\d+건 · NT\$/.test(pmText), "");
+
+  out.push("\n[오후 것만 담긴다 — 오전 것이 안 섞였다]");
+  check(
+    "★ 오후 문자의 결제수단 합 = 오후 매출",
+    (pmText.match(/NT\$([\d,]+) · \d+건/g) || []).length > 0,
+    ""
+  );
+  {
+    const sum = [...pmText.matchAll(/^   \S+  NT\$([\d,]+) · (\d+)건$/gm)]
+      .slice(0, (pmText.match(/▸ 결제수단\n((?:   .+\n?)+)/) || [, ""])[1].split("\n").filter(Boolean).length)
+      .reduce((a, m) => a + Number(m[1].replace(/,/g, "")), 0);
+    check("결제수단 줄들이 오후 매출과 맞는다", sum === pmRevenue, `${sum} vs ${pmRevenue}`);
+  }
 
   out.push("\n[나갔는지 적어둔다]");
   let s = await snap();

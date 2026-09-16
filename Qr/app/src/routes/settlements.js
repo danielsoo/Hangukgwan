@@ -448,20 +448,25 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   let pmPart = null;
   let pmSnapshot = null;
   if (shift === "day" && amClosedAt) {
-    const paid = orders.filter((o) => o.status === "paid");
-    const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
-    const amRevenue = amPaid.reduce((sum, o) => sum + netTotalOf(o), 0);
-    amPart = { revenue: amRevenue, count: amPaid.length };
-    // 오후는 빼서 구한다 — 따로 더하면 반올림이나 경계 판정이 어긋났을 때
-    // 오전+오후가 하루 매출과 안 맞는 문자가 나간다.
-    pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
-    // 그리고 **오후 것만** 담은 결산을 하나 더 만든다.
+    // ★ 가르는 일을 손으로 하지 않는다.
     //
-    // 2026-09-16 사장님: "오후 정산은 오후 정산만 해서 보내고 하루 전체
-    // 정산을 오후 정산 끝나고 한 번 더 보내줘." 하루 문자의 「오전/오후」
-    // 두 줄은 매출·건수뿐이라, 저녁 장사의 결제수단·할인·취소를 보려면
-    // 하루치에서 오전치를 손으로 빼야 했다.
-    pmSnapshot = computeSettlement(orders.filter((o) => isAfterAmClose(o, amClosedAt)), date, date, await halfOpts(date, date, req));
+    // computeSettlement 는 이미 「오전만 / 오후만」을 낼 줄 안다(opts.shift —
+    // 결산 탭의 「오전만 보기」가 쓰는 바로 그것). 그걸 쓰면 결제수단·할인·
+    // VIP 카드·취소·미결제가 **전부 따라온다.**
+    //
+    // 2026-09-16 사장님: "오후는 왜이렇게 보고가 빈약해. 오전처럼 자세하게
+    // 나와야지." 처음엔 여기서 주문 목록을 직접 걸러 넘겼는데, 그러면 이
+    // 함수가 아는 것의 일부만 쓰는 꼴이었다. 한 곳에서 가르게 두면 문자도
+    // 화면도 같은 답을 본다.
+    const halfArgs = await halfOpts(date, date, req);
+    pmSnapshot = computeSettlement(orders, date, date, { ...halfArgs, shift: "pm" });
+    // 하루 문자의 「오전 / 오후」 두 줄도 **같은 가름**을 쓴다. 예전에는
+    // 여기만 「오전 정산을 누른 시각」으로 따로 갈랐는데, 그러면 오후 문자와
+    // 하루 문자의 오후 숫자가 서로 다를 수 있다 — 사장님이 두 문자를
+    // 대조하다 멈춘다.
+    const half = snapshot.half_split || {};
+    amPart = { revenue: (half.am && half.am.revenue) || 0, count: (half.am && half.am.paid_order_count) || 0 };
+    pmPart = { revenue: (half.pm && half.pm.revenue) || 0, count: (half.pm && half.pm.paid_order_count) || 0 };
   }
 
   let line = { sent: false, error: "disabled" };
@@ -512,21 +517,6 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
   });
 });
 
-/**
- * 이 주문이 **오전 정산 뒤에** 일어난 것인가 — 오후 문자에 담을 것인가.
- *
- * 결제된 주문은 「언제 받았는가」로, 나머지(취소·미결제)는 「언제
- * 들어왔는가」로 가른다. 취소된 주문에는 받은 시각이 없다.
- *
- * 가르는 기준은 영업시간표가 아니라 **오전 정산을 누른 시각**이다 — 하루
- * 문자의 「오전/오후」 두 줄과 같은 기준이어야 두 문자의 숫자가 맞는다
- * (14시 20분에 눌렀으면 14시 10분 결제는 오전 몫이다).
- */
-function isAfterAmClose(o, amClosedAt) {
-  if (!amClosedAt) return true;
-  const at = o && o.status === "paid" ? paidAtOf(o) : String((o && o.created_at) || "");
-  return String(at || "") > amClosedAt;
-}
 
 /**
  * 정산한 것을 결제완료 칸에서 내린다 (claude/... 「정산하면 결제완료 칸이
@@ -721,15 +711,15 @@ router.post("/resend-line", requireOwner, async (req, res) => {
   const snapshot = computeSettlement(orders, date, date, opts);
   const amClosedAt = (opts.amClosedAt || {})[date] || null;
 
-  // 오전/오후 가르기는 그날 마감 때와 같은 방법으로 한다(위 shift-close).
+  // 오전/오후 가르기는 그날 마감 때와 같은 방법으로 한다(위 shift-close) —
+  // computeSettlement 의 half_split. 여기서 따로 갈라 적으면 다시 보낸 문자와
+  // 원래 문자의 숫자가 달라진다.
   let amPart = null;
   let pmPart = null;
   if (amClosedAt) {
-    const paid = orders.filter((o) => o.status === "paid");
-    const amPaid = paid.filter((o) => paidAtOf(o) <= amClosedAt);
-    const amRevenue = amPaid.reduce((sum, o) => sum + netTotalOf(o), 0);
-    amPart = { revenue: amRevenue, count: amPaid.length };
-    pmPart = { revenue: snapshot.total_revenue - amRevenue, count: paid.length - amPaid.length };
+    const half = snapshot.half_split || {};
+    amPart = { revenue: (half.am && half.am.revenue) || 0, count: (half.am && half.am.paid_order_count) || 0 };
+    pmPart = { revenue: (half.pm && half.pm.revenue) || 0, count: (half.pm && half.pm.paid_order_count) || 0 };
   }
 
   const [snap] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
