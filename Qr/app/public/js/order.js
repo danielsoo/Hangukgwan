@@ -205,6 +205,38 @@
   // 여기는 통화 기호를 문구가 직접 들고 있어서 money() 를 못 쓴다.
   const comma = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US") : n);
 
+  /**
+   * 「하나만 고르는 옵션」을 읽는다. 「이름:금액」, 금액은 없으면 0.
+   *
+   * 2026-09-16 사장님: 크기(S/M/L/XL)처럼 **하나만 고르면서 값이 붙는**
+   * 옵션이 필요하다. 여러 개 고르는 옵션(addons)으로 넣으면 손님이 M 과 L 을
+   * 같이 고를 수 있어서 안 된다.
+   *
+   * 읽는 규칙은 addons 와 똑같다(src/addons.js parseOptions) — 두 화면이
+   * 같은 값을 봐야 부르는 금액과 실제로 받는 금액이 안 갈린다. 금액을 안
+   * 적으면 0 이라, 지금까지 쓰던 "牛,豬" 는 그대로 돈다.
+   */
+  function parseOptions(str) {
+    if (!str) return [];
+    return String(str)
+      .split(",")
+      .map((pair) => {
+        const [name, priceStr] = pair.split(":");
+        const trimmed = (name || "").trim();
+        const price = parseInt((priceStr || "0").trim(), 10);
+        return trimmed ? { name: trimmed, price: Number.isNaN(price) ? 0 : price } : null;
+      })
+      .filter(Boolean);
+  }
+  /** 옵션 이름만. 값이 붙어 있어도 이름만 돌려준다. */
+  const optionNames = (str) => parseOptions(str).map((o) => o.name);
+  /** 지금 고른 옵션의 값. 못 찾으면 0 — 서버도 같은 판단을 한다. */
+  function currentOptionPrice(item) {
+    if (!item || !currentOption) return 0;
+    const found = parseOptions(item.options).find((o) => o.name === currentOption);
+    return found ? found.price : 0;
+  }
+
   // 사장님이 주신 문구 그대로다(2026-09-11). 금액만 설정에서 가져온다 —
   // 여기에 200을 박아두면 설정을 바꿔도 안내문만 옛 금액으로 남는다.
   const MIN_SPEND_NOTICE = {
@@ -782,9 +814,7 @@
   // shown on the menu list), not the option picker inside the item sheet,
   // which already had these icons from an earlier round.
   function meatIconsHtml(item) {
-    const icons = (item.options || "")
-      .split(",")
-      .map((o) => o.trim())
+    const icons = optionNames(item.options)
       .filter((o) => OPTION_ICONS[o])
       .map((o) => optionIconHtml(o));
     if (BEEF_BROTH_ICON_CODES.includes(item.code)) icons.push(optionIconHtml("牛"));
@@ -860,7 +890,7 @@
 
   function openItemSheet(item) {
     currentItem = item;
-    currentOption = item.options ? item.options.split(",")[0].trim() : null;
+    currentOption = item.options ? optionNames(item.options)[0] || null : null;
     // 맵기는 늘 「基本」이 있고, 그게 기본으로 골라져 있다.
     //
     // 2026-09-10 사장님: "매운맛 선택이 무조건 첫번째거로 선택되어있어" →
@@ -1001,7 +1031,7 @@
         mixMin && !hasPriorOrder
           ? t("mixOptionsHint").replace("{n}", mixMin)
           : t("mixOptionsHintAfter");
-      const opts = item.options.split(",").map((s) => s.trim());
+      const opts = optionNames(item.options);
       mixQty = {};
       opts.forEach((opt) => (mixQty[opt] = 0));
       mixQty[opts[0]] = 2;
@@ -1028,14 +1058,20 @@
       }
       if (item.options) {
         optWrap.hidden = false;
-        item.options.split(",").forEach((opt, i) => {
+        parseOptions(item.options).forEach((opt, i) => {
           const b = document.createElement("button");
-          b.textContent = optionLabel(opt.trim());
+          // 값이 붙는 옵션은 얼마가 붙는지 그 자리에 적는다. 안 적으면
+          // 손님이 고르고 나서 합계가 왜 올랐는지 모른다.
+          b.textContent = opt.price
+            ? `${optionLabel(opt.name)} +${money(opt.price)}`
+            : optionLabel(opt.name);
           if (i === 0) b.classList.add("active");
           b.onclick = () => {
-            currentOption = opt.trim();
+            currentOption = opt.name;
             optList.querySelectorAll("button").forEach((x) => x.classList.remove("active"));
             b.classList.add("active");
+            // 고른 값이 합계에 바로 보여야 한다.
+            updateAddBtnPrice();
           };
           optList.appendChild(b);
         });
@@ -1106,10 +1142,14 @@
     if (!currentItem) return;
     const addonsPrice = addonsPriceFor(currentItem, currentAddons);
     if (currentItem.mix_options) {
+      // 섞는 메뉴(牛/豬)는 옵션에 값이 붙지 않는다 — 옵션마다 수량이 따로
+      // 있어서 값을 붙이면 어느 쪽 값인지 한 줄로는 못 적는다. 메뉴 관리
+      // 화면이 그 조합을 막는다.
       const totalQty = Object.values(mixQty).reduce((sum, q) => sum + q, 0);
       $("#addToCartPrice").textContent = money((currentItem.price + addonsPrice) * totalQty);
     } else {
-      $("#addToCartPrice").textContent = money((currentItem.price + addonsPrice) * currentQty);
+      const optPrice = currentOptionPrice(currentItem);
+      $("#addToCartPrice").textContent = money((currentItem.price + optPrice + addonsPrice) * currentQty);
     }
   }
 

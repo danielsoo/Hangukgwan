@@ -5,7 +5,7 @@ const { isOpenNow, orderingState } = require("../openHours");
 const { nowLocal, taipeiDateString } = require("../time");
 const { resolveCustomer } = require("../customer");
 const { isActive: isVipActive, cardBelongsTo } = require("../vip");
-const { parseAddons } = require("../addons");
+const { parseAddons, optionPriceOf } = require("../addons");
 const { broadcastOrdersChanged, broadcastTableMoved } = require("../realtime");
 const testMode = require("../testMode");
 const seating = require("../seating");
@@ -29,6 +29,24 @@ function resolveSelectedAddons(mi, requestedNames) {
     if (match && !chosen.some((c) => c.name === match.name)) chosen.push(match);
   }
   return chosen;
+}
+
+/**
+ * 손님이 고른 「하나만 고르는 옵션」의 값. 메뉴에 적힌 값으로 **다시 매긴다.**
+ *
+ * 2026-09-16 사장님: 크기(S/M/L/XL)처럼 하나만 고르면서 값이 붙는 옵션이
+ * 필요하다. addons 로 넣으면 손님이 M 과 L 을 같이 고를 수 있어서 안 된다.
+ *
+ * addons 와 똑같이, **화면이 보내온 금액은 절대 안 믿는다.** 이름만 받아서
+ * 메뉴 쪽 정의에서 값을 찾는다(src/addons.js). 못 찾으면 0 이다 — 메뉴가
+ * 바뀌어 없어진 옵션 때문에 주문 자체가 막히면 안 된다.
+ *
+ * 찾은 값은 unit_price 에 **더해서** 저장한다. 그러면 줄 금액·결산·할인·
+ * 종이까지 손댈 곳이 없다 — 전부 unit_price 를 쓰고 있기 때문이다. 고른
+ * 이름은 option_choice 에 그대로 남으므로 「L 로 380원」이 종이에 같이 찍힌다.
+ */
+function optionPriceFor(mi, chosenName) {
+  return optionPriceOf(mi.options, chosenName);
 }
 
 const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
@@ -373,7 +391,9 @@ router.post("/", async (req, res) => {
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
     const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
-    total += (mi.price + addonsPricePerUnit) * qty;
+    // 고른 옵션의 값(크기 등)은 unit_price 에 더해 둔다 — 위 optionPriceFor 주석.
+    const optionPricePerUnit = optionPriceFor(mi, it.option);
+    total += (mi.price + optionPricePerUnit + addonsPricePerUnit) * qty;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -381,8 +401,11 @@ router.post("/", async (req, res) => {
       name_ko: mi.name_ko,
       name_en: mi.name_en,
       qty,
-      unit_price: mi.price,
+      unit_price: mi.price + optionPricePerUnit,
       option_choice: it.option || null,
+      // 옵션 때문에 얼마가 붙었는지 따로 적어둔다. unit_price 만 보면 메뉴
+      // 값이 오른 것인지 옵션이 붙은 것인지 나중에 가릴 수 없다.
+      option_price: optionPricePerUnit || null,
       spice_choice: it.spice || null,
       // 부대찌개(部隊鍋) 포장 전용 옵션(不煮外帶/煮熟外帶 — 조리 여부) — 매장
       // 식사에는 없고 order.js의 #itemTakeoutOptions에서만 선택된다. 주방이
@@ -1085,7 +1108,8 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
     const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
-    total += (mi.price + addonsPricePerUnit) * qty;
+    const optionPricePerUnit = optionPriceFor(mi, it.option);
+    total += (mi.price + optionPricePerUnit + addonsPricePerUnit) * qty;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -1093,8 +1117,9 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       name_ko: mi.name_ko,
       name_en: mi.name_en,
       qty,
-      unit_price: mi.price,
+      unit_price: mi.price + optionPricePerUnit,
       option_choice: it.option || null,
+      option_price: optionPricePerUnit || null,
       spice_choice: it.spice || null,
       takeout_choice: it.takeoutOption || null,
       selected_addons: selectedAddons,

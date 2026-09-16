@@ -1158,7 +1158,9 @@
       chipAddBtn: "추가",
       chipFreeAddon: "(무료)",
       itemOptionsSingleTitle: "하나만 고르는 옵션",
-      itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 가격은 안 바뀌어요.",
+      itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 값을 적으면 그만큼 가격이 올라가요 (크기 같은 것). 안 적으면 가격은 그대로예요.",
+      itemMixOptionsPriceWarn: "옵션별 개별 수량을 켜면 옵션에 적은 값은 안 붙어요. 옵션마다 수량이 따로라 어느 쪽 값인지 한 줄로 적을 수가 없거든요.",
+      chipOptionNamePlaceholder: "이름 (예: 소고기, M)",
       itemOptionsMultiTitle: "여러 개 고를 수 있는 옵션",
       itemOptionsMultiHint: "손님이 원하는 만큼 골라요. 고른 만큼 가격이 올라가요. 값이 없으면 0을 넣으세요.",
       itemPaneBasic: "기본",
@@ -1181,7 +1183,7 @@
       itemPriceNoteLabel: "가격 비고",
       itemPriceNotePlaceholder: "예: 2인분",
       itemOriginalPriceLabel: "정가 (할인 전 가격, 없으면 비워두세요)",
-      itemOptionsLabel: "옵션 (예: 소고기, 돼지고기)",
+      itemOptionsLabel: "옵션 (예: 소고기 / 크기 S·M·L)",
       itemOptionsPlaceholder: "옵션이 없으면 비워두세요",
       itemSpiceOptionsLabel: "맵기 옵션 (예: 안 맵게, 보통, 맵게)",
       itemSpiceOptionsPlaceholder: "맵기 옵션이 없으면 비워두세요",
@@ -1919,7 +1921,9 @@
       chipAddBtn: "新增",
       chipFreeAddon: "(免費)",
       itemOptionsSingleTitle: "只能選一個的選項",
-      itemOptionsSingleHint: "顧客只會從中選一個，價格不會變。",
+      itemOptionsSingleHint: "顧客只會從中選一個。填了金額就會加價（例如尺寸），不填則價格不變。",
+      itemMixOptionsPriceWarn: "開啟「各選項獨立數量」後，選項上填的金額不會生效 — 每個選項有各自的數量，無法只用一行標價。",
+      chipOptionNamePlaceholder: "名稱（例：牛肉、M）",
       itemOptionsMultiTitle: "可以複選的選項",
       itemOptionsMultiHint: "顧客可以選任意多個，選越多價格越高。免費的話請填 0。",
       itemPaneBasic: "基本",
@@ -2517,11 +2521,36 @@
   // dish's meat-choice is visible wherever its name shows, not just inside
   // its own option picker (2026-09 피드백: "메뉴에 표시되는 동물 사진에
   // 넣어달라는 거였어").
+  /**
+   * 「하나만 고르는 옵션」을 읽는다 — 「이름:금액」, 금액은 없으면 0.
+   *
+   * 2026-09-16 사장님: 크기(S/M/L/XL)처럼 하나만 고르면서 값이 붙는 옵션이
+   * 필요하다. 읽는 규칙은 addons 와 같고(src/addons.js parseOptions),
+   * 손님 화면(public/js/order.js)도 같은 규칙을 쓴다 — 세 곳이 같은 값을
+   * 봐야 부르는 금액과 실제로 받는 금액이 안 갈린다.
+   */
+  function parseOptions(str) {
+    if (!str) return [];
+    return String(str)
+      .split(",")
+      .map((pair) => {
+        const [name, priceStr] = pair.split(":");
+        const trimmed = (name || "").trim();
+        const price = parseInt((priceStr || "0").trim(), 10);
+        return trimmed ? { name: trimmed, price: Number.isNaN(price) ? 0 : price } : null;
+      })
+      .filter(Boolean);
+  }
+  const optionNames = (str) => parseOptions(str).map((o) => o.name);
+  const optionPriceOf = (str, name) => {
+    if (!name) return 0;
+    const found = parseOptions(str).find((o) => o.name === String(name).trim());
+    return found ? found.price : 0;
+  };
+
   const meatIconsHtml = (mi) => {
     if (!mi) return "";
-    const icons = (mi.options || "")
-      .split(",")
-      .map((o) => o.trim())
+    const icons = optionNames(mi.options)
       .filter((o) => OPTION_ICONS[o])
       .map((o) => optionIconHtml(o));
     if (BEEF_BROTH_ICON_CODES.includes(mi.code)) icons.push(optionIconHtml("牛"));
@@ -5312,7 +5341,12 @@
         // — the owner asked for this specifically so a busy kitchen can
         // never mistake "牛" / "豬" / a spice level for a second dish.
         const detailLines = [];
-        if (it.option_choice) detailLines.push(`<div class="item-detail">└ ${it.option_choice}</div>`);
+        if (it.option_choice)
+          detailLines.push(
+            `<div class="item-detail">└ ${it.option_choice}${
+              Number(it.option_price) > 0 ? ` (+NT$${money(it.option_price)})` : ""
+            }</div>`
+          );
         // 基本(default spice level) stays implicit and is never printed —
         // every menu item's spice_options starts with "基本" (see seed.js),
         // so an unprinted spice line already means "기본맛, 안 바뀜" to the
@@ -6012,7 +6046,7 @@
   function openAddPicker(mi, onCommit) {
     const backdrop = $("#orderEditPickerModal");
     let qty = mi.min_first_order_qty || 1;
-    let option = mi.options ? mi.options.split(",")[0].trim() : null;
+    let option = mi.options ? optionNames(mi.options)[0] || null : null;
     let spice = mi.spice_options ? mi.spice_options.split(",")[0].trim() : null;
     let addons = [];
     const availableAddons = parseAddons(mi.addons);
@@ -6070,10 +6104,26 @@
         return s + (a ? a.price : 0);
       }, 0);
       $("#orderEditPickerQty").textContent = String(qty);
-      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${money((mi.price + addonsPrice) * qty)}`;
+      // 고른 옵션의 값(크기 등)도 더한다 — 서버가 다시 매기는 값과 같아야
+      // 직원이 손님에게 부르는 숫자가 맞는다(src/routes/orders.js optionPriceFor).
+      const optPrice = optionPriceOf(mi.options, option);
+      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${money((mi.price + optPrice + addonsPrice) * qty)}`;
     };
 
-    pillPicker("#orderEditPickerOptions", mi.options ? mi.options.split(",").map((o) => o.trim()).filter(Boolean) : [], option, (v) => (option = v), optionLabel);
+    // 값이 붙는 옵션은 칩에 「+NT$50」 을 같이 적고, 고르면 위 금액이 바뀐다.
+    pillPicker(
+      "#orderEditPickerOptions",
+      optionNames(mi.options),
+      option,
+      (v) => {
+        option = v;
+        updateCommitLabel();
+      },
+      (name) => {
+        const p = optionPriceOf(mi.options, name);
+        return p ? `${optionLabel(name)} +NT$${money(p)}` : optionLabel(name);
+      }
+    );
     pillPicker("#orderEditPickerSpice", mi.spice_options ? mi.spice_options.split(",").map((o) => o.trim()).filter(Boolean) : [], spice, (v) => (spice = v), spiceLabel);
     renderAddons();
     updateCommitLabel();
@@ -6187,7 +6237,7 @@
           mi && mi.options && !mi.mix_options
             ? pillGroup(
                 "option",
-                mi.options.split(",").map((o) => o.trim()).filter(Boolean),
+                optionNames(mi.options),
                 it.option_choice,
                 optionLabel,
                 "order-edit-pill-group-segmented"
@@ -6625,6 +6675,22 @@
    * 화면·주방 빌지·서버 파서(src/addons.js)도 전부 그대로다. 바뀐 것은
    * 사장님이 그 쉼표를 직접 찍지 않아도 된다는 것뿐이다.
    */
+  /**
+   * 「옵션별 개별 수량」과 「옵션에 붙인 값」은 같이 못 쓴다.
+   *
+   * 섞는 메뉴(동판불고기의 牛/豬)는 옵션마다 수량이 따로 있다. 거기에
+   * 옵션 값이 붙으면 한 줄에 어느 쪽 값인지 적을 수가 없다 — 값을 조용히
+   * 무시하는 것이 제일 나쁘다(사장님은 붙는 줄 알고 저장한다). 막지는
+   * 않고 **그 자리에서 말해준다.**
+   */
+  function paintMixOptionsWarn() {
+    const warn = $("#mixOptionsPriceWarn");
+    if (!warn) return;
+    const mix = !!($("#f_mix_options") && $("#f_mix_options").checked);
+    const hasPriced = parseOptions(($("#f_options") || {}).value || "").some((o) => o.price > 0);
+    warn.hidden = !(mix && hasPriced);
+  }
+
   function chipValuesOf(field) {
     const raw = ($(`#${field.dataset.chipFor}`).value || "").trim();
     return raw ? raw.split(",").map((v) => v.trim()).filter(Boolean) : [];
@@ -6642,9 +6708,17 @@
       if (priced) {
         // "볶음밥 추가:80" → "볶음밥 추가 +NT$80". 0 원은 무료 교환이라
         // (예: 飯換冬粉:0) 값 대신 그렇게 적어준다.
+        //
+        // 값 자리가 **아예 없으면**(예: "牛") 값 이야기를 안 적는다.
+        // 2026-09-16 에 「하나만 고르는 옵션」도 값을 받게 되면서, 예전부터
+        // 있던 "牛,豬" 같은 값이 이 칸에 들어오게 됐다. 그것을 「무료」라고
+        // 적으면 없는 말을 지어내는 것이다 — 값을 정한 적이 없을 뿐이다.
+        const hasPriceSlot = value.includes(":");
         const [name, priceStr] = value.split(":");
         const price = parseInt((priceStr || "0").trim(), 10) || 0;
-        text = `${(name || "").trim()} ${price ? `+NT$${money(price)}` : T("chipFreeAddon")}`;
+        text = hasPriceSlot
+          ? `${(name || "").trim()} ${price ? `+NT$${money(price)}` : T("chipFreeAddon")}`
+          : (name || "").trim();
       }
       chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-x" aria-label="remove">✕</button>`;
       chip.querySelector(".chip-text").textContent = text;
@@ -6652,6 +6726,7 @@
         const next = chipValuesOf(field).filter((_, i) => i !== idx);
         $(`#${field.dataset.chipFor}`).value = next.join(",");
         renderChips(field);
+        paintMixOptionsWarn();
       };
       list.appendChild(chip);
     });
@@ -6676,8 +6751,14 @@
     values.push(value);
     $(`#${field.dataset.chipFor}`).value = values.join(",");
     renderChips(field);
+    paintMixOptionsWarn();
     return true;
   }
+  // 「옵션별 개별 수량」을 켜고 끌 때마다 위 경고를 다시 본다.
+  if (document.getElementById("f_mix_options")) {
+    document.getElementById("f_mix_options").addEventListener("change", paintMixOptionsWarn);
+  }
+
   function initChipFields() {
     $$(".chip-field").forEach((field) => {
       const priced = field.classList.contains("chip-field-priced");
@@ -6766,6 +6847,7 @@
     $("#f_soldout_until").value = (item && item.soldout_until) || "";
     paintItemFormSoldOut();
     $("#f_mix_options").checked = !!item?.mix_options;
+    paintMixOptionsWarn();
     renderAllergenCheckboxes(item?.allergens || []);
     $("#f_photo").value = "";
     if (item?.photo_url) {

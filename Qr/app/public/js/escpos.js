@@ -95,6 +95,12 @@
   //
   // 자리를 한 칸 더 먹지만(NT$7,120 은 NT$7120 보다 한 글자 길다) padLine 이
   // 알아서 맞춘다. 자릿수를 세는 것보다 낫다.
+  /** 「L」 또는 「L (+NT$150)」. 값이 안 붙은 옵션은 이름만. */
+  function optionLine(it) {
+    const p = Number(it && it.option_price);
+    return Number.isFinite(p) && p > 0 ? `${it.option_choice} (+NT$${money(p)})` : String(it.option_choice);
+  }
+
   function money(v) {
     if (v === "" || v === null || v === undefined) return "";
     const n = Number(v);
@@ -201,7 +207,9 @@
     o.items.forEach((it) => {
       const name = truncateToWidth(itemName(it), LINE_WIDTH - 6);
       out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
-      if (it.option_choice) out += "  └ " + it.option_choice + "\n";
+      // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
+      // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
+      if (it.option_choice) out += "  └ " + optionLine(it) + "\n";
       if (it.spice_choice) out += "  └ " + it.spice_choice + "\n";
       // 부대찌개 포장 전용 조리 여부(不煮外帶/煮熟外帶) — priceCopy 여부와
       // 무관하게 항상 찍는다(주방이 조리 전에 확인해야 하는 정보라서).
@@ -479,7 +487,7 @@
       if (it.__delta === "-") line("[취소 / 取消]", sz("itemDetail", 13), 900);
       else if (it.__delta === "+") line("[추가 / 追加]", sz("itemDetail", 13), 900);
       row(itemName(it), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
-      if (it.option_choice) line("  └ " + it.option_choice, sz("itemDetail", 13), wt("itemDetail", 400));
+      if (it.option_choice) line("  └ " + optionLine(it), sz("itemDetail", 13), wt("itemDetail", 400));
       // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
       // (public/js/spice.js isSilentOnTicket).
