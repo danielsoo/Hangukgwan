@@ -8218,13 +8218,16 @@
           // 퍼센트를 직접 입력해도 같다(7% 면 화면 105, 실제 107).
           //
           // 그래서 **환산하지 않는다.** 화면에 보여준 총 할인액
-          // (breakdown.manualAmount — 사장님이 손님에게 부른 숫자)을 라운드
-          // 크기에 비례해 **정수로 쪼개서** 각 라운드에 그 금액을 그대로
-          // 보낸다. 서버는 정액을 내림만 하므로(src/discounts.js) 정수는
-          // 그대로 통과하고, 쪼갠 것들의 합은 언제나 원래 금액과 같다.
+          // (breakdown.manualAmount — 사장님이 손님에게 부른 숫자)을 그대로
+          // 정액으로 보낸다. 서버는 정액을 내림만 하므로(src/discounts.js)
+          // 정수는 그대로 통과한다.
+          //
+          // 그리고 **쪼개지 않는다** — 2026-09-16 사장님: "직접 입력은 무조건
+          // 총 금액에서 빼줘. 퍼센트인던 금액이던. 주문별로 나눠서 빼지말고."
+          // 한 라운드에 통째로 적는다(assignManualAmountToRounds).
           const manualShares =
             manualValue && selections.length > 1
-              ? splitManualAmountAcross(breakdown.manualAmount, selections, discountType)
+              ? assignManualAmountToRounds(breakdown.manualAmount, selections, discountType)
               : null;
           const results = await Promise.all(
             selections.map((x, i) =>
@@ -8434,10 +8437,36 @@
   // 직접 입력(재량 할인) 전용 — 特約95折/VIP9折와 달리 음료·주류를 빼지
   // 않는다(src/routes/orders.js의 fullEligibleTotal과 동일 규칙, 위
   // payment-discount-rules 참고).
+  /**
+   * 직접 입력(재량 할인)의 기준 금액 — **손님이 내는 돈 전부**.
+   *
+   * 서버의 fullEligibleTotal(src/discounts.js)과 **같은 식이어야 한다.**
+   *
+   * 2026-09-16 사장님: "직접 입력은 무조건 총 금액에서 빼줘. 퍼센트인던
+   * 금액이던." 이어서 "내가 말하는 기준은 직접입력이야."
+   *
+   * 아무것도 안 뺀다 — 음료도, 기타도, 이미 깎아 파는 세트도, 크기 옵션도,
+   * 추가 옵션도 전부. 화면에 뜬 「합계」가 곧 이 금액이다. 「2,910원 받을
+   * 건데 10%」라고 하면 291 이 빠져야지, 화면에 안 보이는 2,500 의 10% 가
+   * 빠지면 안 된다.
+   *
+   * 特約95折/VIP9折 의 제한(음료·기타·세트·옵션 제외)은 그 카드 프로그램
+   * 고유 규칙이라 여기로 물려받지 않는다.
+   */
   function fullEligibleClientTotal(order, indexes) {
-    // 재량 할인도 세트에는 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다
-    // (2026-09-16 사장님). 옵션 값도 discountBaseOfClient 에서 빠진다.
-    return sumDiscountableClient(order, indexes, false, null);
+    const idxs = indexes || order.items.map((_, i) => i);
+    return idxs.reduce((s, i) => {
+      const it = order.items[i];
+      // VIP 카드 판매(NT$300)만은 뺀다 — 카드값을 깎아주는 건 말이 안 되고,
+      // 기준에 섞이면 밥값에서 떼려던 퍼센트가 카드값까지 먹는다
+      // (서버의 fullEligibleTotal 과 같은 예외).
+      if (!it || isCardSaleItemClient(it)) return s;
+      return s + lineTotalOf(it);
+    }, 0);
+  }
+  /** src/vip.js isCardSaleItem 과 같은 규칙. */
+  function isCardSaleItemClient(it) {
+    return !!(it && it.category_key === "vip_card");
   }
   function computeManualDiscountAmountClient(manualValue, eligibleTotal) {
     if (!manualValue) return 0;
@@ -8761,21 +8790,32 @@
   }
 
   /**
-   * 재량 할인 한 덩어리를 라운드별 **정수** 금액으로 쪼갠다.
+   * 재량 할인 한 덩어리를 어느 라운드에 적을지 정한다.
    *
-   * 2026-09-16 사장님: "한 테이블 전체 결제할 때 예를 들어 직접 입력으로
-   * 10달러를 할인 했어. 그럼 한 테이블에서 총 3번을 주문했어 그럼 그게 3개로
-   * 나뉘어서 들어가 아니면 그냥 전체 액수에서 까여?"
+   * 2026-09-16 사장님, 두 번에 걸쳐:
+   *   "한 테이블 전체 결제할 때 예를 들어 직접 입력으로 10달러를 할인 했어.
+   *    그럼 한 테이블에서 총 3번을 주문했어 그럼 그게 3개로 나뉘어서 들어가
+   *    아니면 그냥 전체 액수에서 까여?"
+   *   → "직접 입력은 무조건 총 금액에서 빼줘. 퍼센트인던 금액이던.
+   *      주문별로 나눠서 빼지말고."
    *
-   * 나뉘어 들어간다. 서버는 라운드마다 따로 계산하므로(splitPayOrderItems 가
-   * 라운드 수만큼 호출된다), 10원을 그대로 세 번 보내면 30원이 깎인다.
+   * 깎는 금액은 **테이블 전체에서 한 번** 정한다(tableDiscountFor 의
+   * breakdown.manualAmount — 화면에 뜬 그 숫자). 여기서 하는 일은 그 한
+   * 덩어리를 **어느 주문에 적어둘지**를 정하는 것뿐이다.
    *
-   * 쪼개는 방법: 라운드 금액에 비례해 나누고, 내림하고 남은 잔돈은 소수점이
-   * 큰 라운드부터 1원씩 준다(최대잉여법). **합이 언제나 원래 금액과 같다** —
-   * 그게 이 함수가 있는 이유다. 한 라운드가 자기 금액보다 많이 깎이는 일도
-   * 없게 마지막에 한 번 더 막는다.
+   * 적어두기는 해야 한다 — 서버는 주문마다 할인을 기록하고, 결제도 라운드마다
+   * 따로 돈다(splitPayOrderItems 가 라운드 수만큼 호출된다). 10원을 그대로
+   * 세 번 보내면 30원이 깎인다.
+   *
+   * 그래서 **한 라운드에 통째로** 적는다. 가장 큰 라운드부터 담는다 — 거의
+   * 언제나 거기서 끝난다. 할인이 그 라운드 금액보다 커서 안 들어갈 때만 다음
+   * 라운드로 넘긴다(안 넘기면 서버가 잘라내서 그만큼 조용히 덜 깎인다).
+   *
+   * 예전에는 라운드 금액에 비례해 쪼갰는데, 사장님이 10원을 한 번 넣고
+   * 「직접 입력 -5 / -3 / -2」 세 줄을 보게 됐다. 손님에게 부른 숫자가 어디에도
+   * 그대로 안 적혀 있었다.
    */
-  function splitManualAmountAcross(totalAmount, selections, discountType) {
+  function assignManualAmountToRounds(totalAmount, selections, discountType) {
     const bases = selections.map((x) =>
       Math.max(
         0,
@@ -8784,15 +8824,18 @@
     );
     const sum = bases.reduce((a, b) => a + b, 0);
     const want = Math.min(Math.floor(Number(totalAmount) || 0), sum);
-    if (!(want > 0) || sum <= 0) return bases.map(() => 0);
-    const raw = bases.map((b) => (want * b) / sum);
-    const out = raw.map((v) => Math.floor(v));
-    let left = want - out.reduce((a, b) => a + b, 0);
-    const byFrac = raw
-      .map((v, i) => ({ i, frac: v - Math.floor(v), base: bases[i] }))
-      .sort((a, b) => b.frac - a.frac || b.base - a.base);
-    for (let k = 0; left > 0 && k < byFrac.length; k++, left--) out[byFrac[k].i] += 1;
-    return out.map((v, i) => Math.min(v, bases[i]));
+    const out = bases.map(() => 0);
+    if (!(want > 0) || sum <= 0) return out;
+    let left = want;
+    // 큰 라운드부터. 같으면 앞선 라운드가 먼저 — 매번 같은 답이 나와야 한다.
+    const byBase = bases.map((b, i) => ({ i, b })).sort((a, b) => b.b - a.b || a.i - b.i);
+    for (const { i, b } of byBase) {
+      if (left <= 0) break;
+      const take = Math.min(left, b);
+      out[i] = take;
+      left -= take;
+    }
+    return out;
   }
 
   /** 아직 안 받은 품목 전부 — 「미결제 합계」가 재는 것과 같은 범위. */

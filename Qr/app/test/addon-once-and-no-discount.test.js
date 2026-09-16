@@ -65,8 +65,12 @@ function check(name, cond, extra = "") {
     const items = [line];
     const d = computeDiscountAmount("vip9", null, items, [0], () => false);
     check("★ VIP9折은 밥값 600 의 10% = 60", d.vipAmount === 60, `${d.vipAmount} (800 기준이면 80)`);
+    // 직접 입력은 예외다 — 2026-09-16 저녁 사장님: "직접 입력은 무조건 총
+    // 금액에서 빼줘. 퍼센트인던 금액이던 (…) 내가 말하는 기준은 직접입력이야."
+    // 「옵션은 할인 안 함」은 特約95折/VIP9折 의 규칙으로 남는다
+    // (test/manual-discount-base.test.js).
     const m = computeDiscountAmount(null, { mode: "percent", value: 10 }, items, [0], () => false);
-    check("★ 재량 할인도 옵션은 안 깎는다", m.manualAmount === 60, `${m.manualAmount}`);
+    check("★ 직접 입력은 옵션까지 포함한 800 의 10% = 80", m.manualAmount === 80, `${m.manualAmount}`);
   }
 
   const staff = request.agent(app);
@@ -198,7 +202,14 @@ out.push("\n[이미 깎아 파는 세트에는 할인이 안 걸린다]");
     status: "paid", paymentMethod: "cash", manualDiscountMode: "percent", manualDiscountValue: 10,
   });
   sAfter = store.orders.find((x) => x.id === so.id);
-  check("★ 재량 퍼센트 할인도 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다", (sAfter.discount_amount || 0) === 0, `${sAfter.discount_amount}`);
+  // 아침에는 「vip 할인이나 퍼센트 할인 둘 다」였는데, 저녁에 직접 입력만
+  // 예외가 됐다(위 주석). 세트도 직접 입력에는 걸린다 — 손님이 내는 돈
+  // 전부가 기준이다.
+  check(
+    "★ 직접 입력은 세트에도 걸린다 — 560 의 10% = 56",
+    (sAfter.discount_amount || 0) === 56,
+    `${sAfter.discount_amount} — VIP 할인은 여전히 0 이다(바로 위 검사)`
+  );
 
   // 세트와 보통 메뉴가 같이 있으면 보통 메뉴에만 걸린다.
   const g = request.agent(app);
@@ -234,7 +245,11 @@ out.push("\n[이미 깎아 파는 세트에는 할인이 안 걸린다]");
     /discountBaseOfClient\(it\)/.test(reducer) && !/lineTotalOf\(it\)/.test(reducer),
     "서버는 안 깎는데 화면만 깎아 보여주면 부르는 숫자가 틀어진다"
   );
-  check("★ 재량 할인도 같은 리듀서를 쓴다", /sumDiscountableClient\(/.test(full), "");
+  check(
+    "★ 직접 입력 기준은 그 리듀서를 **안** 쓴다 — 아무것도 빼지 않는다",
+    !/sumDiscountableClient\(/.test(full) && /lineTotalOf\(it\)/.test(full),
+    "세트·옵션이 또 빠지면 화면에 뜬 합계의 퍼센트가 안 나온다"
+  );
   check("★ 세트를 뺀다", /isSetDiscountItem\(it\)/.test(reducer), "");
 
   console.log(out.join("\n"));

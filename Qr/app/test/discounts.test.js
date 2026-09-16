@@ -38,14 +38,21 @@ check("재량 기준은 음료를 포함한다", fullEligibleTotal(ITEMS) === 11
 // 2026-09-16 사장님: "추가 옵션으로 들어가는 모든 주문은 할인을 하면 안돼."
 // 같은 날 다시, 결제창 스크린샷과 함께: "옵션들은 할인이 적용 안되어야 해."
 // 「옵션들」은 둘 다다 — 크기 같은 하나만 고르는 옵션(option_price)도,
-// 여러 개 고르는 추가 옵션(selected_addons)도. 할인 기준은 밥값뿐이다
-// (src/discounts.js discountBaseOf, test/discount-floor-and-options.test.js).
-check("★ 할인 기준은 추가 옵션을 뺀다",
-  fullEligibleTotal([{ unit_price: 100, qty: 3, selected_addons: [{ price: 50 }] }]) === 300,
+// 여러 개 고르는 추가 옵션(selected_addons)도.
+//
+// **그 규칙은 特約95折/VIP9折 것이다.** 같은 날 저녁에 직접 입력은 예외가
+// 됐다 — "직접 입력은 무조건 총 금액에서 빼줘 (…) 내가 말하는 기준은
+// 직접입력이야"(test/manual-discount-base.test.js).
+const noDrinkAtAll = () => false;
+check("★ VIP 기준은 추가 옵션을 뺀다",
+  discountEligibleTotal([{ unit_price: 100, qty: 3, selected_addons: [{ price: 50 }] }], null, noDrinkAtAll) === 300,
   "추가 옵션까지 세면 450 이 된다");
-check("★ 크기 옵션 값도 할인 기준에서 빠진다",
-  fullEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }]) === 300,
+check("★ VIP 기준은 크기 옵션 값도 뺀다",
+  discountEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }], null, noDrinkAtAll) === 300,
   "옵션 값까지 세면 450 이 된다");
+check("★ 직접 입력 기준은 그 둘을 다 넣는다 — 손님이 내는 돈 전부",
+  fullEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }]) === 450,
+  "화면에 뜬 합계가 450 인데 300 의 10% 를 깎으면 직원이 부를 숫자를 못 맞춘다");
 // 옵션 값은 수량을 안 곱한다 — 닭갈비(첫 주문 2인분)에서 두 배가 되던 건.
 // 할인 기준에서는 빠지지만, 손님이 내는 줄 금액에는 딱 한 번 붙는다.
 check("★ 수량이 늘어도 옵션 값은 한 번",
