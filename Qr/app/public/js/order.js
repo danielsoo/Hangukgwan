@@ -231,6 +231,12 @@
   /** 옵션 이름만. 값이 붙어 있어도 이름만 돌려준다. */
   const optionNames = (str) => parseOptions(str).map((o) => o.name);
   /** 지금 고른 옵션의 값. 못 찾으면 0 — 서버도 같은 판단을 한다. */
+  /** 담긴 줄의 옵션 값. currentOptionPrice 는 지금 고르는 중인 것을 본다. */
+  function optionPriceIn(item, name) {
+    if (!item || !name) return 0;
+    const found = parseOptions(item.options).find((o) => o.name === name);
+    return found ? found.price : 0;
+  }
   function currentOptionPrice(item) {
     if (!item || !currentOption) return 0;
     const found = parseOptions(item.options).find((o) => o.name === currentOption);
@@ -381,6 +387,15 @@
    * 이 화면의 금액은 전부 이 함수를 지난다 — 통화 기호도 여기서 붙는다.
    * 숫자가 아닌 것이 오면 그대로 둔다. 지어내지 않는다.
    */
+  // 품목 한 줄의 금액 — 밥값 × 수량 + 고른 옵션 값 + 추가 옵션 값.
+  // 옵션 값은 **수량을 안 곱한다**(src/discounts.js lineTotalOf, 2026-09-16
+  // 사장님: "가격에 넣은 그 액수만큼 올라가게 해줘. 최소 주문 관련 없이").
+  function lineTotalOf(it) {
+    const optPrice = Number((it && it.option_price) || 0) || 0;
+    const addons = ((it && it.selected_addons) || []).reduce((s, a) => s + (a.price || 0), 0);
+    return (it.unit_price || 0) * (it.qty || 0) + optPrice + addons;
+  }
+
   function money(n) {
     const num = Number(n);
     const shown = Number.isFinite(num) ? num.toLocaleString("en-US") : n;
@@ -1146,10 +1161,11 @@
       // 있어서 값을 붙이면 어느 쪽 값인지 한 줄로는 못 적는다. 메뉴 관리
       // 화면이 그 조합을 막는다.
       const totalQty = Object.values(mixQty).reduce((sum, q) => sum + q, 0);
-      $("#addToCartPrice").textContent = money((currentItem.price + addonsPrice) * totalQty);
+      $("#addToCartPrice").textContent = money(currentItem.price * totalQty + addonsPrice);
     } else {
+      // 옵션 값은 수량을 안 곱한다 — 적어둔 금액이 그대로 한 번 붙는다.
       const optPrice = currentOptionPrice(currentItem);
-      $("#addToCartPrice").textContent = money((currentItem.price + optPrice + addonsPrice) * currentQty);
+      $("#addToCartPrice").textContent = money(currentItem.price * currentQty + optPrice + addonsPrice);
     }
   }
 
@@ -1237,7 +1253,15 @@
   };
 
   function cartTotal() {
-    return cart.reduce((sum, c) => sum + (c.item.price + addonsPriceFor(c.item, c.addons)) * c.qty, 0);
+    // 옵션·추가 옵션은 한 줄에 한 번(서버와 같은 규칙, src/discounts.js).
+    return cart.reduce(
+      (sum, c) =>
+        sum +
+        c.item.price * c.qty +
+        optionPriceIn(c.item, c.option) +
+        addonsPriceFor(c.item, c.addons),
+      0
+    );
   }
   function cartCount() {
     return cart.reduce((sum, c) => sum + c.qty, 0);
@@ -1318,7 +1342,9 @@
             <button class="cart-item-remove" data-act="remove">${t("remove")}</button>
           </div>
         </div>
-        <div class="cart-item-right">${money((c.item.price + addonsPriceFor(c.item, c.addons)) * c.qty)}</div>
+        <div class="cart-item-right">${money(
+          c.item.price * c.qty + optionPriceIn(c.item, c.option) + addonsPriceFor(c.item, c.addons)
+        )}</div>
       `;
       row.querySelector('[data-act="minus"]').onclick = () => {
         // No min_first_order_qty floor here either (see #qtyMinus above) —
@@ -1849,7 +1875,7 @@
         const optionSuffix = [it.option_choice, it.takeout_choice].filter(Boolean).join(", ");
         row.innerHTML = `
           <span class="history-item-name">${name}${optionSuffix ? ` (${optionSuffix})` : ""}${addonsSuffix}<span class="history-item-qty">x${it.qty}</span></span>
-          <span class="history-item-price">${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}${isPaid ? `<span class="history-paid-badge">${t("historyPaidBadge")}</span>` : ""}</span>
+          <span class="history-item-price">${money(lineTotalOf(it))}${isPaid ? `<span class="history-paid-badge">${t("historyPaidBadge")}</span>` : ""}</span>
         `;
         list.appendChild(row);
       });

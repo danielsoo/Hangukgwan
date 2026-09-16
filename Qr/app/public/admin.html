@@ -1235,6 +1235,14 @@
             <span class="nav-name" data-i18n="itemPaneSoldOut">품절</span>
             <span class="nav-sub" data-i18n="itemPaneSoldOutSub">판매 중 · 기간</span>
           </button>
+          <!-- 2026-09-16 사장님: "메뉴 수정을 할 때 옆에 탭으로 하나 만들어서
+               폰에서 어떻게 보이는지 실제 ui 코드를 랜더링해서 보여주면 좋을
+               것 같아. 실제 서비스에서 불러오면 괜히 복잡해지고 그냥 작동
+               안하는 프론트만 보여주면 될 것 같아." -->
+          <button type="button" class="item-form-nav-btn" data-item-pane="preview">
+            <span class="nav-name" data-i18n="itemPanePreview">미리보기</span>
+            <span class="nav-sub" data-i18n="itemPanePreviewSub">손님 폰 화면</span>
+          </button>
         </nav>
 
         <div class="item-form-content">
@@ -1352,6 +1360,17 @@
           <!-- 품절 기간 — 표의 배지에서도 같은 것을 고칠 수 있다(soldOutBackdrop).
                여기 있는 이유는 메뉴를 새로 만들거나 크게 손볼 때 한 화면에서
                끝내기 위해서다. -->
+          <!-- 손님 폰에서 어떻게 보이는지. **작동하지 않는 그림**이다 —
+               누를 수 있는 것이 없고, 실제 주문 화면을 불러오지도 않는다.
+               지금 폼에 적혀 있는 값만 그대로 그린다(admin.js renderItemPreview).
+               옵션 탭이 무슨 뜻인지 글로 읽어도 안 와닿을 때, 여기서 보면 안다. -->
+          <section class="item-form-pane item-form-pane-preview" data-item-pane="preview" hidden>
+            <p class="option-group-hint" data-i18n="itemPreviewHint">손님 폰에서 이렇게 보여요. 여기서는 눌러도 아무 일도 안 일어나요 — 보기만 하는 그림이에요.</p>
+            <div class="phone-preview">
+              <div class="phone-preview-screen" id="itemPreviewScreen"></div>
+            </div>
+          </section>
+
           <section class="item-form-pane" data-item-pane="soldout" hidden>
             <label><span data-i18n="itemSoldOutLabel">품절</span></label>
             <div class="soldout-modes" id="f_soldout_modes" style="margin-bottom:12px;">

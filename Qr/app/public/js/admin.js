@@ -1161,6 +1161,14 @@
       itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 값을 적으면 그만큼 가격이 올라가요 (크기 같은 것). 안 적으면 가격은 그대로예요.",
       itemMixOptionsPriceWarn: "옵션별 개별 수량을 켜면 옵션에 적은 값은 안 붙어요. 옵션마다 수량이 따로라 어느 쪽 값인지 한 줄로 적을 수가 없거든요.",
       chipOptionNamePlaceholder: "이름 (예: 소고기, M)",
+      itemPanePreview: "미리보기",
+      itemPanePreviewSub: "손님 폰 화면",
+      itemPreviewHint: "손님 폰에서 이렇게 보여요. 여기서는 눌러도 아무 일도 안 일어나요 — 보기만 하는 그림이에요.",
+      itemPreviewNoName: "(이름 없음)",
+      itemPreviewNoPhoto: "사진 없음",
+      itemPreviewQty: "수량",
+      itemPreviewMinQty: "첫 주문은 {n}인분부터예요",
+      itemPreviewAddBtn: "담기",
       itemOptionsMultiTitle: "여러 개 고를 수 있는 옵션",
       itemOptionsMultiHint: "손님이 원하는 만큼 골라요. 고른 만큼 가격이 올라가요. 값이 없으면 0을 넣으세요.",
       itemPaneBasic: "기본",
@@ -1924,6 +1932,14 @@
       itemOptionsSingleHint: "顧客只會從中選一個。填了金額就會加價（例如尺寸），不填則價格不變。",
       itemMixOptionsPriceWarn: "開啟「各選項獨立數量」後，選項上填的金額不會生效 — 每個選項有各自的數量，無法只用一行標價。",
       chipOptionNamePlaceholder: "名稱（例：牛肉、M）",
+      itemPanePreview: "預覽",
+      itemPanePreviewSub: "顧客手機畫面",
+      itemPreviewHint: "顧客手機上會像這樣。這裡按了不會有任何反應 — 只是示意圖。",
+      itemPreviewNoName: "（沒有名稱）",
+      itemPreviewNoPhoto: "沒有照片",
+      itemPreviewQty: "數量",
+      itemPreviewMinQty: "第一次點餐從 {n} 份起",
+      itemPreviewAddBtn: "加入",
       itemOptionsMultiTitle: "可以複選的選項",
       itemOptionsMultiHint: "顧客可以選任意多個，選越多價格越高。免費的話請填 0。",
       itemPaneBasic: "基本",
@@ -5993,7 +6009,7 @@
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
             <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
-            <span>NT$${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}</span>
+            <span>NT$${money(lineTotalOf(it))}</span>
           </div>`
       )
       .join("");
@@ -6106,8 +6122,9 @@
       $("#orderEditPickerQty").textContent = String(qty);
       // 고른 옵션의 값(크기 등)도 더한다 — 서버가 다시 매기는 값과 같아야
       // 직원이 손님에게 부르는 숫자가 맞는다(src/routes/orders.js optionPriceFor).
+      // 옵션 값은 수량을 안 곱한다 — 서버와 같은 규칙(src/discounts.js).
       const optPrice = optionPriceOf(mi.options, option);
-      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${money((mi.price + optPrice + addonsPrice) * qty)}`;
+      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${money(mi.price * qty + optPrice + addonsPrice)}`;
     };
 
     // 값이 붙는 옵션은 칩에 「+NT$50」 을 같이 적고, 고르면 위 금액이 바뀐다.
@@ -6204,8 +6221,8 @@
     // this modal doesn't offer a UI to change addons (that's chosen once at
     // order time on the customer page), it just needs to keep the price
     // consistent with what the server will recompute on save.
-    const itemTotal = (it) =>
-      (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
+    // 위 lineTotalOf 와 같은 규칙을 쓴다 — 두 군데서 따로 더하면 갈린다.
+    const itemTotal = (it) => lineTotalOf(it);
     const grandTotal = () => draftItems.reduce((s, it) => s + itemTotal(it), 0);
 
     function renderDraft() {
@@ -6658,7 +6675,93 @@
   function showItemPane(name) {
     $$(".item-form-nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.itemPane === name));
     $$(".item-form-pane").forEach((p) => (p.hidden = p.dataset.itemPane !== name));
+    // 미리보기는 열 때마다 지금 폼 값으로 새로 그린다 — 옵션을 고치고
+    // 넘어왔는데 옛 그림이 남아 있으면 그게 더 헷갈린다.
+    if (name === "preview") renderItemPreview();
   }
+
+  /**
+   * 손님 폰에서 이 메뉴가 어떻게 보이는지 — **작동하지 않는 그림.**
+   *
+   * 2026-09-16 사장님: "옵션 탭이 지금 너무 혼잡해 읽어도 이해가 안되는
+   * 부분이 꽤 있어서 (…) 폰에서 어떻게 보이는지 실제 ui 코드를 랜더링해서
+   * 보여주면 좋을 것 같아. 실제 서비스에서 불러오면 괜히 복잡해지고 그냥
+   * 작동 안하는 프론트만 보여주면 될 것 같아."
+   *
+   * 그래서 손님 화면을 불러오지 않는다(iframe 도, fetch 도 없다). 지금 폼에
+   * 적혀 있는 값만 읽어 같은 모양으로 그린다. 누를 수 있는 것은 없다.
+   *
+   * 글로 「하나만 고르는 옵션」「여러 개 고를 수 있는 옵션」이라고 적어둬도
+   * 무슨 차이인지 안 와닿는다. 라디오 한 줄과 체크박스 한 줄을 나란히 보면
+   * 바로 안다 — 그게 이 탭이 하는 일의 전부다.
+   */
+  function renderItemPreview() {
+    const box = $("#itemPreviewScreen");
+    if (!box) return;
+    const val = (id) => (($(id) && $(id).value) || "").trim();
+    const num = (id) => Number(val(id)) || 0;
+    const name = val("#f_name_zh") || val("#f_name_ko") || T("itemPreviewNoName");
+    const price = num("#f_price");
+    const original = num("#f_original_price");
+    const minQty = num("#f_min_first_order_qty");
+    const photo = $("#f_photo_preview") && !$("#f_photo_preview").hidden ? $("#f_photo_preview").src : "";
+
+    // 한 줄짜리 고르기 묶음. picked 는 처음 골라져 있는 것(손님 화면도 첫
+    // 번째가 골라진 채로 열린다).
+    const radioRow = (title, raw, priced) => {
+      const opts = priced ? parseOptions(raw) : optionNames(raw).map((n) => ({ name: n, price: 0 }));
+      if (!opts.length) return "";
+      return `<div class="pv-group"><div class="pv-group-title">${escapeHtml(title)}</div><div class="pv-chips">${opts
+        .map(
+          (o, i) =>
+            `<span class="pv-chip${i === 0 ? " picked" : ""}">${escapeHtml(o.name)}${
+              o.price ? ` +NT$${money(o.price)}` : ""
+            }</span>`
+        )
+        .join("")}</div></div>`;
+    };
+    const checkRow = (title, raw) => {
+      const opts = parseAddons(raw);
+      if (!opts.length) return "";
+      return `<div class="pv-group"><div class="pv-group-title">${escapeHtml(title)}</div>${opts
+        .map(
+          (o) =>
+            `<label class="pv-check"><span class="pv-box"></span><span>${escapeHtml(o.name)}</span><span class="pv-check-price">${
+              o.price ? `+NT$${money(o.price)}` : T("chipFreeAddon")
+            }</span></label>`
+        )
+        .join("")}</div>`;
+    };
+
+    const qty = minQty > 1 ? minQty : 1;
+    // 담기 버튼 금액은 실제 규칙 그대로 센다 — 밥값만 수량을 곱하고 옵션
+    // 값은 한 번(src/discounts.js lineTotalOf). 처음 골라져 있는 옵션 기준.
+    const firstOpt = parseOptions(val("#f_options"))[0];
+    const shownTotal = price * qty + (firstOpt ? firstOpt.price : 0);
+
+    box.innerHTML = `
+      <div class="pv-photo${photo ? "" : " pv-photo-empty"}"${photo ? ` style="background-image:url('${photo}')"` : ""}>${
+        photo ? "" : `<span>${T("itemPreviewNoPhoto")}</span>`
+      }</div>
+      <div class="pv-body">
+        <div class="pv-name">${escapeHtml(name)}</div>
+        <div class="pv-price">${
+          original > price ? `<s>NT$${money(original)}</s> ` : ""
+        }NT$${money(price)}</div>
+        ${val("#f_desc_zh") || val("#f_desc_ko") ? `<div class="pv-desc">${escapeHtml(val("#f_desc_zh") || val("#f_desc_ko"))}</div>` : ""}
+        ${radioRow(T("itemOptionsLabel"), val("#f_options"), true)}
+        ${radioRow(T("itemSpiceOptionsLabel"), val("#f_spice_options"), false)}
+        ${radioRow(T("itemTakeoutOptionsLabel"), val("#f_takeout_options"), false)}
+        ${checkRow(T("itemAddonsLabel"), val("#f_addons"))}
+        <div class="pv-group"><div class="pv-group-title">${T("itemPreviewQty")}</div>
+          <div class="pv-qty"><span>−</span><b>${qty}</b><span>＋</span></div>
+          ${minQty > 1 ? `<div class="pv-note">${T("itemPreviewMinQty").replace("{n}", minQty)}</div>` : ""}
+        </div>
+      </div>
+      <div class="pv-cta">${T("itemPreviewAddBtn")} NT$${money(shownTotal)}</div>
+    `;
+  }
+
   $$(".item-form-nav-btn").forEach((btn) => {
     btn.onclick = () => showItemPane(btn.dataset.itemPane);
   });
@@ -7928,8 +8031,13 @@
   // 공통 로직을 여기로 뽑아둔다 — 카드 테두리를 씌우는 방식만 둘이 다르다.
   // 한 품목 라인의 금액(단가+애드온 합)×수량 — 부분 결제(아래) 계산과
   // itemLines 표시에서 공통으로 쓰던 계산식을 하나로 모음.
+  // 품목 한 줄의 금액 — 밥값 × 수량 + 고른 옵션 값 + 추가 옵션 값.
+  // 옵션 값은 **수량을 안 곱한다**(src/discounts.js lineTotalOf, 2026-09-16
+  // 사장님: "가격에 넣은 그 액수만큼 올라가게 해줘. 최소 주문 관련 없이").
   function lineTotalOf(it) {
-    return (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
+    const optPrice = Number((it && it.option_price) || 0) || 0;
+    const addons = ((it && it.selected_addons) || []).reduce((s, a) => s + (a.price || 0), 0);
+    return (it.unit_price || 0) * (it.qty || 0) + optPrice + addons;
   }
   // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
   // (체크한 품목 기준) — split-pay는 이제 체크한 품목을 다른 주문으로

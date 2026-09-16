@@ -34,8 +34,17 @@ const calc = (type, manual, items = ITEMS, indexes) => computeDiscountAmount(typ
 out.push("[기준 금액]");
 check("VIP 기준은 음료를 뺀다", discountEligibleTotal(ITEMS, null, isDrink) === 1000);
 check("재량 기준은 음료를 포함한다", fullEligibleTotal(ITEMS) === 1100);
-check("추가옵션·수량까지 더한다",
-  fullEligibleTotal([{ unit_price: 100, qty: 3, selected_addons: [{ price: 50 }] }]) === 450);
+// 2026-09-16 사장님: "추가 옵션으로 들어가는 모든 주문은 할인을 하면 안돼."
+// 할인 기준에서 추가 옵션은 빠진다. 크기 같은 「하나만 고르는 옵션」의 값은
+// 이 음식의 값 자체라 들어간다(src/discounts.js discountBaseOf).
+check("★ 할인 기준은 추가 옵션을 뺀다",
+  fullEligibleTotal([{ unit_price: 100, qty: 3, selected_addons: [{ price: 50 }] }]) === 300,
+  "추가 옵션까지 세면 450 이 된다");
+check("★ 크기 옵션 값은 할인 기준에 들어간다",
+  fullEligibleTotal([{ unit_price: 100, qty: 3, option_price: 150 }]) === 450);
+// 옵션 값은 수량을 안 곱한다 — 닭갈비(첫 주문 2인분)에서 두 배가 되던 건.
+check("★ 수량이 늘어도 옵션 값은 한 번",
+  fullEligibleTotal([{ unit_price: 100, qty: 5, option_price: 150 }]) === 650);
 
 out.push("");
 out.push("[하나만 걸었을 때 — 2026-09-10 이전과 결과가 같아야 한다]");

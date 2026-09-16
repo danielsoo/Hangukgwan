@@ -2292,3 +2292,54 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .cat-discount-toggle input { width: 15px; height: 15px; cursor: pointer; }
 .cat-discount-toggle input:disabled { cursor: default; }
+
+/* ── 메뉴 수정의 「미리보기」 탭 ─────────────────────────────────────────
+   2026-09-16 사장님: "옵션 탭이 지금 너무 혼잡해 읽어도 이해가 안되는 부분이
+   꽤 있어서 (…) 폰에서 어떻게 보이는지 실제 ui 코드를 랜더링해서 보여주면
+   좋을 것 같아."
+
+   손님 화면을 불러오지 않는다. 폼에 적힌 값으로 같은 모양을 그릴 뿐이고,
+   누를 수 있는 것은 없다(admin.js renderItemPreview). 「하나만 고르는 것」과
+   「여러 개 고르는 것」의 차이는 글보다 그림이 빠르다. */
+.item-form-pane-preview { display: flex; flex-direction: column; gap: 12px; }
+.phone-preview {
+  width: 320px;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 10px solid #1f2937;
+  border-radius: 28px;
+  background: #1f2937;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.phone-preview-screen {
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  /* 손님 폰에서 한 화면에 들어오는 만큼만 보여준다. 넘치면 굴린다. */
+  max-height: 60vh;
+  overflow-y: auto;
+  font-size: 14px;
+  color: var(--ink);
+  /* 보기만 하는 그림 — 눌리지 않는다. */
+  pointer-events: none;
+  user-select: none;
+}
+.pv-photo { height: 140px; background: #f3f0ea center/cover no-repeat; }
+.pv-photo-empty { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; }
+.pv-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.pv-name { font-weight: 800; font-size: 17px; }
+.pv-price { font-weight: 700; color: var(--red); }
+.pv-price s { color: var(--muted); font-weight: 500; margin-right: 4px; }
+.pv-desc { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.pv-group { display: flex; flex-direction: column; gap: 7px; }
+.pv-group-title { font-size: 12px; font-weight: 700; color: var(--muted); }
+.pv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pv-chip { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+.pv-chip.picked { background: var(--navy); border-color: var(--navy); color: #fff; font-weight: 700; }
+.pv-check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.pv-box { width: 16px; height: 16px; border: 1.5px solid var(--line); border-radius: 4px; flex: none; }
+.pv-check-price { margin-left: auto; color: var(--muted); }
+.pv-qty { display: flex; align-items: center; gap: 14px; font-size: 15px; }
+.pv-qty span { width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+.pv-note { font-size: 12px; color: var(--muted); }
+.pv-cta { background: var(--red); color: #fff; text-align: center; font-weight: 800; padding: 14px; font-size: 15px; }

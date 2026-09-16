@@ -158,8 +158,13 @@
   // 한 품목 라인의 금액(단가+애드온 합)×수량 — admin.js의 lineTotalOf()와
   // 동일한 계산식(이 파일은 admin.js와 별개로 로드되므로 그쪽 함수를 그냥
   // 가져다 쓸 수 없어 여기 따로 둔다).
+  // 품목 한 줄의 금액 — 밥값 × 수량 + 고른 옵션 값 + 추가 옵션 값.
+  // 옵션 값은 **수량을 안 곱한다**(src/discounts.js lineTotalOf, 2026-09-16
+  // 사장님: "가격에 넣은 그 액수만큼 올라가게 해줘. 최소 주문 관련 없이").
   function lineTotalOf(it) {
-    return (it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty;
+    const optPrice = Number((it && it.option_price) || 0) || 0;
+    const addons = ((it && it.selected_addons) || []).reduce((s, a) => s + (a.price || 0), 0);
+    return (it.unit_price || 0) * (it.qty || 0) + optPrice + addons;
   }
 
   // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른

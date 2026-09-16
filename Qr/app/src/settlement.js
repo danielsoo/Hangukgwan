@@ -157,6 +157,8 @@ function halfOf(order, opts) {
  * 취소/미결제 금액에는 쓰지 않는다 — 그건 「얼마짜리가 취소됐나」라서 할인을
  * 뺄 근거가 없다(아직 아무도 할인을 걸지 않았다).
  */
+const { lineTotalOf } = require("./discounts");
+
 function netTotalOf(o) {
   const total = Number((o && o.total) || 0);
   const off = Number((o && o.discount_amount) || 0);
@@ -243,8 +245,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   //
   // 그리고 「아직 못 받은 돈」도 같이 적는다. 손님이 나머지를 안 내고 가면
   // 그 자리가 사장님 눈에 걸려야 한다.
-  const lineAmount = (it) =>
-    ((it.unit_price || 0) + (it.selected_addons || []).reduce((a, x) => a + (x.price || 0), 0)) * (it.qty || 0);
+  // 줄 금액 계산은 한 곳에만 둔다(src/discounts.js lineTotalOf). 옵션 값은
+  // 수량을 안 곱한다 — 2026-09-16 사장님 규칙.
+  const lineAmount = (it) => lineTotalOf(it);
   const partialPaidOrders = rangeOrders
     .filter((o) => OPEN_STATUSES.includes(o.status) && (o.items || []).some((it) => it.paid))
     .map((o) => {
@@ -295,7 +298,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     const byMethod = new Map();
     for (const it of o.items || []) {
       const method = it.payment_method || o.payment_method || "unspecified";
-      byMethod.set(method, (byMethod.get(method) || 0) + (it.unit_price || 0) * (it.qty || 0));
+      // 줄 금액은 한 곳에서만 센다(위 lineAmount) — 옵션·추가 옵션이 빠지면
+      // 결제수단별 비중이 실제와 어긋난다.
+      byMethod.set(method, (byMethod.get(method) || 0) + lineAmount(it));
     }
     const gross = [...byMethod.values()].reduce((a, b) => a + b, 0);
     // 실제 받은 금액. 할인이 없으면 gross 와 같다.

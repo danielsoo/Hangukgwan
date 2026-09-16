@@ -16,10 +16,44 @@ const { isCardSaleItem } = require("./vip");
 
 const VIP_DISCOUNT_RATES = { te95: 0.95, vip9: 0.9 };
 
-// 품목 한 줄의 금액 — 추가 옵션(addons)까지 더한 뒤 수량을 곱한다.
+/**
+ * 품목 한 줄의 금액.
+ *
+ *     밥값 × 수량  +  고른 옵션 값  +  추가 옵션 값
+ *
+ * 옵션 값은 **수량을 안 곱한다.**
+ *
+ * 2026-09-16 사장님: "닭갈비 같은 경우는 기본 주문이 2인분이여서 그런지 저
+ * 옵션이 1개를 올렸는데 2개 올라간 가격으로 측정이 돼." 그리고 "가격에 넣은
+ * 그 액수만큼 올라가게 해줘. 최소 주문 관련 없이."
+ *
+ * 닭갈비는 첫 주문이 2인분이라 수량이 2 에서 시작한다. 예전에는 추가 옵션
+ * 값에도 그 2 가 곱해져서, 치즈 하나를 얹었는데 두 개 값이 붙었다. 손님이
+ * 체크한 것은 하나다. **적어둔 금액이 그대로 한 번 붙는 것**이 사장님이
+ * 정한 규칙이다.
+ */
+function optionPriceOfItem(it) {
+  const p = Number((it && it.option_price) || 0);
+  return Number.isFinite(p) ? p : 0;
+}
+function addonsTotalOf(it) {
+  return ((it && it.selected_addons) || []).reduce((a, x) => a + (x.price || 0), 0);
+}
 function lineTotalOf(it) {
-  const addonsTotal = (it.selected_addons || []).reduce((a, x) => a + x.price, 0);
-  return (it.unit_price + addonsTotal) * it.qty;
+  return (it.unit_price || 0) * (it.qty || 0) + optionPriceOfItem(it) + addonsTotalOf(it);
+}
+
+/**
+ * 할인이 걸리는 금액 — **추가 옵션은 뺀다.**
+ *
+ * 2026-09-16 사장님: "추가 옵션으로 들어가는 모든 주문은 할인을 하면 안돼."
+ *
+ * 크기 같은 「하나만 고르는 옵션」의 값은 뺀 것에 들어간다 — 그건 이 음식의
+ * 값 자체지 따로 시킨 것이 아니다. 추가 옵션(사리면·볶음밥 추가)은 얹어
+ * 시킨 것이라 뺀다.
+ */
+function discountBaseOf(it) {
+  return (it.unit_price || 0) * (it.qty || 0) + optionPriceOfItem(it);
 }
 
 // indexes를 주면 그 인덱스들만(부분 결제로 이번에 실제 결제되는 품목만),
@@ -36,7 +70,8 @@ function sumItems(items, indexes, exclude) {
   return idxs.reduce((s, i) => {
     const it = items[i];
     if (!it || isCardSaleItem(it) || (exclude && exclude(it))) return s;
-    return s + lineTotalOf(it);
+    // 할인 기준이므로 추가 옵션은 빼고 더한다(위 discountBaseOf).
+    return s + discountBaseOf(it);
   }, 0);
 }
 
@@ -160,6 +195,8 @@ function guessDiscountExcluded(cat) {
 
 module.exports = {
   DISCOUNT_EXCLUDED_CATEGORY_KEYS,
+  addonsTotalOf,
+  discountBaseOf,
   DISCOUNT_EXCLUDED_NAME_HINTS,
   isDiscountExcludedCategory,
   guessDiscountExcluded,

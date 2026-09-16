@@ -98,9 +98,11 @@ function check(name, cond, extra = "") {
   check("S 는 그대로", o.total === 400, `${o.total} (200 x2)`);
   check("붙은 값은 없다고 적는다", o.items[0].option_price == null, `${o.items[0].option_price}`);
   o = await order(6, sized, "L");
-  check("★ L 은 한 개당 150 이 붙는다", o.total === 700, `${o.total} (350 x2 여야 한다)`);
+  // 2026-09-16 사장님: "가격에 넣은 그 액수만큼 올라가게 해줘. 최소 주문
+  // 관련 없이." 200 x2 + 150 = 550 이다. 150 x2 가 아니다.
+  check("★ 적어둔 금액이 그대로 한 번 붙는다", o.total === 550, `${o.total} (200 x2 + 150 이어야 한다)`);
   check("★ 붙은 값을 따로 적어둔다", o.items[0].option_price === 150, `${o.items[0].option_price}`);
-  check("★ 한 개 값에 이미 들어 있다 — 줄 금액·결산·할인이 손댈 곳이 없다", o.items[0].unit_price === 350, `${o.items[0].unit_price}`);
+  check("★ 밥값은 밥값대로 둔다", o.items[0].unit_price === 200, `${o.items[0].unit_price}`);
   check("고른 이름도 남는다", o.items[0].option_choice === "L", `${o.items[0].option_choice}`);
 
   out.push("\n[옛 모양 메뉴는 그대로다]");
@@ -119,7 +121,7 @@ function check(name, cond, extra = "") {
     items: [{ itemId: sized, qty: 1, orderType: "dine_in", addons: [], option: "L", option_price: 0, unit_price: 1 }],
   });
   o = store.orders.find((x) => x.id === r.body.id);
-  check("★ 서버가 다시 매긴다", o.total === 350 && o.items[0].unit_price === 350, `${o.total} / ${o.items[0].unit_price}`);
+  check("★ 서버가 다시 매긴다", o.total === 350 && o.items[0].option_price === 150, `${o.total} / ${o.items[0].option_price}`);
 
   r = await guest.post("/api/orders").send({
     tableNumber: "8",
@@ -129,11 +131,11 @@ function check(name, cond, extra = "") {
   check("★ 없는 옵션을 보내도 주문은 들어간다 — 값만 0", o.total === 200, `${o.total}`);
 
   out.push("\n[할인도 옵션 값을 포함한 금액에 걸린다]");
-  const paid = await order(9, sized, "L"); // 700
+  const paid = await order(9, sized, "L"); // 200x2 + 150 = 550
   r = await staff.patch(`/api/orders/${paid.id}`).send({ status: "paid", paymentMethod: "cash", vipDiscountType: "vip9" });
   check("결제된다", r.status === 200, `${r.status}`);
   const after = store.orders.find((x) => x.id === paid.id);
-  check("★ 700 의 10% 가 깎인다 — 400 기준이 아니다", (after.discount_amount || 0) === 70, `${after.discount_amount}`);
+  check("★ 크기 값까지 넣은 550 의 10% 가 깎인다", (after.discount_amount || 0) === 55, `${after.discount_amount}`);
 
   out.push("\n[세 화면이 같은 규칙을 쓴다]");
   const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
@@ -167,6 +169,40 @@ function check(name, cond, extra = "") {
   );
   check("★ 개별 수량과 같이 쓰면 말해준다", /paintMixOptionsWarn/.test(admin) && /mixOptionsPriceWarn/.test(html), "값을 조용히 무시하는 것이 제일 나쁘다");
   for (const k of ["itemOptionsSingleHint", "itemMixOptionsPriceWarn", "chipOptionNamePlaceholder"]) {
+    check(`${k} 가 한국어/중국어 둘 다 있다`, admin.split(`${k}:`).length - 1 >= 2, "");
+  }
+
+  out.push("\n[미리보기 탭 — 손님 폰에서 어떻게 보이나]");
+  //
+  // 2026-09-16 사장님: "옵션 탭이 지금 너무 혼잡해 읽어도 이해가 안되는
+  // 부분이 꽤 있어서 (…) 폰에서 어떻게 보이는지 실제 ui 코드를 랜더링해서
+  // 보여주면 좋을 것 같아. 실제 서비스에서 불러오면 괜히 복잡해지고 그냥
+  // 작동 안하는 프론트만 보여주면 될 것 같아."
+  const css = fs.readFileSync(path.join(__dirname, "../public/css/admin.css"), "utf8");
+  check("탭이 있다", /data-item-pane="preview"/.test(html), "");
+  check("그릴 자리가 있다", /id="itemPreviewScreen"/.test(html), "");
+  check("★ 열 때마다 지금 폼 값으로 다시 그린다", /if \(name === "preview"\) renderItemPreview\(\)/.test(admin), "옛 그림이 남아 있으면 더 헷갈린다");
+  check(
+    "★ 손님 화면을 불러오지 않는다 — 작동 안 하는 그림이다",
+    !/itemPreviewScreen[\s\S]{0,600}?<iframe/.test(admin) && !/renderItemPreview[\s\S]{0,1200}?fetch\(/.test(admin),
+    "실제 서비스를 불러오면 괜히 복잡해진다"
+  );
+  check(
+    "★ 눌리지 않는다",
+    /\.phone-preview-screen\s*\{[^}]*pointer-events:\s*none/.test(css),
+    "누를 수 있으면 진짜 화면인 줄 안다"
+  );
+  check(
+    "★ 하나만 고르는 것은 알약, 여러 개는 체크박스로 그린다",
+    /pv-chip/.test(admin) && /pv-check/.test(admin) && /\.pv-box/.test(css),
+    "둘의 차이는 글보다 그림이 빠르다 — 그게 이 탭이 하는 일이다"
+  );
+  check(
+    "★ 담기 버튼 금액도 실제 규칙대로 센다",
+    /price \* qty \+ \(firstOpt \? firstOpt\.price : 0\)/.test(admin),
+    "미리보기가 다른 숫자를 보여주면 아무 소용이 없다"
+  );
+  for (const k of ["itemPanePreview", "itemPreviewHint", "itemPreviewAddBtn"]) {
     check(`${k} 가 한국어/중국어 둘 다 있다`, admin.split(`${k}:`).length - 1 >= 2, "");
   }
 

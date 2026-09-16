@@ -390,10 +390,12 @@ router.post("/", async (req, res) => {
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
-    const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
-    // 고른 옵션의 값(크기 등)은 unit_price 에 더해 둔다 — 위 optionPriceFor 주석.
-    const optionPricePerUnit = optionPriceFor(mi, it.option);
-    total += (mi.price + optionPricePerUnit + addonsPricePerUnit) * qty;
+    // 추가 옵션도 한 줄에 한 번이다 — 손님이 체크한 것은 하나다.
+    const addonsPriceOnce = selectedAddons.reduce((s, a) => s + a.price, 0);
+    // 옵션 값은 **수량을 안 곱한다** — 적어둔 금액이 그대로 한 번 붙는다
+    // (src/discounts.js lineTotalOf, 2026-09-16 사장님).
+    const optionPriceOnce = optionPriceFor(mi, it.option);
+    total += mi.price * qty + optionPriceOnce + addonsPriceOnce;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -401,11 +403,10 @@ router.post("/", async (req, res) => {
       name_ko: mi.name_ko,
       name_en: mi.name_en,
       qty,
-      unit_price: mi.price + optionPricePerUnit,
+      unit_price: mi.price,
       option_choice: it.option || null,
-      // 옵션 때문에 얼마가 붙었는지 따로 적어둔다. unit_price 만 보면 메뉴
-      // 값이 오른 것인지 옵션이 붙은 것인지 나중에 가릴 수 없다.
-      option_price: optionPricePerUnit || null,
+      // 옵션 때문에 붙는 금액. 수량과 무관하게 한 줄에 한 번이다.
+      option_price: optionPriceOnce || null,
       spice_choice: it.spice || null,
       // 부대찌개(部隊鍋) 포장 전용 옵션(不煮外帶/煮熟外帶 — 조리 여부) — 매장
       // 식사에는 없고 order.js의 #itemTakeoutOptions에서만 선택된다. 주방이
@@ -1107,9 +1108,10 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     if (!mi) continue;
     const qty = Math.max(1, Math.min(20, parseInt(it.qty, 10) || 1));
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
-    const addonsPricePerUnit = selectedAddons.reduce((s, a) => s + a.price, 0);
-    const optionPricePerUnit = optionPriceFor(mi, it.option);
-    total += (mi.price + optionPricePerUnit + addonsPricePerUnit) * qty;
+    // 추가 옵션도 한 줄에 한 번이다 — 손님이 체크한 것은 하나다.
+    const addonsPriceOnce = selectedAddons.reduce((s, a) => s + a.price, 0);
+    const optionPriceOnce = optionPriceFor(mi, it.option);
+    total += mi.price * qty + optionPriceOnce + addonsPriceOnce;
     validated.push({
       item_id: mi.id,
       code: mi.code || null,
@@ -1117,9 +1119,9 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       name_ko: mi.name_ko,
       name_en: mi.name_en,
       qty,
-      unit_price: mi.price + optionPricePerUnit,
+      unit_price: mi.price,
       option_choice: it.option || null,
-      option_price: optionPricePerUnit || null,
+      option_price: optionPriceOnce || null,
       spice_choice: it.spice || null,
       takeout_choice: it.takeoutOption || null,
       selected_addons: selectedAddons,
