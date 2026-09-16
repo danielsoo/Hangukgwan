@@ -23,6 +23,7 @@ const { applyOrderHours20260910 } = require("./src/migrations/2026-09-10-order-h
 // 배포한 것이 화면에 안 닿던 문제 — 자세한 배경은 그 파일 맨 위 주석.
 const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
+const { applyDiscountExcludedFlag20260916 } = require("./src/migrations/2026-09-16-discount-excluded-flag");
 const {
   applyRemoveTable020260910,
   MIGRATION_FLAG: REMOVE_TABLE_0_FLAG,
@@ -321,6 +322,7 @@ async function storeRefreshAndFlush(req, res, next) {
       // 구이류와 기타 사이에 "전통한식요리 經典韓式料理" — 71~83번이 그리로
       // 옮겨가고 빈 기타는 없어진다.
       await applyTraditionalCategory20260910(store, { save, nextId });
+      await applyDiscountExcludedFlag20260916(store, { save });
       // 포장 손님이 들어오던 「外帶」 0번 테이블을 없앤다. 지워도 안전할
       // 때만 지우고, 아니면 다음 부팅에 다시 본다. 아직 이관하지 않은 아주
       // 오래된 설치에서만 미결제 주문 확인용 목록을 여기서 한 번 보충한다.

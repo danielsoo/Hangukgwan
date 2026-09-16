@@ -120,8 +120,49 @@ function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes, 
 // 적으면 화면이 보여주는 금액과 실제로 받는 금액이 언젠가 갈린다.
 const DISCOUNT_EXCLUDED_CATEGORY_KEYS = ["drink", "other"];
 
+// 이름으로도 알아본다.
+//
+// 2026-09-16 사장님이 다시: "그리고 할인은 기타, 음료 는 모두 적용 안돼."
+// 키 목록만으로는 못 잡는 경우가 있다 — 분류의 key 는 만들 때 한 번
+// 정해지고 화면에 안 보인다. 「기타」라고 보이는 분류의 key 가 other 가
+// 아닐 수 있고, 사장님은 그것을 알 방법이 없다. 보이는 이름으로도 같이
+// 잡는다.
+//
+// 이름 맞추기는 어디까지나 **처음 값을 정해주는 용도**다. 최종 판단은
+// 분류 자신의 discount_excluded 표이고(아래), 그 표는 메뉴 관리에서
+// 사장님이 직접 켜고 끈다. 이름으로 잘못 잡혔으면 그 자리에서 풀 수 있다.
+const DISCOUNT_EXCLUDED_NAME_HINTS = ["기타", "其他", "음료", "飲料", "饮料", "주류", "酒類", "酒类"];
+
+/**
+ * 이 분류는 할인에서 빠지는가.
+ *
+ * 분류에 적힌 표(discount_excluded)가 있으면 그것만 본다 — 사장님이
+ * 메뉴 관리에서 정한 값이다. 표가 아예 없는 옛 데이터일 때만 키/이름으로
+ * 짐작한다. 마이그레이션이 한 번 돌고 나면 전부 표를 갖는다.
+ */
+function isDiscountExcludedCategory(cat) {
+  if (!cat) return false;
+  if (cat.discount_excluded !== undefined && cat.discount_excluded !== null) {
+    return !!cat.discount_excluded;
+  }
+  return guessDiscountExcluded(cat);
+}
+
+/** 표가 없는 분류의 처음 값. 키가 맞거나 이름이 맞으면 제외로 본다. */
+function guessDiscountExcluded(cat) {
+  if (!cat) return false;
+  if (DISCOUNT_EXCLUDED_CATEGORY_KEYS.includes(cat.key)) return true;
+  const names = [cat.name_ko, cat.name_zh, cat.name_en]
+    .map((v) => String(v == null ? "" : v).trim())
+    .filter(Boolean);
+  return names.some((n) => DISCOUNT_EXCLUDED_NAME_HINTS.includes(n));
+}
+
 module.exports = {
   DISCOUNT_EXCLUDED_CATEGORY_KEYS,
+  DISCOUNT_EXCLUDED_NAME_HINTS,
+  isDiscountExcludedCategory,
+  guessDiscountExcluded,
   VIP_DISCOUNT_RATES,
   lineTotalOf,
   discountEligibleTotal,

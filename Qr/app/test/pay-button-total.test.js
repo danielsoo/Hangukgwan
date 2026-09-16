@@ -69,11 +69,15 @@ function makeClient(vipType, manualValue, drinkIds) {
   )(
     vipType,
     manualValue,
-    { vip_discount_excluded_categories: ["drink", "other"] },
+    // 2026-09-16: 화면은 이제 키 목록을 받아 다시 판단하지 않는다. 서버가
+    // 분류마다 discount_excluded 로 답을 내서 보낸다
+    // (src/routes/menu.js categoriesWithItems). 예시도 그 모양이어야 한다 —
+    // 안 그러면 이 시험은 실제로 도는 코드와 다른 것을 재게 된다.
+    {},
     [
-      { key: "drink", items: drinkIds.map((id) => ({ id })) },
-      { key: "other", items: [] },
-      { key: "rice", items: [] },
+      { key: "drink", discount_excluded: true, items: drinkIds.map((id) => ({ id })) },
+      { key: "other", discount_excluded: true, items: [] },
+      { key: "rice", discount_excluded: false, items: [] },
     ],
     (it) => ((it.unit_price || 0) + (it.selected_addons || []).reduce((s, a) => s + (a.price || 0), 0)) * (it.qty || 0)
   );

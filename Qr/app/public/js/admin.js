@@ -856,6 +856,8 @@
       menuTrashMatch: "휴지통에 「{name}」(코드 {code})이 있어요. 새 메뉴로 넣으면 번호가 달라져서 결산에서 두 줄로 갈라집니다. 어떻게 할까요?",
       menuTrashRestoreIt: "되살리기",
       menuTrashMakeNew: "새 메뉴로 넣기",
+      catDiscountExcluded: "할인 제외",
+      catDiscountExcludedTitle: "체크하면 이 분류의 메뉴에는 特約95折/VIP9折 할인이 걸리지 않아요.",
       // 결산 탭의 LINE 한 줄. 결산이 됐다고 문자가 간 것은 아니다.
       lineShiftAm: "오전",
       lineShiftDay: "하루",
@@ -1616,6 +1618,8 @@
       menuTrashMatch: "垃圾桶裡有「{name}」（代碼 {code}）。建立新品項會取得新編號，結算會分成兩列。要怎麼處理？",
       menuTrashRestoreIt: "還原",
       menuTrashMakeNew: "建立新品項",
+      catDiscountExcluded: "不折扣",
+      catDiscountExcludedTitle: "勾選後，此分類的品項不套用特約95折／VIP9折。",
       lineShiftAm: "上午",
       lineShiftDay: "整日",
       lineSentAt: "{time} 已傳送",
@@ -3015,6 +3019,9 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
+    // 주소에 #탭이름 이 있으면 그 탭으로 연다(아래 openTabFromHash).
+    // 수기 주문을 끝낸 화면이 /admin#orders 로 돌아온다.
+    openTabFromHash();
     // 화면에 남아 있는 결산 숫자는 **이 사람의 것이 아니다.** 로그인/로그아웃이
     // 둘 다 화면을 새로 열므로 여기까지 올 일은 없지만, 오면 반드시 비운다 —
     // 「올 일이 없다」에 기대서 안 지우면, 언젠가 오는 길이 생겼을 때 조용히
@@ -3141,6 +3148,20 @@
   // 못 박는 일은 서버가 한다(GET /api/settlements) — 화면에서 날짜 칸을
   // 감추는 것만으로는 막은 것이 아니다.
   const OWNER_ONLY_TABS = new Set(["vip", "accounts"]);
+
+  // 주소의 #탭이름 으로 탭을 못 박을 수 있다.
+  //
+  // 2026-09-16 사장님: "실시간 주문 탭으로 이동." 수기 주문을 끝낸 화면이
+  // /admin#orders 로 돌아온다(public/js/order.js goBackToAdmin). 그냥
+  // /admin 으로 보내도 지금은 그 탭에서 시작하지만, 나중에 기본 탭이
+  // 바뀌면 그 약속이 조용히 깨진다. 주소에 적어두면 안 깨진다.
+  function openTabFromHash() {
+    const want = String(location.hash || "").replace(/^#/, "").trim();
+    if (!want) return;
+    const btn = $(`.admin-tabs button[data-tab="${want}"]`);
+    if (btn) btn.click();
+  }
+  window.addEventListener("hashchange", openTabFromHash);
 
   $$(".admin-tabs button").forEach((btn) => {
     btn.onclick = () => {
@@ -6418,7 +6439,16 @@
     categories.forEach((c) => {
       const block = document.createElement("div");
       block.className = "cat-block";
-      block.innerHTML = `<h3>${catName(c)}</h3>`;
+      // 이 분류는 할인에서 빠지는가 — **보이게** 한다.
+      //
+      // 2026-09-16 사장님: "그리고 할인은 기타, 음료 는 모두 적용 안돼."
+      // 같은 요청이 두 번째였다. 예전에는 코드 안 목록으로만 정해서,
+      // 제대로 걸렸는지 확인할 자리도 고칠 자리도 없었다.
+      const excl = !!c.discount_excluded;
+      block.innerHTML = `<h3>${catName(c)}<label class="cat-discount-toggle" title="${T("catDiscountExcludedTitle")}">
+          <input type="checkbox" data-cat-discount-id="${c.id}" ${excl ? "checked" : ""} ${canMenuEdit() ? "" : "disabled"} />
+          ${T("catDiscountExcluded")}
+        </label></h3>`;
       const table = document.createElement("table");
       table.className = "item-table";
       table.innerHTML = `
@@ -6482,6 +6512,26 @@
           await loadMenu();
         } finally {
           btn.disabled = false;
+        }
+      };
+    });
+    // 분류별 「할인 제외」 토글. 서버가 정답을 들고 있으므로 저장한 뒤
+    // 메뉴를 다시 읽어 화면을 맞춘다 — 눌린 대로 믿고 그리면, 저장이
+    // 실패했을 때 화면만 바뀐 채로 남는다.
+    wrap.querySelectorAll("[data-cat-discount-id]").forEach((box) => {
+      box.onchange = async () => {
+        const id = parseInt(box.dataset.catDiscountId, 10);
+        const want = box.checked;
+        box.disabled = true;
+        try {
+          const res = await fetch(`/api/menu/admin/categories/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ discount_excluded: want }),
+          });
+          if (!res.ok) await showAlert(T("menuErrSaveFailed"));
+        } finally {
+          await loadMenu();
         }
       };
     });
@@ -7810,10 +7860,12 @@
    * 옛 서버가 안 내려주면 예전처럼 음료만 뺀다.
    */
   function discountExcludedItemIdSet() {
-    const keys = (storeSettings && storeSettings.vip_discount_excluded_categories) || ["drink"];
     const ids = new Set();
     for (const c of categories || []) {
-      if (!keys.includes(c.key)) continue;
+      // 서버가 이미 답을 내서 보내준다(src/routes/menu.js
+      // categoriesWithItems). 여기서 다시 판단하지 않는다 — 같은 규칙을
+      // 두 군데서 적으면 화면에 뜬 금액과 실제로 받는 금액이 갈린다.
+      if (!c.discount_excluded) continue;
       for (const it of c.items || []) ids.add(it.id);
     }
     return ids;
@@ -9678,10 +9730,16 @@
           // 직원이 돌아올 방법이 없어지므로 ?fromAdmin=1을 붙여서
           // order.js가 "관리자로 돌아가기" 버튼을 띄우게 한다. 일반 브라우저
           // (PC/폰 웹)에서는 이 조건이 안 걸리므로 기존처럼 새 탭으로 연다.
+          // 2026-09-16 사장님: "단말기로 수기주문완료후 실시간주문탭으로
+          // 자동 복귀되도록해줘." 새 탭으로 열리는 길에도 ?fromAdmin=1 을
+          // 붙인다 — 예전에는 키오스크 앱 안에서만 붙어서, 보통 브라우저로
+          // 쓰는 단말기에서는 주문을 넣어도 돌아가는 길이 안 뜨고 완료
+          // 화면에 「繼續加點」만 남았다. 새 탭 쪽은 그 탭을 닫는 것으로
+          // 돌아간다(order.js goBackToAdmin).
           if (window.HangukgwanPrint) {
             location.href = `/t/${encodeURIComponent(t.number)}?fromAdmin=1`;
           } else {
-            window.open(`/t/${encodeURIComponent(t.number)}`, "_blank");
+            window.open(`/t/${encodeURIComponent(t.number)}?fromAdmin=1`, "_blank");
           }
           $("#manualOrderBackdrop").hidden = true;
         };

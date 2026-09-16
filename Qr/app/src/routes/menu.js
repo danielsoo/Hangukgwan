@@ -6,6 +6,7 @@ const { withAvailability, today } = require("../availability");
 const { broadcastOnWrite } = require("../realtime");
 const { DELETED_AT, activeItems, deletedItems, isDeleted } = require("../menuItems");
 const { reserveId } = require("../db");
+const { isDiscountExcludedCategory } = require("../discounts");
 const { nowLocal } = require("../time");
 const canEditMenu = requirePermission("menuEdit");
 
@@ -47,7 +48,11 @@ function categoriesWithItems(onlyAvailable) {
       .map((i) => withAvailability(i, store.settings));
     if (onlyAvailable) items = items.filter((i) => i.available);
     items = items.sort((a, b) => a.sort_order - b.sort_order);
-    return { ...c, items };
+    // 할인 제외 여부는 **서버가 답을 내서** 내보낸다. 화면이 키 목록을
+    // 받아 다시 판단하던 것을 그만둔다 — 같은 규칙을 두 군데서 적으면
+    // 화면에 뜬 금액과 실제로 받는 금액이 언젠가 갈린다. 여기서 늘
+    // true/false 로 못 박아 보내면 화면은 그대로 쓰기만 하면 된다.
+    return { ...c, discount_excluded: isDiscountExcludedCategory(c), items };
   });
 }
 
@@ -194,7 +199,36 @@ router.get("/admin", requireAdmin, (req, res) => {
 });
 
 router.get("/admin/categories", requireAdmin, (req, res) => {
-  res.json([...store.categories].sort((a, b) => a.sort_order - b.sort_order));
+  res.json(
+    [...store.categories]
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map((c) => ({ ...c, discount_excluded: isDiscountExcludedCategory(c) }))
+  );
+});
+
+/**
+ * 이 분류를 할인에서 뺄지 말지.
+ *
+ * 2026-09-16 사장님: "그리고 할인은 기타, 음료 는 모두 적용 안돼."
+ * 같은 요청이 두 번째다(2026-09-14 에도 있었다). 그때는 코드에 키 목록을
+ * 적는 것으로 끝냈는데, key 는 화면에 안 보이고 사장님이 고칠 수도 없다.
+ * 「기타」로 보이는 분류의 key 가 other 가 아니면 조용히 할인이 걸렸고,
+ * 어디가 잘못됐는지 알 길이 없었다.
+ *
+ * 이제 메뉴 관리에서 분류마다 켜고 끈다. 보이고, 고칠 수 있다.
+ */
+router.patch("/admin/categories/:id", canEditMenu, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const want = !!(req.body || {}).discount_excluded;
+  let updated = null;
+  await refreshAndSave((st) => {
+    const cat = (st.categories || []).find((c) => c.id === id);
+    if (!cat) return;
+    cat.discount_excluded = want;
+    updated = cat;
+  });
+  if (!updated) return res.status(404).json({ error: "not_found" });
+  res.json({ ...updated, discount_excluded: isDiscountExcludedCategory(updated) });
 });
 
 router.post("/admin/items", canEditMenu, async (req, res) => {

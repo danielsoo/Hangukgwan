@@ -63,12 +63,11 @@ function rememberOrder(order) {
 // test/discounts.test.js 가 직접 검증한다.
 const {
   VIP_DISCOUNT_RATES,
-  DISCOUNT_EXCLUDED_CATEGORY_KEYS,
+  isDiscountExcludedCategory,
   computeDiscountAmount: computeDiscountAmountPure,
   parseManualDiscount,
   discountTypeKey,
 } = require("../discounts");
-const EXCLUDED_KEYS = new Set(DISCOUNT_EXCLUDED_CATEGORY_KEYS);
 // 사장님 요청(2026-09-07): "결제종류 현금, 라인페이, 신용카드, 기타" — "기타"
 // 하나 추가. 이 목록은 결제 방식 팝업(직원이 직접 고르는 값)에서 허용되는
 // 값만 담는다 — "online"(손님이 직접 결제하는 온라인 결제, src/routes/
@@ -90,12 +89,23 @@ function categoryKeyOf(it) {
   return cat ? cat.key : null;
 }
 
+// 그 key 를 가진 분류 자체. 할인 제외 여부는 분류에 적혀 있다.
+function categoryOfKey(key) {
+  if (key == null) return null;
+  return (store.categories || []).find((c) => c.key === key) || null;
+}
+
 // 特約95折/VIP9折이 **빼는** 품목인가.
 //
-// 어느 분류를 빼는지는 src/discounts.js 한 곳에 적혀 있다
-// (DISCOUNT_EXCLUDED_CATEGORY_KEYS — 음료·주류와 기타). 실제 합산은
-// src/discounts.js 가 이 함수를 받아서 한다.
-const isDiscountExcludedItem = (it) => EXCLUDED_KEYS.has(categoryKeyOf(it));
+// 판단은 **분류 자신이** 들고 있다(discount_excluded). 예전에는 key 목록
+// 하나로 정했는데, key 는 만들 때 한 번 정해지고 화면에 안 보인다 —
+// 「기타」라고 보이는 분류의 key 가 other 가 아니면 조용히 할인이 걸렸고,
+// 사장님은 그것을 알 방법도 고칠 방법도 없었다. 2026-09-16 에 같은 요청이
+// 두 번째로 온 이유가 그것으로 보인다.
+//
+// 이제 메뉴 관리에서 분류마다 켜고 끈다. key/이름 짐작은 처음 값을
+// 정해줄 때만 쓴다(src/discounts.js isDiscountExcludedCategory).
+const isDiscountExcludedItem = (it) => isDiscountExcludedCategory(categoryOfKey(categoryKeyOf(it)));
 
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을

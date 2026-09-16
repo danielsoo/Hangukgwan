@@ -2202,3 +2202,20 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .menu-trash-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
 .menu-trash-meta { color: var(--muted); font-size: 13px; margin-top: 2px; }
 .menu-trash-restore { flex: none; padding: 8px 16px; font-size: 14px; }
+
+/* 메뉴 관리의 분류 머리에 붙는 「할인 제외」 토글. 2026-09-16 사장님이 같은
+   요청("할인은 기타, 음료 는 모두 적용 안돼")을 두 번 하신 뒤 — 예전에는
+   코드 안 목록으로만 정해서 제대로 걸렸는지 볼 자리가 없었다. */
+.cat-discount-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  vertical-align: middle;
+}
+.cat-discount-toggle input { width: 15px; height: 15px; cursor: pointer; }
+.cat-discount-toggle input:disabled { cursor: default; }

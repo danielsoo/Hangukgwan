@@ -186,6 +186,10 @@
       <!-- 직원이 단말기에서 넣은 수기 주문일 때만 보인다 — 곧 관리자 화면으로
            돌아간다는 알림. 손님 주문에는 안 뜬다. -->
       <p class="confirm-return-note" id="confirmReturnNote" hidden></p>
+      <!-- 직원이 단말기에서 넣은 수기 주문일 때만 보이는 큰 버튼. 2026-09-16
+           사장님: "주문하고 뜨는 이걸 실시간 주문 탭으로 이동으로 바꿔줘."
+           손님 주문에는 안 뜬다 — 손님에게 관리자 화면은 갈 곳이 아니다. -->
+      <button class="submit-btn" id="goToAdminOrdersBtn" hidden></button>
       <button class="submit-btn" id="backToMenuBtn" data-i18n="orderMore">繼續加點</button>
     </div>
   </div>

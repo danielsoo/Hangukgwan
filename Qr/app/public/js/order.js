@@ -249,6 +249,40 @@
     ko: "관리자 화면으로 돌아갑니다…",
     en: "Returning to the admin screen…",
   };
+  // 2026-09-16 사장님: "주문하고 뜨는 이걸 실시간 주문 탭으로 이동으로
+  // 바꿔줘." 기다리지 않고 바로 갈 수 있어야 한다.
+  const ADMIN_ORDERS_BTN = {
+    zh: "前往即時訂單",
+    ko: "실시간 주문 탭으로 이동",
+    en: "Go to live orders",
+  };
+  // 실시간 주문 탭을 **못 박아서** 부른다. /admin 이 지금은 그 탭에서
+  // 시작하지만, 나중에 기본 탭이 바뀌면 이 약속이 조용히 깨진다.
+  const ADMIN_ORDERS_URL = "/admin#orders";
+  /**
+   * 관리자 화면으로 돌아간다.
+   *
+   * 두 가지 길로 여기 온다.
+   *  · 키오스크 앱: window.open 이 막혀 있어 같은 화면에서 이동해 왔다.
+   *    그대로 /admin 으로 이동하면 된다.
+   *  · 보통 브라우저: 새 탭으로 열려 왔다(window.opener 가 있다). 이 탭을
+   *    닫는 것이 맞다 — 안 그러면 관리자 화면이 두 개가 된다. 닫기가
+   *    막힌 경우를 대비해 조금 뒤 이동으로 넘어간다.
+   */
+  function goBackToAdmin() {
+    if (window.opener) {
+      try {
+        window.close();
+      } catch (e) {
+        /* 닫기가 막힌 브라우저 */
+      }
+      setTimeout(() => {
+        location.href = ADMIN_ORDERS_URL;
+      }, 300);
+      return;
+    }
+    location.href = ADMIN_ORDERS_URL;
+  }
 
   const SEATING_STALE_MSG = {
     zh: "這個畫面是上一位客人開啟的。已為您重新整理，請再點一次餐。",
@@ -1635,9 +1669,7 @@
       note.hidden = false;
     }
     clearTimeout(adminReturnTimer);
-    adminReturnTimer = setTimeout(() => {
-      location.href = "/admin";
-    }, ADMIN_RETURN_MS);
+    adminReturnTimer = setTimeout(goBackToAdmin, ADMIN_RETURN_MS);
   }
   function cancelAdminReturn() {
     clearTimeout(adminReturnTimer);
@@ -1811,9 +1843,20 @@
   if (fromAdmin) {
     const backBtn = $("#backToAdminBtn");
     backBtn.hidden = false;
-    backBtn.onclick = () => {
-      location.href = "/admin";
-    };
+    backBtn.onclick = goBackToAdmin;
+    // 완료 화면의 큰 버튼도 여기서 켠다. 손님 주문에는 안 뜬다.
+    const goBtn = $("#goToAdminOrdersBtn");
+    if (goBtn) {
+      goBtn.textContent = ADMIN_ORDERS_BTN[lang] || ADMIN_ORDERS_BTN.zh;
+      goBtn.hidden = false;
+      goBtn.onclick = () => {
+        cancelAdminReturn();
+        goBackToAdmin();
+      };
+      // 「계속 추가」는 이제 둘째 버튼이다 — 누르는 일이 드물다.
+      const more = $("#backToMenuBtn");
+      if (more) more.classList.add("secondary-btn");
+    }
   }
 
   // Store info sheet

@@ -62,20 +62,28 @@ out.push("\n[재량(직접 입력) 할인은 그대로 전체에 걸린다]");
   check("★ 음료·기타뿐이어도 재량은 깎인다", d.manualAmount === 50, `${d.manualAmount}`);
 }
 
-out.push("\n[서버와 화면이 같은 목록을 본다]");
+out.push("\n[서버와 화면이 같은 판단을 본다]");
 {
-  const settings = fs.readFileSync(path.join(__dirname, "../src/routes/settings.js"), "utf8");
+  // 2026-09-16: 키 목록을 화면에 내려주고 화면이 다시 판단하던 것을
+  // 그만뒀다. 이제 **서버가 답을 내서** 분류마다 true/false 로 보낸다.
+  // 같은 규칙을 두 군데서 적으면 화면에 뜬 금액과 실제로 받는 금액이 갈린다.
   const admin = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
   const orders = fs.readFileSync(path.join(__dirname, "../src/routes/orders.js"), "utf8");
+  const menu = fs.readFileSync(path.join(__dirname, "../src/routes/menu.js"), "utf8");
+  // 손님 화면·메뉴 관리 목록을 만드는 그 함수를 콕 집어 본다. 파일
+  // 어딘가에 같은 글자가 있다고 통과시키면 안 된다 — 실제로 한 번 그랬다.
+  const cwiFrom = menu.indexOf("function categoriesWithItems(");
+  const cwiTo = menu.indexOf("\n}\n", cwiFrom);
+  const cwi = cwiFrom >= 0 && cwiTo > cwiFrom ? menu.slice(cwiFrom, cwiTo) : "";
   check(
-    "★ 서버가 목록을 내려준다",
-    /map\.vip_discount_excluded_categories = DISCOUNT_EXCLUDED_CATEGORY_KEYS;/.test(settings),
-    ""
+    "★ 목록을 만들 때 분류마다 답을 내서 보낸다",
+    /discount_excluded: isDiscountExcludedCategory\(c\)/.test(cwi),
+    `categoriesWithItems 안에 없다 (${cwi.length}자)`
   );
   check(
-    "★ 화면이 그것을 받아 쓴다",
-    /storeSettings\.vip_discount_excluded_categories/.test(admin),
-    "화면이 목록을 따로 적고 있다"
+    "★ 화면은 그 답을 그대로 쓴다",
+    /if \(!c\.discount_excluded\) continue;/.test(admin),
+    "화면이 다시 판단하고 있다"
   );
   check(
     "화면에 음료가 박혀 있지 않다",
@@ -83,8 +91,13 @@ out.push("\n[서버와 화면이 같은 목록을 본다]");
     'admin.js 에 c.key === "drink" 가 남아 있다'
   );
   check(
-    "주문 라우트도 목록을 쓴다",
-    /EXCLUDED_KEYS\.has\(categoryKeyOf\(it\)\)/.test(orders),
+    "화면이 키 목록을 다시 안 본다",
+    !/storeSettings\.vip_discount_excluded_categories/.test(admin),
+    "키 목록으로 되돌아갔다"
+  );
+  check(
+    "주문 라우트도 같은 판단을 쓴다",
+    /isDiscountExcludedCategory\(categoryOfKey\(categoryKeyOf\(it\)\)\)/.test(orders),
     ""
   );
   // 품목별 취소선도 같은 목록이어야 한다 — 줄 그어진 품목과 실제로 깎이는
