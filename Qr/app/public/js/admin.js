@@ -421,8 +421,18 @@
    */
   function tableDisplayName(t) {
     if (!t || !t.label) return (t && t.number) || "";
-    if (t.is_counter) return t.label;
+    // 포장 카운터와 테스트 테이블은 번호를 안 붙인다 — 둘 다 「자리 번호」를
+    // 가진 적이 없고, 「테스트 테이블 TEST」는 그냥 지저분하다.
+    if (t.is_counter || isTestTable(t)) return t.label;
     return `${t.label} ${t.number}`;
+  }
+  /** 이 자리가 시험용인가 (src/testMode.js isTestTable 과 같은 규칙). */
+  function isTestTable(t) {
+    return !!(t && (t.is_test || String(t.number) === "TEST"));
+  }
+  /** 이 주문이 「테스트 테이블」에서 나온 것인가. */
+  function isTestTableOrder(o) {
+    return !!(o && o.test_session === "test_table");
   }
   /**
    * 돈을 사람이 읽는 모양으로. 천 자리마다 쉼표.
@@ -876,6 +886,10 @@
       menuTrashMatch: "휴지통에 「{name}」(코드 {code})이 있어요. 새 메뉴로 넣으면 번호가 달라져서 결산에서 두 줄로 갈라집니다. 어떻게 할까요?",
       menuTrashRestoreIt: "되살리기",
       menuTrashMakeNew: "새 메뉴로 넣기",
+      testTableTileName: "테스트",
+      testTableTileTag: "시험용",
+      testTableBadge: "테스트 테이블",
+      testTableHint: "여기서 만든 주문은 결산에도 지난 기록에도 안 들어가고, 주방 빌지도 자동으로 안 나가요. 테스터 모드를 켜지 않아도 언제든 쓸 수 있어요.",
       catDiscountExcluded: "할인 제외",
       catDiscountExcludedTitle: "체크하면 이 분류의 메뉴에는 特約95折/VIP9折 할인이 걸리지 않아요.",
       itemDiscountExcludedLabel: "할인 적용 (特約95折/VIP9折·퍼센트 할인)",
@@ -1660,6 +1674,10 @@
       menuTrashMatch: "垃圾桶裡有「{name}」（代碼 {code}）。建立新品項會取得新編號，結算會分成兩列。要怎麼處理？",
       menuTrashRestoreIt: "還原",
       menuTrashMakeNew: "建立新品項",
+      testTableTileName: "測試",
+      testTableTileTag: "測試專用",
+      testTableBadge: "測試桌",
+      testTableHint: "這裡建立的訂單不列入結算與歷史紀錄，也不會自動列印廚房單。不用開測試模式也能隨時使用。",
       catDiscountExcluded: "不折扣",
       catDiscountExcludedTitle: "勾選後，此分類的品項不套用特約95折／VIP9折。",
       itemDiscountExcludedLabel: "折扣套用（特約95折／VIP9折・百分比折扣）",
@@ -4506,12 +4524,18 @@
       if (!firstEverOnThisDevice) {
         pending.forEach((o) => flashNewOrder(o.id));
         if (soundOn) playBeep();
-        if (autoPrintOn && printHereAllowed()) {
+        // 「테스트 테이블」 주문은 자동으로 안 찍는다 — 2026-09-16 사장님:
+        // "그건 결산이나 실제 영수증은 발급 안되게해줘." 손으로 「인쇄」를
+        // 누르면 찍히고(프린터를 시험해 볼 수는 있어야 하니), 그 종이에는
+        // 「테스트 / 測試 · 이 주문은 만들지 마세요」가 크게 박힌다
+        // (public/js/escpos.js isTestOrder).
+        const toPrint = pending.filter((o) => !isTestTableOrder(o));
+        if (autoPrintOn && printHereAllowed() && toPrint.length) {
           // 한 장씩 차례로. 예전에는 Promise.all 로 한꺼번에 보냈는데,
           // 주문 두 건이 같이 들어오면 프린터에 연결을 두 개 여는 셈이라
           // 한쪽이 조용히 사라진다(sendRasterTicketParts 주석과 같은 이유).
           (async () => {
-            for (const o of pending) await printKitchenTicket(o);
+            for (const o of toPrint) await printKitchenTicket(o);
             renderOrders();
           })();
         }
@@ -4538,6 +4562,8 @@
     const jobs = [];
     for (const o of fresh) {
       if (o.status === "paid" || o.status === "cancelled") continue;
+      // 「테스트 테이블」은 종이를 안 내보낸다 — 위 신규 주문과 같은 이유.
+      if (isTestTableOrder(o)) continue;
       const ch = o.items_changed;
       if (ch && ch.at && ((ch.added || []).length || (ch.removed || []).length)) {
         const key = `c${o.id}@${ch.at}`;
@@ -7550,7 +7576,8 @@
     // takeoutOrders와 같은 이유 — order_type이 실수로 dine_in/mixed로
     // 찍혀 있어도 여전히 포장 손님 것).
     const focusTag = focusedOrder && (focusedOrder.order_type === "takeout" || (table && table.is_counter)) ? ` · ${fmtTakeoutTileTag(table, focusedOrder)}` : "";
-    const titleText = table && table.is_counter
+    // 「테스트 테이블」도 번호를 안 붙인다 — 이름이 이미 무슨 자리인지 말한다.
+    const titleText = table && (table.is_counter || isTestTable(table))
       ? `${label || openTableLabel || tableNumber}${focusTag}`
       : `${T("tableLabel")} ${label || tableNumber}${focusTag}`;
     // 사장님 요청(2026-09-09): "결제를 완료했다고 직원이 누르지 않는 한
@@ -7571,8 +7598,14 @@
     // focusOrderId 로 좁혀 들어온 화면에서도 내놓지 않는다 — 거기서 누르면
     // 화면에 안 보이는 다른 주문까지 같이 옮겨진다.
     const showMoveTable = !!(table && !table.is_counter && unpaidOrders.length > 0 && !focusOrderId);
+    // 시험용 자리라는 것을 결제창 맨 위에서 말해 준다 — 여기서 누른
+    // 「결제 완료」는 결산 어디에도 안 남는다(2026-09-16 사장님).
+    const testTableNoticeHtml = isTestTable(table)
+      ? `<div class="test-table-notice"><strong>${T("testTableBadge")}</strong><span>${T("testTableHint")}</span></div>`
+      : "";
     const header = `
       <h2>${titleText}${partyText}</h2>
+      ${testTableNoticeHtml}
       <div style="margin-top:-6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${money(unpaidTotal)}</strong></p>
         ${showMoveTable
@@ -9874,7 +9907,11 @@
           let nextLeft = left;
           if (showMainTile) {
             const tableEl = document.createElement("div");
-            tableEl.className = "table-block" + (bundledOrders.length ? " has-order" : "");
+            // 시험용 자리는 한눈에 갈려야 한다 — 바쁠 때 진짜 자리로 착각해
+            // 여기에 손님 주문을 넣으면 그 돈은 결산에 안 잡힌다
+            // (2026-09-16 사장님의 「테스트 테이블」).
+            tableEl.className =
+              "table-block" + (bundledOrders.length ? " has-order" : "") + (isTestTable(t) ? " test-table" : "");
             // 어느 자리 타일인지 화면에서 집어낼 수 있게 남긴다 — 타일에
             // 보이는 글자는 표시 이름(label)일 수도 있어서 글자로는 못 찾는다.
             tableEl.dataset.tableNumber = t.number;
@@ -9882,8 +9919,16 @@
             tableEl.style.top = top + "px";
             tableEl.style.width = w + "px";
             tableEl.style.height = h + "px";
+            // 타일은 70px 남짓이라 「테스트 테이블」이 세 줄로 깨진다 —
+            // 타일에서만 짧은 이름을 쓴다(결제창 제목은 그대로 긴 이름).
             tableEl.innerHTML = `
-              <span>${t.label || t.number}</span>${t.party_size ? `<span class="tb-party">${fmtPartySeat(t)}</span>` : ""}
+              <span>${isTestTable(t) ? T("testTableTileName") : t.label || t.number}</span>${
+                isTestTable(t)
+                  ? `<span class="tb-test-tag">${T("testTableTileTag")}</span>`
+                  : t.party_size
+                  ? `<span class="tb-party">${fmtPartySeat(t)}</span>`
+                  : ""
+              }
             `;
             tableEl.onclick = () => openTableDetail(t.number, t.label);
             zoneEl.appendChild(tableEl);

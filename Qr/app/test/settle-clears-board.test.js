@@ -35,7 +35,15 @@ out.push("[1] 정산이 표시를 남긴다 (src/routes/settlements.js)");
   check("★ 줄을 지우지 않는다", !/deleteMany|deleteOne|\$unset/.test(settlements), "");
   check("★ 이미 정산된 것은 다시 안 건드린다", /!o\.settled_at/.test(settlements), "");
   check("그날 것만 고른다", /String\(o\.created_at \|\| ""\)\.slice\(0, 10\) === date/.test(settlements), "");
-  check("★ 테스트 주문과 진짜 주문을 섞지 않는다", /!!o\.test_session === !!testId/.test(settlements), "");
+  // 2026-09-16: 「있냐 없냐」가 아니라 **값까지** 맞춘다. 늘 켜져 있는
+  // 「테스트 테이블」이 생기면서(src/testMode.js TEST_TABLE_SESSION),
+  // 있냐 없냐만 보면 테스터 모드로 결산을 눌렀을 때 그 자리 주문까지 같이
+  // 마감된다 — 그 자리는 어느 결산에도 안 들어가야 한다.
+  check(
+    "★ 테스트 주문과 진짜 주문을 섞지 않는다",
+    /\(o\.test_session \|\| null\) === \(testId \|\| null\)/.test(settlements),
+    ""
+  );
   // 표시를 다는 일은 markSettled 한 곳으로 모았다 — 직접 누른 정산과 자동
   // 오전 정산이 같은 규칙을 써야 하기 때문이다(test/auto-am-close.test.js).
   check("주문마다 그 줄만 쓴다 (store 통째로 X)", /async function markSettled[\s\S]{0,1200}await saveOrders\(rows\)/.test(settlements), "");

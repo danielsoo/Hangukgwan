@@ -580,6 +580,24 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
   font-size: 9px; font-weight: 600; color: var(--muted); margin-top: 2px;
   text-align: center; line-height: 1.2; padding: 0 3px; white-space: normal; word-break: keep-all;
 }
+/* 시험용 자리(2026-09-16 「테스트 테이블」) — 바쁠 때 진짜 자리로 착각해
+   여기에 손님 주문을 넣으면 그 돈은 결산에 안 잡힌다. 빗금으로 「이건 진짜
+   자리가 아니다」를 멀리서도 보이게 한다. */
+.table-block.test-table {
+  border-style: dashed;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(120, 120, 130, 0.09) 0 6px,
+    transparent 6px 12px
+  );
+}
+.table-block .tb-test-tag {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-top: 1px;
+  letter-spacing: 0.02em;
+}
 .table-block .resize-handle { background: linear-gradient(135deg, transparent 50%, var(--red) 50%); }
 /* 결제 탭 배치도(payment-floor-plan)는 항상 보기 전용 — 좌석을 잡아서
    옮기는 게 아니라 터치해서 결제 화면을 여는 용도라, 기본 .table-block의
@@ -2400,3 +2418,21 @@ body:not(.role-staff) .staff-only { display: none !important; }
   padding-top: 3px;
   border-top: 1px dashed var(--line);
 }
+
+/* 결제창 맨 위의 「테스트 테이블」 안내 — 여기서 누른 결제 완료는 결산
+   어디에도 안 남는다(2026-09-16 사장님). 직원이 그걸 모르고 진짜 손님을
+   여기서 받으면 받은 돈이 통째로 사라진 것처럼 보인다. */
+.test-table-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px dashed #b4870a;
+  background: #fff8e6;
+  color: #7a5c06;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.test-table-notice strong { font-size: 14px; font-weight: 800; }

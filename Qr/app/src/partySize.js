@@ -25,10 +25,13 @@
  * 결제하고 나가도 인원수가 안 지워진다 — 테스트가 진짜 자리를 붙잡는 셈이다.
  * 테스트 주문은 종료할 때 통째로 사라질 것이므로 받을 돈으로 칠 수도 없다.
  */
+// 테스터 모드 주문은 자리 계산에서 빼고, **테스트 테이블의 주문은 센다**
+// — 그 자리에서 인원·결제가 평소처럼 동작해야 한다(src/testMode.js).
+const { countsAtTable } = require("./testMode");
 function hasUnpaidOrder(store, tableNumber) {
   return store.orders.some(
     (o) =>
-      !o.test_session &&
+      countsAtTable(o) &&
       String(o.table_number) === String(tableNumber) &&
       o.status !== "paid" &&
       o.status !== "cancelled"
@@ -151,7 +154,7 @@ function partyBreakdownOf(table) {
 function liveOrdersOf(store, tableNumber) {
   return (store.orders || []).filter(
     (o) =>
-      !o.test_session &&
+      countsAtTable(o) &&
       String(o.table_number) === String(tableNumber) &&
       o.status !== "paid" &&
       o.status !== "cancelled"
@@ -174,7 +177,7 @@ function ordersOfSeating(store, table) {
   const num = String(table.number);
   const seat = seatingStartOf(table);
   return (store.orders || [])
-    .filter((o) => !o.test_session)
+    .filter(countsAtTable)
     .filter((o) => String(o.table_number) === num && o.status !== "cancelled")
     .filter((o) => (seat ? String(o.created_at || "") >= seat : o.status !== "paid"));
 }

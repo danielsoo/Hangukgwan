@@ -500,7 +500,11 @@ async function markSettled(date, closedAt, shift, testId) {
       o.status === "paid" &&
       !o.settled_at &&
       String(o.created_at || "").slice(0, 10) === date &&
-      !!o.test_session === !!testId &&
+      // 값까지 맞춰 본다. 예전에는 「있냐 없냐」만 봐서, 테스터 모드로 결산을
+      // 눌렀을 때 테스트 테이블 주문까지 같이 마감돼 버렸다. 그 자리는
+      // 어느 결산에도 안 들어가야 한다(2026-09-16 사장님: "결산이나 실제
+      // 영수증은 발급 안되게해줘").
+      (o.test_session || null) === (testId || null) &&
       paidAtOf(o) <= closedAt
   );
   if (!rows.length) return rows;

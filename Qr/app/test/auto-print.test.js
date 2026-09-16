@@ -43,7 +43,9 @@ check("찍기 전에 판단 표시를 먼저 남긴다",
 // 켜는 순간 그동안 쌓인 신규 주문이 한꺼번에 쏟아진다.
 {
   const i = adminJs.indexOf("pending.forEach((o) => decidedOrderIds.add(o.id));");
-  const j = adminJs.indexOf("if (autoPrintOn && printHereAllowed())");
+  // 2026-09-16 에 조건이 하나 늘었다 — 「테스트 테이블」 주문은 자동으로 안
+  // 찍는다(test/test-table.test.js). 글자 그대로 찾지 말고 시작만 맞춘다.
+  const j = adminJs.indexOf("if (autoPrintOn && printHereAllowed()");
   check("자동 인쇄가 꺼져 있어도 판단은 남긴다", i > 0 && j > i, `${i} / ${j}`);
 }
 check("저장이 막힌 기기에서도 죽지 않는다", /decidedStorageOk = false/.test(adminJs));

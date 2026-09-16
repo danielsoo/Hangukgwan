@@ -288,7 +288,13 @@ router.post("/", async (req, res) => {
   // 화면에서도 잠그지만(public/js/order.js) 여기서 한 번 더 막는다. 주소를
   // 아는 사람이 그냥 POST 하면 화면 잠금은 아무 의미가 없고, QR 주소는
   // 테이블마다 종이에 인쇄돼 벽에 붙어 있다.
-  if (!isTestDevice && !(req.session && req.session.isAdmin) && !isOpenNow(store.settings)) {
+  //
+  // 「테스트 테이블」도 영업시간에 안 묶인다(2026-09-16). 장사 끝나고 조용할
+  // 때 이것저것 해보려고 만든 자리인데 그때 잠기면 쓸 수가 없다. 이 자리의
+  // 주문은 어차피 결산에도 지난 기록에도 안 들어간다(src/testMode.js).
+  const orderingTableEarly = store.tables.find((t) => t.number === String(tableNumber));
+  const isTestTableOrder = testMode.isTestTable(orderingTableEarly);
+  if (!isTestDevice && !isTestTableOrder && !(req.session && req.session.isAdmin) && !isOpenNow(store.settings)) {
     return res.status(403).json({ error: "closed_now", ordering: orderingState(store.settings) });
   }
 
@@ -298,11 +304,13 @@ router.post("/", async (req, res) => {
   // The 포장 카운터 (is_counter, see src/routes/tables.js) is the one
   // exception: there's no headcount to ask a takeout customer for, and
   // public/js/order.js's initPartySize() already skips that modal for it.
-  const orderingTable = store.tables.find((t) => t.number === String(tableNumber));
+  const orderingTable = orderingTableEarly;
   if (!orderingTable) return res.status(400).json({ error: "party_size_required" });
-  // 테스트 기기는 인원수를 안 물어도 넣을 수 있다. 없는 자리에 넣는 것은
-  // 여전히 막는다 — 그건 우회할 규칙이 아니라 그냥 잘못된 주문이다.
-  if (!isTestDevice && !orderingTable.is_counter && !orderingTable.party_size) {
+  // 테스트 기기는 인원수를 안 물어도 넣을 수 있다. 「테스트 테이블」도
+  // 마찬가지다 — 그 자리에 몇 명이 앉았는지는 아무 데도 안 쓰인다(결산에
+  // 안 들어가므로). 없는 자리에 넣는 것은 여전히 막는다 — 그건 우회할
+  // 규칙이 아니라 그냥 잘못된 주문이다.
+  if (!isTestDevice && !isTestTableOrder && !orderingTable.is_counter && !orderingTable.party_size) {
     return res.status(400).json({ error: "party_size_required" });
   }
 
@@ -576,7 +584,12 @@ router.post("/", async (req, res) => {
     ...(seating.seatingOf(orderingTable) ? { seating: seating.seatingOf(orderingTable) } : {}),
     // 테스트 기기가 넣은 것이면 표를 남긴다. 이 한 칸이 있는 주문만
     // 「테스터 모드 종료」때 지워진다 — 없으면 진짜 주문이다.
-    ...testMode.tag(req, store),
+    //
+    // 2026-09-16: 「테스트 테이블」에서 온 주문도 같은 칸에 표를 받는다.
+    // 값이 달라서(test_table) 종료할 때 안 지워지고, 결산·지난 기록에서는
+    // 똑같이 빠지고, 빌지에는 「테스트」가 찍힌다 — 그 한 칸을 보는 모든
+    // 곳이 공짜로 따라온다(src/testMode.js tagForTable).
+    ...testMode.tagForTable(req, store, orderingTable),
     // 두 번 눌린 것을 알아보는 표(위 requestIdOf). 안 보낸 화면의 주문에는
     // 이 칸을 안 만든다 — 고유 인덱스가 부분 인덱스라 없는 것끼리는 안 겹친다.
     ...(clientRequestId ? { client_request_id: clientRequestId } : {}),

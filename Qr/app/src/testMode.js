@@ -36,6 +36,55 @@ const crypto = require("crypto");
 const COLLECTION = "test_sessions";
 const SETTING_KEY = "test_session";
 
+// ── 테스트 테이블 ──────────────────────────────────────────────────────
+//
+// 2026-09-16 사장님: "지금 테이블이 실제 주문이 있어서 그러는데 차라리
+// 테스트 테이블을 만들어줘. 테스터를 키든 안 켜든 볼 수 있게 해줘. 그리고
+// 결제탭에서도 테스터 테이블을 한 곳 만들어줘서 사용할 수 있으면 좋겠어.
+// 일반 테이블처럼 근데 그건 결산이나 실제 영수증은 발급 안되게해줘."
+//
+// 위 테스터 모드는 **기기**를 통째로 시험용으로 바꾼다. 장사 중에는 그걸
+// 켜기가 부담스럽다 — 진짜 테이블에 진짜 주문이 들어 있는데 화면 규칙이
+// 바뀐다. 그래서 「늘 거기 있는 시험용 자리」를 하나 따로 둔다.
+//
+// 구현은 **한 줄짜리 결정**이다: 이 자리의 주문에는 늘 켜져 있는 가짜 세션
+// id 를 박는다. 그러면 test_session 칸을 보는 모든 곳이 공짜로 따라온다 —
+//
+//   · 결산(src/routes/settlements.js)은 test_session 이 있는 주문을 안 센다
+//   · 지난 기록(GET /api/orders/history)도 안 보여준다
+//   · 빌지에 「테스트 / 測試 · 이 주문은 만들지 마세요」가 찍힌다
+//     (public/js/escpos.js isTestOrder)
+//   · 주문 카드에 「테스트」 배지가 붙는다
+//
+// 진짜 세션 id 는 newId() 가 ts_ + 18바이트 hex 로 만든다. 이 값은 그 꼴이
+// 절대 아니라서 「테스터 모드 종료」의 deleteMany({test_session: cur.id})
+// 에 걸리지 않는다 — 시험용 자리는 종료해도 그대로 남는다. 그게 맞다.
+// 이 자리는 세션이 아니라 **가구**다.
+const TEST_TABLE_SESSION = "test_table";
+const TEST_TABLE_NUMBER = "TEST";
+
+/** 이 기록이 「테스트 테이블」에서 나온 것인가. */
+function isTestTableRow(row) {
+  return !!row && row.test_session === TEST_TABLE_SESSION;
+}
+
+/** 이 자리가 테스트 테이블인가. */
+function isTestTable(table) {
+  return !!(table && (table.is_test || String(table.number) === TEST_TABLE_NUMBER));
+}
+
+/**
+ * 자리 하나 안에서 「이 주문을 진짜 손님 것으로 세는가」.
+ *
+ * 테스터 모드 주문은 안 센다 — 사장님이 7번 테이블에 시험 주문을 하나
+ * 넣어두면 그 자리의 진짜 손님이 결제하고 나가도 인원이 안 지워진다.
+ * 반대로 **테스트 테이블의 주문은 센다** — 그 자리에는 진짜 손님이 올 일이
+ * 없고, 안 세면 그 자리에서 인원도 결제도 아무것도 동작하지 않는다.
+ */
+function countsAtTable(row) {
+  return !row || !row.test_session || isTestTableRow(row);
+}
+
 /** 지금 가게에 열려 있는 테스트 세션. 없으면 null. */
 function active(store) {
   const s = store && store.settings && store.settings[SETTING_KEY];
@@ -84,7 +133,19 @@ function isTestRow(row) {
  */
 function visibleTo(req, store) {
   const id = currentId(req, store);
-  return id ? () => true : (row) => !isTestRow(row);
+  // 테스트 테이블은 **늘 보인다.** 사장님이 "테스터를 키든 안 켜든 볼 수
+  // 있게 해줘" 라고 한 것이 이 줄이다 — 그 자리를 쓰려고 테스터 모드를
+  // 켜야 한다면 애초에 이 자리를 만든 뜻이 없다.
+  return id ? () => true : (row) => !isTestRow(row) || isTestTableRow(row);
+}
+
+/**
+ * 이 주문에 붙일 표. 테스트 테이블에서 온 것이면 늘 켜져 있는 그 표를
+ * 붙이고, 아니면 평소대로 이 기기가 시험 중인지를 본다.
+ */
+function tagForTable(req, store, table) {
+  if (isTestTable(table)) return { test_session: TEST_TABLE_SESSION };
+  return tag(req, store);
 }
 
 function newId() {
@@ -424,6 +485,12 @@ module.exports = {
   tag,
   isTestRow,
   visibleTo,
+  TEST_TABLE_SESSION,
+  TEST_TABLE_NUMBER,
+  isTestTableRow,
+  isTestTable,
+  countsAtTable,
+  tagForTable,
   start,
   snapshotSettings,
   snapshotMenu,
