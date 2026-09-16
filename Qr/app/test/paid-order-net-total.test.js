@@ -96,6 +96,11 @@ const ticketInfoOf = (() => {
       const off = Number(o.discount_amount || 0);
       return off > 0 ? off : 0;
     }
+    // 2026-09-16: 종이에 「무슨 할인이 얼마」 한 줄이 들어가면서 이름표가
+    // 필요해졌다(영수증 시안 B2). 진짜와 같은 표를 쓴다.
+    const RECEIPT_DISCOUNT_PART_LABELS = { te95: "特約95折", vip95: "特約95折", vip9: "VIP9折", vip10: "VIP9折", manual: "折扣" };
+    const receiptDiscountLabelOf = (t) =>
+      String(t || "").split("+").map((k) => RECEIPT_DISCOUNT_PART_LABELS[k] || "折扣").join(" + ");
   `;
   // eslint-disable-next-line no-new-func
   return new Function(`${helpers}\n${body}\n return computeTicketDiscountInfo;`)();
@@ -112,6 +117,10 @@ if (typeof ticketInfoOf === "function") {
     info.isPercent === false,
     JSON.stringify(info)
   );
+  check("★ 무슨 할인이었는지 종이에 쓸 이름이 있다", info.label === "unspecified" || typeof info.label === "string", JSON.stringify(info));
+  check("★ 얼마를 깎았는지도 같이 온다", info.amount === 23, JSON.stringify(info));
+  const named = ticketInfoOf({ id: 3, status: "paid", total: 470, discount_amount: 23, discount_type: "te95+manual", items: [] });
+  check("★ 두 할인을 같이 걸면 이름도 둘", named.label === "特約95折 + 折扣", JSON.stringify(named));
   const plain = ticketInfoOf({ id: 2, status: "paid", total: 470, items: [] });
   check("할인 없이 결제된 주문은 그대로", plain.active === false, JSON.stringify(plain));
 }
@@ -140,9 +149,27 @@ if (typeof buildEscPosTicket === "function" && typeof ticketInfoOf === "function
   check("★ 할인 전 금액도 같이 보인다 — 손님이 물으면 그 자리에서 답한다", text.includes("NT$470"), "");
   check("★ 깎였다는 것이 보인다", /NT\$470\s*→\s*NT\$447/.test(text), text.slice(-200));
 
+  // 2026-09-16 사장님이 고른 영수증 안(B2): 할인 한 줄 + 合計 하나.
+  // 小計 는 넣지 않는다 — 같은 금액이 두 번 적히면 되레 헷갈린다.
+  const named = { ...o, discount_type: "te95+manual" };
+  const namedText = buildEscPosTicket(named, "한국관", { priceCopy: true, discount: ticketInfoOf(named) });
+  check("★ 얼마를 깎았는지 종이에 한 줄로 찍힌다", /-NT\$23/.test(namedText), namedText.slice(-260));
+  check("★ 무슨 할인이었는지도 같이 찍힌다", namedText.includes("特約95折 + 折扣"), namedText.slice(-260));
+  // 品目 이름은 원래 한글·중국어가 같이 찍힌다(주방도 홀도 읽어야 한다).
+  // 할인 줄만은 손님에게 건네는 금액 설명이라 중국어여야 한다.
+  const discountLine = namedText.split("\n").find((l) => l.includes("-NT$23")) || "";
+  check("★ 종이의 할인 이름은 중국어다 — 손님이 읽는 줄이다", !/[가-힣]/.test(discountLine), JSON.stringify(discountLine));
+  check("★ 小計 줄은 없다 (B2)", !namedText.includes("小計"), "같은 금액이 두 번 적히면 헷갈린다");
+  check(
+    "★ 할인 줄이 合計 보다 위에 있다",
+    namedText.indexOf("-NT$23") < namedText.indexOf("合計"),
+    "깎고 나서 얼마를 받았는지 순서대로 읽혀야 한다"
+  );
+
   const noDiscount = { ...o, discount_amount: 0 };
   const plainText = buildEscPosTicket(noDiscount, "한국관", { priceCopy: true, discount: ticketInfoOf(noDiscount) });
   check("할인이 없으면 화살표가 없다", !/→/.test(plainText.split("合計")[1] || ""), "");
+  check("할인이 없으면 할인 줄도 없다", !/-NT\$/.test(plainText), plainText.slice(-200));
 }
 
 out.push("\n[화면 — 결제완료 카드]");

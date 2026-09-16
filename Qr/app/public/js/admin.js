@@ -5408,12 +5408,18 @@
   // 이 함수 하나를 그대로 재사용한다.
   // 브라우저로 인쇄하는 빌지에도 같은 표시. ESC/POS 두 갈래(escpos.js)와
   // 문구를 맞춘다 — 어느 경로로 나오든 주방이 보는 종이는 같아야 한다.
-  function testTicketBannerHtml(o) {
+  /**
+   * 2026-09-16 사장님: "언어 조심해줘. 영수증은 무조건 다 중국어야 해."
+   *
+   * 廚房出單 은 주방이 읽는 종이라 한글이 같이 있는 게 낫다. 結帳單 은
+   * 손님이 가져가는 종이다 — 거기엔 한글을 안 찍는다.
+   */
+  function testTicketBannerHtml(o, priceCopy) {
     if (!o || !o.test_session) return "";
     return (
       '<div style="text-align:center;border:3px solid #000;padding:6px;margin-bottom:8px;">' +
-      '<div style="font-size:1.4em;font-weight:900;">*** 테스트 / 測試 ***</div>' +
-      '<div style="font-weight:700;">이 주문은 만들지 마세요</div>' +
+      `<div style="font-size:1.4em;font-weight:900;">${priceCopy ? "*** 測試 ***" : "*** 테스트 / 測試 ***"}</div>` +
+      (priceCopy ? "" : '<div style="font-weight:700;">이 주문은 만들지 마세요</div>') +
       '<div style="font-weight:700;">請勿製作此訂單</div>' +
       "</div>"
     );
@@ -5421,7 +5427,12 @@
 
   function buildReceiptBodyHtml(o, priceCopy) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
-    const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+    // 結帳單 은 손님이 가져가는 종이라 가게 이름도 중국어로 간다
+    // (2026-09-16 사장님: "영수증은 무조건 다 중국어야 해"). 廚房出單 은
+    // 예전 그대로 — 주방이 읽는 종이다.
+    const storeName = priceCopy
+      ? (storeSettings && storeSettings.store_name_zh) || "韓國館"
+      : (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
     // 사장님 피드백(2026-09-07): "할인 반영 안될 때는 굳이 음료수 얘기
     // 안해도 되고" — 이 주문(정확히는 테이블/포장카운터 단위, 결제 팝업과
     // 완전히 같은 규칙)에 지금 걸려 있는 할인이 없으면 { active: false }를
@@ -5436,7 +5447,12 @@
 
     const itemRows = o.items
       .map((it) => {
-        const name = it.name_zh || it.name_ko || it.name_en || "";
+        // 結帳單 에서는 한글로 떨어지지 않는다 — 中文 → English 순으로
+        // 찾고, 둘 다 없을 때만 마지막으로 한글을 쓴다(빈칸으로 두면 무슨
+        // 음식값인지 알 수 없다). escpos.js itemName() 과 같은 규칙.
+        const name = priceCopy
+          ? it.name_zh || it.name_en || it.name_ko || ""
+          : it.name_zh || it.name_ko || it.name_en || "";
         // Each attribute of the item (meat type, spice level, note) gets
         // its own indented "└" line instead of being crammed onto one line
         // — the owner asked for this specifically so a busy kitchen can
@@ -5519,7 +5535,7 @@
       .join("");
 
     return `<div class="receipt">
-    ${testTicketBannerHtml(o)}
+    ${testTicketBannerHtml(o, priceCopy)}
     <div class="header"><div class="store-name">${storeName} ${priceCopy ? "結帳單" : "廚房出單"}</div></div>
     <div class="divider"></div>
     <div class="meta-row"><span class="table-no">${
@@ -5536,6 +5552,15 @@
     ${
       discountInfo.active && hasDrinkItem && discountInfo.isPercent
         ? `<div class="price-copy-note price-copy-drink-note">※ 飲料/酒類恕不折扣</div>`
+        : ""
+    }
+    ${
+      // 2026-09-16 사장님이 고른 안(B2): 小計 줄은 넣지 않는다. 넣으면
+      // 같은 금액(NT$890)이 小計 와 合計 취소선에 두 번 적혀서, 손님이
+      // 종이를 볼 때 무엇이 무엇인지 되레 헷갈린다. 할인 줄 하나와 合計
+      // 하나면 「원래 얼마, 얼마 깎고, 얼마 받았다」가 다 들어간다.
+      discountInfo.active && Number(discountInfo.amount) > 0
+        ? `<div class="discount-row"><span>${escapeHtml(discountInfo.label || "折扣")}</span><span>−NT$${money(discountInfo.amount)}</span></div>`
         : ""
     }
     <div class="total-row"><span>合計</span><span>${
@@ -5628,12 +5653,20 @@
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
   .item-price { font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; color: #000; }
-  .item-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
+  /* 2026-09-16 사장님: "프린트는 빨간색이 안나와서 총 금액을 긋고 하는 게
+     나을 거 같아." 회색(#999)도 같은 문제다 — 열전사 프린터는 점이 찍히거나
+     안 찍히거나(1비트)라, 회색은 성기게 찍히거나 아예 안 보인다. 검정으로
+     찍고 취소선으로 가른다. */
+  .item-price-orig { color: #000; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
   .item-price-final { font-weight: ${fs.itemPriceWeight}; color: #000; }
   .total-row { display: flex; justify-content: space-between; font-size: ${fs.total}px; font-weight: ${fs.totalWeight}; margin-top: 2mm; padding-top: 2mm; border-top: 1px dashed #000; }
-  .total-price-orig { color: #999; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
+  .discount-row { display: flex; justify-content: space-between; font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; margin-top: 1.5mm; }
+  .total-price-orig { color: #000; text-decoration: line-through; margin-right: 1mm; font-weight: 400; }
   .price-copy-note { font-size: ${fs.orderNote}px; color: #555; margin-top: 2mm; text-align: center; }
-  .price-copy-drink-note { color: #966; margin-top: 1mm; }
+  /* 붉은 기가 돌던 색(#966)을 검정으로. 열전사 프린터는 빨강을 못 찍고
+     (2026-09-16 사장님) 옅은 색은 성기게 찍힌다. 손님이 읽어야 하는
+     안내라 안 보이면 안 된다. */
+  .price-copy-drink-note { color: #000; margin-top: 1mm; }
   .print-time { text-align: center; font-size: ${fs.printTime}px; font-weight: ${fs.printTimeWeight}; color: #555; margin-top: 3mm; }
   .receipt-page-break { break-after: page; page-break-after: always; }
   ${screenChromeCss}
@@ -8546,9 +8579,18 @@
     //
     // isPercent 는 false 로 둔다 — 품목마다 얼마씩 깎였는지는 나중에 알 수
     // 없다(정액 할인이 섞이면 고르게 나눌 수 없다). 合計 줄에서만 보여준다.
+    // 2026-09-16 사장님: 종이에 「얼마가 깎였는지」가 있어야 한다. 合計 에
+    // 원래 금액과 받은 금액만 있으면 손님도 직원도 차액을 암산해야 한다.
+    // 그래서 label(무슨 할인) 과 amount(얼마) 를 같이 돌려준다.
     const paidOff = paidOrderDiscount(o);
     if (paidOff > 0) {
-      return { active: true, isPercent: false, discountedTotal: orderPaidAmount(o) };
+      return {
+        active: true,
+        isPercent: false,
+        discountedTotal: orderPaidAmount(o),
+        label: receiptDiscountLabelOf(o.discount_type),
+        amount: paidOff,
+      };
     }
     const active = (!!vipCurrentType || !!manualDiscountValue) && o.status !== "paid" && o.status !== "cancelled";
     if (!active) return { active: false };
@@ -8563,11 +8605,18 @@
     // fullEligibleClientTotal 주석), 그때는 소계/합계에서만 보여준다 —
     // 재량 할인이 걸려 있으면 항상 false.
     const isPercent = !!vipCurrentType && !manualDiscountValue;
+    // 아직 안 낸 주문의 미리보기 — 이름은 지금 고른 할인에서 짓는다.
+    // 결제가 끝나면 위쪽 가지가 주문에 적힌 사실을 쓴다.
+    const labelParts = [];
+    if (vipCurrentType) labelParts.push(receiptDiscountLabelOf(vipCurrentType));
+    if (manualDiscountValue) labelParts.push(receiptDiscountLabelOf("manual"));
     return {
       active: true,
       isPercent,
       rate: isPercent ? VIP_DISCOUNT_RATES_CLIENT[vipCurrentType] : undefined,
       discountedTotal: o.total - discountAmount,
+      label: labelParts.join(" + "),
+      amount: discountAmount,
     };
   }
   // 결제 방식/재량 할인 미리보기 계산을 한 곳에서 — 特約95折/VIP9折와
@@ -8699,6 +8748,23 @@
     String(t || "unspecified")
       .split("+")
       .map(discountPartLabelOf)
+      .join(" + ");
+  /**
+   * **종이에 찍는** 할인 이름. 위 discountLabelOf 와 달리 화면 언어를 따르지
+   * 않는다 — 結帳單 은 손님이 보는 종이고 나머지 글자(桌號·合計·內用)가 전부
+   * 중국어인데, 할인 이름만 「직접 입력」 이라고 찍히면 그 줄만 못 읽는다.
+   */
+  const RECEIPT_DISCOUNT_PART_LABELS = {
+    te95: "特約95折",
+    vip95: "特約95折",
+    vip9: "VIP9折",
+    vip10: "VIP9折",
+    manual: "折扣",
+  };
+  const receiptDiscountLabelOf = (t) =>
+    String(t || "")
+      .split("+")
+      .map((k) => RECEIPT_DISCOUNT_PART_LABELS[k] || "折扣")
       .join(" + ");
   /**
    * 「이 라운드에 얼마가 어떤 이름으로 깎였는가」 한 줄.

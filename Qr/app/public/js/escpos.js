@@ -145,7 +145,18 @@
   // Mirrors buildTicketHtml()'s own item-name preference (name_zh first —
   // this restaurant's real kitchen ticket has historically been in
   // Chinese, see the comment on buildTicketHtml in admin.js).
-  function itemName(it) {
+  /**
+   * 품목 이름.
+   *
+   * 2026-09-16 사장님: "언어 조심해줘. 영수증은 무조건 다 중국어야 해."
+   *
+   * 廚房出單 은 주방이 읽는 종이라 중국어가 없으면 한글로 떨어지는 게 낫다.
+   * 結帳單 은 손님이 가져가는 종이다 — 거기서는 한글로 떨어지면 안 된다.
+   * 그래서 결제용에서는 中文 → English 순으로 찾고, 둘 다 없을 때만 어쩔
+   * 수 없이 마지막으로 한글을 쓴다(빈칸으로 두면 무슨 음식값인지 모른다).
+   */
+  function itemName(it, priceCopy) {
+    if (priceCopy) return it.name_zh || it.name_en || it.name_ko || "";
     return it.name_zh || it.name_ko || it.name_en || "";
   }
 
@@ -204,15 +215,18 @@
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과를 그대로
     // 넘겨받는다(이 파일은 admin.js의 테이블별 할인 상태를 모르므로).
     // { active:false } 아니면 { active:true, isPercent, rate?,
-    // discountedTotal } — buildReceiptBodyHtml()과 완전히 같은 규칙.
+    // discountedTotal, label, amount } — buildReceiptBodyHtml()과 완전히
+    // 같은 규칙. label/amount 는 「무슨 할인이 얼마」 한 줄을 찍는 데 쓴다.
     const discount = (opts && opts.discount) || { active: false };
     let hasDrinkItem = false;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
     let out = CMD.INIT;
 
     if (isTestOrder(o)) {
-      out += CMD.ALIGN_CENTER + CMD.BOLD_ON + "*** 테스트 / 測試 ***" + CMD.BOLD_OFF + "\n";
-      out += CMD.ALIGN_CENTER + "이 주문은 만들지 마세요\n";
+      // 結帳單 에는 한글을 안 찍는다(2026-09-16 사장님). 廚房出單 은 주방이
+      // 읽는 종이라 한글이 같이 있는 게 낫다.
+      out += CMD.ALIGN_CENTER + CMD.BOLD_ON + (priceCopy ? "*** 測試 ***" : "*** 테스트 / 測試 ***") + CMD.BOLD_OFF + "\n";
+      if (!priceCopy) out += CMD.ALIGN_CENTER + "이 주문은 만들지 마세요\n";
       out += CMD.ALIGN_CENTER + "請勿製作此訂單\n";
       out += CMD.ALIGN_LEFT + divider() + "\n";
     }
@@ -224,7 +238,7 @@
     out += divider() + "\n";
 
     o.items.forEach((it) => {
-      const name = truncateToWidth(itemName(it), LINE_WIDTH - 6);
+      const name = truncateToWidth(itemName(it, priceCopy), LINE_WIDTH - 6);
       out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
       // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
       // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
@@ -271,6 +285,14 @@
       out += "※ 飲料/酒類恕不折扣\n";
     }
     out += divider() + "\n";
+    // 2026-09-16 사장님이 고른 안(B2): 小計 줄은 안 찍는다. 같은 금액이 두
+    // 번 적히면 되레 헷갈린다. 「무슨 할인 얼마」 한 줄과 合計 하나면
+    // 원래 얼마 · 얼마 깎고 · 얼마 받았다가 전부 들어간다.
+    if (priceCopy && discount.active && Number(discount.amount) > 0) {
+      out += padLine(discount.label || "折扣", `-NT$${money(discount.amount)}`) + "\n";
+    }
+    // 텍스트 모드에는 취소선이 없다(ESC/POS 에 그런 명령이 없다). 화살표가
+    // 그 자리를 대신한다 — 래스터로 뽑을 때는 진짜 취소선을 긋는다.
     if (priceCopy && discount.active) {
       out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
     } else {
@@ -422,10 +444,15 @@
     labelInfo = labelInfo || {};
     const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}${partyTag(o)}`;
     const priceCopy = !!(opts && opts.priceCopy);
-    // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과. 이
-    // 비트맵도 흑백 1비트 인쇄라 화면의 회색 취소선을 그대로 재현하기
-    // 어려워서, buildEscPosTicket()의 일반 텍스트 버전과 똑같이
-    // "NT$원가→NT$할인가" 화살표 표기로 통일한다.
+    // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과.
+    //
+    // 2026-09-16 사장님: "vip 로 할인들어가는 그거는 할인 들어간 요소마다
+    // 줄 가로로 긋고 가격 새로 써주는 거 해줬으면 좋겠어."
+    //
+    // 예전에는 텍스트 렌더러와 똑같이 화살표(원가→할인가)를 썼다. 이쪽은
+    // 우리가 직접 그리는 그림이라 **진짜 취소선을 그을 수 있다** — 흑백
+    // 1비트라도 선은 선이다. 텍스트 렌더러만 화살표로 남는다(ESC/POS 에
+    // 취소선 명령이 없다).
     const discount = (opts && opts.discount) || { active: false };
     let hasDrinkItem = false;
 
@@ -444,7 +471,11 @@
       const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD * 2;
       const align = opts.align || "left";
       const fitted = opts.noFit ? text : fitText(mctx, text, maxWidth);
-      ops.push({ type: "text", text: fitted, px, weight, align, y });
+      // opts.strike = { before, text } — 줄 안의 한 토막에만 취소선을 긋는다.
+      // 2026-09-16 사장님: "vip 로 할인들어가는 그거는 할인 들어간 요소마다
+      // 줄 가로로 긋고 가격 새로 써주는 거 해줬으면 좋겠어." 래스터는 우리가
+      // 직접 그리는 그림이라 진짜 선을 그을 수 있다.
+      ops.push({ type: "text", text: fitted, px, weight, align, y, strike: opts.strike || null });
       y += Math.round(px * PX_TO_DOTS * 1.4) + (opts.gapAfter || 0);
     }
     function row(left, right, px, weight, opts) {
@@ -463,7 +494,12 @@
       const badgeGap = badge ? 14 : 0;
       const leftMax = RASTER_DOTS_WIDE - RASTER_PAD * 2 - rightWidth - 16 - badgeSize - badgeGap;
       const fittedLeft = fitText(mctx, left, leftMax);
-      ops.push({ type: "row", left: fittedLeft, right, px, weight, y, badge, badgeSize, badgeGap });
+      // opts.strikePrefix — 오른쪽 값의 **앞부분**에 취소선을 긋는다.
+      //
+      // 2026-09-16 사장님: "프린트는 빨간색이 안나와서 총 금액을 긋고 하는
+      // 게 나을 거 같아." 래스터는 우리가 직접 그리는 그림이라 진짜 선을
+      // 그을 수 있다(텍스트 모드에는 그런 명령이 없어 화살표를 쓴다).
+      ops.push({ type: "row", left: fittedLeft, right, px, weight, y, badge, badgeSize, badgeGap, strikePrefix: opts.strikePrefix || null });
       y += Math.round(px * PX_TO_DOTS * 1.4) + (opts.gapAfter || 0);
     }
     function divider() {
@@ -474,8 +510,8 @@
     // 테스터 모드 주문은 가게 이름보다 먼저, 제일 크게. 주방은 종이만 보고
     // 움직인다(isTestOrder 위 주석).
     if (isTestOrder(o)) {
-      line("*** 테스트 / 測試 ***", sz("storeName", 17) + 4, 900, { align: "center" });
-      line("이 주문은 만들지 마세요", sz("tableNo", 13), 700, { align: "center" });
+      line(priceCopy ? "*** 測試 ***" : "*** 테스트 / 測試 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+      if (!priceCopy) line("이 주문은 만들지 마세요", sz("tableNo", 13), 700, { align: "center" });
       line("請勿製作此訂單", sz("tableNo", 13), 700, { align: "center" });
       divider();
     }
@@ -487,13 +523,13 @@
     const notice = (opts && opts.notice) || null;
     if (notice) {
       if (notice.kind === "moved") {
-        line("*** 자리 이동 / 換桌 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+        line(priceCopy ? "*** 換桌 ***" : "*** 자리 이동 / 換桌 ***", sz("storeName", 17) + 4, 900, { align: "center" });
         line(`${notice.from} → ${notice.to}`, sz("storeName", 17) + 8, 900, { align: "center" });
-        line("음식은 새 자리로", sz("tableNo", 13), 700, { align: "center" });
+        if (!priceCopy) line("음식은 새 자리로", sz("tableNo", 13), 700, { align: "center" });
         line("餐點請送到新桌號", sz("tableNo", 13), 700, { align: "center" });
       } else {
-        line("*** 주문 변경 / 訂單異動 ***", sz("storeName", 17) + 4, 900, { align: "center" });
-        line("아래 것만 반영하세요", sz("tableNo", 13), 700, { align: "center" });
+        line(priceCopy ? "*** 訂單異動 ***" : "*** 주문 변경 / 訂單異動 ***", sz("storeName", 17) + 4, 900, { align: "center" });
+        if (!priceCopy) line("아래 것만 반영하세요", sz("tableNo", 13), 700, { align: "center" });
         line("僅需處理以下項目", sz("tableNo", 13), 700, { align: "center" });
       }
       divider();
@@ -511,9 +547,9 @@
     o.items.forEach((it) => {
       // 변경 빌지의 각 줄은 「추가」인지 「취소」인지가 품목 이름보다 먼저
       // 읽혀야 한다. 취소를 추가로 읽으면 만들지 말아야 할 것을 만든다.
-      if (it.__delta === "-") line("[취소 / 取消]", sz("itemDetail", 13), 900);
-      else if (it.__delta === "+") line("[추가 / 追加]", sz("itemDetail", 13), 900);
-      row(itemName(it), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
+      if (it.__delta === "-") line(priceCopy ? "[取消]" : "[취소 / 取消]", sz("itemDetail", 13), 900);
+      else if (it.__delta === "+") line(priceCopy ? "[追加]" : "[추가 / 追加]", sz("itemDetail", 13), 900);
+      row(itemName(it, priceCopy), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
       if (it.option_choice) line("  └ " + optionLine(it), sz("itemDetail", 13), wt("itemDetail", 400));
       // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
@@ -542,8 +578,14 @@
         const isDrink = it.category_key === "drink";
         if (isDrink) hasDrinkItem = true;
         if (discount.active && discount.isPercent && !isDrink) {
+          // 2026-09-16 사장님: "할인 들어간 요소마다 줄 가로로 긋고 가격
+          // 새로 써주는 거." 빨간색이 안 나오는 종이라 취소선이 유일하게
+          // 눈에 띄는 표시다.
           const discounted = payableAfterRate(amount, discount.rate);
-          line("  └ NT$" + money(amount) + "→NT$" + money(discounted), sz("itemPrice", 13), wt("itemPrice", 700));
+          const orig = "NT$" + money(amount);
+          line("  └ " + orig + " NT$" + money(discounted), sz("itemPrice", 13), wt("itemPrice", 700), {
+            strike: { before: "  └ ", text: orig },
+          });
         } else {
           const mark = discount.active && discount.isPercent && isDrink ? "※" : "";
           line("  └ NT$" + money(amount) + mark, sz("itemPrice", 13), wt("itemPrice", 700));
@@ -557,7 +599,7 @@
     }
     divider();
     if (notice) {
-      row("주문번호 / 單號", `#${o.id}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+      row(priceCopy ? "單號" : "주문번호 / 單號", `#${o.id}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
       // 주방용에는 합계를 안 찍는다. 이 종이에 적힌 것은 주문 전체가 아니라
       // 바뀐 부분 뿐이라, 합계를 같이 두면 「이만큼만 받으면 되는」 것으로
       // 읽힌다.
@@ -568,13 +610,22 @@
       if (priceCopy) {
         divider();
         if (discount.active) {
-          row("변경 후 전체 / 異動後合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+          row(priceCopy ? "異動後合計" : "변경 후 전체 / 異動後合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
         } else {
-          row("변경 후 전체 / 異動後合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+          row(priceCopy ? "異動後合計" : "변경 후 전체 / 異動後合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
         }
       }
     } else if (priceCopy && discount.active) {
-      row("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+      // 2026-09-16 사장님이 고른 안(B2): 小計 줄은 안 찍는다. 같은 금액이
+      // 두 번 적히면 되레 헷갈린다. 할인 한 줄과 合計 하나면 원래 얼마 ·
+      // 얼마 깎고 · 얼마 받았다가 전부 들어간다.
+      if (Number(discount.amount) > 0) {
+        row(discount.label || "折扣", `-NT$${money(discount.amount)}`, sz("itemPrice", 13), wt("itemPrice", 700));
+      }
+      row("合計", `NT$${money(o.total)} NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), {
+        gapAfter: 6,
+        strikePrefix: `NT$${money(o.total)}`,
+      });
     } else {
       row("合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
@@ -632,11 +683,26 @@
         ctx.fillText(op.left, leftX, op.y);
         ctx.textAlign = "right";
         ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
+        if (op.strikePrefix) {
+          // 오른쪽 정렬이라 글자는 (오른끝 - 전체너비) 에서 시작한다.
+          // 앞부분만 그 폭만큼 긋는다.
+          const startX = canvas.width - RASTER_PAD - ctx.measureText(op.right).width;
+          const prefixWidth = ctx.measureText(op.strikePrefix).width;
+          const midY = op.y + Math.round(op.px * PX_TO_DOTS * 0.52);
+          ctx.fillRect(startX, midY, prefixWidth, Math.max(2, Math.round(op.px * PX_TO_DOTS * 0.09)));
+        }
         return;
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
       ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
+      if (op.strike && op.align !== "center") {
+        // 왼쪽 정렬이라 앞 토막의 폭만큼 밀어서 긋는다.
+        const x0 = RASTER_PAD + ctx.measureText(op.strike.before || "").width;
+        const w = ctx.measureText(op.strike.text).width;
+        const midY = op.y + Math.round(op.px * PX_TO_DOTS * 0.52);
+        ctx.fillRect(x0, midY, w, Math.max(2, Math.round(op.px * PX_TO_DOTS * 0.09)));
+      }
     });
 
     return rasterCanvasToEscPos(canvas, ctx);
