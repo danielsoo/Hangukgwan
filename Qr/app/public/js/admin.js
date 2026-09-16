@@ -2845,6 +2845,9 @@
       ? `已移到「${to}」（${moved} 筆${paid ? `，含已結帳 ${paid} 筆` : ""}）。請提醒客人改掃新桌號的 QR code。`
       : `"${to}"으로 옮겼습니다 (주문 ${moved}건${paid ? `, 결제 완료 ${paid}건 포함` : ""}). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
   const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
+  // 결제완료 카드의 작은 두 번째 줄. 「원래 얼마였고 얼마 깎였나」.
+  const fmtCardDiscountNote = (total, off) =>
+    adminLang === "zh" ? `原價 NT$${total} · 折扣 -NT$${off}` : `할인 전 NT$${total} · 할인 -NT$${off}`;
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
   const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
@@ -5013,6 +5016,16 @@
     // 그래도 자리에 앉아 계신 손님이다. 직원이 눈으로 보고 판단하도록
     // 사실만 적어 둔다(src/routes/orders.js).
     const locTag = o.location_unverified ? `<span class="order-card-loc-unverified">${T("orderCardLocUnverified")}</span>` : "";
+    // 할인이 걸린 결제완료 주문은 **받은 돈**을 크게, 할인 전 금액과 깎아준
+    // 돈을 그 아래 작게. 사장님이 그 자리에서 검산할 수 있어야 한다
+    // (위 orderPaidAmount 주석).
+    const cardOff = paidOrderDiscount(o);
+    const cardTotalHtml =
+      cardOff > 0
+        ? `<div class="order-card-total">NT$${orderPaidAmount(o)}<span class="order-card-total-was">${escapeHtml(
+            fmtCardDiscountNote(o.total, cardOff)
+          )}</span></div>`
+        : `<div class="order-card-total">NT$${o.total}</div>`;
     card.innerHTML = `
       <div class="order-card-top">
         <span>${tableTag}${typeBadge}${movedTag}${locTag}${
@@ -5026,7 +5039,7 @@
       ${printFailedNotice}
       <div class="order-card-items">${itemsHtml}</div>
       ${itemsToggleHtml}
-      <div class="order-card-total">NT$${o.total}</div>
+      ${cardTotalHtml}
       <div class="order-card-actions" id="actions-${o.id}"></div>
     `;
     // Drag-to-reorder within this same column, via the ⠿ handle above (see
@@ -7854,11 +7867,50 @@
   // 안 되므로 판단 기준(어떤 타입인지, 활성 여부)과 공식을 그대로
   // 재사용한다. 결제 팝업 로직 자체를 재사용하지 못하는 건 그쪽이 DOM을
   // 직접 그리는 함수라서이고, 여기는 숫자만 필요하다.
+  /**
+   * 이 주문으로 **실제로 받은 돈**.
+   *
+   * 주문의 total 은 할인 **전** 금액이다. 깎아준 돈은 discount_amount 에
+   * 따로 적힌다(src/routes/orders.js recordDiscount). 둘을 헷갈리면 서랍과
+   * 화면이 안 맞는다.
+   *
+   * 2026-09-16 사장님: "각 자리별 결제완료금액이 할인전 금액으로 그대로
+   * 표기됨."
+   */
+  function orderPaidAmount(o) {
+    const total = Number((o && o.total) || 0);
+    const off = Number((o && o.discount_amount) || 0);
+    return Math.max(0, total - off);
+  }
+
+  /** 결제가 끝난 주문에 걸린 할인 금액(없으면 0). */
+  function paidOrderDiscount(o) {
+    if (!o || o.status !== "paid") return 0;
+    const off = Number(o.discount_amount || 0);
+    return off > 0 ? off : 0;
+  }
+
   function computeTicketDiscountInfo(o) {
     const vipCurrentType = isCounterOrder(o) ? counterVipDiscountTypeByOrderId.get(o.id) || null : tableVipDiscountType;
     const manualDiscountValue = isCounterOrder(o)
       ? counterManualDiscountValueByOrderId.get(o.id) || null
       : tableManualDiscountValue;
+    // 이미 결제된 주문은 **주문에 적힌 할인**을 쓴다.
+    //
+    // 위의 vipCurrentType/manualDiscountValue 는 결제 화면에서 지금 고른
+    // 값이다 — 아직 안 낸 주문의 미리보기용이라, 결제가 끝나면 비어 있다.
+    // 그래서 예전에는 결제완료 주문을 재인쇄하면 **할인 전 금액**이 찍혔다.
+    // 손님에게 건네는 종이가 실제로 받은 돈과 달랐다.
+    //
+    // 2026-09-16 사장님: "결제완료 된 부분에 대하여 재인쇄를 할 때는
+    // 최종결제금액이 프린트되도록 수정요망."
+    //
+    // isPercent 는 false 로 둔다 — 품목마다 얼마씩 깎였는지는 나중에 알 수
+    // 없다(정액 할인이 섞이면 고르게 나눌 수 없다). 合計 줄에서만 보여준다.
+    const paidOff = paidOrderDiscount(o);
+    if (paidOff > 0) {
+      return { active: true, isPercent: false, discountedTotal: orderPaidAmount(o) };
+    }
     const active = (!!vipCurrentType || !!manualDiscountValue) && o.status !== "paid" && o.status !== "cancelled";
     if (!active) return { active: false };
     const { total: discountAmount } = computeCombinedDiscountClient(

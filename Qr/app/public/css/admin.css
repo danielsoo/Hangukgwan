@@ -193,6 +193,19 @@ html[data-admin-seen="1"] #loginScreen { display: none; }
 .order-card-time { color: var(--muted); font-weight: 400; font-size: 14px; }
 .order-card-items { font-size: 16px; color: #55504a; margin-bottom: 6px; line-height: 1.5; }
 .order-card-total { font-weight: 700; font-size: 17px; }
+/* 할인이 걸린 결제완료 주문은 **받은 돈**을 크게 적고, 할인 전 금액과
+   깎아준 돈을 그 아래 작게 붙인다. 2026-09-16 사장님: "직원이 할인여부 등
+   당일 정산에 대한 오류검증, 또는 손님이 할인여부에 대한 재확인 요구시
+   할인여부를 현재로서는 확인하기 힘든 상황." — 받은 돈만 있으면 "왜 470이
+   아니라 447이지" 가 되고, 할인 전 금액만 있으면 서랍과 안 맞는다. 둘 다
+   있어야 그 자리에서 검산이 된다. */
+.order-card-total-was {
+  display: block;
+  margin-top: 2px;
+  font-weight: 500;
+  font-size: 12px;
+  color: #6b7280;
+}
 /* Squeezing every button (다음 단계/취소/수정/인쇄/미리보기) into one flex
    row forced each into a sliver too narrow for its label, wrapping "결제
    완료로 변경" onto three lines and leaving the buttons looking crammed
