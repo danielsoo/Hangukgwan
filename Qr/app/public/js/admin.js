@@ -7877,9 +7877,14 @@
             openTableDetail(tableNumber, label, focusOrderId);
           },
           // 받을 돈이 남아 있으면 지금 팔지 않고 이번 결제에 얹는다.
+          //
+          // 포장 카운터는 예외다 — 여기 카드들은 서로 다른 손님이라
+          // 「이 자리의 이번 결제」라는 것이 없다. 누구에게 얹을지는 그
+          // 손님 카드 안의 버튼(data-vip-sell-order)이 정한다. 그래서
+          // 카운터의 이 footer 버튼은 늘 **바로 판다**.
           (cardNumber) => {
-            if (!unpaidOrders.length) return false;
-            pendingVipCardSale = { tableNumber: String(tableNumber), cardNumber: cardNumber || "" };
+            if (isCounterTable || !unpaidOrders.length) return false;
+            pendingVipCardSale = { tableNumber: String(tableNumber), orderId: null, cardNumber: cardNumber || "" };
             openTableDetail(tableNumber, label, focusOrderId);
             return true;
           }
@@ -7924,6 +7929,33 @@
         openTableDetail(tableNumber, label, focusOrderId);
       };
     }
+    // 포장 카운터 카드 자신의 「VIP卡販售」 — 얹으면 **그 손님 결제에만**
+    // 붙는다(2026-09-16 사장님: "vip 카드도 별개"). 위 footer 버튼과 같은
+    // 팝업·같은 동작이고, 다른 것은 얹는 대상이 테이블이 아니라 주문
+    // 하나라는 것뿐이다.
+    $("#tableDetailBody")
+      .querySelectorAll("[data-vip-sell-order]")
+      .forEach((btn) => {
+        btn.onclick = () => {
+          const orderId = parseInt(btn.dataset.vipSellOrder, 10);
+          const o = tableOrders.find((x) => x.id === orderId);
+          const redraw = () => openTableDetail(tableNumber, label, focusOrderId);
+          // 이미 얹어 둔 게 있으면 한 번 더 누르는 것은 「빼기」다.
+          if (pendingVipCardAmountFor(tableNumber, orderId) > 0) {
+            clearPendingVipCardSale();
+            redraw();
+            return;
+          }
+          openVipSellModal(tableNumber, redraw, (cardNumber) => {
+            // 아직 받을 돈이 남아 있는 주문에만 얹는다. 이미 끝난 주문에
+            // 얹으면 붙을 결제가 없어서 카드가 미아가 된다.
+            if (!o || o.status === "paid" || o.status === "cancelled") return false;
+            pendingVipCardSale = { tableNumber: String(tableNumber), orderId, cardNumber: cardNumber || "" };
+            redraw();
+            return true;
+          });
+        };
+      });
     $("#tableDetailBody")
       .querySelectorAll("[data-advance-id]")
       .forEach((btn) => {
@@ -7948,8 +7980,14 @@
                     vipDiscountClientTotal(o, null, discountType)
                   )
                 : { vipAmount: 0, manualAmount: 0, afterVip: 0, total: 0 };
+            // 이 주문에 얹어 둔 카드가 있으면 팝업이 두 몫을 갈라
+            // 보여준다 — 진짜 테이블의 결제와 같은 규칙이고(위 footer),
+            // 고르는 결제수단은 밥값 것이며 카드값은 언제나 현금이다.
+            const cardAmount = pendingVipCardAmountFor(tableNumber, orderId);
+            const gross = o ? o.total : 0;
             const method = await showPaymentMethodPopup(
-              fmtPaymentSummary(o ? o.total : 0, discountType, manualValue, breakdown),
+              fmtPaymentSummary(gross, discountType, manualValue, breakdown) +
+                (cardAmount ? fmtPaymentVipCardPart(gross - breakdown.total, cardAmount) : ""),
               discountRequiresCashOnly(discountType)
             );
             if (!method) return;
@@ -7957,6 +7995,17 @@
             if (!updated) {
               await showAlert(T("paySelectedFailedMsg"));
               return;
+            }
+            // 밥값이 실제로 결제된 **뒤에** 카드를 판다. 순서가 반대면 밥값
+            // 결제가 실패했는데 카드만 팔려 있는 상태가 된다(위 footer 결제와
+            // 같은 이유).
+            if (cardAmount) {
+              const sold = await sellVipCard(tableNumber, pendingVipCardSale.cardNumber);
+              if (sold.ok) clearPendingVipCardSale();
+              else
+                await showAlert(
+                  sold.body && sold.body.error === "card_exists" ? T("vipCardNumberTaken") : T("vipSellFailedAfterPay")
+                );
             }
             counterVipDiscountTypeByOrderId.delete(orderId);
             counterManualDiscountValueByOrderId.delete(orderId);
@@ -8850,10 +8899,26 @@
     // 체크박스/합산 결제 대상이 아니므로(withItemCheckboxes가 항상
     // false), 카운터만은 예전처럼 카드 자신의 "결제 완료로 변경" 버튼을
     // 그대로 둔다 — 그게 그 손님 주문 하나를 처리하는 유일한 방법이다.
+    //
+    // 2026-09-16 사장님: "포장 결제 탭도 각 탭들이 일반 테이블처럼 세팅
+    // 되어야 해 (…) 결제도 별개." 진짜 테이블의 결제 버튼에는 받을 돈이
+    // 적혀 있는데(footerPayBtn) 카운터 카드의 버튼에는 없어서, 직원이
+    // 부를 숫자를 찾으려면 눈을 위로 올려 합계를 봐야 했다. 같은 모양으로
+    // 맞춘다 — 그 주문의 밥값(할인 뒤) + 그 주문에 얹은 카드값.
+    const cardPendingAmount = isCounterOrder(o) ? pendingVipCardAmountFor(o.table_number, o.id) : 0;
+    const cardPayable = Math.max(0, remainingAmountOf(o) - (vipDiscountActive ? vipDiscountAmount : 0)) + cardPendingAmount;
     const nextBtn =
       o.status === "paid" || o.status === "cancelled" || !isCounterOrder(o)
         ? ""
-        : `<button class="primary-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")}</button>`;
+        : `<button class="primary-btn" style="padding:7px 14px;font-size:14px;white-space:nowrap;" data-advance-id="${o.id}" data-advance-to="paid">${T("nextServed")} (NT$${money(cardPayable)})</button>`;
+    // 카운터 카드 자신의 「VIP卡販售」. 이 카드에 얹으면 이 손님 결제에만
+    // 붙는다(위 pendingVipCardAmountFor 주석).
+    const vipSellBtnHtml =
+      o.status === "paid" || o.status === "cancelled" || !isCounterOrder(o)
+        ? ""
+        : cardPendingAmount
+        ? `<button type="button" class="vip-sell-btn is-pending" data-vip-sell-order="${o.id}">${T("vipSellPendingBtn")} NT$${money(cardPendingAmount)}</button>`
+        : `<button type="button" class="vip-sell-btn" data-vip-sell-order="${o.id}">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${money(vipSalePrice)}`}</button>`;
     // 이미 일부 품목이 결제완료(item.paid) 처리된 주문은 "수정"을 막는다 —
     // 수정 화면은 품목을 통째로 새로 짜서 저장하는 방식이라(openOrderEdit),
     // 이미 결제된 품목과 같은 메뉴/옵션의 새 품목이 한 줄로 합쳐지거나
@@ -8938,6 +9003,8 @@
       timeStatusLineHtml,
       nextBtn,
       editBtn,
+      vipSellBtnHtml,
+      cardPendingAmount,
       vipDiscountToggleHtml,
       itemsHtml,
       itemsToggleHtml,
@@ -9000,10 +9067,11 @@
         ${p.noteHtml}
         <div style="margin-top:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-top:10px;">
-            <div style="display:flex;gap:6px;flex-wrap:wrap;">${p.nextBtn}${p.editBtn}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">${p.nextBtn}${p.editBtn}${p.vipSellBtnHtml}</div>
           </div>
           <div class="pay-total-row" style="font-weight:700;font-size:16px;padding-top:8px;border-top:1px solid var(--line);"><span>${T("subtotalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(p.total, p.shownDiscountAmount)}</span></div>
           ${p.discountNoteHtml}
+          ${p.cardPendingAmount ? `<div class="vip-sell-pending-note" style="text-align:right;">${T("vipSellPendingNote")}</div>` : ""}
           ${p.vipDiscountToggleHtml ? `<div style="display:flex;justify-content:flex-end;padding:8px 0;">${p.vipDiscountToggleHtml}</div>` : ""}
           <div class="pay-total-row" style="font-weight:800;font-size:17px;color:var(--red);margin-top:10px;padding-top:10px;border-top:1px solid var(--line);"><span>${T("totalLabel")}</span><span class="pay-amount-cell">${vipTotalHtml(o.total, p.vipDiscountAmount)}</span></div>
         </div>
@@ -11373,15 +11441,38 @@
   // 카드 판매는 여전히 자기 주문(kind: "vip_card_sale")으로 남는다 —
   // 결산이 「카드 판매」를 밥값과 갈라 보는 근거가 그것이고, 결제수단
   // 집계도 품목마다 보기 때문에 현금 칸에 300이 정확히 들어간다.
-  let pendingVipCardSale = null; // { tableNumber, cardNumber }
+  // orderId 가 있으면 **그 주문 하나**에 얹은 것이다(포장 카운터).
+  //
+  // 2026-09-16 사장님(포장 결제창 스크린샷과 함께): "포장 결제 탭도 각
+  // 탭들이 일반 테이블처럼 세팅 되어야 해. 그냥 3개씩 한 행에 넣어준 것
+  // 뿐이야. vip 카드도 별개, 결제도 별개 세팅값도."
+  //
+  // 포장 카운터의 카드 하나하나는 **서로 다른 손님**이다. 그런데 얹어 둔
+  // 카드는 「이 테이블」 단위라, 4번 손님에게 판 카드가 5번 손님 결제
+  // 버튼에도 같이 붙어 있었다. 먼저 결제하는 사람이 남의 카드값을 내는
+  // 셈이다. 그래서 카운터에서는 주문 번호까지 같이 기억한다.
+  //
+  // 진짜 테이블은 예전 그대로 orderId 가 null 이다 — 거기서는 라운드가
+  // 여럿이어도 결제가 테이블 단위 한 번이라 「테이블에 얹는다」가 맞다.
+  let pendingVipCardSale = null; // { tableNumber, orderId, cardNumber }
 
   function clearPendingVipCardSale() {
     pendingVipCardSale = null;
   }
 
-  function pendingVipCardAmountFor(tableNumber) {
+  /**
+   * 지금 이 자리(또는 이 주문)에 얹어 둔 카드값. 없으면 0.
+   *
+   * orderId 를 안 주면 「테이블에 얹은 것」을 묻는 것이다 — 특정 주문에
+   * 얹힌 카드는 그때 안 잡힌다. 그래야 카운터의 footer 합계가 남의 손님
+   * 카드값을 끌어오지 않는다.
+   */
+  function pendingVipCardAmountFor(tableNumber, orderId) {
     if (!pendingVipCardSale) return 0;
     if (String(pendingVipCardSale.tableNumber) !== String(tableNumber)) return 0;
+    const want = orderId == null ? null : Number(orderId);
+    const have = pendingVipCardSale.orderId == null ? null : Number(pendingVipCardSale.orderId);
+    if (have !== want) return 0;
     return vipSalePrice == null ? 0 : vipSalePrice;
   }
 
