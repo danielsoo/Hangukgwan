@@ -6096,6 +6096,45 @@
     return { ok: true, updatedOrder: body ? body.updatedOrder : null };
   }
 
+  /**
+   * 테이블 결제 — 고른 라운드를 **한 번에** 보낸다.
+   *
+   * 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면 된다니까?"
+   *
+   * 위 splitPayOrderItems 는 주문 하나를 결제한다. 테이블 결제는 예전에
+   * 그것을 라운드 수만큼 불렀고, 서버는 요청마다 주문 한 건만 보므로
+   * 재량 할인을 라운드마다 다시 계산했다. 그 어긋남을 메우려고 화면이
+   * 금액을 미리 주무르는 일(퍼센트 환산, 라운드 배분)을 해야 했는데,
+   * 그건 화면이 할 일이 아니었다 — 돈 계산은 서버 몫이다.
+   *
+   * 그래서 고른 라운드를 통째로 넘기고 값은 사장님이 입력한 그대로
+   * 보낸다. 나누는 일은 이제 아무도 하지 않는다.
+   */
+  async function payTableOrders(selections, paymentMethod, vipDiscountType, manualDiscountValue) {
+    const reqBody = { selections: selections.map((x) => ({ orderId: x.order.id, itemIndexes: x.indexes })) };
+    if (paymentMethod) reqBody.paymentMethod = paymentMethod;
+    if (vipDiscountType) reqBody.vipDiscountType = vipDiscountType;
+    if (manualDiscountValue) {
+      reqBody.manualDiscountMode = manualDiscountValue.mode;
+      reqBody.manualDiscountValue = manualDiscountValue.value;
+    }
+    const res = await fetch("/api/orders/pay-table", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(reqBody),
+    });
+    // 실패하면 **전부** 실패다. 서버가 도중에 멈추는 일이 없으므로(주문을
+    // 먼저 다 검사하고 나서 손댄다) 반만 결제된 테이블이 남지 않는다.
+    if (!res.ok) return { ok: false, results: selections.map(() => ({ ok: false, updatedOrder: null })) };
+    const body = await res.json().catch(() => null);
+    const byId = new Map(((body && body.updatedOrders) || []).map((o) => [o.id, o]));
+    return {
+      ok: true,
+      paymentId: body ? body.paymentId : null,
+      results: selections.map((x) => ({ ok: true, updatedOrder: byId.get(x.order.id) || null })),
+    };
+  }
+
   function openOrderDetail(o) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
     const itemsHtml = o.items
@@ -8185,61 +8224,24 @@
             (cardAmount ? fmtPaymentVipCardPart(total - breakdown.total, cardAmount) : "");
           const method = await showPaymentMethodPopup(summary, discountRequiresCashOnly(discountType));
           if (!method) return;
-          // 사장님 피드백(2026-09-07, 스크린샷과 함께): "직접 숫자 로직
-          // 이상해" — 정액(금액) 직접 할인은 特約95折/VIP9折(비율)와 달리
-          // 라운드마다 독립적으로 적용하면 안 된다. 이 버튼은 체크된
-          // 라운드마다 splitPayOrderItems를 따로 호출하는데, 서버(orders.js
-          // computeDiscountAmount)는 각 호출을 그 라운드 자기 금액만 보고
-          // 독립적으로 다시 계산하므로, 금액 그대로를 매 호출에 실어 보내면
-          // 라운드 수만큼 곱절로(예: 500원이 3라운드 결제에서 최대
-          // 1500원까지) 할인되는 버그가 있었다. 2라운드 이상을 한 번에
-          // 결제할 때는 실제로 적용될 총 할인액을 동일 비율(%)로 환산해서
-          // 보낸다 — 그러면 서버가 라운드별로 각자 계산해도 합이 원래
-          // 의도한 총 할인액과 같아진다(特約95折/VIP9折가 원래 비율이라
-          // 안전한 것과 같은 원리). 라운드가 1개뿐이면 애초에 곱절 문제가
-          // 없으니 원래 값(사장님이 입력한 그대로) 그대로 보낸다.
+          // 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면
+          // 된다니까? 이해가 안돼?"
           //
-          // 2026-09-10: VIP 할인과 같이 걸 수 있게 되면서 환산 기준이
-          // 바뀌었다. 서버의 재량 할인 기준은 "전체 금액"이 아니라 "VIP
-          // 할인을 뺀 뒤 남은 금액"(computeDiscountAmount의 afterVip)이므로,
-          // 퍼센트로 환산할 때도 그 기준으로 나눠야 라운드별 합이 원래
-          // 의도한 할인액과 맞는다.
+          // 여기 있던 것은 전부 편법이었다. 체크된 라운드마다
+          // splitPayOrderItems 를 따로 불렀고, 서버는 요청마다 주문 한
+          // 건만 보고 재량 할인을 다시 계산했다. 그래서 같은 금액을 그냥
+          // 실어 보내면 라운드 수만큼 곱절로 깎였다. 그것을 피하려고
+          // 퍼센트로 환산했다가 내림 때문에 더 깎였고(690+500+310 에 10원이
+          // 12원이 됐다), 라운드에 미리 배분했다가 할인이 라운드 금액보다
+          // 크면 두 라운드로 쪼개졌다.
           //
-          // ★ 2026-09-16: 퍼센트로 환산하는 방법을 그만둔다.
-          //
-          // 같은 날 소수점을 전부 **내림**으로 바꾸면서(사장님: "소숫점은
-          // 그냥 다 내림으로 하려고 해") 이 환산이 깨졌다. 내림은 라운드마다
-          // 올라가는 쪽으로 어긋난다 —
-          //
-          //   690 + 500 + 310 = 1,500 에 정액 10원
-          //     반올림이던 때  5 + 3 + 2 = 10  (맞음)
-          //     내림으로 바꾼 뒤  5 + 4 + 3 = 12  (2원 더 깎임)
-          //
-          // 퍼센트를 직접 입력해도 같다(7% 면 화면 105, 실제 107).
-          //
-          // 그래서 **환산하지 않는다.** 화면에 보여준 총 할인액
-          // (breakdown.manualAmount — 사장님이 손님에게 부른 숫자)을 그대로
-          // 정액으로 보낸다. 서버는 정액을 내림만 하므로(src/discounts.js)
-          // 정수는 그대로 통과한다.
-          //
-          // 그리고 **쪼개지 않는다** — 2026-09-16 사장님: "직접 입력은 무조건
-          // 총 금액에서 빼줘. 퍼센트인던 금액이던. 주문별로 나눠서 빼지말고."
-          // 한 라운드에 통째로 적는다(assignManualAmountToRounds).
-          const manualShares =
-            manualValue && selections.length > 1
-              ? assignManualAmountToRounds(breakdown.manualAmount, selections, discountType)
-              : null;
-          const results = await Promise.all(
-            selections.map((x, i) =>
-              splitPayOrderItems(
-                x.order.id,
-                x.indexes,
-                method,
-                discountType,
-                manualShares ? (manualShares[i] > 0 ? { mode: "amount", value: manualShares[i] } : null) : manualValue
-              )
-            )
-          );
+          // 편법을 또 고치는 대신 편법이 필요했던 이유를 없앤다. 고른
+          // 라운드를 통째로 **한 번에** 보내고, 서버가 테이블 총액을
+          // 기준으로 재량 할인을 딱 한 번 계산한다(src/discounts.js
+          // computeTableDiscount). 화면은 사장님이 입력한 값을 그대로
+          // 넘길 뿐, 아무것도 나누지 않는다.
+          const paid = await payTableOrders(selections, method, discountType, manualValue);
+          const results = paid.results;
           if (results.some((r) => !r.ok)) {
             await showAlert(T("paySelectedFailedMsg"));
           }
@@ -8513,7 +8515,11 @@
   function orderPaidAmount(o) {
     const total = Number((o && o.total) || 0);
     const off = Number((o && o.discount_amount) || 0);
-    return Math.max(0, total - off);
+    // 0 에서 자르지 않는다 — 서버(src/settlement.js netTotalOf)와 같은
+    // 이유다. 재량 할인은 한 결제에 한 덩어리로 라운드 하나에 통째로
+    // 적히므로, 그 라운드보다 할인이 크면 이 줄만 음수로 보인다. 그게
+    // 사실이다. 여기서 0 으로 자르면 줄들을 더한 값이 결산 합계와 안 맞는다.
+    return total - off;
   }
 
   /** 결제가 끝난 주문에 걸린 할인 금액(없으면 0). */
@@ -8787,55 +8793,6 @@
     const vipAmount = selections.reduce((sum, x) => sum + vipDiscountClientTotal(x.order, x.indexes, tableVipDiscountType), 0);
     const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, base, vipAmount);
     return { full: gross, breakdown, payable: gross - breakdown.total };
-  }
-
-  /**
-   * 재량 할인 한 덩어리를 어느 라운드에 적을지 정한다.
-   *
-   * 2026-09-16 사장님, 두 번에 걸쳐:
-   *   "한 테이블 전체 결제할 때 예를 들어 직접 입력으로 10달러를 할인 했어.
-   *    그럼 한 테이블에서 총 3번을 주문했어 그럼 그게 3개로 나뉘어서 들어가
-   *    아니면 그냥 전체 액수에서 까여?"
-   *   → "직접 입력은 무조건 총 금액에서 빼줘. 퍼센트인던 금액이던.
-   *      주문별로 나눠서 빼지말고."
-   *
-   * 깎는 금액은 **테이블 전체에서 한 번** 정한다(tableDiscountFor 의
-   * breakdown.manualAmount — 화면에 뜬 그 숫자). 여기서 하는 일은 그 한
-   * 덩어리를 **어느 주문에 적어둘지**를 정하는 것뿐이다.
-   *
-   * 적어두기는 해야 한다 — 서버는 주문마다 할인을 기록하고, 결제도 라운드마다
-   * 따로 돈다(splitPayOrderItems 가 라운드 수만큼 호출된다). 10원을 그대로
-   * 세 번 보내면 30원이 깎인다.
-   *
-   * 그래서 **한 라운드에 통째로** 적는다. 가장 큰 라운드부터 담는다 — 거의
-   * 언제나 거기서 끝난다. 할인이 그 라운드 금액보다 커서 안 들어갈 때만 다음
-   * 라운드로 넘긴다(안 넘기면 서버가 잘라내서 그만큼 조용히 덜 깎인다).
-   *
-   * 예전에는 라운드 금액에 비례해 쪼갰는데, 사장님이 10원을 한 번 넣고
-   * 「직접 입력 -5 / -3 / -2」 세 줄을 보게 됐다. 손님에게 부른 숫자가 어디에도
-   * 그대로 안 적혀 있었다.
-   */
-  function assignManualAmountToRounds(totalAmount, selections, discountType) {
-    const bases = selections.map((x) =>
-      Math.max(
-        0,
-        fullEligibleClientTotal(x.order, x.indexes) - vipDiscountClientTotal(x.order, x.indexes, discountType)
-      )
-    );
-    const sum = bases.reduce((a, b) => a + b, 0);
-    const want = Math.min(Math.floor(Number(totalAmount) || 0), sum);
-    const out = bases.map(() => 0);
-    if (!(want > 0) || sum <= 0) return out;
-    let left = want;
-    // 큰 라운드부터. 같으면 앞선 라운드가 먼저 — 매번 같은 답이 나와야 한다.
-    const byBase = bases.map((b, i) => ({ i, b })).sort((a, b) => b.b - a.b || a.i - b.i);
-    for (const { i, b } of byBase) {
-      if (left <= 0) break;
-      const take = Math.min(left, b);
-      out[i] = take;
-      left -= take;
-    }
-    return out;
   }
 
   /** 아직 안 받은 품목 전부 — 「미결제 합계」가 재는 것과 같은 범위. */
@@ -14511,7 +14468,7 @@
     const gross = Number((o && o.total) || 0);
     const off = Number((o && o.discount_amount) || 0);
     if (!(off > 0)) return `NT$${money(gross)}`;
-    return `<span class="stl-order-total-was">NT$${money(gross)}</span> NT$${money(Math.max(0, gross - off))}`;
+    return `<span class="stl-order-total-was">NT$${money(gross)}</span> NT$${money(gross - off)}`;
   }
 
   function renderSettlementOrderBody(o) {

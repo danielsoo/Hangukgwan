@@ -271,6 +271,46 @@ check(
   "예전 방식이 남아 있다"
 );
 
+out.push("\n[라운드가 여러 개일 때도 화면 == 서버]");
+// 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면 된다니까?"
+//
+// 테이블 결제는 이제 요청 하나로 나가고(POST /api/orders/pay-table) 서버는
+// computeTableDiscount 로 테이블 전체를 한 번에 센다. 위의 시험들은 라운드가
+// 하나뿐인 경우만 재고 있었는데, 정작 사장님이 틀렸다고 한 자리는 라운드가
+// 여럿일 때다. 화면에 뜬 숫자와 실제로 깎이는 돈이 갈리면 그때 그 자리에서
+// 손님에게 부른 값이 틀린 값이 된다.
+const MULTI = [
+  { name: "재량 10원, 라운드 셋", rounds: [[ITEM(1, 690, 1)], [ITEM(1, 500, 1)], [ITEM(1, 310, 1)]], vip: null, manual: { mode: "amount", value: 10 } },
+  { name: "재량 7%, 라운드 셋", rounds: [[ITEM(1, 690, 1)], [ITEM(1, 500, 1)], [ITEM(1, 310, 1)]], vip: null, manual: { mode: "percent", value: 7 } },
+  { name: "VIP9折 + 재량 10원", rounds: [[ITEM(1, 690, 1)], [ITEM(1, 500, 1)], [ITEM(1, 310, 1)]], vip: "vip9", manual: { mode: "amount", value: 10 } },
+  { name: "特約95折만, 라운드 둘", rounds: [[ITEM(1, 450, 2)], [ITEM(1, 330, 1)]], vip: "te95", manual: null },
+  { name: "음료가 섞인 라운드", rounds: [[ITEM(1, 230, 1), ITEM(90, 60, 1)], [ITEM(1, 400, 1)]], drinks: [90], vip: "te95", manual: { mode: "amount", value: 20 } },
+  { name: "★ 할인이 어느 라운드보다 크다", rounds: [[ITEM(1, 300, 1)], [ITEM(1, 200, 1)], [ITEM(1, 100, 1)]], vip: null, manual: { mode: "amount", value: 400 } },
+  { name: "★ 테이블 총액보다 큰 할인", rounds: [[ITEM(1, 300, 1)], [ITEM(1, 200, 1)]], vip: null, manual: { mode: "amount", value: 9999 } },
+];
+for (const c of MULTI) {
+  const drinks = c.drinks || [];
+  const client = makeClient(c.vip, c.manual, drinks);
+  const selections = c.rounds.map((items) => ({ order: { items }, indexes: items.map((_, i) => i) }));
+  const got = client.tableDiscountFor(selections);
+
+  const isDrink = (it) => drinks.includes(it.item_id);
+  const srv = server.computeTableDiscount(
+    c.vip,
+    c.manual,
+    c.rounds.map((items) => ({ items, indexes: items.map((_, i) => i) })),
+    isDrink
+  );
+  const gross = c.rounds.reduce((s, items) => s + items.reduce((a, it) => a + server.lineTotalOf(it), 0), 0);
+
+  check(`${c.name} — 깎이는 돈이 같다`, got.breakdown.total === srv.total, `화면 ${got.breakdown.total} vs 서버 ${srv.total}`);
+  check(`${c.name} — 재량 할인이 같다`, got.breakdown.manualAmount === srv.manualAmount, `화면 ${got.breakdown.manualAmount} vs 서버 ${srv.manualAmount}`);
+  check(`${c.name} — 받을 돈이 같다`, got.payable === gross - srv.total, `화면 ${got.payable} vs 서버 ${gross - srv.total}`);
+  // 쪼개지지 않는다 — 사장님이 부른 숫자가 한 줄로 그대로 적힌다.
+  check(`${c.name} — 적히는 자리는 한 곳`, srv.manualParts.filter((x) => x > 0).length <= 1, JSON.stringify(srv.manualParts));
+  check(`${c.name} — 손님이 낼 돈이 음수가 아니다`, gross - srv.total >= 0, `${gross - srv.total}`);
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -162,7 +162,17 @@ const { lineTotalOf } = require("./discounts");
 function netTotalOf(o) {
   const total = Number((o && o.total) || 0);
   const off = Number((o && o.discount_amount) || 0);
-  return Math.max(0, total - off);
+  // 0 에서 자르지 않는다.
+  //
+  // 2026-09-16: 재량 할인은 이제 한 번의 결제에 한 덩어리로, 라운드
+  // **하나에** 통째로 적힌다(src/routes/orders.js POST /pay-table).
+  // 할인이 그 라운드 금액보다 크면 그 줄 하나만 보면 음수가 된다 — 옆
+  // 라운드에서 마저 깎인 것이다. 여기서 0 으로 자르면 그 초과분이 매출에
+  // 그대로 남아, 받지도 않은 돈이 서랍에 있는 것처럼 보인다.
+  //
+  // 테이블 전체로는 절대 음수가 안 된다 — 할인 자체를 테이블 총액에서
+  // 자르기 때문이다(src/discounts.js computeTableDiscount).
+  return total - off;
 }
 
 function summarize(paid, half) {

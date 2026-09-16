@@ -190,7 +190,14 @@ const slice = (src, header, end) => {
       totalHtml({ total: 530, discount_amount: 27 }).includes("stl-order-total-was"),
     totalHtml({ total: 530, discount_amount: 27 })
   );
-  check("음수로 안 내려간다", totalHtml({ total: 100, discount_amount: 999 }).includes("NT$0"), totalHtml({ total: 100, discount_amount: 999 }));
+  // 2026-09-16: 0 에서 자르지 않는다. 재량 할인은 라운드 하나에 통째로
+  // 적히므로 그 줄만 음수로 보일 수 있고, 그게 실제로 일어난 일이다.
+  // 잘라버리면 줄들을 더한 값이 결산 합계와 안 맞는다.
+  check(
+    "라운드 하나로는 음수가 보인다 — 자르면 결산 합계와 안 맞는다",
+    totalHtml({ total: 100, discount_amount: 999 }).includes("NT$-899"),
+    totalHtml({ total: 100, discount_amount: 999 })
+  );
   check("자리 규칙이 있다", /\.stl-order-total-was/.test(css), "");
 
   const body = slice(admin, "  function renderSettlementOrderBody(o) {", "\n  }\n");

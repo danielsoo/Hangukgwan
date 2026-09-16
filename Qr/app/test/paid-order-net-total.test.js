@@ -52,7 +52,14 @@ if (typeof orderPaidAmount === "function") {
   check("★ 할인이 있으면 빼고 센다", orderPaidAmount({ total: 470, discount_amount: 23 }) === 447, `${orderPaidAmount({ total: 470, discount_amount: 23 })}`);
   check("할인이 없으면 그대로다", orderPaidAmount({ total: 470 }) === 470, "");
   check("할인이 0이어도 그대로다", orderPaidAmount({ total: 470, discount_amount: 0 }) === 470, "");
-  check("★ 음수로 내려가지 않는다", orderPaidAmount({ total: 100, discount_amount: 500 }) === 0, "");
+  // 2026-09-16 규칙이 바뀌었다. 재량 할인은 한 번의 결제에 한 덩어리로,
+  // 라운드 **하나에** 통째로 적힌다(src/routes/orders.js POST /pay-table).
+  // 할인이 그 라운드보다 크면 그 줄 하나만 보면 음수다 — 옆 라운드에서
+  // 마저 깎인 것이고, 테이블 전체로는 절대 음수가 안 된다.
+  //
+  // 여기서 0 으로 자르면 그 초과분이 매출에 남아, 받지도 않은 돈이
+  // 서랍에 있는 것처럼 보인다. 그래서 자르지 않는다.
+  check("★ 라운드 하나로는 음수가 될 수 있다 — 자르면 그만큼 매출이 부풀어서", orderPaidAmount({ total: 100, discount_amount: 500 }) === -400, `${orderPaidAmount({ total: 100, discount_amount: 500 })}`);
   check("값이 없어도 안 터진다", orderPaidAmount(null) === 0 && orderPaidAmount({}) === 0, "");
 }
 if (typeof paidOrderDiscount === "function") {

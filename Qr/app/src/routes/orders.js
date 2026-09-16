@@ -87,6 +87,7 @@ const {
   computeDiscountAmount: computeDiscountAmountPure,
   parseManualDiscount,
   discountTypeKey,
+  computeTableDiscount,
 } = require("../discounts");
 // 사장님 요청(2026-09-07): "결제종류 현금, 라인페이, 신용카드, 기타" — "기타"
 // 하나 추가. 이 목록은 결제 방식 팝업(직원이 직접 고르는 값)에서 허용되는
@@ -1343,6 +1344,126 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   if (partyCleared) await savePartySize(store, order.table_number);
   await broadcastOrdersChanged(req, [order.id]);
   res.json({ updatedOrder: order });
+});
+
+// Admin: 테이블 전체 결제 — **요청 하나로** 받는다.
+//
+// 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면 된다니까?
+// 이해가 안돼?"
+//
+// 이해하는 데 오래 걸렸다. 문제의 뿌리는 산수가 아니라 이 결제가 서버에
+// 도착하는 모양이었다. 예전에는 테이블 결제 버튼 하나가 라운드 수만큼의
+// PATCH /:id/split-pay 요청으로 쪼개져 나갔다. 서버는 매번 주문 한 건만
+// 보므로 「이 테이블의 전체 금액」이라는 것을 볼 기회 자체가 없었고, 그래서
+// 재량 할인도 주문 단위로 다시 계산되고 주문 단위로 잘렸다. 화면이 그
+// 차이를 메우려고 편법을 썼다 — 퍼센트로 환산했다가 내림 때문에 더
+// 깎였고, 라운드에 배분했다가 할인이 라운드 금액보다 크면 쪼개졌다.
+// 사장님이 계속 지적한 것이 그 쪼개짐이다.
+//
+// 그래서 편법을 고치는 대신 편법이 필요했던 이유를 없앤다. 한 손님의 한
+// 번의 결제는 요청 하나이고, 재량 할인은 테이블 총액 기준으로 딱 한 번
+// 계산된다(src/discounts.js computeTableDiscount). 라운드는 그저 그 결제가
+// 어느 주문들을 덮었는지 적어두는 이름표(payment_id)다.
+//
+// PATCH /:id/split-pay 는 그대로 둔다 — 카운터(포장)처럼 주문 하나가 곧
+// 계산서 한 장인 자리에서는 그쪽이 맞고, 옛 화면이 아직 그것을 부른다.
+router.post("/pay-table", requireAdmin, async (req, res) => {
+  if (req.session.role !== "owner") {
+    const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderEdit);
+    if (!allowed) return res.status(403).json({ error: "permission_denied" });
+  }
+  const raw = Array.isArray((req.body || {}).selections) ? req.body.selections : null;
+  if (!raw || raw.length === 0) return res.status(400).json({ error: "invalid_selection" });
+
+  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
+  if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
+
+  // 주문을 전부 먼저 모아서 전부 검사한다. 하나라도 결제할 수 없는
+  // 상태면 **아무것도 건드리지 않는다** — 반만 결제된 테이블이 남는 것이
+  // 제일 나쁘다. 예전 방식(요청 여러 개)은 이것을 보장할 수 없었다.
+  const picked = [];
+  const seen = new Set();
+  for (const sel of raw) {
+    const id = parseInt(sel && sel.orderId, 10);
+    if (!Number.isInteger(id) || seen.has(id)) return res.status(400).json({ error: "invalid_selection" });
+    seen.add(id);
+    const order = await operationalOrderById(store, id);
+    if (!order) return res.status(404).json({ error: "not_found" });
+    if (order.status === "paid" || order.status === "cancelled") {
+      return res.status(400).json({ error: "order_not_editable" });
+    }
+    const wanted = Array.isArray(sel.itemIndexes) ? sel.itemIndexes : [];
+    const selectedIdx = [...new Set(wanted.map((i) => parseInt(i, 10)))].filter(
+      (i) => Number.isInteger(i) && i >= 0 && i < order.items.length && !order.items[i].paid
+    );
+    if (selectedIdx.length === 0) return res.status(400).json({ error: "invalid_selection" });
+    picked.push({ order, selectedIdx });
+  }
+  // 한 번의 결제는 한 테이블의 것이다. 섞여 들어오면 「전체 금액」이
+  // 무엇인지부터가 말이 안 된다.
+  if (new Set(picked.map((p) => String(p.order.table_number))).size > 1) {
+    return res.status(400).json({ error: "mixed_tables" });
+  }
+
+  const breakdown = computeTableDiscount(
+    vipDiscountType,
+    manualDiscount,
+    picked.map((p) => ({ items: p.order.items, indexes: p.selectedIdx })),
+    isDiscountExcludedItem
+  );
+
+  // 이 결제에 이름표를 하나 붙인다. 라운드가 몇 개로 나뉘어 있든 이
+  // 번호가 같으면 「손님이 한 번에 낸 돈」이다 — 나중에 이전 주문이나
+  // 결산에서 되짚을 때 라운드를 다시 묶을 수 있는 유일한 근거다.
+  // 카운터 이름을 "payments" 와 나눠 쓴다 — 그쪽은 손님이 직접 내는 온라인
+  // 결제의 번호다(src/routes/payments.js). 섞으면 둘 다 번호가 튄다.
+  const paymentId = await reserveId("table_payments");
+  const paidAt = nowLocal();
+  const tableNumber = picked[0].order.table_number;
+
+  picked.forEach(({ order, selectedIdx }, i) => {
+    selectedIdx.forEach((idx) => {
+      order.items[idx].paid = true;
+      order.items[idx].paid_at = paidAt;
+      // 결제수단은 품목마다 적는다 — 같은 라운드를 나중에 다른 수단으로
+      // 또 나눠 내도 각자 제 수단으로 잡히게(2026-09-07 사장님 요청).
+      if (paymentMethod) order.items[idx].payment_method = paymentMethod;
+    });
+    order.payment_ids = [...(order.payment_ids || []), paymentId];
+    // 재량 할인은 carrier 라운드 **하나에만** 통째로 적힌다. 나머지
+    // 라운드에는 자기 몫의 VIP 할인만 적는다 — 그래서 discount_type 도
+    // carrier 만 "…+manual" 이 되고, 결산의 할인 종류별 집계에서
+    // 「직접 입력」이 결제 한 번에 1건으로 잡힌다.
+    const mine = breakdown.manualParts[i];
+    if (vipDiscountType || mine > 0) {
+      recordDiscount(order, vipDiscountType, mine > 0 ? manualDiscount : null, {
+        vipAmount: breakdown.vipParts[i],
+        manualAmount: mine,
+        total: breakdown.vipParts[i] + mine,
+      });
+    }
+    order.updated_at = paidAt;
+    // 남김없이 다 결제됐으면 주문 전체를 paid 로 넘긴다. 주문 전체의
+    // 결제수단은 **그때** 정한다 — 일부만 받아놓고 「현금으로 결제된
+    // 주문」의 모양을 갖는 것을 막기 위해서다(2026-09-14).
+    if (order.items.every((it) => it.paid)) {
+      order.status = "paid";
+      const methods = [...new Set(order.items.map((it) => it.payment_method).filter(Boolean))];
+      order.payment_method = methods.length === 1 ? methods[0] : paymentMethod || order.payment_method || null;
+    }
+  });
+
+  const updated = picked.map((p) => p.order);
+  await saveOrders(updated);
+  updated.forEach(rememberOrder);
+  let partyCleared = false;
+  if (updated.some((o) => o.status === "paid")) {
+    const remaining = await openOrdersForTable(store, tableNumber);
+    partyCleared = clearPartySizeIfSettled({ ...store, orders: remaining }, tableNumber);
+  }
+  if (partyCleared) await savePartySize(store, tableNumber);
+  await broadcastOrdersChanged(req, updated.map((o) => o.id));
+  res.json({ paymentId, discount: breakdown, updatedOrders: updated });
 });
 
 module.exports = router;

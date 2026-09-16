@@ -332,6 +332,65 @@ function guessDiscountExcluded(cat) {
   return names.some((n) => DISCOUNT_EXCLUDED_NAME_HINTS.includes(n));
 }
 
+
+// 한 번의 결제 = 한 장의 계산서. 재량 할인은 그 계산서 **한 장 전체**를
+// 기준으로 딱 한 번 계산한다.
+//
+// 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면 된다니까?"
+//
+// 위 computeDiscountAmount 는 주문(라운드) 하나를 받는다. 한 테이블에서
+// 세 번 나눠 주문했으면 그것이 세 번 불렸고, 그때마다 자기 라운드 금액만
+// 보고 재량 할인을 다시 계산했다. 그래서 세 번 결제하면 재량 할인도 세
+// 번 걸렸고(라운드 수만큼 곱절), 그것을 피하려고 화면이 퍼센트로
+// 환산하거나 라운드에 배분해서 보내는 편법을 써야 했다. 편법마다 자기
+// 버그가 있었다 — 환산은 내림 때문에 더 깎였고, 배분은 할인이 라운드
+// 금액보다 크면 두 라운드로 쪼개졌다.
+//
+// 그 편법들이 필요했던 이유는 단 하나, 서버가 테이블 전체를 볼 기회가
+// 없었다는 것이다. 이 함수는 그 기회를 만든다. lots 는 이번에 같이
+// 결제되는 라운드들이고([{ items, indexes }, ...]), 기준 금액은 그것들을
+// 다 더한 값이다.
+//
+// 特約95折/VIP9折는 **손대지 않는다**(2026-09-16 사장님: "직접 입력으로
+// 할인 해주는 거 제외하고 할인들은 냅둬"). 그쪽은 원래부터 품목별 비율이라
+// 라운드로 나눠 계산해도 합이 같다 — 라운드별로 계산한 뒤 더할 뿐이다.
+function computeTableDiscount(vipDiscountType, manualDiscount, lots, isDrink) {
+  const rounds = Array.isArray(lots) ? lots : [];
+  const vipParts = rounds.map((lot) => computeVipDiscountItems(vipDiscountType, lot.items, lot.indexes, isDrink));
+  const grossParts = rounds.map((lot) => fullEligibleTotal(lot.items, lot.indexes));
+  const vipAmount = vipParts.reduce((a, b) => a + b, 0);
+  // 재량 할인의 기준은 「VIP 할인을 뺀 뒤 손님이 낼 돈 전부」다. 라운드가
+  // 몇 개든 상관없다 — 손님에게는 계산서가 한 장이다.
+  const afterVip = Math.max(0, grossParts.reduce((a, b) => a + b, 0) - vipAmount);
+  let manualAmount = 0;
+  if (manualDiscount) {
+    manualAmount =
+      manualDiscount.mode === "percent"
+        ? afterVip - payableAfterRate(afterVip, 1 - manualDiscount.value / 100)
+        : Math.floor(manualDiscount.value);
+    // 계산서 한 장보다 많이 깎을 수는 없다. 자르는 기준도 테이블 전체다 —
+    // 예전에는 라운드마다 잘라서, 큰 할인이 조용히 줄어들곤 했다.
+    manualAmount = Math.min(afterVip, Math.max(0, manualAmount));
+  }
+  // 재량 할인을 어느 라운드에 적어둘 것인가. **쪼개지 않는다** — 한 덩어리
+  // 그대로 한 라운드에 적는다(2026-09-16 사장님: "주문별로 나눠서
+  // 빼지말고"). 그래야 이전 주문·결산에 「직접 입력 −NT$400」 한 줄로
+  // 남는다. 제일 큰 라운드를 고르는 건 순전히 보기 좋으라고 하는 것이다 —
+  // 대개 그 라운드 금액 안에 들어가서 그 줄의 숫자가 음수로 보이지 않는다.
+  // 들어가지 않더라도 쪼개지는 않는다. 합계는 어느 쪽이든 정확하다.
+  let carrier = -1;
+  let best = -1;
+  for (let i = 0; i < rounds.length; i += 1) {
+    const room = grossParts[i] - vipParts[i];
+    if (room > best) {
+      best = room;
+      carrier = i;
+    }
+  }
+  const manualParts = rounds.map((_, i) => (i === carrier ? manualAmount : 0));
+  return { vipParts, grossParts, manualParts, carrier, vipAmount, manualAmount, afterVip, total: vipAmount + manualAmount };
+}
+
 module.exports = {
   DISCOUNT_EXCLUDED_CATEGORY_KEYS,
   isSetDiscountItem,
@@ -352,4 +411,5 @@ module.exports = {
   parseManualDiscount,
   discountTypeKey,
   computeDiscountAmount,
+  computeTableDiscount,
 };
