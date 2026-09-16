@@ -151,6 +151,89 @@ function check(name, cond, extra = "") {
     "결산이 따로 더하면 매출과 주문 화면이 갈린다"
   );
 
+out.push("\n[이미 깎아 파는 세트에는 할인이 안 걸린다]");
+  //
+  // 2026-09-16 사장님: "김밥 + 라면 세트 메뉴 그거 이미 할인이 들어간 거라
+  // 추가 vip 할인이나 퍼센트 할인에는 적용이 안되도록 해줘 할인 제외 애들처럼."
+  //
+  // 세트는 정가(따로 시켰을 때의 값)가 판매가보다 높게 적혀 있다. 그 차이가
+  // 곧 이미 깎아준 금액이라, 또 9折 을 걸면 두 번 깎인다.
+  const { isSetDiscountItem } = require("../src/discounts");
+  check("★ 정가가 더 높으면 세트로 본다", isSetDiscountItem({ unit_price: 280, original_price: 330 }) === true, "");
+  check("정가가 없으면 아니다", isSetDiscountItem({ unit_price: 280 }) === false, "");
+  check("정가가 더 낮으면 아니다 — 잘못 적은 값에 휘둘리지 않는다", isSetDiscountItem({ unit_price: 280, original_price: 200 }) === false, "");
+  check("메뉴 쪽 모양(price)도 읽는다", isSetDiscountItem({ price: 280, original_price: 330 }) === true, "");
+
+  r = await staff.post("/api/menu/admin/items").send({
+    category_id: cat.id, name_zh: "세트시험", name_ko: "세트시험",
+    price: 280, original_price: 330, force_new: true,
+  });
+  check("세트 메뉴가 만들어진다", r.status === 201, `${r.status} ${JSON.stringify(r.body)}`);
+  const setId = r.body.id;
+
+  async function orderSet(table) {
+    const g = request.agent(app);
+    await g.put(`/api/tables/${table}/party-size`).send({ adults: 2, children: 0 });
+    const res = await g.post("/api/orders").send({
+      tableNumber: String(table),
+      items: [{ itemId: setId, qty: 2, orderType: "dine_in", addons: [] }],
+    });
+    if (res.status !== 201) throw new Error(`주문 실패 ${res.status} ${JSON.stringify(res.body)}`);
+    return store.orders.find((x) => x.id === res.body.id);
+  }
+
+  let so = await orderSet(9);
+  check("★ 정가가 주문에 찍힌다 — 나중에 메뉴를 고쳐도 판단이 안 흔들린다", so.items[0].original_price === 330, `${so.items[0].original_price}`);
+  r = await staff.patch(`/api/orders/${so.id}`).send({ status: "paid", paymentMethod: "cash", vipDiscountType: "vip9" });
+  check("결제된다", r.status === 200, `${r.status}`);
+  let sAfter = store.orders.find((x) => x.id === so.id);
+  check("★ VIP9折이 하나도 안 걸린다", (sAfter.discount_amount || 0) === 0, `${sAfter.discount_amount} (560 의 10% 면 56)`);
+
+  so = await orderSet(10);
+  r = await staff.patch(`/api/orders/${so.id}`).send({
+    status: "paid", paymentMethod: "cash", manualDiscountMode: "percent", manualDiscountValue: 10,
+  });
+  sAfter = store.orders.find((x) => x.id === so.id);
+  check("★ 재량 퍼센트 할인도 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다", (sAfter.discount_amount || 0) === 0, `${sAfter.discount_amount}`);
+
+  // 세트와 보통 메뉴가 같이 있으면 보통 메뉴에만 걸린다.
+  const g = request.agent(app);
+  await g.put("/api/tables/11/party-size").send({ adults: 2, children: 0 });
+  r = await g.post("/api/orders").send({
+    tableNumber: "11",
+    items: [
+      { itemId: setId, qty: 1, orderType: "dine_in", addons: [] },   // 280, 세트
+      { itemId: dak, qty: 2, orderType: "dine_in", addons: [] },     // 600, 보통
+    ],
+  });
+  const mixed = store.orders.find((x) => x.id === r.body.id);
+  await staff.patch(`/api/orders/${mixed.id}`).send({ status: "paid", paymentMethod: "cash", vipDiscountType: "vip9" });
+  const mAfter = store.orders.find((x) => x.id === mixed.id);
+  check("★ 섞여 있으면 세트만 빠진다 — 600 의 10%", (mAfter.discount_amount || 0) === 60, `${mAfter.discount_amount} (880 기준이면 88)`);
+
+  out.push("\n[화면도 같은 규칙을 쓴다]");
+  check("★ 관리자 화면이 세트를 뺀다", /isSetDiscountItem\(it\)/.test(files["관리자 화면"]), "화면만 깎아 보여주면 직원이 틀린 숫자를 부른다");
+  // 함수가 **정의만** 돼 있고 안 쓰이면 소용이 없다. 두 함수의 몸통을 직접
+  // 잘라서 그 안에서 무엇을 더하는지 본다.
+  const bodyOf = (src, header) => {
+    const i = src.indexOf(header);
+    return i < 0 ? "" : src.slice(i, src.indexOf("\n  }\n", i));
+  };
+  const eligible = bodyOf(files["관리자 화면"], "  function discountEligibleClientTotal(");
+  const full = bodyOf(files["관리자 화면"], "  function fullEligibleClientTotal(");
+  check("두 함수를 찾았다", eligible.length > 50 && full.length > 50, `${eligible.length}/${full.length}`);
+  check(
+    "★ 화면의 할인 기준도 추가 옵션을 뺀다",
+    /discountBaseOfClient\(it\)/.test(eligible) && !/lineTotalOf\(it\)/.test(eligible),
+    "서버는 안 깎는데 화면만 깎아 보여주면 부르는 숫자가 틀어진다"
+  );
+  check(
+    "★ 재량 할인 기준도 같다",
+    /discountBaseOfClient\(it\)/.test(full) && !/lineTotalOf\(it\)/.test(full),
+    ""
+  );
+  check("★ 두 함수 다 세트를 뺀다", /isSetDiscountItem\(it\)/.test(eligible) && /isSetDiscountItem\(it\)/.test(full), "");
+
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

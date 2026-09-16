@@ -52,6 +52,27 @@ function lineTotalOf(it) {
  * 값 자체지 따로 시킨 것이 아니다. 추가 옵션(사리면·볶음밥 추가)은 얹어
  * 시킨 것이라 뺀다.
  */
+/**
+ * 이 품목은 **이미 할인이 들어간 세트**인가.
+ *
+ * 2026-09-16 사장님: "김밥 + 라면 세트 메뉴 그거 이미 할인이 들어간 거라
+ * 추가 vip 할인이나 퍼센트 할인에는 적용이 안되도록 해줘 할인 제외 애들처럼."
+ *
+ * 세트는 original_price(따로 시켰을 때의 값)가 price 보다 높게 적혀 있다 —
+ * 손님 화면이 그걸로 취소선과 「-NT$50」 을 그린다(order.js priceHtml).
+ * 그 차이가 곧 이미 깎아준 금액이다. 거기에 또 9折 을 걸면 두 번 깎인다.
+ *
+ * 따로 켜고 끄는 표를 두지 않는다. **정가를 적어둔 것 자체가** 「이건 이미
+ * 싸게 파는 것」이라는 뜻이고, 그 말을 두 군데서 다르게 하면 언젠가 갈린다.
+ */
+function isSetDiscountItem(it) {
+  if (!it) return false;
+  const original = Number(it.original_price || 0);
+  // 주문에 찍힌 품목은 unit_price, 메뉴 쪽은 price 에 값이 있다.
+  const now = Number(it.unit_price != null ? it.unit_price : it.price || 0);
+  return original > 0 && now > 0 && original > now;
+}
+
 function discountBaseOf(it) {
   return (it.unit_price || 0) * (it.qty || 0) + optionPriceOfItem(it);
 }
@@ -69,7 +90,14 @@ function sumItems(items, indexes, exclude) {
   const idxs = indexes || items.map((_, i) => i);
   return idxs.reduce((s, i) => {
     const it = items[i];
-    if (!it || isCardSaleItem(it) || (exclude && exclude(it))) return s;
+    // 이미 깎아 파는 세트는 **어떤 할인의 기준에도** 안 들어간다.
+    //
+    // 2026-09-16 사장님: "김밥 + 라면 세트 메뉴 그거 이미 할인이 들어간 거라
+    // 추가 vip 할인이나 퍼센트 할인에는 적용이 안되도록 해줘." 「이나」라고
+    // 하셨으니 VIP 카드 할인도, 직원 재량 할인도 둘 다다. 그래서 exclude
+    // 콜백(음료·기타)과 **따로** 여기서 막는다 — 재량 할인은 그 콜백을 안
+    // 넘기기 때문이다(아래 fullEligibleTotal).
+    if (!it || isCardSaleItem(it) || isSetDiscountItem(it) || (exclude && exclude(it))) return s;
     // 할인 기준이므로 추가 옵션은 빼고 더한다(위 discountBaseOf).
     return s + discountBaseOf(it);
   }, 0);
@@ -195,6 +223,7 @@ function guessDiscountExcluded(cat) {
 
 module.exports = {
   DISCOUNT_EXCLUDED_CATEGORY_KEYS,
+  isSetDiscountItem,
   addonsTotalOf,
   discountBaseOf,
   DISCOUNT_EXCLUDED_NAME_HINTS,

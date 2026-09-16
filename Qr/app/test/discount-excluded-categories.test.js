@@ -80,9 +80,12 @@ out.push("\n[서버와 화면이 같은 판단을 본다]");
     /discount_excluded: isDiscountExcludedCategory\(c\)/.test(cwi),
     `categoriesWithItems 안에 없다 (${cwi.length}자)`
   );
+  // 2026-09-16: 여기에 「이미 깎아 파는 세트」가 하나 더 붙었다
+  // (isSetDiscountItem). 분류 판단은 여전히 서버 답을 그대로 쓴다 —
+  // 화면이 키 목록을 보고 다시 정하지 않는다는 것이 이 검사의 뜻이다.
   check(
-    "★ 화면은 그 답을 그대로 쓴다",
-    /if \(!c\.discount_excluded\) continue;/.test(admin),
+    "★ 화면은 분류 판단을 서버 답 그대로 쓴다",
+    /c\.discount_excluded \|\| isSetDiscountItem\(it\)/.test(admin),
     "화면이 다시 판단하고 있다"
   );
   check(

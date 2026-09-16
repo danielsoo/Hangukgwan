@@ -8071,21 +8071,45 @@
   function discountExcludedItemIdSet() {
     const ids = new Set();
     for (const c of categories || []) {
-      // 서버가 이미 답을 내서 보내준다(src/routes/menu.js
-      // categoriesWithItems). 여기서 다시 판단하지 않는다 — 같은 규칙을
-      // 두 군데서 적으면 화면에 뜬 금액과 실제로 받는 금액이 갈린다.
-      if (!c.discount_excluded) continue;
-      for (const it of c.items || []) ids.add(it.id);
+      for (const it of c.items || []) {
+        // (1) 분류가 통째로 빠지는 경우(음료·기타). 서버가 이미 답을 내서
+        //     보내준다(src/routes/menu.js categoriesWithItems) — 여기서 다시
+        //     판단하지 않는다. 같은 규칙을 두 군데서 적으면 화면에 뜬 금액과
+        //     실제로 받는 금액이 갈린다.
+        // (2) 이미 깎아 파는 세트(신라면 김밥세트). 정가가 적혀 있으면 그
+        //     차이가 곧 이미 깎아준 금액이라, 또 9折 을 걸면 두 번 깎인다
+        //     (2026-09-16 사장님, src/discounts.js isSetDiscountItem).
+        if (c.discount_excluded || isSetDiscountItem(it)) ids.add(it.id);
+      }
     }
     return ids;
+  }
+  /** src/discounts.js isSetDiscountItem 과 같은 규칙. */
+  function isSetDiscountItem(it) {
+    if (!it) return false;
+    const original = Number(it.original_price || 0);
+    const now = Number(it.unit_price != null ? it.unit_price : it.price || 0);
+    return original > 0 && now > 0 && original > now;
+  }
+  /**
+   * 할인이 걸리는 금액 — 추가 옵션은 뺀다.
+   *
+   * 서버의 discountBaseOf(src/discounts.js)와 **같은 식이어야 한다.** 여기가
+   * lineTotalOf 를 쓰면 화면은 추가 옵션까지 깎아 보여주고 서버는 안 깎는다.
+   * 직원이 손님에게 부르는 숫자가 틀어지는 자리다.
+   */
+  function discountBaseOfClient(it) {
+    const optPrice = Number((it && it.option_price) || 0) || 0;
+    return (it.unit_price || 0) * (it.qty || 0) + optPrice;
   }
   function discountEligibleClientTotal(order, indexes) {
     const excludedIds = discountExcludedItemIdSet();
     const idxs = indexes || order.items.map((_, i) => i);
     return idxs.reduce((s, i) => {
       const it = order.items[i];
-      if (!it || excludedIds.has(it.item_id)) return s;
-      return s + lineTotalOf(it);
+      // 이미 깎아 파는 세트도 뺀다 — 주문에 찍힌 정가로 바로 알 수 있다.
+      if (!it || excludedIds.has(it.item_id) || isSetDiscountItem(it)) return s;
+      return s + discountBaseOfClient(it);
     }, 0);
   }
   function computeVipDiscountClient(type, eligibleTotal) {
@@ -8100,8 +8124,10 @@
     const idxs = indexes || order.items.map((_, i) => i);
     return idxs.reduce((s, i) => {
       const it = order.items[i];
-      if (!it) return s;
-      return s + lineTotalOf(it);
+      // 재량 할인도 세트에는 안 걸린다 — 「vip 할인이나 퍼센트 할인」 둘 다다
+      // (2026-09-16 사장님). 추가 옵션도 여기서 빠진다.
+      if (!it || isSetDiscountItem(it)) return s;
+      return s + discountBaseOfClient(it);
     }, 0);
   }
   function computeManualDiscountAmountClient(manualValue, eligibleTotal) {

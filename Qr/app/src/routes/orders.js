@@ -82,6 +82,7 @@ function rememberOrder(order) {
 const {
   VIP_DISCOUNT_RATES,
   isDiscountExcludedCategory,
+  isSetDiscountItem,
   computeDiscountAmount: computeDiscountAmountPure,
   parseManualDiscount,
   discountTypeKey,
@@ -123,7 +124,8 @@ function categoryOfKey(key) {
 //
 // 이제 메뉴 관리에서 분류마다 켜고 끈다. key/이름 짐작은 처음 값을
 // 정해줄 때만 쓴다(src/discounts.js isDiscountExcludedCategory).
-const isDiscountExcludedItem = (it) => isDiscountExcludedCategory(categoryOfKey(categoryKeyOf(it)));
+const isDiscountExcludedItem = (it) =>
+  isDiscountExcludedCategory(categoryOfKey(categoryKeyOf(it))) || isSetDiscountItem(it);
 
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을
@@ -392,6 +394,7 @@ router.post("/", async (req, res) => {
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
     // 추가 옵션도 한 줄에 한 번이다 — 손님이 체크한 것은 하나다.
     const addonsPriceOnce = selectedAddons.reduce((s, a) => s + a.price, 0);
+    // 고른 옵션의 값(크기 등)은 unit_price 에 더해 둔다 — 위 optionPriceFor 주석.
     // 옵션 값은 **수량을 안 곱한다** — 적어둔 금액이 그대로 한 번 붙는다
     // (src/discounts.js lineTotalOf, 2026-09-16 사장님).
     const optionPriceOnce = optionPriceFor(mi, it.option);
@@ -404,6 +407,10 @@ router.post("/", async (req, res) => {
       name_en: mi.name_en,
       qty,
       unit_price: mi.price,
+      // 따로 시켰을 때의 값(세트 메뉴). 이 값이 적혀 있으면 이미 깎아 파는
+      // 것이라 VIP·재량 할인이 또 걸리지 않는다(src/discounts.js
+      // isSetDiscountItem). category_key 와 같은 이유로 그때 값을 찍어둔다.
+      original_price: mi.original_price || null,
       option_choice: it.option || null,
       // 옵션 때문에 붙는 금액. 수량과 무관하게 한 줄에 한 번이다.
       option_price: optionPriceOnce || null,
@@ -1110,6 +1117,8 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
     const selectedAddons = resolveSelectedAddons(mi, it.addons);
     // 추가 옵션도 한 줄에 한 번이다 — 손님이 체크한 것은 하나다.
     const addonsPriceOnce = selectedAddons.reduce((s, a) => s + a.price, 0);
+    // 옵션 값은 **수량을 안 곱한다** — 적어둔 금액이 그대로 한 번 붙는다
+    // (src/discounts.js lineTotalOf, 2026-09-16 사장님).
     const optionPriceOnce = optionPriceFor(mi, it.option);
     total += mi.price * qty + optionPriceOnce + addonsPriceOnce;
     validated.push({
@@ -1120,6 +1129,7 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
       name_en: mi.name_en,
       qty,
       unit_price: mi.price,
+      original_price: mi.original_price || null,
       option_choice: it.option || null,
       option_price: optionPriceOnce || null,
       spice_choice: it.spice || null,
