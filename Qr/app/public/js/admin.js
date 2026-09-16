@@ -878,6 +878,17 @@
       menuTrashMakeNew: "새 메뉴로 넣기",
       catDiscountExcluded: "할인 제외",
       catDiscountExcludedTitle: "체크하면 이 분류의 메뉴에는 特約95折/VIP9折 할인이 걸리지 않아요.",
+      itemDiscountExcludedLabel: "할인 적용 (特約95折/VIP9折·퍼센트 할인)",
+      itemDiscountFollowCat: "분류 설정을 따름",
+      itemDiscountOn: "할인 적용함",
+      itemDiscountOff: "할인 안 함",
+      itemDiscountHintFollowOn: "지금 이 분류는 「할인 제외」예요. 그래서 이 메뉴도 할인이 안 걸려요.",
+      itemDiscountHintFollowOff: "지금 이 분류는 할인이 걸려요. 그래서 이 메뉴도 할인이 걸려요.",
+      itemDiscountHintOn: "분류가 「할인 제외」여도 이 메뉴에는 할인이 걸려요.",
+      itemDiscountHintOff: "분류와 상관없이 이 메뉴에는 할인이 안 걸려요.",
+      itemDiscountOffBadge: "할인 안 함",
+      itemDiscountOnBadge: "할인 적용",
+      itemDiscountBadgeTitle: "이 메뉴만 따로 정해 둔 값이에요. 메뉴를 눌러 「가격」 탭에서 바꿀 수 있어요.",
       // 결산 탭의 LINE 한 줄. 결산이 됐다고 문자가 간 것은 아니다.
       lineShiftAm: "오전",
       lineShiftDay: "하루",
@@ -1651,6 +1662,17 @@
       menuTrashMakeNew: "建立新品項",
       catDiscountExcluded: "不折扣",
       catDiscountExcludedTitle: "勾選後，此分類的品項不套用特約95折／VIP9折。",
+      itemDiscountExcludedLabel: "折扣套用（特約95折／VIP9折・百分比折扣）",
+      itemDiscountFollowCat: "依分類設定",
+      itemDiscountOn: "套用折扣",
+      itemDiscountOff: "不套用折扣",
+      itemDiscountHintFollowOn: "此分類目前設為「不折扣」，所以此品項也不折扣。",
+      itemDiscountHintFollowOff: "此分類目前會折扣，所以此品項也會折扣。",
+      itemDiscountHintOn: "即使分類設為「不折扣」，此品項仍會折扣。",
+      itemDiscountHintOff: "不論分類設定，此品項都不折扣。",
+      itemDiscountOffBadge: "不折扣",
+      itemDiscountOnBadge: "折扣",
+      itemDiscountBadgeTitle: "此品項單獨設定的值。點品項在「價格」分頁可修改。",
       lineShiftAm: "上午",
       lineShiftDay: "整日",
       lineSentAt: "{time} 已傳送",
@@ -6522,6 +6544,19 @@
     }, delay);
   }
 
+  /**
+   * 메뉴 이름 옆의 작은 표 — **따로 정해 둔 메뉴에만** 붙는다.
+   *
+   * 분류를 따르는(대부분의) 메뉴에는 아무것도 안 붙는다. 전부에 붙이면
+   * 표가 배지밭이 돼서 정작 예외인 줄이 안 보인다.
+   */
+  function discountFlagBadgeHtml(item) {
+    const own = item ? item.discount_excluded_own : null;
+    if (own === null || own === undefined) return "";
+    const label = own ? T("itemDiscountOffBadge") : T("itemDiscountOnBadge");
+    return ` <span class="item-discount-badge ${own ? "off" : "on"}" title="${T("itemDiscountBadgeTitle")}">${label}</span>`;
+  }
+
   function renderMenuAdmin() {
     const wrap = $("#menuCategories");
     wrap.innerHTML = "";
@@ -6564,7 +6599,7 @@
         tr.innerHTML = `
           <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="${T("photoMissingTitle")}">${T("photoMissing")}</span>`}</td>
           <td>${item.code || ""}</td>
-          <td>${itemName(item)}</td>
+          <td>${itemName(item)}${discountFlagBadgeHtml(item)}</td>
           <td>NT$${money(item.price)}</td>
           <td>${canMenuEdit()
             ? `<button type="button" class="availability-pill ${item.available ? "on" : "off"}" data-soldout-id="${item.id}" title="${T("soldOutTitle")}">${item.available ? T("onSale") : T("soldOut")}</button>`
@@ -6869,6 +6904,37 @@
     return true;
   }
   // 「옵션별 개별 수량」을 켜고 끌 때마다 위 경고를 다시 본다.
+  /**
+   * 「할인 적용」 아래 한 줄 안내.
+   *
+   * 「분류 따름」을 골랐을 때 **지금 그 분류가 어느 쪽인지** 같이 보여준다 —
+   * 분류 토글은 메뉴 관리 표 위쪽에 있어서, 수정 창을 열어 둔 채로는 안
+   * 보인다. 그걸 모르면 「분류 따름」이 할인을 켜는 건지 끄는 건지 알 수가
+   * 없다.
+   */
+  function paintDiscountExcludedHint() {
+    const hint = document.getElementById("discountExcludedHint");
+    const sel = document.getElementById("f_discount_excluded");
+    if (!hint || !sel) return;
+    if (sel.value === "1") {
+      hint.textContent = T("itemDiscountHintOff");
+      return;
+    }
+    if (sel.value === "0") {
+      hint.textContent = T("itemDiscountHintOn");
+      return;
+    }
+    const catId = parseInt(($("#f_category_id") || {}).value, 10);
+    const cat = (categories || []).find((c) => c.id === catId);
+    hint.textContent = cat && cat.discount_excluded ? T("itemDiscountHintFollowOn") : T("itemDiscountHintFollowOff");
+  }
+  if (document.getElementById("f_discount_excluded")) {
+    document.getElementById("f_discount_excluded").addEventListener("change", paintDiscountExcludedHint);
+  }
+  if (document.getElementById("f_category_id")) {
+    // 분류를 바꾸면 「분류 따름」의 뜻도 같이 바뀐다.
+    document.getElementById("f_category_id").addEventListener("change", paintDiscountExcludedHint);
+  }
   if (document.getElementById("f_mix_options")) {
     document.getElementById("f_mix_options").addEventListener("change", paintMixOptionsWarn);
   }
@@ -6952,6 +7018,13 @@
     $("#f_takeout_options").value = item?.takeout_options || "";
     $("#f_addons").value = item?.addons || "";
     $("#f_min_first_order_qty").value = item?.min_first_order_qty || "";
+    // 「분류 따름」("") / 「할인 적용함」("0") / 「할인 안 함」("1").
+    // 서버가 메뉴 자신이 들고 있는 날것을 discount_excluded_own 으로 준다 —
+    // 옆의 discount_excluded 는 분류까지 반영한 **답**이라 여기 쓰면 안 된다
+    // (분류를 따르는 메뉴가 전부 「할인 안 함」으로 고정돼 보인다).
+    const ownExcluded = item ? item.discount_excluded_own : null;
+    $("#f_discount_excluded").value = ownExcluded === null || ownExcluded === undefined ? "" : ownExcluded ? "1" : "0";
+    paintDiscountExcludedHint();
     $("#f_is_spicy").checked = !!item?.is_spicy;
     $("#f_is_signature").checked = !!item?.is_signature;
     // 품절은 체크박스 하나가 아니라 네 가지 중 하나다 — 표의 배지 팝업과
@@ -7028,6 +7101,9 @@
       takeout_options: $("#f_takeout_options").value.trim() || null,
       addons: $("#f_addons").value.trim() || null,
       min_first_order_qty: parseInt($("#f_min_first_order_qty").value, 10) || null,
+      // "" 를 그대로 보낸다 — 서버가 "" 를 「분류 따름」(null)으로 읽는다
+      // (src/routes/menu.js normalizeDiscountExcluded).
+      discount_excluded: $("#f_discount_excluded").value,
       is_spicy: $("#f_is_spicy").checked,
       is_signature: $("#f_is_signature").checked,
       // available 은 서버가 soldoutMode 를 보고 정한다(applySoldOut) —
@@ -8090,7 +8166,11 @@
         // (2) 이미 깎아 파는 세트(신라면 김밥세트). 정가가 적혀 있으면 그
         //     차이가 곧 이미 깎아준 금액이라, 또 9折 을 걸면 두 번 깎인다
         //     (2026-09-16 사장님, src/discounts.js isSetDiscountItem).
-        if (c.discount_excluded || isSetDiscountItem(it)) ids.add(it.id);
+        // 2026-09-16부터 서버가 **메뉴 한 줄마다** 답을 내서 보낸다
+        // (분류 토글 + 메뉴 자신의 설정을 합친 값 — src/routes/menu.js).
+        // 옛 서버가 안 보내면 예전처럼 분류 값을 쓴다.
+        const excluded = it.discount_excluded === undefined ? !!c.discount_excluded : !!it.discount_excluded;
+        if (excluded || isSetDiscountItem(it)) ids.add(it.id);
       }
     }
     return ids;

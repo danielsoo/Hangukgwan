@@ -2293,6 +2293,29 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .cat-discount-toggle input { width: 15px; height: 15px; cursor: pointer; }
 .cat-discount-toggle input:disabled { cursor: default; }
 
+/* 메뉴 이름 옆의 「할인 적용/안 함」 표 — 2026-09-16 사장님: "모든 주문마다
+   할인 적용 온 오프 할 수 있게 메뉴 관리에서 할 수 있게 해줘."
+   분류를 그냥 따르는 메뉴에는 안 붙는다(admin.js discountFlagBadgeHtml) —
+   전부에 붙이면 정작 예외인 줄이 안 보인다. */
+.item-discount-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.item-discount-badge.off {
+  background: #fdecec;
+  color: #a3302c;
+}
+.item-discount-badge.on {
+  background: #e8f3ec;
+  color: #1f6b3c;
+}
+
 /* ── 메뉴 수정의 「미리보기」 탭 ─────────────────────────────────────────
    2026-09-16 사장님: "옵션 탭이 지금 너무 혼잡해 읽어도 이해가 안되는 부분이
    꽤 있어서 (…) 폰에서 어떻게 보이는지 실제 ui 코드를 랜더링해서 보여주면

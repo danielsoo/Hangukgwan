@@ -82,6 +82,7 @@ function rememberOrder(order) {
 const {
   VIP_DISCOUNT_RATES,
   isDiscountExcludedCategory,
+  isDiscountExcludedMenuItem,
   isSetDiscountItem,
   computeDiscountAmount: computeDiscountAmountPure,
   parseManualDiscount,
@@ -124,8 +125,17 @@ function categoryOfKey(key) {
 //
 // 이제 메뉴 관리에서 분류마다 켜고 끈다. key/이름 짐작은 처음 값을
 // 정해줄 때만 쓴다(src/discounts.js isDiscountExcludedCategory).
+// 2026-09-16 사장님: "모든 주문마다 할인 적용 온 오프 할 수 있게 메뉴
+// 관리에서 할 수 있게 해줘." — 메뉴 한 줄이 자기 표를 들 수 있고, 그 표가
+// 분류를 이긴다(src/discounts.js isDiscountExcludedMenuItem).
+//
+// 주문에 찍어 두지 않고 **지금 메뉴를 다시 본다.** 분류 표도 예전부터 그렇게
+// 해 왔다 — 사장님이 토글을 껐는데 이미 앉아 있는 테이블만 예전 값으로
+// 남으면, 같은 화면에서 두 규칙이 돌아가는 꼴이 된다.
+const menuItemOfOrderItem = (it) => (store.menuItems || []).find((m) => m.id === it.item_id) || null;
 const isDiscountExcludedItem = (it) =>
-  isDiscountExcludedCategory(categoryOfKey(categoryKeyOf(it))) || isSetDiscountItem(it);
+  isSetDiscountItem(it) ||
+  isDiscountExcludedMenuItem(menuItemOfOrderItem(it), categoryOfKey(categoryKeyOf(it)));
 
 // paymentMethod/vipDiscountType 둘 다 body에서 그대로 신뢰하지 않고 여기서
 // 검증한다 — 특히 "할인은 현금만"이라는 규칙은 클라이언트가 버튼을

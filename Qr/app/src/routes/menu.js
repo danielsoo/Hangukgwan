@@ -6,7 +6,7 @@ const { withAvailability, today } = require("../availability");
 const { broadcastOnWrite } = require("../realtime");
 const { DELETED_AT, activeItems, deletedItems, isDeleted } = require("../menuItems");
 const { reserveId } = require("../db");
-const { isDiscountExcludedCategory } = require("../discounts");
+const { isDiscountExcludedCategory, isDiscountExcludedMenuItem } = require("../discounts");
 const { nowLocal } = require("../time");
 const canEditMenu = requirePermission("menuEdit");
 
@@ -52,7 +52,18 @@ function categoriesWithItems(onlyAvailable) {
     // 받아 다시 판단하던 것을 그만둔다 — 같은 규칙을 두 군데서 적으면
     // 화면에 뜬 금액과 실제로 받는 금액이 언젠가 갈린다. 여기서 늘
     // true/false 로 못 박아 보내면 화면은 그대로 쓰기만 하면 된다.
-    return { ...c, discount_excluded: isDiscountExcludedCategory(c), items };
+    // 메뉴 한 줄의 할인 제외도 **서버가 답을 내서** 보낸다(2026-09-16
+    // 사장님: "모든 주문마다 할인 적용 온 오프 할 수 있게"). 화면은
+    // discount_excluded 를 그대로 믿고 쓰면 되고, 수정 폼이 「분류 따름 /
+    // 적용 / 제외」 셋 중 무엇인지 보여줄 수 있게 메뉴 자신이 들고 있는
+    // 날것(discount_excluded_own)도 같이 보낸다.
+    const catExcluded = isDiscountExcludedCategory(c);
+    items = items.map((i) => ({
+      ...i,
+      discount_excluded: isDiscountExcludedMenuItem(i, c),
+      discount_excluded_own: i.discount_excluded === undefined ? null : i.discount_excluded,
+    }));
+    return { ...c, discount_excluded: catExcluded, items };
   });
 }
 
@@ -193,6 +204,20 @@ router.get("/", (req, res) => {
   res.json(categoriesWithItems(true));
 });
 
+/**
+ * 메뉴 한 줄의 「할인 적용」 설정을 저장할 값으로 바꾼다.
+ *
+ * 화면의 <select> 는 "" / "0" / "1" 세 값을 보낸다. 셋을 각각
+ * null(분류 따름) / false(할인함) / true(할인 안 함) 로 못 박는다 —
+ * ""를 false 로 접어버리면 「분류 따름」과 「분류가 제외여도 할인함」이
+ * 같은 값이 돼서, 사장님이 고른 것을 되돌려 보여줄 수 없다.
+ */
+function normalizeDiscountExcluded(v) {
+  if (v === undefined || v === null || v === "") return null;
+  if (v === "0" || v === 0 || v === false || v === "false") return false;
+  return true;
+}
+
 // Admin: full menu including unavailable items
 router.get("/admin", requireAdmin, (req, res) => {
   res.json(categoriesWithItems(false));
@@ -298,6 +323,8 @@ router.post("/admin/items", canEditMenu, async (req, res) => {
     // #itemAddonsList and the price recompute in this file / orders.js.
     addons: b.addons || null,
     min_first_order_qty: b.min_first_order_qty || null,
+    // null 이면 분류를 따른다(위 normalizeDiscountExcluded).
+    discount_excluded: normalizeDiscountExcluded(b.discount_excluded),
     allergens: Array.isArray(b.allergens) ? b.allergens : [],
     is_spicy: b.is_spicy ? 1 : 0,
     is_signature: b.is_signature ? 1 : 0,
@@ -355,6 +382,7 @@ router.put("/admin/items/:id", canEditMenu, async (req, res) => {
       if (Number.isFinite(catId)) item.category_id = catId;
     }
     if (b.allergens !== undefined) item.allergens = Array.isArray(b.allergens) ? b.allergens : [];
+    if (b.discount_excluded !== undefined) item.discount_excluded = normalizeDiscountExcluded(b.discount_excluded);
     if (b.mix_options !== undefined) item.mix_options = b.mix_options ? 1 : 0;
     if (b.is_spicy !== undefined) item.is_spicy = b.is_spicy ? 1 : 0;
     if (b.is_signature !== undefined) item.is_signature = b.is_signature ? 1 : 0;

@@ -77,15 +77,22 @@ out.push("\n[서버와 화면이 같은 판단을 본다]");
   const cwi = cwiFrom >= 0 && cwiTo > cwiFrom ? menu.slice(cwiFrom, cwiTo) : "";
   check(
     "★ 목록을 만들 때 분류마다 답을 내서 보낸다",
-    /discount_excluded: isDiscountExcludedCategory\(c\)/.test(cwi),
+    /discount_excluded: catExcluded/.test(cwi) && /const catExcluded = isDiscountExcludedCategory\(c\);/.test(cwi),
     `categoriesWithItems 안에 없다 (${cwi.length}자)`
   );
-  // 2026-09-16: 여기에 「이미 깎아 파는 세트」가 하나 더 붙었다
-  // (isSetDiscountItem). 분류 판단은 여전히 서버 답을 그대로 쓴다 —
-  // 화면이 키 목록을 보고 다시 정하지 않는다는 것이 이 검사의 뜻이다.
+  // 2026-09-16 오후: 메뉴 한 줄도 자기 표를 들 수 있게 되면서
+  // (isDiscountExcludedMenuItem — "모든 주문마다 할인 적용 온 오프 할 수 있게
+  // 메뉴 관리에서"), 서버가 **메뉴마다** 답을 내서 보낸다.
   check(
-    "★ 화면은 분류 판단을 서버 답 그대로 쓴다",
-    /c\.discount_excluded \|\| isSetDiscountItem\(it\)/.test(admin),
+    "★ 메뉴 한 줄마다도 답을 내서 보낸다",
+    /discount_excluded: isDiscountExcludedMenuItem\(i, c\)/.test(cwi),
+    `categoriesWithItems 안에 없다 (${cwi.length}자)`
+  );
+  // 분류 판단은 여전히 서버 답을 그대로 쓴다 — 화면이 키 목록을 보고 다시
+  // 정하지 않는다는 것이 이 검사의 뜻이다. 이제 그 답은 메뉴 줄에 실려 온다.
+  check(
+    "★ 화면은 할인 제외 판단을 서버 답 그대로 쓴다",
+    /it\.discount_excluded === undefined \? !!c\.discount_excluded : !!it\.discount_excluded/.test(admin),
     "화면이 다시 판단하고 있다"
   );
   check(
@@ -100,7 +107,7 @@ out.push("\n[서버와 화면이 같은 판단을 본다]");
   );
   check(
     "주문 라우트도 같은 판단을 쓴다",
-    /isDiscountExcludedCategory\(categoryOfKey\(categoryKeyOf\(it\)\)\)/.test(orders),
+    /isDiscountExcludedMenuItem\(menuItemOfOrderItem\(it\), categoryOfKey\(categoryKeyOf\(it\)\)\)/.test(orders),
     ""
   );
   // 품목별 취소선도 같은 목록이어야 한다 — 줄 그어진 품목과 실제로 깎이는

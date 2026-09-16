@@ -273,6 +273,30 @@ function isDiscountExcludedCategory(cat) {
   return guessDiscountExcluded(cat);
 }
 
+/**
+ * 이 **메뉴 한 줄**은 할인에서 빠지는가.
+ *
+ * 2026-09-16 사장님: "모든 주문마다 할인 적용 온 오프 할 수 있게 메뉴
+ * 관리에서 할 수 있게 해줘."
+ *
+ * 분류 단위만으로는 안 되는 경우가 있다 — 같은 분류 안에서 어떤 메뉴는
+ * 깎아주고 어떤 메뉴는 안 깎는 식. 그래서 메뉴 자신이 표를 하나 더 들 수
+ * 있게 하고, **그 표가 분류를 이긴다.**
+ *
+ *   item.discount_excluded === null/undefined  → 분류를 따른다(기본값)
+ *   item.discount_excluded === true            → 이 메뉴만 할인 안 함
+ *   item.discount_excluded === false           → 분류가 제외여도 이 메뉴는 할인함
+ *
+ * 세 번째가 핵심이다 — 「음료 분류는 전부 할인 안 함, 그런데 이 하나는
+ * 해줌」을 표현할 방법이 없으면 사장님이 분류를 통째로 풀어야 한다.
+ */
+function isDiscountExcludedMenuItem(item, cat) {
+  if (item && item.discount_excluded !== undefined && item.discount_excluded !== null) {
+    return !!item.discount_excluded;
+  }
+  return isDiscountExcludedCategory(cat);
+}
+
 /** 표가 없는 분류의 처음 값. 키가 맞거나 이름이 맞으면 제외로 본다. */
 function guessDiscountExcluded(cat) {
   if (!cat) return false;
@@ -290,6 +314,7 @@ module.exports = {
   discountBaseOf,
   DISCOUNT_EXCLUDED_NAME_HINTS,
   isDiscountExcludedCategory,
+  isDiscountExcludedMenuItem,
   guessDiscountExcluded,
   VIP_DISCOUNT_RATES,
   lineTotalOf,

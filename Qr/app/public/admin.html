@@ -1270,6 +1270,20 @@
               <label><span data-i18n="itemOriginalPriceLabel">정가 (할인 전 가격, 없으면 비워두세요)</span><input id="f_original_price" type="number" /></label>
             </div>
             <label><span data-i18n="itemMinFirstOrderQtyLabel">최초 주문 최소 수량 (없으면 비워두세요)</span><input id="f_min_first_order_qty" type="number" min="0" /></label>
+
+            <!-- 2026-09-16 사장님: "모든 주문마다 할인 적용 온 오프 할 수
+                 있게 메뉴 관리에서 할 수 있게 해줘." — 분류 단위 토글
+                 (메뉴 관리 표의 분류 제목 옆)만으로는 같은 분류 안에서
+                 하나만 빼거나 하나만 넣을 수가 없다. 메뉴마다 따로 정하고,
+                 안 정하면 분류를 따른다. -->
+            <label><span data-i18n="itemDiscountExcludedLabel">할인 적용 (特約95折/VIP9折·퍼센트 할인)</span>
+              <select id="f_discount_excluded">
+                <option value="" data-i18n="itemDiscountFollowCat">분류 설정을 따름</option>
+                <option value="0" data-i18n="itemDiscountOn">할인 적용함</option>
+                <option value="1" data-i18n="itemDiscountOff">할인 안 함</option>
+              </select>
+            </label>
+            <p class="option-group-hint" id="discountExcludedHint"></p>
           </section>
 
           <!-- 사장님(2026-09-10): "옵션 치고 엔터하면 밑에 글자 등록되어있는
