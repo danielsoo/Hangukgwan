@@ -201,20 +201,24 @@
   let minSpendRequired = 0;
 
 
+  // 문구 안에 직접 박히는 금액에도 쉼표를 찍는다(아래 money() 와 같은 규칙).
+  // 여기는 통화 기호를 문구가 직접 들고 있어서 money() 를 못 쓴다.
+  const comma = (n) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US") : n);
+
   // 사장님이 주신 문구 그대로다(2026-09-11). 금액만 설정에서 가져온다 —
   // 여기에 200을 박아두면 설정을 바꿔도 안내문만 옛 금액으로 남는다.
   const MIN_SPEND_NOTICE = {
-    zh: (n) => `大人及13歲以上兒童，每人低消${n}元；13歲以下免低消。`,
-    ko: (n) => `어른과 13세 이상 어린이는 1인당 최소 주문 금액이 NT$${n} 입니다. 13세 이하는 해당되지 않습니다.`,
-    en: (n) => `Minimum NT$${n} per person for adults and children aged 13 and over. Under 13 exempt.`,
+    zh: (n) => `大人及13歲以上兒童，每人低消${comma(n)}元；13歲以下免低消。`,
+    ko: (n) => `어른과 13세 이상 어린이는 1인당 최소 주문 금액이 NT$${comma(n)} 입니다. 13세 이하는 해당되지 않습니다.`,
+    en: (n) => `Minimum NT$${comma(n)} per person for adults and children aged 13 and over. Under 13 exempt.`,
   };
 
   // 규칙만 적어두면 손님은 얼마를 더 담아야 하는지 직접 계산해야 한다.
   // 이미 시킨 라운드까지 합친 금액과 모자란 금액을 같이 적어준다.
   const MIN_SPEND_SHORTFALL = {
-    zh: (have, need) => `目前 NT$${have} / 需要 NT$${need}（還差 NT$${need - have}）`,
-    ko: (have, need) => `지금 NT$${have} / 필요 NT$${need} (NT$${need - have} 부족)`,
-    en: (have, need) => `Now NT$${have} of NT$${need} (NT$${need - have} to go)`,
+    zh: (have, need) => `目前 NT$${comma(have)} / 需要 NT$${comma(need)}（還差 NT$${comma(need - have)}）`,
+    ko: (have, need) => `지금 NT$${comma(have)} / 필요 NT$${comma(need)} (NT$${comma(need - have)} 부족)`,
+    en: (have, need) => `Now NT$${comma(have)} of NT$${comma(need)} (NT$${comma(need - have)} to go)`,
   };
 
   // Shown when trying to add a griddle (불판) item below its
@@ -336,8 +340,19 @@
     renderMemberSheet();
   }
 
+  /**
+   * 돈 한 덩이. 천 자리마다 쉼표.
+   *
+   * 2026-09-16 사장님: "모든 돈이 표시되는 액수에는 천 자리수마다 , 를
+   * 표시해줘 1,000 이렇게." NT$7120 과 NT$712 는 흘깃 보면 같아 보인다.
+   *
+   * 이 화면의 금액은 전부 이 함수를 지난다 — 통화 기호도 여기서 붙는다.
+   * 숫자가 아닌 것이 오면 그대로 둔다. 지어내지 않는다.
+   */
   function money(n) {
-    return `${CURRENCY_SYMBOL[currency] || "NT$"}${n}`;
+    const num = Number(n);
+    const shown = Number.isFinite(num) ? num.toLocaleString("en-US") : n;
+    return `${CURRENCY_SYMBOL[currency] || "NT$"}${shown}`;
   }
 
   // Set-discount price display (e.g. 신라면 김밥세트: original_price is what

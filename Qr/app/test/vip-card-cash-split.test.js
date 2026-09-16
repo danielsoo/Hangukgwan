@@ -92,7 +92,8 @@ out.push("\n[4] 화면이 한 번에 부르고 현금만 따로 뗀다 (public/j
     "카드값이 할인 대상에 섞였다"
   );
   check("★ 고르는 결제수단은 밥값 것이라고 적는다", /아래에서 고르는 결제수단은 밥값/.test(admin), "");
-  check("★ 카드값은 무조건 현금이라고 적는다", /VIP 카드 NT\$\$\{cardAmount\} \(무조건 현금\)/.test(admin), "");
+  // 2026-09-16: 금액에 천 자리 쉼표가 붙었다(test/money-thousands.test.js).
+  check("★ 카드값은 무조건 현금이라고 적는다", /VIP 카드 NT\$\$\{money\(cardAmount\)\} \(무조건 현금\)/.test(admin), "");
   check("★ 밥값이 결제된 뒤에 카드를 판다", /if \(cardAmount && !results\.some\(\(r\) => !r\.ok\)\)/.test(admin), "");
   check("★ 카드만 안 팔린 경우를 조용히 넘기지 않는다", /vipSellFailedAfterPay/.test(admin), "");
   check("다른 자리로 넘어가면 얹어 둔 것이 따라가지 않는다", /pendingVipCardSale\.tableNumber\) !== String\(tableNumber\)/.test(admin), "");

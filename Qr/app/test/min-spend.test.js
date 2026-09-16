@@ -134,7 +134,9 @@ out.push("\n[8] 화면 배선 — 옛 규칙은 남아 있지 않다");
   check("주문 직전에 다시 물어본다", /async function refreshMinSpend\(\)/.test(js), "");
 
   // 사장님이 주신 문구 그대로여야 한다.
-  check("★ 사장님 문구 그대로", /大人及13歲以上兒童，每人低消\$\{n\}元；13歲以下免低消。/.test(js), "");
+  // 2026-09-16: 금액에 천 자리 쉼표가 붙으면서 ${n} 이 ${comma(n)} 이 됐다
+  // (test/money-thousands.test.js). 문구 자체는 한 글자도 안 바뀌었다.
+  check("★ 사장님 문구 그대로", /大人及13歲以上兒童，每人低消\$\{comma\(n\)\}元；13歲以下免低消。/.test(js), "");
   check("금액이 설정에서 온다 (200을 박아두지 않았다)", !/低消200元/.test(js), "");
   check("세 언어 모두 있다", /MIN_SPEND_NOTICE[\s\S]{0,400}en:/.test(js), "");
   check("모자란 금액도 적어준다", /MIN_SPEND_SHORTFALL/.test(js) && /id="partyWarningAmount"/.test(html), "");

@@ -150,9 +150,9 @@ check(
   "받은 돈만 있으면 「왜 470이 아니라 447이지」 가 된다"
 );
 check(
-  "할인이 없는 주문은 예전 그대로다",
-  /cardOff > 0[\s\S]{0,400}?`<div class="order-card-total">NT\$\$\{o\.total\}<\/div>`/.test(admin),
-  ""
+  "할인이 없는 주문은 한 줄로만 적힌다",
+  /cardOff > 0[\s\S]{0,400}?`<div class="order-card-total">NT\$\$\{money\(o\.total\)\}<\/div>`/.test(admin),
+  "2026-09-16 부터 금액은 money() 를 지난다(천 자리 쉼표)"
 );
 check("두 번째 줄에 자리(css)가 있다", /\.order-card-total-was/.test(fs.readFileSync(path.join(__dirname, "../public/css/admin.css"), "utf8")), "");
 for (const k of ["原價", "할인 전"]) {

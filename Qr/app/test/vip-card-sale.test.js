@@ -132,7 +132,9 @@ check("결제창에 판매 버튼이 있다", /id="vipSellBtn"/.test(adminSrc));
 check("주문이 없어도 버튼이 나온다",
   /const footer = tableDetailView === "active"\s*\n\s*\?/.test(adminSrc),
   "아직 activeOrders.length 조건에 묶여 있다");
-check("버튼에 금액이 찍힌다", /vipSalePrice == null \? "" : ` NT\$\$\{vipSalePrice\}`/.test(adminSrc));
+// 2026-09-16: 금액에 천 자리 쉼표가 붙었다(test/money-thousands.test.js).
+// 판매가를 아직 안 정했으면 여전히 아무것도 안 찍는다 — money("") 는 빈 값이다.
+check("버튼에 금액이 찍힌다", /vipSalePrice == null \? "" : ` NT\$\$\{money\(vipSalePrice\)\}`/.test(adminSrc));
 check("카드번호 입력칸이 있다", /id="vipSellCardNumber"/.test(adminHtml));
 check("현금이라고 적혀 있다", /vipSellCashOnly/.test(adminHtml) && /vipSellCashOnly/.test(adminSrc));
 check("두 번 눌러 두 장이 팔리지 않는다", /confirmBtn\.disabled = true;/.test(adminSrc));

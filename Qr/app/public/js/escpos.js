@@ -89,6 +89,18 @@
   // with spaces in between based on VISUAL width (see above), not
   // str.length — e.g. padLine("테이블 7번", "매장") lines up "매장" against
   // the line's right edge correctly even though "테이블 7번" is Korean.
+  // 돈은 천 자리마다 쉼표. 2026-09-16 사장님: "모든 돈이 표시되는 액수에는
+  // 천 자리수마다 , 를 표시해줘." 종이도 「모든 돈」에 든다 — 손님이 들고
+  // 가는 종이가 화면과 다르면 그것부터 의심하게 된다.
+  //
+  // 자리를 한 칸 더 먹지만(NT$7,120 은 NT$7120 보다 한 글자 길다) padLine 이
+  // 알아서 맞춘다. 자릿수를 세는 것보다 낫다.
+  function money(v) {
+    if (v === "" || v === null || v === undefined) return "";
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString("en-US") : String(v);
+  }
+
   function padLine(left, right, width) {
     width = width || LINE_WIDTH;
     const leftW = visualWidth(left);
@@ -225,9 +237,9 @@
     }
     out += divider() + "\n";
     if (priceCopy && discount.active) {
-      out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
     } else {
-      out += CMD.DOUBLE_ON + padLine("合計", `NT$${o.total}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
     }
     if (priceCopy) out += "※本單僅供結帳參考，實際折扣依系統結帳畫面為準\n";
     // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
@@ -515,15 +527,15 @@
       if (priceCopy) {
         divider();
         if (discount.active) {
-          row("변경 후 전체 / 異動後合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+          row("변경 후 전체 / 異動後合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
         } else {
-          row("변경 후 전체 / 異動後合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+          row("변경 후 전체 / 異動後合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
         }
       }
     } else if (priceCopy && discount.active) {
-      row("合計", `NT$${o.total}→NT$${discount.discountedTotal}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+      row("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     } else {
-      row("合計", `NT$${o.total}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
+      row("合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
     if (priceCopy) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋

@@ -424,6 +424,25 @@
     if (t.is_counter) return t.label;
     return `${t.label} ${t.number}`;
   }
+  /**
+   * 돈을 사람이 읽는 모양으로. 천 자리마다 쉼표.
+   *
+   * 2026-09-16 사장님: "모든 돈이 표시되는 액수에는 천 자리수마다 , 를
+   * 표시해줘 1,000 이렇게. 저 사진이라면 7,120 이렇게. 더 크면 7,120,120
+   * 이렇게."
+   *
+   * NT$7120 과 NT$712 는 흘깃 보면 같아 보인다. 마감에 서랍을 맞추거나
+   * 손님에게 금액을 부를 때 자릿수를 세고 있으면 안 된다.
+   *
+   * 빈 값은 빈 값으로 둔다 — 「NT$」 뒤에 아무것도 안 적히는 자리가 있다
+   * (판매가를 아직 안 정한 VIP 카드). 거기에 0 을 찍으면 공짜라는 뜻이 된다.
+   * 숫자가 아닌 것이 오면 그대로 돌려준다 — 지어내지 않는다.
+   */
+  function money(v) {
+    if (v === "" || v === null || v === undefined) return "";
+    const n = Number(v);
+    return Number.isFinite(n) ? n.toLocaleString("en-US") : String(v);
+  }
   function escapeHtml(value) {
     return String(value == null ? "" : value)
       .replace(/&/g, "&amp;")
@@ -2171,7 +2190,7 @@
   // A few messages interpolate a count/name in a spot whose word order
   // differs between Korean and Chinese, so these are built directly per
   // language rather than through the flat T() dictionary above.
-  const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${total}` : `주문 ${n}건 · NT$${total}`);
+  const fmtOrderCount = (n, total) => (adminLang === "zh" ? `${n} 筆訂單 · NT$${money(total)}` : `주문 ${n}건 · NT$${money(total)}`);
 
   /**
    * 인원수를 어른(大)/아이(小)까지 적는다 — 2026-09-10 사장님: "인원수 물을 때
@@ -2554,8 +2573,8 @@
   // 완료라는 별도 문구는 없앰).
   const fmtConfirmPaySelected = (label, n, total) =>
     adminLang === "zh"
-      ? `確定要將桌號 ${label} 勾選的 ${n} 項品項（合計 NT$${total}）標記為已結帳嗎？（其餘品項不受影響）`
-      : `테이블 ${label}에서 체크한 품목 ${n}개(합계 NT$${total})만 결제 완료로 처리하시겠습니까? (나머지는 그대로 유지됩니다)`;
+      ? `確定要將桌號 ${label} 勾選的 ${n} 項品項（合計 NT$${money(total)}）標記為已結帳嗎？（其餘品項不受影響）`
+      : `테이블 ${label}에서 체크한 품목 ${n}개(합계 NT$${money(total)})만 결제 완료로 처리하시겠습니까? (나머지는 그대로 유지됩니다)`;
   // 特約95折/VIP9折 — 사장님이 직접 부른 명칭 그대로(한자/영문 혼용)라
   // 관리자 언어(ko/zh)와 무관하게 항상 같은 문구로 보여준다. 서버 쪽
   // src/routes/orders.js의 VIP_DISCOUNT_RATES와 정확히 같은 값이어야 한다.
@@ -2574,8 +2593,8 @@
         ? `自訂 ${manualValue.value}%`
         : `직접 ${manualValue.value}%`
       : adminLang === "zh"
-      ? `自訂 NT$${manualValue.value}`
-      : `직접 NT$${manualValue.value}`;
+      ? `自訂 NT$${money(manualValue.value)}`
+      : `직접 NT$${money(manualValue.value)}`;
   }
   // 결제 방식 팝업(showPaymentMethodPopup)에 보여줄 한 줄 요약 — 실제
   // 반영 금액은 항상 서버가 다시 계산해서 저장하므로(아래
@@ -2592,23 +2611,23 @@
   // 의 결과({ vipAmount, manualAmount, total }).
   function fmtPaymentSummary(total, discountType, manualValue, breakdown) {
     const zh = adminLang === "zh";
-    const head = zh ? `本次結帳合計 NT$${total}` : `이번 결제 합계 NT$${total}`;
+    const head = zh ? `本次結帳合計 NT$${money(total)}` : `이번 결제 합계 NT$${money(total)}`;
     if (!discountType && !manualValue) return head;
     const steps = [];
     if (discountType && breakdown.vipAmount) {
       const label = VIP_DISCOUNT_LABELS[discountType] || "";
       steps.push(
         zh
-          ? `${label}折扣 -NT$${breakdown.vipAmount}（飲料、酒類不適用）`
-          : `${label} 할인 -NT$${breakdown.vipAmount} (음료·주류 제외)`
+          ? `${label}折扣 -NT$${money(breakdown.vipAmount)}（飲料、酒類不適用）`
+          : `${label} 할인 -NT$${money(breakdown.vipAmount)} (음료·주류 제외)`
       );
     }
     if (manualValue && breakdown.manualAmount) {
       const label = fmtManualDiscountLabel(manualValue);
-      steps.push(zh ? `${label}折扣 -NT$${breakdown.manualAmount}` : `${label} 할인 -NT$${breakdown.manualAmount}`);
+      steps.push(zh ? `${label}折扣 -NT$${money(breakdown.manualAmount)}` : `${label} 할인 -NT$${money(breakdown.manualAmount)}`);
     }
     const payable = total - breakdown.total;
-    const tail = zh ? `實收 NT$${payable}` : `실수령 NT$${payable}`;
+    const tail = zh ? `實收 NT$${money(payable)}` : `실수령 NT$${money(payable)}`;
     return [head, ...steps, tail].join(" → ");
   }
   // 밥값과 VIP 카드값을 갈라 보여준다. 고르는 결제수단은 밥값 것이고
@@ -2617,8 +2636,8 @@
     const zh = adminLang === "zh";
     const sum = foodPayable + cardAmount;
     return zh
-      ? `\n\n＋ VIP卡 NT$${cardAmount}（一律現金）\n= 向客人收 NT$${sum}\n下面選的付款方式只套用在餐點 NT$${foodPayable}`
-      : `\n\n＋ VIP 카드 NT$${cardAmount} (무조건 현금)\n= 손님께 받을 돈 NT$${sum}\n아래에서 고르는 결제수단은 밥값 NT$${foodPayable}에만 적용됩니다`;
+      ? `\n\n＋ VIP卡 NT$${money(cardAmount)}（一律現金）\n= 向客人收 NT$${money(sum)}\n下面選的付款方式只套用在餐點 NT$${money(foodPayable)}`
+      : `\n\n＋ VIP 카드 NT$${money(cardAmount)} (무조건 현금)\n= 손님께 받을 돈 NT$${money(sum)}\n아래에서 고르는 결제수단은 밥값 NT$${money(foodPayable)}에만 적용됩니다`;
   }
   // 금액 한 줄 표기. **모듈 자리에 둔다.**
   //
@@ -2627,7 +2646,7 @@
   // 렌더가 통째로 멈췄다 — 사장님 화면에서 1인당 평균부터 아래가 전부 0 으로
   // 보인 이유가 이것이다. 여러 곳에서 쓰는 도우미는 쓰는 곳들이 다 보이는
   // 자리에 있어야 한다.
-  const nt = (v) => `NT$${Number(v || 0).toLocaleString()}`;
+  const nt = (v) => `NT$${money(Number(v || 0))}`;
 
   // 지금 어느 시간대만 보고 있나. null 이면 하루 전체(합산)다.
   //
@@ -2822,8 +2841,8 @@
   const fmtExpandItemsBtn = (n) => (adminLang === "zh" ? `展開 ▾ (還有 ${n} 項)` : `펼치기 ▾ (${n}개 더)`);
   const fmtMergePaySummary = (tableCount, orderCount, total) =>
     adminLang === "zh"
-      ? `已選 ${tableCount} 桌 · ${orderCount} 筆訂單 · 合計 NT$${total}`
-      : `${tableCount}개 테이블 선택 · 주문 ${orderCount}건 · 합계 NT$${total}`;
+      ? `已選 ${tableCount} 桌 · ${orderCount} 筆訂單 · 合計 NT$${money(total)}`
+      : `${tableCount}개 테이블 선택 · 주문 ${orderCount}건 · 합계 NT$${money(total)}`;
   const fmtConfirmMergePay = (tableCount, orderCount) =>
     adminLang === "zh"
       ? `確定要將這 ${tableCount} 桌、共 ${orderCount} 筆未結帳訂單合併標記為已結帳嗎？`
@@ -2851,7 +2870,7 @@
   const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
   // 결제완료 카드의 작은 두 번째 줄. 「원래 얼마였고 얼마 깎였나」.
   const fmtCardDiscountNote = (total, off) =>
-    adminLang === "zh" ? `原價 NT$${total} · 折扣 -NT$${off}` : `할인 전 NT$${total} · 할인 -NT$${off}`;
+    adminLang === "zh" ? `原價 NT$${money(total)} · 折扣 -NT$${money(off)}` : `할인 전 NT$${money(total)} · 할인 -NT$${money(off)}`;
   const fmtOhCalTitle = (y, m) => (adminLang === "zh" ? `${y} 年 ${m} 月` : `${y}년 ${m}월`);
   const fmtDefaultZoneName = (n) => (adminLang === "zh" ? `區域 ${n}` : `구역 ${n}`);
   const fmtAddTableToZoneTitle = (name) => (adminLang === "zh" ? `新增桌號到「${name}」` : `"${name}"에 테이블 추가`);
@@ -4538,8 +4557,8 @@
     const confirmMsg =
       openOrders.length > 0
         ? adminLang === "zh"
-          ? `尚有 ${openOrders.length} 筆訂單尚未結帳（合計 NT$${openTotal}，不論餐點是否已出）。結算後將全部標記為已結帳並從看板移除，確定要繼續嗎？`
-          : `아직 결제되지 않은 주문이 ${openOrders.length}건(합계 NT$${openTotal}) 있어요. 음식이 나갔든 안 나갔든 정산하면 전부 결제완료 처리되어 판에서 사라집니다. 진행할까요?`
+          ? `尚有 ${openOrders.length} 筆訂單尚未結帳（合計 NT$${money(openTotal)}，不論餐點是否已出）。結算後將全部標記為已結帳並從看板移除，確定要繼續嗎？`
+          : `아직 결제되지 않은 주문이 ${openOrders.length}건(합계 NT$${money(openTotal)}) 있어요. 음식이 나갔든 안 나갔든 정산하면 전부 결제완료 처리되어 판에서 사라집니다. 진행할까요?`
         : adminLang === "zh"
         ? "確定要結算嗎？"
         : "정산을 진행할까요?";
@@ -4622,19 +4641,19 @@
       const split =
         summary && summary.am_part && summary.pm_part
           ? adminLang === "zh"
-            ? `\n(上午 NT$${summary.am_part.revenue} · 下午 NT$${summary.pm_part.revenue})`
-            : `\n(오전 NT$${summary.am_part.revenue} · 오후 NT$${summary.pm_part.revenue})`
+            ? `\n(上午 NT$${money(summary.am_part.revenue)} · 下午 NT$${money(summary.pm_part.revenue)})`
+            : `\n(오전 NT$${money(summary.am_part.revenue)} · 오후 NT$${money(summary.pm_part.revenue)})`
           : "";
       showAlert(
         (adminLang === "zh"
-          ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + split + seatNote + settledNote + lineNote
+          ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${money(total)}`
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + split + seatNote + settledNote + lineNote
       );
     } else {
       showAlert(
         (adminLang === "zh"
-          ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${total}`
-          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${total}`) + seatNote + settledNote + lineNote
+          ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${money(total)}`
+          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + seatNote + settledNote + lineNote
       );
     }
   }
@@ -5043,10 +5062,10 @@
     const cardOff = paidOrderDiscount(o);
     const cardTotalHtml =
       cardOff > 0
-        ? `<div class="order-card-total">NT$${orderPaidAmount(o)}<span class="order-card-total-was">${escapeHtml(
+        ? `<div class="order-card-total">NT$${money(orderPaidAmount(o))}<span class="order-card-total-was">${escapeHtml(
             fmtCardDiscountNote(o.total, cardOff)
           )}</span></div>`
-        : `<div class="order-card-total">NT$${o.total}</div>`;
+        : `<div class="order-card-total">NT$${money(o.total)}</div>`;
     card.innerHTML = `
       <div class="order-card-top">
         <span>${tableTag}${typeBadge}${movedTag}${locTag}${
@@ -5341,11 +5360,11 @@
           if (discountInfo.active && discountInfo.isPercent && !isDrink) {
             const discounted = amount - Math.round(amount * (1 - discountInfo.rate));
             detailLines.push(
-              `<div class="item-detail item-price">└ <span class="item-price-orig">NT$${amount}</span> <span class="item-price-final">NT$${discounted}</span></div>`
+              `<div class="item-detail item-price">└ <span class="item-price-orig">NT$${money(amount)}</span> <span class="item-price-final">NT$${money(discounted)}</span></div>`
             );
           } else {
             const mark = discountInfo.active && discountInfo.isPercent && isDrink ? " ※" : "";
-            detailLines.push(`<div class="item-detail item-price">└ NT$${amount}${mark}</div>`);
+            detailLines.push(`<div class="item-detail item-price">└ NT$${money(amount)}${mark}</div>`);
           }
         }
         return `<div class="item-row">
@@ -5377,8 +5396,8 @@
     }
     <div class="total-row"><span>合計</span><span>${
       discountInfo.active
-        ? `<span class="total-price-orig">NT$${o.total}</span> NT$${discountInfo.discountedTotal}`
-        : `NT$${o.total}`
+        ? `<span class="total-price-orig">NT$${money(o.total)}</span> NT$${money(discountInfo.discountedTotal)}`
+        : `NT$${money(o.total)}`
     }</span></div>
     ${priceCopy ? `<div class="price-copy-note">※本單僅供結帳參考，實際折扣依系統結帳畫面為準</div>` : ""}
     <div class="print-time">列印時間：${new Date().toLocaleString("zh-TW")}</div>
@@ -5940,7 +5959,7 @@
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
             <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
-            <span>NT$${(it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty}</span>
+            <span>NT$${money((it.unit_price + (it.selected_addons || []).reduce((s, a) => s + a.price, 0)) * it.qty)}</span>
           </div>`
       )
       .join("");
@@ -5950,7 +5969,7 @@
       <p style="color:#999;font-size:15px;">${time} · ${T("statusTh")}: ${statusLabel(o.status)}</p>
       ${itemsHtml}
       ${o.note ? `<p style="margin-top:10px;"><strong>${T("memoLabel")}:</strong>${o.note}</p>` : ""}
-      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">${T("totalLabel")} NT$${o.total}</div>
+      <div style="text-align:right;font-weight:800;font-size:18px;margin-top:10px;">${T("totalLabel")} NT$${money(o.total)}</div>
     `;
     $("#orderDetailBackdrop").hidden = false;
   }
@@ -6051,7 +6070,7 @@
         return s + (a ? a.price : 0);
       }, 0);
       $("#orderEditPickerQty").textContent = String(qty);
-      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${(mi.price + addonsPrice) * qty}`;
+      $("#orderEditPickerCommit").textContent = `${T("orderEditAddBtn")} — NT$${money((mi.price + addonsPrice) * qty)}`;
     };
 
     pillPicker("#orderEditPickerOptions", mi.options ? mi.options.split(",").map((o) => o.trim()).filter(Boolean) : [], option, (v) => (option = v), optionLabel);
@@ -6241,7 +6260,7 @@
               <span class="order-edit-qty-value">${it.qty}</span>
               <button type="button" class="order-edit-qty-btn" data-idx="${idx}" data-action="inc">+</button>
             </div>
-            <span class="order-edit-item-price">NT$${itemTotal(it)}</span>
+            <span class="order-edit-item-price">NT$${money(itemTotal(it))}</span>
             <button type="button" class="order-edit-remove-btn" data-idx="${idx}" title="${T("cancelBtn")}">✕</button>
           </div>
           <div class="order-edit-item-row-choice">${optionsHtml}</div>
@@ -6288,7 +6307,7 @@
         });
       });
 
-      $("#orderEditTotal").textContent = `${T("totalLabel")} NT$${grandTotal()}`;
+      $("#orderEditTotal").textContent = `${T("totalLabel")} NT$${money(grandTotal())}`;
     }
 
     // Quick-add only offers simple items (no mix_options, still available)
@@ -6296,7 +6315,7 @@
     const addable = allItems.filter((mi) => mi.available && !mi.mix_options);
     const addSelect = $("#orderEditAddSelect");
     addSelect.innerHTML = addable
-      .map((mi) => `<option value="${mi.id}">${mi.code ? `${mi.code} ` : ""}${itemName(mi)} — NT$${mi.price}</option>`)
+      .map((mi) => `<option value="${mi.id}">${mi.code ? `${mi.code} ` : ""}${itemName(mi)} — NT$${money(mi.price)}</option>`)
       .join("");
     // Picking a dish and pressing "+ 추가" used to drop it straight onto the
     // list with whatever option/spice happened to be first and no way to
@@ -6468,7 +6487,7 @@
           <td>${item.photo_url ? `<span class="item-row-photo" style="background-image:url('${item.photo_url}')"></span>` : `<span class="photo-missing-badge" title="${T("photoMissingTitle")}">${T("photoMissing")}</span>`}</td>
           <td>${item.code || ""}</td>
           <td>${itemName(item)}</td>
-          <td>NT$${item.price}</td>
+          <td>NT$${money(item.price)}</td>
           <td>${canMenuEdit()
             ? `<button type="button" class="availability-pill ${item.available ? "on" : "off"}" data-soldout-id="${item.id}" title="${T("soldOutTitle")}">${item.available ? T("onSale") : T("soldOut")}</button>`
             : `<span class="availability-pill ${item.available ? "on" : "off"}">${item.available ? T("onSale") : T("soldOut")}</span>`}${
@@ -6625,7 +6644,7 @@
         // (예: 飯換冬粉:0) 값 대신 그렇게 적어준다.
         const [name, priceStr] = value.split(":");
         const price = parseInt((priceStr || "0").trim(), 10) || 0;
-        text = `${(name || "").trim()} ${price ? `+NT$${price}` : T("chipFreeAddon")}`;
+        text = `${(name || "").trim()} ${price ? `+NT$${money(price)}` : T("chipFreeAddon")}`;
       }
       chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-x" aria-label="remove">✕</button>`;
       chip.querySelector(".chip-text").textContent = text;
@@ -6965,7 +6984,7 @@
       row.innerHTML = `
         <div class="menu-trash-info">
           <div class="menu-trash-name">${m.code ? `${escapeHtml(m.code)} ` : ""}${escapeHtml(name || "")}</div>
-          <div class="menu-trash-meta">NT$${m.price} · ${T("menuTrashDeletedAt")} ${escapeHtml(String(m.deleted_at || "").slice(0, 16))}</div>
+          <div class="menu-trash-meta">NT$${money(m.price)} · ${T("menuTrashDeletedAt")} ${escapeHtml(String(m.deleted_at || "").slice(0, 16))}</div>
         </div>
         <button type="button" class="menu-trash-restore">${T("menuTrashRestore")}</button>
       `;
@@ -7283,7 +7302,7 @@
     const header = `
       <h2>${titleText}${partyText}</h2>
       <div style="margin-top:-6px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${unpaidTotal}</strong></p>
+        <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${money(unpaidTotal)}</strong></p>
         ${showMoveTable
           ? `<button type="button" id="moveTableBtn" class="table-detail-clear-party">${T("moveTableBtn")}</button>`
           : ""}
@@ -7403,7 +7422,7 @@
     const footerPayBtn = isCounterTable
       ? ""
       : footerSelections.length > 0
-      ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${footerPayTotal})</button>`
+      ? `<button class="primary-btn pay-selected-items-btn" style="padding:8px 16px;font-size:15px;">${T("paySelectedBtn")} (NT$${money(footerPayTotal)})</button>`
       : `<button class="primary-btn" disabled style="padding:8px 16px;font-size:15px;opacity:0.4;cursor:not-allowed;">${T("paySelectedBtn")}</button>`;
     // 特約95折/VIP9折 토글 — 처음엔 여기 footer에 따로 한 줄로 뒀는데,
     // 사장님 피드백(2026-09-06, 스크린샷과 함께): "할인 위치를 가장 아래
@@ -7424,9 +7443,9 @@
     // 적어 둔다 — 결제수단을 고르는 팝업에서 「LINE」을 눌러도 이 300은
     // 현금이라는 것을 그 전에 알아야 한다.
     const vipSellBtnHtml = pendingCardAmount
-      ? `<button type="button" id="vipSellBtn" class="vip-sell-btn is-pending">${T("vipSellPendingBtn")} NT$${pendingCardAmount}</button>` +
+      ? `<button type="button" id="vipSellBtn" class="vip-sell-btn is-pending">${T("vipSellPendingBtn")} NT$${money(pendingCardAmount)}</button>` +
         `<span class="vip-sell-pending-note">${T("vipSellPendingNote")}</span>`
-      : `<button type="button" id="vipSellBtn" class="vip-sell-btn">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${vipSalePrice}`}</button>`;
+      : `<button type="button" id="vipSellBtn" class="vip-sell-btn">${T("vipSellBtn")}${vipSalePrice == null ? "" : ` NT$${money(vipSalePrice)}`}</button>`;
     const footer = tableDetailView === "active"
       ? `
         <div class="table-detail-footer">
@@ -8098,9 +8117,9 @@
   // 이면 그냥 원래 금액만 보여준다(할인 꺼짐, 또는 이 라운드에 할인 대상
   // 품목이 없어서 결과가 원래와 같은 경우).
   function vipTotalHtml(original, discountAmount) {
-    if (!discountAmount) return `NT$${original}`;
+    if (!discountAmount) return `NT$${money(original)}`;
     const newAmount = original - discountAmount;
-    return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${original}</span><span>NT$${newAmount}</span>`;
+    return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${money(original)}</span><span>NT$${money(newAmount)}</span>`;
   }
   // 사장님 피드백(2026-09-05): "外帶 에 있는 거 제외하고 다른 테이블
   // 전체들은 부분 결제를 허용해줘. 체크체크 해서 그것만 결제완료 할 수
@@ -8201,9 +8220,9 @@
     // 새 가격", 아니면(할인 꺼짐/드링크/이미 결제됨/재량 할인) 원래 표시
     // 그대로 반환.
     function vipPriceHtml(amount, isEligible) {
-      if (!vipDiscountActive || isManualDiscount || !vipRate || !isEligible) return `NT$${amount}`;
+      if (!vipDiscountActive || isManualDiscount || !vipRate || !isEligible) return `NT$${money(amount)}`;
       const discounted = amount - Math.round(amount * (1 - vipRate));
-      return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${amount}</span><span style="font-weight:700;">NT$${discounted}</span>`;
+      return `<span style="color:var(--muted);text-decoration:line-through;margin-right:6px;">NT$${money(amount)}</span><span style="font-weight:700;">NT$${money(discounted)}</span>`;
     }
     // 이 라운드에서 아직 결제 안 된 품목들의 합계 기준으로 계산한 할인액 —
     // 소계/합계 표시에 재사용(품목 줄 하나하나를 따로 더해 반올림 오차가
@@ -8532,7 +8551,7 @@
             ${p.noteHtml}
             <div style="display:flex;align-items:center;justify-content:${p.editBtn ? "space-between" : "flex-end"};gap:8px;margin-top:8px;">
               ${p.editBtn}
-              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${p.total}</div>
+              <div style="text-align:right;font-weight:700;font-size:15px;">${T("subtotalLabel")} NT$${money(p.total)}</div>
             </div>
           </div>
         `;
@@ -10838,7 +10857,7 @@
     input.value = "";
     err.hidden = true;
     confirmBtn.disabled = false;
-    $("#vipSellPrice").textContent = `NT$${vipSalePrice == null ? "" : vipSalePrice}`;
+    $("#vipSellPrice").textContent = `NT$${money(vipSalePrice == null ? "" : vipSalePrice)}`;
     backdrop.hidden = false;
     input.focus();
 
@@ -10881,7 +10900,7 @@
       // 돈을 받는 일이라 확인 한 번을 남긴다 — 얼마를 받았는지가 화면에
       // 또렷하게 남아야 서랍과 맞출 때 헷갈리지 않는다.
       const paid = body && body.price != null ? body.price : vipSalePrice;
-      await showAlert(`${number ? T("vipSellDoneWithCard") : T("vipSellDone")}\nNT$${paid}`);
+      await showAlert(`${number ? T("vipSellDoneWithCard") : T("vipSellDone")}\nNT$${money(paid)}`);
     };
   }
 
@@ -12851,7 +12870,7 @@
                 <span class="settlement-problem-time">${time}</span>
                 <span class="settlement-problem-table">${fmtOrderTableTag(o.table_number)}</span>
                 <span class="settlement-problem-status">${statusLabel(o.status)}</span>
-                <span class="settlement-problem-total">NT$${o.total}</span>
+                <span class="settlement-problem-total">NT$${money(o.total)}</span>
               </div>
               <div class="settlement-problem-items">${itemsText}</div>
             </div>`;
@@ -13181,7 +13200,7 @@
                   return `
                 <button type="button" class="settlement-history-row" data-date="${s.date}">
                   <span class="settlement-history-date">${dayLabel}</span>
-                  <span class="settlement-history-row-sub">NT$${Number(s.total_revenue || 0).toLocaleString()}${warn}</span>
+                  <span class="settlement-history-row-sub">NT$${money(Number(s.total_revenue || 0))}${warn}</span>
                 </button>`;
                 })
                 .join("")}
@@ -13246,7 +13265,7 @@
           <div class="stl-bar-row">
             <span class="stl-bar-name" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}${count}</span>
             <span class="stl-bar-track">${width > 0 ? `<span class="stl-bar-fill" style="width:${width}%"></span>` : ""}</span>
-            <span class="stl-bar-amount">NT$${Number(r.value || 0).toLocaleString()}</span>
+            <span class="stl-bar-amount">NT$${money(Number(r.value || 0))}</span>
             <span class="stl-bar-share">${pct}%</span>
           </div>`;
       })
@@ -13270,7 +13289,7 @@
           <tr>
             <td>${itemDisplayName(it)}</td>
             <td>${it.qty}</td>
-            <td>NT$${it.subtotal.toLocaleString()}</td>
+            <td>NT$${money(it.subtotal)}</td>
           </tr>`
       )
       .join("");
@@ -13654,7 +13673,7 @@
               <span class="stl-order-time">${day} ${time}</span>
               <span class="stl-order-table">${who}</span>
               <span class="stl-order-peek">${escapeHtml(peek)}</span>
-              <span class="stl-order-total">NT$${Number(o.total || 0).toLocaleString()}</span>
+              <span class="stl-order-total">NT$${money(Number(o.total || 0))}</span>
               <span class="stl-order-actions">
                 <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
                 <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
@@ -13732,7 +13751,7 @@
         return `
           <div class="stl-order-line">
             <span>${itemDisplayName(it)} <span style="color:var(--muted)">x${it.qty}</span></span>
-            <span>NT$${Number((it.unit_price || 0) * (it.qty || 0)).toLocaleString()}</span>
+            <span>NT$${money(Number((it.unit_price || 0) * (it.qty || 0)))}</span>
           </div>
           ${extras.length ? `<div class="stl-order-line-sub">└ ${escapeHtml(extras.join(" · "))}</div>` : ""}`;
       })
@@ -13742,7 +13761,7 @@
     const meta = [
       o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentMethodLabelFor(o.payment_method)}` : null,
       o.party_size ? fmtPartyDetail(o) : null,
-      o.discount_amount ? `${T("settlementDiscountAmount")} NT$${Number(o.discount_amount).toLocaleString()}` : null,
+      o.discount_amount ? `${T("settlementDiscountAmount")} NT$${money(Number(o.discount_amount))}` : null,
       o.paid_at ? `${T("settlementOrdersPaidAt")} ${String(o.paid_at).slice(5, 16)}` : null,
       `${T("settlementOrdersStatus")} ${statusLabel(o.status)}`,
     ].filter(Boolean);
