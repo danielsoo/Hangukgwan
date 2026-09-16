@@ -1151,8 +1151,45 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 
 /* Modal */
-.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
-.modal { background: #fff; border-radius: 14px; padding: 22px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; position: relative; }
+/* 창의 높이를 **실제로 보이는 높이**로 잰다.
+ *
+ * 2026-09-16 사장님(태블릿 스크린샷과 함께): "이것도 여전히 짤리고."
+ * 주문이 많은 자리를 열면 「미결제 합계 · 결제 완료」 줄이 화면 아래로
+ * 넘어가 아예 안 보였다.
+ *
+ * 원인은 vh 다. 태블릿 브라우저에서 100vh 는 **주소창을 뺀 높이가 아니라
+ * 주소창까지 포함한 큰 쪽**이다(large viewport). 그래서 90vh 로 잡아둔
+ * 창이 실제로 보이는 영역보다 길어지고, 맨 아래 줄이 주소창 뒤로 숨는다.
+ * 데스크톱 브라우저에는 그 차이가 없어서 여기서는 멀쩡해 보인다 — 실제로
+ * 그래서 못 잡았다.
+ *
+ * dvh 는 지금 보이는 높이다. 옛 브라우저를 위해 vh 를 먼저 적고 dvh 로
+ * 덮는다 — dvh 를 모르는 브라우저는 그 줄을 무시하고 vh 를 쓴다. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  height: 100vh;
+  height: 100dvh;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+.modal {
+  background: #fff;
+  border-radius: 14px;
+  padding: 22px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  max-height: 90dvh;
+  /* flex 자식의 자동 최소 높이가 max-height 를 이겨서 창이 넘치는 일을 막는다. */
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
 .modal-close { position: absolute; right: 14px; top: 14px; border: none; background: #f1ede6; width: 30px; height: 30px; border-radius: 999px; cursor: pointer; }
 .modal-form label { display: block; font-size: 16px; color: var(--muted); margin-bottom: 12px; }
 .modal-form input, .modal-form select { width: 100%; padding: 9px; border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; font-size: 18px; }
@@ -1193,6 +1230,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
    버튼이 화면 밖으로 사라졌다 — 저장하려고 다시 올라와야 했다. */
 .modal.modal-wide {
   height: min(86vh, 780px);
+  height: min(86dvh, 780px);
   max-height: none;   /* 위의 .modal 이 걸어둔 90vh 를 대신한다 */
   overflow: hidden;   /* 굴리는 것은 아래 .item-form-content 한 곳뿐이다 */
   display: flex;
@@ -1686,17 +1724,45 @@ body:not(.role-staff) .staff-only { display: none !important; }
 
 /* 결제창 맨 아래 줄. 「받을 돈」과 VIP 카드 판매 버튼이 왼쪽, 결제 버튼이
    오른쪽. 좁은 화면에서는 줄바꿈된다 — 태블릿을 세로로 쓰는 날이 있다. */
+/* 결제 버튼은 **언제나 오른쪽 끝**이다.
+ *
+ * 2026-09-16 사장님(두 번째): "일단 결제완료가 여전히 왼쪽으로 빠져."
+ *
+ * 원인은 이 줄의 flex-wrap: wrap 이었다. 왼쪽 묶음(미결제 합계 + VIP카드
+ * 판매)이 넓어지면 결제 버튼이 **다음 줄로 넘어갔고**, 혼자 남은 줄에서는
+ * justify-content: space-between 이 아무 일도 안 해서 왼쪽에 붙었다.
+ * 할인이 걸려 「NT$250 NT$238」로 길어지는 순간 정확히 그렇게 된다 —
+ * 사장님 스크린샷이 그 상태다.
+ *
+ * 이 줄은 안 접는다(nowrap). 대신 왼쪽 묶음이 자기 안에서 접는다. 제일
+ * 자주 누르는 버튼이 눌릴 때마다 다른 자리에 있으면 안 된다. */
 .table-detail-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   border-top: 2px solid var(--ink);
   margin-top: 4px;
   padding-top: 12px;
 }
-.table-detail-footer-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+/* 남는 자리를 왼쪽이 가져가고, 좁아지면 자기 안에서 줄을 바꾼다.
+   min-width: 0 이 없으면 flex 자식이 내용보다 안 줄어들어 버튼을 밀어낸다. */
+.table-detail-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 버튼은 줄어들지도, 글자가 쪼개지지도 않는다. margin-left: auto 는 왼쪽
+   묶음이 비어 있을 때(주문이 없는 자리)도 오른쪽에 붙게 한다. */
+.table-detail-footer > .primary-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
 /* 돈을 받는 버튼이라 결제 버튼과 헷갈리면 안 된다 — 채운 버튼이 아니라
    테두리만 있는 버튼으로 두고, 금액을 버튼 안에 같이 적는다. */
 .table-detail-footer .vip-sell-btn {

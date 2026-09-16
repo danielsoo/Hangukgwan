@@ -140,6 +140,70 @@ const footRule = /\.table-detail-modal \.table-detail-footer\s*\{([^}]*)\}/.exec
 check("★ 발은 줄어들지 않는다", !!footRule && /flex:\s*none/.test(footRule[1]), "");
 check("발 뒤가 비치지 않는다", !!footRule && /background:\s*#fff/.test(footRule[1]), "");
 
+out.push("\n[결제 버튼은 언제나 오른쪽 끝]");
+//
+// 2026-09-16 사장님(두 번째): "일단 결제완료가 여전히 왼쪽으로 빠져."
+// 왼쪽 묶음(미결제 합계 + VIP카드 판매)이 넓어지면 결제 버튼이 다음 줄로
+// 넘어갔고, 혼자 남은 줄에서는 space-between 이 아무 일도 안 해서 왼쪽에
+// 붙었다. 할인이 걸려 「NT$250 NT$238」로 길어지는 순간 그렇게 된다.
+// 줄 맨 앞에서 시작하는 규칙만 본다 — `.table-detail-modal .table-detail-footer`
+// 같은 다른 규칙에 걸리면 엉뚱한 것을 재게 된다(실제로 한 번 그랬다).
+const foot = /\n\.table-detail-footer\s*\{([^}]*)\}/.exec(css);
+check("발 규칙이 있다", !!foot, "");
+check(
+  "★ 발 줄은 안 접힌다 — 접히면 버튼이 다음 줄 왼쪽으로 떨어진다",
+  !!foot && /flex-wrap:\s*nowrap/.test(foot[1]),
+  foot && foot[1].trim()
+);
+const footLeft = /\.table-detail-footer-left\s*\{([^}]*)\}/.exec(css);
+check(
+  "★ 좁아지면 왼쪽 묶음이 자기 안에서 접는다",
+  !!footLeft && /flex-wrap:\s*wrap/.test(footLeft[1]) && /min-width:\s*0/.test(footLeft[1]),
+  "min-width: 0 이 없으면 flex 자식이 안 줄어들어 버튼을 밀어낸다"
+);
+const footBtn = /\.table-detail-footer\s*>\s*\.primary-btn\s*\{([^}]*)\}/.exec(css);
+check("버튼 규칙이 있다", !!footBtn, "");
+if (footBtn) {
+  check("★ 버튼은 오른쪽 끝에 붙는다", /margin-left:\s*auto/.test(footBtn[1]), footBtn[1].trim());
+  check("★ 버튼은 줄어들지 않는다", /flex:\s*0 0 auto/.test(footBtn[1]), "");
+  check("★ 버튼 글자가 쪼개지지 않는다", /white-space:\s*nowrap/.test(footBtn[1]), "");
+}
+
+out.push("\n[태블릿에서 창 높이를 실제로 보이는 높이로 잰다]");
+//
+// 2026-09-16 사장님(태블릿 스크린샷과 함께): "이것도 여전히 짤리고."
+// 주문이 많은 자리를 열면 발이 화면 아래로 넘어가 안 보였다.
+//
+// 태블릿 브라우저에서 100vh 는 **주소창까지 포함한 큰 쪽**이다. 그래서
+// 90vh 로 잡은 창이 실제로 보이는 영역보다 길어지고 맨 아래 줄이 숨는다.
+// 데스크톱에는 그 차이가 없어서 여기서는 멀쩡해 보인다 — 실제로 그래서
+// 못 잡았다. dvh 는 지금 보이는 높이다.
+const modalBlock = /\n\.modal\s*\{([^}]*)\}/.exec(css);
+check("창 규칙이 있다", !!modalBlock, "");
+if (modalBlock) {
+  check(
+    "★ 창 높이를 dvh 로 잰다",
+    /max-height:\s*\d+dvh/.test(modalBlock[1]),
+    "vh 만 쓰면 태블릿에서 맨 아래 줄이 주소창 뒤로 숨는다"
+  );
+  check(
+    "★ dvh 를 모르는 브라우저를 위해 vh 를 먼저 적는다",
+    /max-height:\s*\d+vh[\s\S]*max-height:\s*\d+dvh/.test(modalBlock[1]),
+    "순서가 뒤집히면 옛 브라우저에서 높이가 아예 안 걸린다"
+  );
+  check(
+    "창 자신도 flex 최소 높이에 안 밀린다",
+    /min-height:\s*0/.test(modalBlock[1]),
+    ""
+  );
+}
+const backdrop = /\.modal-backdrop\s*\{([^}]*)\}/.exec(css);
+check(
+  "★ 가운데 맞추는 바탕도 같은 높이를 쓴다",
+  !!backdrop && /height:\s*100vh[\s\S]*height:\s*100dvh/.test(backdrop[1]),
+  "바탕이 큰 쪽으로 잡히면 창이 가운데가 아니라 아래로 밀린다"
+);
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
