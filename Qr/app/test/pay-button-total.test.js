@@ -41,10 +41,13 @@ const src = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8
 
 // 화면 쪽 산수를 통째로 꺼낸다 — 할인율표부터 tableDiscountFor 까지.
 const ratesAt = src.indexOf("  const VIP_DISCOUNT_RATES_CLIENT");
-const fnAt = src.indexOf("  function tableDiscountFor(selections) {");
+// grossSelectionTotal 까지 같이 꺼내야 한다 — tableDiscountFor 가 그걸로
+// 「받을 돈」을 센다(2026-09-16 핫픽스).
+const fnAt = src.indexOf("  function grossSelectionTotal(order, indexes) {");
 const fnEnd = src.indexOf("\n  /** 아직 안 받은 품목 전부", fnAt);
 check("화면 쪽 할인율표를 찾는다", ratesAt > 0, String(ratesAt));
 check("tableDiscountFor 를 찾는다", fnAt > 0 && fnEnd > fnAt, `${fnAt}, ${fnEnd}`);
+check("받을 돈 합산도 같이 꺼냈다", src.slice(fnAt, fnEnd).includes("function tableDiscountFor"), "");
 
 // 2026-09-14: 할인에서 빠지는 분류가 음료뿐이 아니게 되면서
 // (discountExcludedItemIdSet) 이 묶음의 시작이 앞으로 당겨졌다. 그 함수까지
@@ -79,7 +82,13 @@ function makeClient(vipType, manualValue, drinkIds) {
       { key: "other", discount_excluded: true, items: [] },
       { key: "rice", discount_excluded: false, items: [] },
     ],
-    (it) => ((it.unit_price || 0) + (it.selected_addons || []).reduce((s, a) => s + (a.price || 0), 0)) * (it.qty || 0)
+    // src/discounts.js lineTotalOf 와 **같은 식**이어야 한다 — 옵션 값은
+    // 수량을 안 곱한다(2026-09-16). 여기가 다르면 이 시험은 실제로 도는
+    // 코드와 다른 것을 재게 된다.
+    (it) =>
+      (it.unit_price || 0) * (it.qty || 0) +
+      (Number(it.option_price) || 0) +
+      (it.selected_addons || []).reduce((s, a) => s + (a.price || 0), 0)
   );
 }
 
@@ -138,6 +147,59 @@ const CASES = [
     manual: null,
     expectPayable: 240,
   },
+  // ── 2026-09-16 핫픽스: 할인 기준에서 빠지는 것들이 버튼에서도 사라졌다 ──
+  {
+    // 사장님 스크린샷 그대로: 김밥세트(280, 정가 330) 하나만 체크.
+    // 세트는 이미 깎아 파는 값이라 어떤 할인의 기준에도 안 들어간다.
+    // 그래도 **받을 돈은 280 이다.** 버튼은 0 을 적고 있었다.
+    name: "★ 세트만 골라도 값을 다 받는다 — 버튼이 NT$0 이던 자리",
+    items: [{ item_id: 22, unit_price: 280, original_price: 330, qty: 1, selected_addons: [] }],
+    drinks: [],
+    vip: "te95",
+    manual: null,
+    expectPayable: 280,
+  },
+  {
+    name: "★ 세트 + 보통 메뉴 — 세트 값이 안 사라진다",
+    items: [
+      { item_id: 22, unit_price: 280, original_price: 330, qty: 1, selected_addons: [] },
+      ITEM(1, 200, 1),
+    ],
+    drinks: [],
+    vip: "vip9",
+    manual: null,
+    // 280(그대로) + 200 의 10% 할인 → 180. 세트를 빼먹으면 180 이 나온다.
+    expectPayable: 460,
+  },
+  {
+    // 닭갈비 x2 600 + 泡麵 50 + 拌飯 80. 옵션 값은 할인 기준에서 빠지지만
+    // 받을 돈에는 그대로 들어간다.
+    name: "★ 옵션 값도 안 사라진다",
+    items: [
+      { item_id: 52, unit_price: 300, qty: 2, selected_addons: [{ name: "泡麵", price: 50 }, { name: "拌飯", price: 80 }] },
+    ],
+    drinks: [],
+    vip: "te95",
+    manual: null,
+    // 밥값 600 → 570, 옵션 130 은 그대로. 옵션을 빼먹으면 570 이 나온다.
+    expectPayable: 700,
+  },
+  {
+    name: "★ 크기 옵션도 마찬가지",
+    items: [{ item_id: 5, unit_price: 200, qty: 1, option_price: 50, selected_addons: [] }],
+    drinks: [],
+    vip: "vip9",
+    manual: null,
+    expectPayable: 230, // 200 → 180, 옵션 50 그대로
+  },
+  {
+    name: "★ 음료만 골라도 값을 다 받는다",
+    items: [ITEM(90, 300, 1)],
+    drinks: [90],
+    vip: "te95",
+    manual: null,
+    expectPayable: 300,
+  },
 ];
 
 out.push("\n[화면 산수 == 서버 산수]");
@@ -148,10 +210,41 @@ for (const c of CASES) {
 
   const isDrink = (it) => c.drinks.includes(it.item_id);
   const srv = server.computeDiscountAmount(c.vip, c.manual, c.items, indexes, isDrink);
-  const srvPayable = server.fullEligibleTotal(c.items, indexes) - srv.total;
+  // ★ 받을 돈은 **줄 금액의 합**에서 할인을 뺀 것이다 — 할인 기준
+  // (fullEligibleTotal)에서 빼는 게 아니다.
+  //
+  // 2026-09-16 사장님(스크린샷과 함께): "지금 보면 클릭했는데 0으로 표시되고
+  // 있어." 김밥세트 하나만 체크했는데 버튼이 NT$0 이었다. 세트는 할인
+  // 기준에서 통째로 빠지니(이미 깎아 파는 값) 기준이 0 이었고, 버튼이 그
+  // 기준을 적고 있었다. 옵션 값도 같은 이유로 사라지고 있었다.
+  //
+  // 이 시험도 **같은 착각을 하고 있었다** — 그래서 통과했다. 고친다.
+  const srvPayable = indexes.reduce((s, i) => s + server.lineTotalOf(c.items[i]), 0) - srv.total;
 
   check(`${c.name} — 서버와 같은 답`, got.payable === srvPayable, `화면 ${got.payable} vs 서버 ${srvPayable}`);
   check(`${c.name} — 받을 돈 NT$${c.expectPayable}`, got.payable === c.expectPayable, `${got.payable}`);
+}
+
+out.push("\n[받을 돈과 할인 기준을 안 헷갈린다]");
+{
+  const fn = src.slice(fnAt, fnEnd);
+  check(
+    "★ 받을 돈은 줄 금액의 합이다",
+    /const gross = selections\.reduce\(\(sum, x\) => sum \+ grossSelectionTotal\(x\.order, x\.indexes\), 0\);/.test(fn),
+    "기준 금액으로 버튼을 적으면 세트·옵션 값이 사라진다"
+  );
+  check("★ payable 은 gross 에서 뺀다", /payable: gross - breakdown\.total/.test(fn), "");
+  check(
+    "★ 할인 기준은 따로 센다",
+    /const base = selections\.reduce\(\(sum, x\) => sum \+ fullEligibleClientTotal/.test(fn),
+    ""
+  );
+  check(
+    "★ 할인이 없을 때도 gross 를 돌려준다",
+    /return \{ full: gross, breakdown: \{ vipAmount: 0, manualAmount: 0, afterVip: gross, total: 0 \}, payable: gross \};/.test(fn),
+    "할인이 꺼져 있을 때 세트만 고르면 0 이 된다"
+  );
+  check("grossSelectionTotal 이 lineTotalOf 를 쓴다", /grossSelectionTotal[\s\S]{0,260}?lineTotalOf\(order\.items\[i\]\)/.test(fn), "");
 }
 
 out.push("\n[세 자리가 같은 함수를 쓴다]");

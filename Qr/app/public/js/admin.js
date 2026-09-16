@@ -8510,14 +8510,38 @@
    *
    * selections: [{ order, indexes }] — collectSelectedItemsByOrder 와 같은 꼴.
    */
+  /**
+   * 고른 품목들의 **받을 돈 전부** — 할인 기준이 아니라 값 그대로의 합이다.
+   *
+   * 이 둘을 헷갈리면 돈이 사라진다(아래 tableDiscountFor 주석).
+   */
+  function grossSelectionTotal(order, indexes) {
+    const idxs = indexes || order.items.map((_, i) => i);
+    return idxs.reduce((s, i) => (order.items[i] ? s + lineTotalOf(order.items[i]) : s), 0);
+  }
   function tableDiscountFor(selections) {
-    const full = selections.reduce((sum, x) => sum + fullEligibleClientTotal(x.order, x.indexes), 0);
+    // ★ 받을 돈(gross)과 할인 기준(base)은 **다른 값이다.**
+    //
+    // 2026-09-16 사장님(스크린샷과 함께): "지금 보면 클릭했는데 0으로
+    // 표시되고 있어." — 김밥세트(NT$280) 하나만 체크했는데 결제 버튼이
+    // NT$0 이었다.
+    //
+    // 예전에는 둘이 같은 값이라 fullEligibleClientTotal 하나로 버텼다.
+    // 그 뒤로 할인 기준에서 빠지는 것이 늘었다 — 이미 깎아 파는 세트
+    // (isSetDiscountItem), 그리고 옵션 값(크기·추가 옵션). 기준으로 버튼
+    // 금액을 적으니 **빠진 만큼이 그대로 사라졌다.** 세트만 고르면 기준이
+    // 0 이라 버튼도 0 이다.
+    //
+    // 받은 돈 자체는 맞았다 — 서버가 order.total 로 따로 센다. 틀린 것은
+    // 직원이 손님에게 부르는 숫자였다.
+    const gross = selections.reduce((sum, x) => sum + grossSelectionTotal(x.order, x.indexes), 0);
     if (!tableVipDiscountType && !tableManualDiscountValue) {
-      return { full, breakdown: { vipAmount: 0, manualAmount: 0, afterVip: full, total: 0 }, payable: full };
+      return { full: gross, breakdown: { vipAmount: 0, manualAmount: 0, afterVip: gross, total: 0 }, payable: gross };
     }
+    const base = selections.reduce((sum, x) => sum + fullEligibleClientTotal(x.order, x.indexes), 0);
     const vipAmount = selections.reduce((sum, x) => sum + vipDiscountClientTotal(x.order, x.indexes, tableVipDiscountType), 0);
-    const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, full, vipAmount);
-    return { full, breakdown, payable: full - breakdown.total };
+    const breakdown = computeCombinedDiscountClient(tableVipDiscountType, tableManualDiscountValue, base, vipAmount);
+    return { full: gross, breakdown, payable: gross - breakdown.total };
   }
 
   /** 아직 안 받은 품목 전부 — 「미결제 합계」가 재는 것과 같은 범위. */
