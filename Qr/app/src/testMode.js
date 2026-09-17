@@ -474,6 +474,68 @@ async function end(db, store, { save, deletePhoto }, opts = {}) {
   return { session: cur, deleted, photosDeleted };
 }
 
+/**
+ * 「T」 자리에 쌓인 기록을 전부 지운다.
+ *
+ * 2026-09-17 사장님: "테스터 모드를 안 키고 만든 테스터 테이블은 지워지는
+ * 기능이 따로 없어서 만들어야 할 것 같아."
+ *
+ * ── 왜 따로 필요한가 ─────────────────────────────────────────────────
+ *
+ * 테스터 모드의 「종료」는 deleteMany({test_session: cur.id}) 다. 그 세션의
+ * id 를 가진 것만 지운다. 그런데 T 자리의 주문에는 **늘 켜져 있는 가짜
+ * 세션 id**(TEST_TABLE_SESSION = "test_table")가 박힌다 — 그래야 테스터
+ * 모드를 껐다 켜도 그 자리가 계속 시험용으로 남기 때문이다.
+ *
+ * 그 설계의 값이 이것이다: 종료가 그 기록을 절대 안 지운다. 결산에도 지난
+ * 기록에도 안 나오니 눈에 안 띌 뿐, 데이터베이스에는 영영 쌓인다.
+ *
+ * ── 지우는 범위 ──────────────────────────────────────────────────────
+ *
+ * 태그가 붙은 네 컬렉션에서 test_session 이 "test_table" 인 것 전부.
+ * 결제완료든 아니든 가리지 않는다 — 그게 이 버튼의 뜻이다.
+ *
+ * 자리의 인원수도 같이 비운다. 주문과 인원은 하나의 세트다
+ * (claude/party-and-orders-are-one-set.md). 주문만 지우고 인원을 남기면
+ * 아무도 없는 자리에 「2인」이 뜬 채로 남는다.
+ *
+ * 진짜 테스터 모드 세션(ts_…)은 건드리지 않는다. 그건 「종료」의 몫이다.
+ */
+async function clearTestTable(db, store, { save } = {}) {
+  const results = await Promise.all(
+    TAGGED_COLLECTIONS.map((name) => db.collection(name).deleteMany({ test_session: TEST_TABLE_SESSION }))
+  );
+  const deleted = {};
+  TAGGED_COLLECTIONS.forEach((name, i) => {
+    deleted[name] = (results[i] && results[i].deletedCount) || 0;
+  });
+
+  // 메모리에 들고 있는 사본도 같이 턴다. 다음 요청이 어차피 다시 읽지만,
+  // 이 요청의 응답과 곧바로 그려질 화면도 맞아야 한다.
+  store.orders = (store.orders || []).filter((o) => !isTestTableRow(o));
+
+  const { clearPartyFields } = require("./partySize");
+  const seats = (store.tables || []).filter((t) => isTestTable(t) && t.party_size);
+  seats.forEach(clearPartyFields);
+  deleted.seats = seats.length;
+  if (seats.length && typeof save === "function") await save();
+
+  return deleted;
+}
+
+/** 지금 T 자리에 몇 건이 쌓여 있는가. 지우기 전에 보여줄 숫자. */
+async function countTestTable(db) {
+  const counts = await Promise.all(
+    TAGGED_COLLECTIONS.map((name) => db.collection(name).countDocuments({ test_session: TEST_TABLE_SESSION }))
+  );
+  const out = { total: 0 };
+  TAGGED_COLLECTIONS.forEach((name, i) => {
+    out[name] = counts[i];
+    out.total += counts[i];
+  });
+  return out;
+}
+
 module.exports = {
   TAGGED_COLLECTIONS,
   joinDevice,
@@ -497,6 +559,8 @@ module.exports = {
   TEST_TABLE_NUMBER,
   LEGACY_TEST_TABLE_NUMBER,
   isTestTableRow,
+  clearTestTable,
+  countTestTable,
   isTestTable,
   countsAtTable,
   tagForTable,

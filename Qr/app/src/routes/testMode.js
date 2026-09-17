@@ -124,4 +124,28 @@ router.post("/end", requireOwner, async (req, res) => {
   res.json({ ok: true, ...result });
 });
 
+// ── 「T」 자리 비우기 ────────────────────────────────────────────────
+//
+// 2026-09-17 사장님: "테스터 모드를 안 키고 만든 테스터 테이블은 지워지는
+// 기능이 따로 없어서 만들어야 할 것 같아."
+//
+// 테스터 모드의 「종료」는 그 세션 id 가 박힌 것만 지운다. T 자리의 주문에는
+// 늘 켜져 있는 가짜 세션 id 가 박히므로 종료로는 영영 안 지워진다
+// (src/testMode.js clearTestTable 주석). 그래서 따로 둔다.
+//
+// 지우는 일이라 사장님만. 직원 권한으로는 못 부른다.
+
+// 지우기 전에 몇 건인지. 확인 창이 「12건을 지웁니다」라고 말할 수 있게.
+router.get("/test-table", requireOwner, async (req, res) => {
+  await connectDB();
+  res.json(await testMode.countTestTable(getDb()));
+});
+
+// 진짜로 지운다. 되돌릴 수 없다 — 화면이 먼저 물어본다.
+router.delete("/test-table", requireOwner, async (req, res) => {
+  await connectDB();
+  const deleted = await testMode.clearTestTable(getDb(), store, { save });
+  res.json({ ok: true, deleted });
+});
+
 module.exports = router;

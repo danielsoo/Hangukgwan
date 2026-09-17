@@ -895,6 +895,11 @@
       testTableTileName: "테스트",
       testTableTileTag: "시험용",
       testTableBadge: "테스트 테이블",
+      clearTestTableBtn: "🧹 시험 기록 전부 지우기",
+      clearTestTableConfirm: "이 자리에 쌓인 시험 기록 {n}건을 전부 지웁니다.\n\n결제완료된 것도 같이 지워지고, 되돌릴 수 없어요. 진짜 장사 기록은 건드리지 않습니다.",
+      clearTestTableEmpty: "지울 시험 기록이 없어요.",
+      clearTestTableDone: "시험 기록 {n}건을 지웠어요.",
+      clearTestTableFailed: "지우지 못했어요. 잠시 뒤 다시 눌러주세요.",
       testTableHint: "여기서 만든 주문은 결산에도 지난 기록에도 안 들어가고, 주방 빌지도 자동으로 안 나가요. 테스터 모드를 켜지 않아도 언제든 쓸 수 있어요.",
       catDiscountExcluded: "할인 제외",
       catDiscountExcludedTitle: "체크하면 이 분류의 메뉴에는 特約95折/VIP9折 할인이 걸리지 않아요.",
@@ -1686,6 +1691,11 @@
       testTableTileName: "測試",
       testTableTileTag: "測試專用",
       testTableBadge: "測試桌",
+      clearTestTableBtn: "🧹 清除全部測試紀錄",
+      clearTestTableConfirm: "將清除這桌累積的 {n} 筆測試紀錄。\n\n已結帳的也會一併刪除，且無法復原。正式營業紀錄不受影響。",
+      clearTestTableEmpty: "沒有可清除的測試紀錄。",
+      clearTestTableDone: "已清除 {n} 筆測試紀錄。",
+      clearTestTableFailed: "清除失敗，請稍後再試。",
       testTableHint: "這裡建立的訂單不列入結算與歷史紀錄，也不會自動列印廚房單。不用開測試模式也能隨時使用。",
       catDiscountExcluded: "不折扣",
       catDiscountExcludedTitle: "勾選後，此分類的品項不套用特約95折／VIP9折。",
@@ -7760,6 +7770,14 @@
         ${showClearParty
           ? `<button type="button" id="clearPartySizeBtn" class="table-detail-clear-party">${T("clearPartySizeBtn")}</button>`
           : ""}
+        ${
+          // 시험용 자리에 쌓인 기록을 비우는 버튼. 테스터 모드의 「종료」는
+          // 이 자리의 기록을 못 지운다(src/testMode.js clearTestTable 주석)
+          // — 2026-09-17 사장님 요청으로 따로 둔다. 지우는 일이라 사장님만.
+          isTestTable(table) && currentRole === "owner"
+            ? `<button type="button" id="clearTestTableBtn" class="table-detail-clear-party">${T("clearTestTableBtn")}</button>`
+            : ""
+        }
       </div>
     `;
     const tabsHtml = `
@@ -7935,6 +7953,52 @@
     // 나간 테이블(인원수만 찍고 안 시켰거나 주문이 전부 취소된 경우)을
     // 정리하는 유일한 길이다. 시간이 지났다고 알아서 지우지는 않으므로,
     // 이 버튼을 누르지 않으면 그 숫자가 그대로 남는다.
+    // 「시험 기록 전부 지우기」 — 테스터 모드의 종료가 못 지우는 것을
+    // 지운다(src/testMode.js clearTestTable 주석). 되돌릴 수 없으므로
+    // **몇 건인지 세어서 보여주고** 물어본다. 0 건이면 묻지도 않는다 —
+    // 「0건을 지웁니다」는 물어볼 이유가 없다.
+    const clearTestBtn = $("#clearTestTableBtn");
+    if (clearTestBtn) {
+      clearTestBtn.onclick = async () => {
+        clearTestBtn.disabled = true;
+        try {
+          const countRes = await fetch("/api/test-mode/test-table");
+          if (!countRes.ok) throw new Error("count_failed");
+          const count = await countRes.json();
+          const n = Number((count && count.total) || 0);
+          if (!n) {
+            clearTestBtn.disabled = false;
+            await showAlert(T("clearTestTableEmpty"));
+            return;
+          }
+          if (!(await showConfirm(T("clearTestTableConfirm").replace("{n}", money(n))))) {
+            clearTestBtn.disabled = false;
+            return;
+          }
+          const res = await fetch("/api/test-mode/test-table", { method: "DELETE" });
+          if (!res.ok) throw new Error("delete_failed");
+          // 화면의 사본도 같이 턴다 — 다음 폴링을 기다리지 않고 바로 빈다.
+          orders = orders.filter((o) => !isTestTableOrder(o));
+          const t = tables.find((x) => String(x.number) === String(tableNumber));
+          if (t) {
+            t.party_size = null;
+            t.party_adults = null;
+            t.party_children = null;
+            t.party_size_updated_at = null;
+          }
+          await loadTables();
+          await showAlert(T("clearTestTableDone").replace("{n}", money(n)));
+          openTableDetail(tableNumber, label, null);
+          renderOrders();
+          if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+          if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
+        } catch (e) {
+          clearTestBtn.disabled = false;
+          await showAlert(T("clearTestTableFailed"));
+        }
+      };
+    }
+
     const clearPartyBtn = $("#clearPartySizeBtn");
     if (clearPartyBtn) {
       clearPartyBtn.onclick = async () => {
