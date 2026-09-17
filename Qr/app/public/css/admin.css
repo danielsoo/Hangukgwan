@@ -569,6 +569,11 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
   user-select: none; z-index: 5;
 }
 .table-block:active { cursor: grabbing; }
+/* 끄는 동안 지금 자리가 옆 테이블과 겹치는 상태. 손을 떼면 그 앞의 빈
+   자리로 물러난다 — 왜 거기 안 놓이는지 미리 보여주는 표시다.
+   (2026-09-16: 예전에는 겹치는 순간 그 자리에 붙들어서, 옆 테이블 너머로
+   옮기는 것 자체가 불가능했다.) */
+.table-block.table-block-blocked { border-color: var(--red); border-style: dashed; opacity: 0.6; }
 .table-block.has-order { border-color: var(--red); background: #fdf3f2; }
 .table-block .tb-party { font-size: 9px; font-weight: 600; color: var(--muted); margin-top: 1px; }
 /* 결제탭의 완전 포장(order_type === "takeout") 주문 타일 — 포장 카운터든

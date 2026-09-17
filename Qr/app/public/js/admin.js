@@ -428,7 +428,11 @@
   }
   /** 이 자리가 시험용인가 (src/testMode.js isTestTable 과 같은 규칙). */
   function isTestTable(t) {
-    return !!(t && (t.is_test || String(t.number) === "TEST"));
+    if (!t) return false;
+    const n = String(t.number);
+    // "TEST" 는 줄이기 전 번호(2026-09-17). 마이그레이션이 아직 안 돈
+    // 서버에 붙은 화면에서도 알아보게 같이 둔다.
+    return !!(t.is_test || n === "T" || n === "TEST");
   }
   /** 이 주문이 「테스트 테이블」에서 나온 것인가. */
   function isTestTableOrder(o) {
@@ -9470,6 +9474,13 @@
         }
       }
 
+      /** 이 자리에 놓으면 옆 테이블과 겹치는가. */
+      function overlapsSibling(x, y) {
+        return siblings.some(
+          (s) => x < s.left + s.width && x + rect.width > s.left && y < s.top + s.height && y + rect.height > s.top
+        );
+      }
+
       function onMove(e2) {
         const dx = e2.clientX - startMouseX;
         const dy = e2.clientY - startMouseY;
@@ -9539,21 +9550,32 @@
           }
         }
 
-        // Prevent tables from overlapping each other: if this position
-        // would overlap a sibling, hold at the last position that didn't
-        // (so a table bumps into its neighbor instead of passing through it).
+        // ★ 끄는 동안에는 붙들지 않는다.
+        //
+        // 2026-09-16 사장님: "지금 테이블이 이동이 1픽셀씩 되고 있어."
+        //
+        // 예전에는 겹치는 자리가 나오는 즉시 「마지막으로 안 겹치던 자리」에
+        // 붙들어 뒀다. 옆 테이블에 부딪치면 멈추라는 뜻이었는데, 자리가
+        // 격자로 촘촘히 놓여 있으면 **끌기 시작하자마자** 옆 것에 닿는다.
+        // 한 번 붙들리면 그 다음부터 계산되는 자리도 계속 옆 것과 겹치므로
+        // 영영 안 풀린다 — 화면에서는 테이블이 몇 픽셀 움직이다 그대로 서
+        // 버린 것처럼 보이고, 옆 테이블 **너머로는 아예 옮길 수가 없었다.**
+        // (실측: 자리 셋이 나란한 줄에서 120px 을 끌면 20px 에서 40px 로
+        // 가고 끝이었다.)
+        //
+        // 그래서 끄는 동안에는 커서를 그냥 따라간다. 겹치는 동안에는
+        // 테두리로 알려주고(.table-block-blocked), 손을 뗄 때도 여전히
+        // 겹쳐 있으면 그때 지나온 자리 중 마지막으로 비어 있던 곳에 놓는다.
+        // 자리가 겹친 채로 저장되는 일은 예전과 똑같이 없다.
+        let blocked = false;
         if (siblings.length) {
-          const overlapsAny = siblings.some(
-            (s) => newX < s.left + s.width && newX + rect.width > s.left && newY < s.top + s.height && newY + rect.height > s.top
-          );
-          if (overlapsAny) {
-            newX = lastValidX;
-            newY = lastValidY;
-          } else {
+          blocked = overlapsSibling(newX, newY);
+          if (!blocked) {
             lastValidX = newX;
             lastValidY = newY;
           }
         }
+        el.classList.toggle("table-block-blocked", blocked);
 
         el.style.left = newX + "px";
         el.style.top = newY + "px";
@@ -9562,7 +9584,16 @@
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
         clearGuides();
-        if (moved) opts.onEnd(parseFloat(el.style.left), parseFloat(el.style.top));
+        el.classList.remove("table-block-blocked");
+        if (moved) {
+          const finalX = parseFloat(el.style.left);
+          const finalY = parseFloat(el.style.top);
+          const settleX = overlapsSibling(finalX, finalY) ? lastValidX : finalX;
+          const settleY = overlapsSibling(finalX, finalY) ? lastValidY : finalY;
+          el.style.left = settleX + "px";
+          el.style.top = settleY + "px";
+          opts.onEnd(settleX, settleY);
+        }
         floorPlanDragging = false;
       }
       document.addEventListener("mousemove", onMove);

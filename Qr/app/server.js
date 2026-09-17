@@ -6,7 +6,7 @@ const session = require("express-session");
 const compression = require("compression");
 const { nowLocal } = require("./src/time");
 const MongoStore = require("connect-mongo");
-const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave, saveFields, storeWrite } = require("./src/db");
+const { refreshStore, save, nextId, savePhoto, deletePhoto, store, getDb, connectDB, getClient, ensureOrderIdFloor, refreshAndSave, saveFields, storeWrite, findOrders, saveOrders } = require("./src/db");
 const seed = require("./src/seed");
 // 0번 테이블 정리 마이그레이션이 「지워도 안전한가」를 묻는 데 쓴다.
 const { hasUnpaidOrder } = require("./src/partySize");
@@ -25,6 +25,7 @@ const { sendStamped } = require("./src/assetVersion");
 const { applyTraditionalCategory20260910 } = require("./src/migrations/2026-09-10-traditional-category");
 const { applyDiscountExcludedFlag20260916 } = require("./src/migrations/2026-09-16-discount-excluded-flag");
 const { applyTestTable20260916 } = require("./src/migrations/2026-09-16-test-table");
+const { applyTestTableShortName20260917 } = require("./src/migrations/2026-09-17-test-table-short-name");
 const {
   applyRemoveTable020260910,
   MIGRATION_FLAG: REMOVE_TABLE_0_FLAG,
@@ -325,6 +326,9 @@ async function storeRefreshAndFlush(req, res, next) {
       await applyTraditionalCategory20260910(store, { save, nextId });
       await applyDiscountExcludedFlag20260916(store, { save });
       await applyTestTable20260916(store, { save, nextId });
+      // 그 자리의 이름을 「T」 한 글자로. 번호까지 바뀌므로 이미 들어가 있던
+      // 주문도 같이 옮긴다(2026-09-17 사장님: "이름이 길어 그냥 T 라고 해줘").
+      await applyTestTableShortName20260917(store, { save, findOrders, saveOrders });
       // 포장 손님이 들어오던 「外帶」 0번 테이블을 없앤다. 지워도 안전할
       // 때만 지우고, 아니면 다음 부팅에 다시 본다. 아직 이관하지 않은 아주
       // 오래된 설치에서만 미결제 주문 확인용 목록을 여기서 한 번 보충한다.

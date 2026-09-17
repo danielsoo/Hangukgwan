@@ -43,7 +43,8 @@ async function applyTestTable20260916(store, { save, nextId }) {
     store.tables.push({
       id: nextId("tables"),
       number: TEST_TABLE_NUMBER,
-      label: "테스트 테이블",
+      // 한 글자. 배치도 타일이 70px 이라 긴 이름은 안 들어간다(2026-09-17).
+      label: TEST_TABLE_NUMBER,
       // 맨 뒤로. 진짜 자리들 사이에 끼면 직원이 헷갈린다.
       sort_order: 9999,
       zone_id,

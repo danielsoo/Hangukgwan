@@ -52,7 +52,13 @@ function check(name, cond, extra = "") {
   out.push("[1. 늘 있고 늘 보인다]");
   const tt = store.tables.find((t) => t.is_test);
   check("★ 자리가 만들어져 있다", !!tt, "마이그레이션이 안 돌았다");
-  check("번호는 TEST", tt && tt.number === "TEST", `${tt && tt.number}`);
+  // 2026-09-17 사장님: "지금 테스트 테이블이 이름이 길어 그냥 T 라고 해줘."
+  // 배치도 타일이 한 변 70px 이라 긴 이름은 안 들어가고, 영수증에는
+  // 「桌號 T」로 찍힌다.
+  check("★ 번호는 한 글자 T", tt && tt.number === "T", `${tt && tt.number}`);
+  check("★ 이름도 한 글자 T", tt && tt.label === "T", `${tt && tt.label}`);
+  check("번호가 상수와 같다", tt && tt.number === testMode.TEST_TABLE_NUMBER, `${testMode.TEST_TABLE_NUMBER}`);
+  check("줄이기 전 번호도 시험용으로 알아본다", testMode.isTestTable({ number: "TEST" }) === true, "옛 서버·옛 화면 대비");
   check("이름이 붙어 있다", !!(tt && tt.label), "");
   check("맨 뒤에 정렬된다 — 진짜 자리 사이에 끼면 헷갈린다", tt && tt.sort_order >= 9999, `${tt && tt.sort_order}`);
   check(
@@ -85,7 +91,7 @@ function check(name, cond, extra = "") {
   const guest = request.agent(app);
   // 인원을 안 물어도 들어가야 한다 — 그 자리에 몇 명인지는 아무 데도 안 쓰인다.
   r = await guest.post("/api/orders").send({
-    tableNumber: "TEST",
+    tableNumber: testMode.TEST_TABLE_NUMBER,
     items: [{ itemId: item.id, qty: 2, orderType: "dine_in", addons: [] }],
   });
   check(
@@ -110,7 +116,7 @@ function check(name, cond, extra = "") {
   check("금액은 평소대로 계산된다", order.total === item.price * 2, `${order.total}`);
 
   // 자리 계산에 들어가야 한다 — 안 그러면 그 자리에서 아무것도 안 돈다.
-  check("★ 그 자리의 미결제로 잡힌다", hasUnpaidOrder(store, "TEST") === true, "");
+  check("★ 그 자리의 미결제로 잡힌다", hasUnpaidOrder(store, testMode.TEST_TABLE_NUMBER) === true, "");
   check("★ 착석 주문 목록에도 들어온다", ordersOfSeating(store, tt).some((o) => o.id === order.id), "");
 
   // 테스터 모드를 **안 켠** 기기에서도 보여야 한다.
@@ -121,7 +127,7 @@ function check(name, cond, extra = "") {
     list.some((o) => o.id === order.id),
     "이게 안 보이면 이 자리를 만든 뜻이 없다"
   );
-  r = await staff.get(`/api/orders/table/TEST`);
+  r = await staff.get(`/api/orders/table/${testMode.TEST_TABLE_NUMBER}`);
   const tableList = Array.isArray(r.body) ? r.body : r.body.orders || [];
   check("★ 결제탭(자리별 목록)에도 보인다", tableList.some((o) => o.id === order.id), `${r.status}`);
 

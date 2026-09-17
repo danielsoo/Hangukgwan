@@ -61,7 +61,13 @@ const SETTING_KEY = "test_session";
 // 에 걸리지 않는다 — 시험용 자리는 종료해도 그대로 남는다. 그게 맞다.
 // 이 자리는 세션이 아니라 **가구**다.
 const TEST_TABLE_SESSION = "test_table";
-const TEST_TABLE_NUMBER = "TEST";
+// 2026-09-17 사장님: "지금 테스트 테이블이 이름이 길어 그냥 T 라고 해줘."
+// 배치도 타일은 한 변이 70px 이고 영수증에는 「桌號 T」로 찍힌다 — 한 글자면
+// 충분하다. 그 자리가 무엇인지는 붉은 배지가 따로 말해준다.
+const TEST_TABLE_NUMBER = "T";
+// 줄이기 전 번호. 마이그레이션이 돌기 전(또는 옛 화면이 떠 있는 태블릿)에도
+// 그 자리를 시험용으로 알아보게 남겨둔다.
+const LEGACY_TEST_TABLE_NUMBER = "TEST";
 
 /** 이 기록이 「테스트 테이블」에서 나온 것인가. */
 function isTestTableRow(row) {
@@ -70,7 +76,9 @@ function isTestTableRow(row) {
 
 /** 이 자리가 테스트 테이블인가. */
 function isTestTable(table) {
-  return !!(table && (table.is_test || String(table.number) === TEST_TABLE_NUMBER));
+  if (!table) return false;
+  const n = String(table.number);
+  return !!(table.is_test || n === TEST_TABLE_NUMBER || n === LEGACY_TEST_TABLE_NUMBER);
 }
 
 /**
@@ -487,6 +495,7 @@ module.exports = {
   visibleTo,
   TEST_TABLE_SESSION,
   TEST_TABLE_NUMBER,
+  LEGACY_TEST_TABLE_NUMBER,
   isTestTableRow,
   isTestTable,
   countsAtTable,
