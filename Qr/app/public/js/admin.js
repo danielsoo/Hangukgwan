@@ -10267,6 +10267,53 @@
     floorFitTimer = setTimeout(fitPaymentFloorPlan, 120);
   });
 
+  /**
+   * 포장 타일을 놓을 **빈 자리**를 찾는다.
+   *
+   * 2026-09-18 사장님(결제탭 스크린샷과 함께): 식사 중인 6번이 추가로 포장을
+   * 시켰더니 그 포장 타일이 옆 자리(8번) 위에 겹쳐 그려졌다.
+   *
+   * 예전에는 자리를 안 찾고 **무조건 그 테이블 바로 오른쪽**(x + 너비 + 틈)에
+   * 놓았다. 그 자리에 이미 다른 테이블이 있어도 상관하지 않았다. 배치도는
+   * 자리들이 촘촘히 놓이므로 바로 오른쪽은 거의 언제나 남의 자리다.
+   *
+   * 그래서 빈 칸을 찾아서 놓는다. 고르는 순서는 「눈이 따라가기 쉬운 순」이다:
+   *   1) 그 테이블과 같은 줄, 오른쪽으로
+   *   2) 같은 줄, 왼쪽으로 (오른쪽이 꽉 찼을 때)
+   *   3) 아랫줄부터 차례로
+   * 구역 안에 아무 데도 없으면 구역 **아래**에 붙인다 — 겹쳐 그리느니 삐져
+   * 나가는 편이 낫다(결제탭은 실제로 그려진 것의 끝을 재서 확대하므로
+   * fitPaymentFloorPlan 이 그것까지 화면에 담아준다).
+   *
+   * occupied 는 이미 찬 사각형들 [{left, top, width, height}].
+   */
+  function findFreeTileSpot(occupied, opts) {
+    const { zoneW, zoneH, preferLeft, top, w, h, gap, minTop } = opts;
+    const step = w + gap;
+    const free = (x, y) =>
+      x >= 0 &&
+      y >= minTop &&
+      x + w <= zoneW &&
+      !occupied.some((r) => x < r.left + r.width && x + w > r.left && y < r.top + r.height && y + h > r.top);
+
+    // 1) 같은 줄 오른쪽 → 2) 같은 줄 왼쪽
+    for (let x = preferLeft; x + w <= zoneW; x += step) if (free(x, top)) return { left: x, top };
+    for (let x = preferLeft - step; x >= 0; x -= step) if (free(x, top)) return { left: x, top };
+
+    // 3) 아랫줄부터. 구역 높이를 넘지 않는 줄까지만 본다.
+    for (let y = top + h + gap; y + h <= zoneH; y += h + gap) {
+      for (let x = 0; x + w <= zoneW; x += step) if (free(x, y)) return { left: x, top: y };
+    }
+    // 위쪽 줄도 본다 — 구역 아래로 삐져나가기 전에 쓸 수 있는 자리는 다 쓴다.
+    for (let y = top - h - gap; y >= minTop; y -= h + gap) {
+      for (let x = 0; x + w <= zoneW; x += step) if (free(x, y)) return { left: x, top: y };
+    }
+
+    // 4) 구역이 꽉 찼다. 아래에 붙인다 — 겹치는 것보다 낫다.
+    const bottom = occupied.reduce((m, r) => Math.max(m, r.top + r.height), zoneH);
+    return { left: Math.min(preferLeft, Math.max(0, zoneW - w)), top: bottom + gap };
+  }
+
   function renderPaymentFloorPlan() {
     const wrap = $("#paymentFloorPlan");
     if (!wrap) return;
@@ -10286,83 +10333,111 @@
       zoneEl.innerHTML = `<span class="zone-label">${z.name}</span>`;
       stage.appendChild(zoneEl);
 
-      tables
+      // ★ 자리를 **먼저 다 정하고** 나서 그린다.
+      //
+      // 2026-09-18 사장님(결제탭 스크린샷과 함께): 식사 중인 6번이 추가로
+      // 포장을 시켰더니 그 포장 타일이 옆 자리(8번) 위에 겹쳐 그려졌다.
+      //
+      // 예전에는 자리를 하나씩 돌면서 그 자리에서 바로 그렸다. 그러니 아직
+      // 안 그린 옆 자리를 모르는 채로 포장 타일을 놓게 되고, 놓는 규칙도
+      // 「그 테이블 바로 오른쪽」 하나뿐이었다. 배치도는 자리가 촘촘하니
+      // 바로 오른쪽은 거의 언제나 남의 자리다.
+      const gap = 8;
+      const plans = tables
         .filter((t) => t.zone_id === z.id)
-        .forEach((t) => {
+        .map((t) => {
           const unpaid = activeOrdersForTable(t.number).filter((o) => o.status !== "paid");
-          const left = t.x != null ? t.x : 10;
-          const top = t.y != null ? t.y : ZONE_HEADER_HEIGHT;
-          const w = t.width || 70;
-          const h = t.height || 70;
-          const gap = 8;
           // "완전 포장" 주문은 진짜 테이블에서는 별도 타일로 분리해서 그
           // 주문 하나만 바로 결제할 수 있게 한다 — 사장님 피드백
           // (2026-09-05): "혼합은 적용 안 할거고 완전 포장인 것만 적용할
-          // 거야... 현재 이미 있는 포장 애들도 적용해줘. 저기 저 박스
-          // 누르면 나오게 해달라는 말이야".
+          // 거야... 저기 저 박스 누르면 나오게 해달라는 말이야".
           //
           // 포장 카운터(is_counter)는 정반대다 — 사장님 피드백(2026-09-05,
           // 후속): "모든 포장 카운터 번호들은 전부 저 하나에 테이블에
           // 들어갈건데 그 테이블을 누르면 여러개 나열해서 나오게 해달라고".
-          // 즉 카운터는 서로 무관한 손님들 주문이 여러 건 쌓여도 배치도
-          // 상에는 항상 "포장 카운터" 타일 하나만 있고, 그 타일을 누르면
-          // (openTableDetail을 focusOrderId 없이 호출 → 아래 body가 모든
-          // 미결제 주문을 각자 카드로 나열하고, 카운터는 payAllBtn도 이미
-          // 꺼져 있어 각 카드의 개별 "결제 완료로 변경" 버튼으로만 처리됨)
-          // 그 목록이 펼쳐진다. 카운터를 주문 개수만큼 옆으로 늘어놓던
-          // 이전 방식(이 세션 초반의 결제탭 포장 타일 분리 작업)은 되돌림.
+          // 카운터는 주문이 몇 건이든 배치도에는 타일 하나뿐이고, 누르면
+          // 그 목록이 펼쳐진다.
           const takeoutOrders = t.is_counter ? [] : unpaid.filter((o) => o.order_type === "takeout");
           const bundledOrders = t.is_counter ? unpaid : unpaid.filter((o) => o.order_type !== "takeout");
-          const showMainTile = t.is_counter || bundledOrders.length > 0 || unpaid.length === 0;
-
-          let nextLeft = left;
-          if (showMainTile) {
-            const tableEl = document.createElement("div");
-            // 시험용 자리는 한눈에 갈려야 한다 — 바쁠 때 진짜 자리로 착각해
-            // 여기에 손님 주문을 넣으면 그 돈은 결산에 안 잡힌다
-            // (2026-09-16 사장님의 「테스트 테이블」).
-            tableEl.className =
-              "table-block" + (bundledOrders.length ? " has-order" : "") + (isTestTable(t) ? " test-table" : "");
-            // 어느 자리 타일인지 화면에서 집어낼 수 있게 남긴다 — 타일에
-            // 보이는 글자는 표시 이름(label)일 수도 있어서 글자로는 못 찾는다.
-            tableEl.dataset.tableNumber = t.number;
-            tableEl.style.left = nextLeft + "px";
-            tableEl.style.top = top + "px";
-            tableEl.style.width = w + "px";
-            tableEl.style.height = h + "px";
-            // 타일은 70px 남짓이라 「테스트 테이블」이 세 줄로 깨진다 —
-            // 타일에서만 짧은 이름을 쓴다(결제창 제목은 그대로 긴 이름).
-            tableEl.innerHTML = `
-              <span>${isTestTable(t) ? T("testTableTileName") : t.label || t.number}</span>${
-                isTestTable(t)
-                  ? `<span class="tb-test-tag">${T("testTableTileTag")}</span>`
-                  : t.party_size
-                  ? `<span class="tb-party">${fmtPartySeat(t)}</span>`
-                  : ""
-              }
-            `;
-            tableEl.onclick = () => openTableDetail(t.number, t.label);
-            zoneEl.appendChild(tableEl);
-            nextLeft += w + gap;
-          }
-
-          takeoutOrders.forEach((o) => {
-            const tileEl = document.createElement("div");
-            tileEl.className = "table-block has-order takeout-order-tile";
-            tileEl.dataset.tableNumber = t.number;
-            tileEl.dataset.orderId = o.id;
-            tileEl.style.left = nextLeft + "px";
-            tileEl.style.top = top + "px";
-            tileEl.style.width = w + "px";
-            tileEl.style.height = h + "px";
-            tileEl.innerHTML = `
-              <span>${t.label || t.number}</span><span class="tb-counter-tag">${fmtTakeoutTileTag(t, o)}</span>
-            `;
-            tileEl.onclick = () => openTableDetail(t.number, t.label, o.id);
-            zoneEl.appendChild(tileEl);
-            nextLeft += w + gap;
-          });
+          return {
+            t,
+            takeoutOrders,
+            bundledOrders,
+            showMainTile: t.is_counter || bundledOrders.length > 0 || unpaid.length === 0,
+            left: t.x != null ? t.x : 10,
+            top: t.y != null ? t.y : ZONE_HEADER_HEIGHT,
+            w: t.width || 70,
+            h: t.height || 70,
+          };
         });
+
+      // 이미 찬 자리. 타일이 뜨는 자리만 센다 — 주문이 전부 포장이라
+      // 타일이 안 뜨는 테이블의 자리는 비워두고, 그 자리는 자기 포장
+      // 타일이 그대로 쓴다(예전과 같다).
+      const occupied = plans
+        .filter((p) => p.showMainTile)
+        .map((p) => ({ left: p.left, top: p.top, width: p.w, height: p.h }));
+
+      plans.forEach((p) => {
+        if (!p.showMainTile) return;
+        const t = p.t;
+        const tableEl = document.createElement("div");
+        // 시험용 자리는 한눈에 갈려야 한다 — 바쁠 때 진짜 자리로 착각해
+        // 여기에 손님 주문을 넣으면 그 돈은 결산에 안 잡힌다
+        // (2026-09-16 사장님의 「테스트 테이블」).
+        tableEl.className =
+          "table-block" + (p.bundledOrders.length ? " has-order" : "") + (isTestTable(t) ? " test-table" : "");
+        // 어느 자리 타일인지 화면에서 집어낼 수 있게 남긴다 — 타일에
+        // 보이는 글자는 표시 이름(label)일 수도 있어서 글자로는 못 찾는다.
+        tableEl.dataset.tableNumber = t.number;
+        tableEl.style.left = p.left + "px";
+        tableEl.style.top = p.top + "px";
+        tableEl.style.width = p.w + "px";
+        tableEl.style.height = p.h + "px";
+        tableEl.innerHTML = `
+          <span>${isTestTable(t) ? T("testTableTileName") : t.label || t.number}</span>${
+            isTestTable(t)
+              ? `<span class="tb-test-tag">${T("testTableTileTag")}</span>`
+              : t.party_size
+              ? `<span class="tb-party">${fmtPartySeat(t)}</span>`
+              : ""
+          }
+        `;
+        tableEl.onclick = () => openTableDetail(t.number, t.label);
+        zoneEl.appendChild(tableEl);
+      });
+
+      plans.forEach((p) => {
+        const t = p.t;
+        let preferLeft = p.showMainTile ? p.left + p.w + gap : p.left;
+        p.takeoutOrders.forEach((o) => {
+          const spot = findFreeTileSpot(occupied, {
+            zoneW: z.width,
+            zoneH: z.height,
+            preferLeft,
+            top: p.top,
+            w: p.w,
+            h: p.h,
+            gap,
+            minTop: ZONE_HEADER_HEIGHT,
+          });
+          occupied.push({ left: spot.left, top: spot.top, width: p.w, height: p.h });
+          preferLeft = spot.left + p.w + gap;
+          const tileEl = document.createElement("div");
+          tileEl.className = "table-block has-order takeout-order-tile";
+          tileEl.dataset.tableNumber = t.number;
+          tileEl.dataset.orderId = o.id;
+          tileEl.style.left = spot.left + "px";
+          tileEl.style.top = spot.top + "px";
+          tileEl.style.width = p.w + "px";
+          tileEl.style.height = p.h + "px";
+          tileEl.innerHTML = `
+            <span>${t.label || t.number}</span><span class="tb-counter-tag">${fmtTakeoutTileTag(t, o)}</span>
+          `;
+          tileEl.onclick = () => openTableDetail(t.number, t.label, o.id);
+          zoneEl.appendChild(tileEl);
+        });
+      });
     });
 
     // 다 그린 뒤에 크기를 맞춘다. 그리기 전에는 잴 것이 없다.
