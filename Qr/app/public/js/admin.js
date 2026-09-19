@@ -719,6 +719,10 @@
       orderEditBtn: "✏️ 수정",
       printBtn: "🖨️ 인쇄",
       previewBtn: "👁️ 미리보기",
+      ticketPreviewTitle: "미리보기 — 주방용 · 결제용",
+      ticketPreviewHint: "실제 인쇄와 같은 내용이에요. 여기서는 종이가 나가지 않아요.",
+      moveSlipFailedTitle: "자리 이동 빌지가 안 나왔어요",
+      moveSlipFailedTail: "주방에는 옛 자리 번호가 적힌 주문서가 그대로 있으니 직접 알려주세요.",
       confirmCancelOrder: "이 주문을 취소하시겠습니까?",
       collapseItemsBtn: "접기 ▲",
       dragHandleTitle: "드래그해서 순서/단계 변경",
@@ -1517,6 +1521,10 @@
       orderEditBtn: "✏️ 修改",
       printBtn: "🖨️ 列印",
       previewBtn: "👁️ 預覽",
+      ticketPreviewTitle: "預覽 — 廚房用 · 結帳用",
+      ticketPreviewHint: "內容與實際列印相同。在這裡不會印出紙張。",
+      moveSlipFailedTitle: "換桌單沒有印出來",
+      moveSlipFailedTail: "廚房那邊還是舊桌號的單子，請直接告知。",
       confirmCancelOrder: "確定要取消這筆訂單嗎？",
       collapseItemsBtn: "收合 ▲",
       dragHandleTitle: "拖曳以調整順序/階段",
@@ -2980,6 +2988,13 @@
     adminLang === "zh"
       ? `已移到「${to}」（${moved} 筆${paid ? `，含已結帳 ${paid} 筆` : ""}）。請提醒客人改掃新桌號的 QR code。`
       : `"${to}"으로 옮겼습니다 (주문 ${moved}건${paid ? `, 결제 완료 ${paid}건 포함` : ""}). 손님께 새 자리의 QR 코드로 주문해달라고 알려주세요.`;
+  // 자리는 옮겨졌는데 빌지가 안 나온 경우. 옮긴 결과 뒤에 이어 붙인다 —
+  // 창을 두 번 띄우면 직원이 앞의 것을 닫고 넘어가느라 정작 중요한 쪽을
+  // 안 읽는다. 「왜 안 나왔는지」와 「그래서 지금 무엇을 해야 하는지」를
+  // 같이 적는다. 종이가 안 나온 것은 주방이 옛 번호를 그대로 들고 있다는
+  // 뜻이라, 실패 사실만 알려주는 것으로는 부족하다.
+  const fmtMoveSlipFailed = (reason) =>
+    `\n\n⚠ ${T("moveSlipFailedTitle")} — ${reason}. ${T("moveSlipFailedTail")}`;
   const fmtMovedFrom = (from) => (adminLang === "zh" ? `← ${from} 移入` : `← ${from}에서`);
   // 결제완료 카드의 작은 두 번째 줄. 「원래 얼마였고 얼마 깎였나」.
   const fmtCardDiscountNote = (total, off) =>
@@ -5850,26 +5865,57 @@
     markPrintSucceededAndAdvance(o);
   }
 
-  // Opens the exact same ticket HTML in its own small popup WINDOW (not a
-  // browser tab) — a fast way to check the layout after a tweak without
-  // needing to actually print a physical page each time. Passing a real
-  // features string (width/height/etc.) is what makes browsers render this
-  // as a separate window instead of a new tab in the current window; a bare
-  // window.open("", "_blank") with no features string opens as a tab.
+  // 빌지 미리보기 — **이 화면 안에서** 연다.
+  //
+  // 2026-09-19 사장님: "웹에서는 실시간 탭 인쇄 옆 미리보기가 보이는데 앱으로
+  // apk 받은 것에서는 안 보여."
+  //
+  // 예전에는 window.open 으로 작은 팝업 창을 띄웠다. 한국관 POS 앱
+  // (태블릿 네이티브 WebView) 안에서는 MainActivity.java 의 onCreateWindow 가
+  // 언제나 false 를 돌려주므로 window.open 이 null 이 되고, 여기 있던
+  // `if (!win) return;` 이 **아무 말 없이 끝났다.** 버튼은 보이는데 눌러도
+  // 아무 일이 안 일어나는 상태였다.
+  //
+  // 그 차단은 원래 영수증 인쇄의 마지막 폴백만 겨냥한 것이었다(그쪽은
+  // window.open 이 막히면 「인쇄 실패」로 화면에 뜬다 — 조용하지 않다).
+  // 부작용으로 다른 window.open 까지 같이 잡아먹었고, 2026-09-16 에 수기
+  // 주문 버튼이 같은 이유로 죽은 적이 있다(아래 manualOrderGrid 주석).
+  // 거기서는 window.HangukgwanPrint 로 앱을 감지해 갈래를 하나 더 쳤지만,
+  // 미리보기는 애초에 팝업일 이유가 없다 — 종이가 아니라 화면에 보여주는
+  // 것이다. 갈래를 늘리는 대신 **웹과 앱이 같은 한 경로**를 쓰게 한다.
+  //
+  // iframe 인 이유: buildDualTicketHtml 은 제 나름의 글꼴·크기를 가진 완결된
+  // 문서다. 이 페이지에 그대로 심으면 양쪽 스타일이 서로 스며든다.
   function previewKitchenTicket(o) {
-    const win = window.open(
-      "",
-      "_blank",
-      "width=420,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes"
-    );
-    if (!win) return; // popup blocked — nothing we can do without a click gesture, which this already is
-    win.document.open();
     // 사장님 요청(2026-09-07)으로 실제 인쇄가 주방용+결제용 2장이 됐으니
     // (buildDualTicketHtml, printKitchenTicket 참고) 미리보기도 그 2장을
     // 그대로 보여줘서 레이아웃을 한 번에 확인할 수 있게 한다.
-    win.document.write(buildDualTicketHtml(o, ticketFontSizes));
-    win.document.close();
+    openTicketPreview(buildDualTicketHtml(o, ticketFontSizes));
   }
+
+  function openTicketPreview(html) {
+    const frame = $("#ticketPreviewFrame");
+    const backdrop = $("#ticketPreviewBackdrop");
+    if (!frame || !backdrop) return;
+    frame.srcdoc = html;
+    backdrop.hidden = false;
+  }
+
+  function closeTicketPreview() {
+    const frame = $("#ticketPreviewFrame");
+    const backdrop = $("#ticketPreviewBackdrop");
+    if (!frame || !backdrop) return;
+    backdrop.hidden = true;
+    // 닫을 때 비운다 — 다음에 열 때 앞 주문의 빌지가 잠깐 비쳤다.
+    frame.srcdoc = "";
+  }
+
+  if ($("#ticketPreviewClose")) $("#ticketPreviewClose").onclick = closeTicketPreview;
+  if ($("#ticketPreviewBackdrop"))
+    $("#ticketPreviewBackdrop").onclick = (e) => {
+      // 창 바깥(어두운 바탕)을 눌렀을 때만 닫는다.
+      if (e.target === $("#ticketPreviewBackdrop")) closeTicketPreview();
+    };
 
   // ---------- Kitchen-ticket per-component font sizes (Settings >
   // 관리자 전용 > 빌지 글자 크기 — owner-editable, server-stored so every
@@ -10504,14 +10550,19 @@
           $("#moveTableBackdrop").hidden = true;
           // 종이가 먼저다. 화면을 다시 그리기 전에 뽑아야, 인쇄가 실패해도
           // 직원이 그 사실을 바로 본다.
-          await printMoveSlip(buildMoveSlipInfo(fromNumber, fromLabel, t, body));
+          const slip = await printMoveSlip(buildMoveSlipInfo(fromNumber, fromLabel, t, body));
           await loadOrders();
           await loadTables();
           // 옮긴 자리를 바로 열어준다 — 옮겼는데 화면이 빈 옛 자리에
           // 머물러 있으면 정말 옮겨졌는지 알 수 없다.
           openTableDetail(String(t.number), t.label || String(t.number));
           if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
-          await showAlert(fmtMovedDone(t.label || t.number, body.moved || 0, body.moved_paid || 0));
+          // 자리는 옮겨졌다. 빌지가 안 나왔으면 **같은 창에** 이어서 말한다 —
+          // 이 사실을 못 보고 넘어가면 주방은 옛 번호로 음식을 낸다.
+          await showAlert(
+            fmtMovedDone(t.label || t.number, body.moved || 0, body.moved_paid || 0) +
+              (slip && !slip.ok && slip.reason ? fmtMoveSlipFailed(slip.reason) : "")
+          );
         } catch (e) {
           btn.disabled = false;
           await showAlert(T("moveTableFailed"));
@@ -12969,11 +13020,15 @@
       // 수 있어야 "저장하고 손님 자리 옮겨보기" 를 안 한다.
       const saved = moveSlipSettings;
       moveSlipSettings = Object.assign({}, DEFAULT_MOVE_SLIP, readMoveSlipInputs(), { enabled: true });
+      let slip;
       try {
-        await printMoveSlip(sampleMoveSlipInfo());
+        slip = await printMoveSlip(sampleMoveSlipInfo());
       } finally {
         moveSlipSettings = saved;
       }
+      // 시험 인쇄는 종이를 보려고 누르는 것이다. 안 나왔으면 왜 안 나왔는지
+      // 여기서 말해줘야 한다 — 프린터를 고치는 자리가 바로 이 화면이다.
+      if (slip && !slip.ok && slip.reason) await showAlert(fmtMoveSlipFailed(slip.reason).trim());
     };
   }
 
@@ -12986,10 +13041,33 @@
   // 주문서와 같은 사다리를 탄다: 앱 브릿지 → RawBT → QZ Tray → 브라우저 인쇄.
   // 어느 한 칸이 안 되는 매장에서도 종이가 나와야 하고, 그 순서를 여기서
   // 새로 정하면 주문서와 어긋난다.
+
+  // 왜 종이가 안 나왔는지 한 마디로 말해준다. 주문서 쪽 printFailReason()
+  // 을 그대로 쓰지 않는 이유는 거기 있는 `!autoPrintOn` 갈래 때문이다 —
+  // 그건 「신규 주문 자동 인쇄」 스위치이고, 자리 이동 빌지는 사람이 자리를
+  // 옮겨서 나가는 것이라 그 스위치와 무관하다. 그대로 갖다 쓰면 "자동
+  // 인쇄가 꺼져 있어요" 라는 **틀린 이유**를 대게 된다.
+  function moveSlipFailReason() {
+    if (appPrintBridge()) return T("printFailReasonApp");
+    return T("printFailReasonNoPrinter");
+  }
+
+  // {ok, reason} 을 돌려준다.
+  //
+  // reason 이 null 이면 **말하지 않는다** — 사장님이 이 종이를 꺼둔 경우다.
+  // 그 외의 실패는 전부 화면에 나가야 한다. 2026-09-19 이전에는 전부 그냥
+  // `false` 였고 부르는 쪽이 그 값을 아예 안 봤다. 앱 안에서 프린터가 안
+  // 잡히면 맨 아래 window.open 이 null 이 되어 **자리 이동 빌지가 말없이
+  // 안 나갔다** (앱의 onCreateWindow 가 언제나 false 를 준다 —
+  // previewKitchenTicket 주석 참고).
+  //
+  // 빌지가 안 나오면 음식이 안 나간다. 조용히 넘어가는 분기를 남겨두지
+  // 않는다.
   async function printMoveSlip(info) {
-    if (typeof buildEscPosMoveSlip !== "function") return false;
+    if (typeof buildEscPosMoveSlip !== "function")
+      return { ok: false, reason: moveSlipFailReason() };
     // 사장님이 이 종이를 꺼둔 매장에서는 아무것도 하지 않는다.
-    if (moveSlipSettings.enabled === false) return false;
+    if (moveSlipSettings.enabled === false) return { ok: false, reason: null };
     info = Object.assign({ showOrders: moveSlipSettings.showOrders !== false }, info);
     let bytes;
     try {
@@ -12997,17 +13075,17 @@
       bytes = buildEscPosMoveSlip(info, storeName, moveSlipSettings);
     } catch (e) {
       console.warn("자리 이동 빌지를 만들지 못했습니다:", e);
-      return false;
+      return { ok: false, reason: moveSlipFailReason() };
     }
 
     const bridge = appPrintBridge();
     if (bridge) {
-      if (await sendRasterTicketBytes(bytes, bridge)) return true;
+      if (await sendRasterTicketBytes(bytes, bridge)) return { ok: true, reason: null };
     } else {
       try {
         const res = await fetch("/api/settings/escpos");
         const cfg = res.ok ? await res.json() : {};
-        if (cfg.rawbtEnabled && (await sendRasterTicketBytes(bytes, null))) return true;
+        if (cfg.rawbtEnabled && (await sendRasterTicketBytes(bytes, null))) return { ok: true, reason: null };
         // QZ Tray 는 같은 래스터 바이트를 base64 로 받는다 — 텍스트 모드로
         // 따로 만들지 않는다. 한국어·중국어는 프린터 코드페이지에 기대지
         // 않고 그림으로 찍는 편이 어느 기계에서도 같게 나온다.
@@ -13015,7 +13093,7 @@
           await ensureQzConnected();
           const config = qz.configs.create(cfg.printerName);
           await qz.print(config, [{ type: "raw", format: "command", flavor: "base64", data: bytesToBase64(bytes) }]);
-          return true;
+          return { ok: true, reason: null };
         }
       } catch (e) {
         console.warn("자리 이동 빌지 인쇄 실패, 브라우저 인쇄로 넘어갑니다:", e);
@@ -13024,7 +13102,9 @@
 
     // 마지막 칸 — 프린터가 하나도 안 잡힌 자리에서도 종이는 나와야 한다.
     const win = window.open("", "_blank");
-    if (!win) return false;
+    // 여기서 끝나면 종이가 한 장도 안 나온 것이다. 한국관 POS 앱 안에서는
+    // window.open 이 늘 null 이라 **언제나** 여기로 떨어진다.
+    if (!win) return { ok: false, reason: moveSlipFailReason() };
     win.document.open();
     win.document.write(buildMoveSlipHtml(info, moveSlipSettings));
     win.document.close();
@@ -13032,7 +13112,7 @@
       win.focus();
       win.print();
     }, 300);
-    return true;
+    return { ok: true, reason: null };
   }
 
   function buildMoveSlipHtml(info, sizes) {

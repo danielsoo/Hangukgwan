@@ -1442,6 +1442,24 @@
   </div>
 </div>
 
+<!-- 빌지 미리보기(실시간 주문 카드의 「👁️ 미리보기」).
+
+     예전에는 window.open 으로 팝업 창을 띄웠는데, 한국관 POS 앱 안에서는
+     그게 늘 막혀서 **버튼을 눌러도 아무 일이 안 일어났다**(2026-09-19
+     사장님). 앱과 웹이 같은 길을 쓰도록 이 화면 안에서 연다 —
+     admin.js previewKitchenTicket/openTicketPreview 참고.
+
+     iframe 인 이유: 빌지는 제 글꼴·크기를 가진 완결된 문서라, 이 페이지에
+     그대로 심으면 양쪽 스타일이 서로 스며든다. -->
+<div id="ticketPreviewBackdrop" class="modal-backdrop" hidden>
+  <div class="modal ticket-preview-modal">
+    <button class="modal-close" id="ticketPreviewClose">✕</button>
+    <h2 data-i18n="ticketPreviewTitle">미리보기 — 주방용 · 결제용</h2>
+    <p class="settings-hint" data-i18n="ticketPreviewHint">실제 인쇄와 같은 내용이에요. 여기서는 종이가 나가지 않아요.</p>
+    <iframe id="ticketPreviewFrame" title="빌지 미리보기"></iframe>
+  </div>
+</div>
+
 <div id="tableDetailBackdrop" class="modal-backdrop" hidden>
   <div class="modal table-detail-modal">
     <button class="modal-close" id="tableDetailClose">✕</button>
