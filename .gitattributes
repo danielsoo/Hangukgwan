@@ -1,0 +1,43 @@
+# 줄바꿈은 어디서 받든 LF 다.
+#
+# 2026-09-19: 윈도우에서 받으면 git 이 기본값(core.autocrlf=true)으로 전부
+# CRLF 로 바꿔놓는다. 그런데 이 저장소의 시험들은 소스를 **글자 그대로 잘라
+# 읽는다** — 예를 들어 test/party-tag.test.js 는 indexOf("\n  }\n") 로 함수
+# 끝을 찾아 new Function 으로 돌린다. CRLF 에서는 그 패턴을 못 찾아 엉뚱한
+# 데서 잘린다.
+#
+# 그래서 코드가 멀쩡한데도 시험 10개가 실패했고, party-tag 에서 npm test 의
+# && 사슬이 끊겨 뒤쪽 70여 개가 아예 안 돌았다. 「저장소가 원래 깨져 있다」는
+# 틀린 결론까지 갔다가 되돌렸다.
+#
+# 이 코드가 실제로 도는 곳은 전부 LF 다 — Vercel(리눅스), APK 빌드 스크립트,
+# 맥. 윈도우 PC 는 편집하고 커밋하는 자리지 실행되는 자리가 아니다.
+* text=auto eol=lf
+
+# 바이너리는 절대 건드리지 않는다.
+#
+# text=auto 의 자동 판별(NUL 바이트 탐지)에 맡기지 않고 못을 박는다.
+# **서명된 APK/AAB 는 한 바이트만 바뀌어도 설치가 안 된다.** 사진도 마찬가지다.
+*.apk       binary
+*.aab       binary
+*.keystore  binary
+*.jks       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.docx      binary
+*.xlsx      binary
+*.zip       binary
+*.woff      binary
+*.woff2     binary
+*.ttf       binary
+*.otf       binary
+*.mp3       binary
+*.wav       binary
+
+# 리눅스·맥에서 도는 스크립트 — CRLF 가 한 글자라도 들어가면 그냥 안 돌아간다.
+# kiosk-app/build.sh, sign-apk.sh 등 APK 를 만드는 것들이 여기 해당한다.
+*.sh        text eol=lf
