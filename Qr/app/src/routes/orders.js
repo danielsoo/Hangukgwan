@@ -13,7 +13,7 @@ const { serviceOf } = require("../servicePeriod");
 // 오전/오후를 가르는 규칙. 결산과 같은 함수를 쓴다.
 const { halfOf } = require("../settlement");
 // 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
-const { maybeAutoCloseAm } = require("./settlements");
+const { maybeAutoCloseAm, maybePendingDayClose } = require("./settlements");
 
 // Re-prices whatever addon names the client sent against the menu item's own
 // `addons` definition (see src/addons.js) — never trusts a price the client
@@ -794,6 +794,11 @@ router.get("/", requireAdmin, (req, res) => {
   //
   // 응답을 기다리게 하지 않는다 — 주문판이 이것 때문에 느려지면 안 된다.
   maybeAutoCloseAm(req);
+  // 어젯밤 23:00 에 「미결제가 남아 마감을 미뤘다」가 있으면 여기서 이어
+  // 본다. 미결제가 정리됐으면 그 자리에서 마감하고, 다음 영업 5분 전이
+  // 지났으면 남아 있어도 그대로 마감한다(2026-09-22 사장님). 표가 없으면
+  // DB 도 안 건드리므로 평소에는 값이 거의 안 든다.
+  maybePendingDayClose(req);
   // 테스터 모드(src/testMode.js): 평소 기기에는 테스트 주문을 아예 안 보낸다.
   // 실시간 주문판에 섞이면 직원이 없는 손님의 음식을 만든다.
   //

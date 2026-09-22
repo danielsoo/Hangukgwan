@@ -3,14 +3,17 @@ const { activeItems } = require("../menuItems");
 const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf, halfOf, netTotalOf } = require("../settlement");
-const { serviceCutAt, serviceCutHm } = require("../servicePeriod");
+const { serviceCutAt, serviceCutHm, LEAD_MIN } = require("../servicePeriod");
+const { nextOpenAt } = require("../openHours");
+// 「아직 받을 돈이 남은 주문」의 목록은 한 곳에서만 정한다(src/orderStatus.js).
+const { OPEN: OPEN_STATUSES } = require("../orderStatus");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
 const { clearIdleSeats } = require("../partySize");
 const { nowLocal } = require("../time");
 // formatSettlementSummary 는 이제 안 쓴다 — 밤 크론이 쓰던 간략한 서식이었는데,
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
-const { sendLineMessage, formatShiftSummary } = require("../line");
+const { sendLineMessage, formatShiftSummary, formatCloseHeldNotice } = require("../line");
 const testMode = require("../testMode");
 
 const router = express.Router();
@@ -398,13 +401,23 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
  * auto=true 면 문자 끝에 「버튼을 안 눌러 자동으로 마감했다」를 한 줄 붙이고
  * 스냅샷에 day_closed_auto 를 남긴다 — 자동 오전 마감이 하는 것과 같다.
  */
-async function performShiftClose({ shift, testId, req, auto = false }) {
+async function performShiftClose({
+  shift,
+  testId,
+  req,
+  auto = false,
+  // 미결제가 남은 채로 「다음 영업 5분 전」이 되어 그대로 닫는 경우.
+  // 문자에 그렇다고 적는다 — 안 적으면 사장님은 받은 돈으로 읽으신다.
+  forced = false,
+  // 보통은 오늘이다. 마감을 미뤘던 **지난 날**을 닫을 때만 그 날짜가 온다
+  // (아래 maybePendingDayClose).
+  date = taipeiDateString(),
+}) {
   // 테스터 모드에서도 정산이 된다. 숫자와 화면은 진짜와 똑같이 돌아가되
   // 두 가지가 다르다(아래):
   //   · 스냅샷이 테스트 세션 것으로 따로 찍히고, 끄면 같이 사라진다
   //   · **LINE 문자는 안 나간다** — 직원 폰으로 가는 것이라 시험으로
   //     보낼 수 없다. 직원이 마감인 줄 알고 움직인다.
-  const date = taipeiDateString();
   const closedAt = nowLocal();
   const orders = await ordersInRange(date, date, req);
   const snapshot = computeSettlement(orders, date, date, await halfOpts(date, date, req));
@@ -489,9 +502,13 @@ async function performShiftClose({ shift, testId, req, auto = false }) {
 
   // 자동으로 마감했으면 그렇다고 적는다. 안 적으면 사장님은 누가 눌렀다고
   // 생각하신다 — 자동 오전 마감이 이미 같은 줄을 붙이고 있다.
-  const autoNote = auto
-    ? `※ ${shift === "day" ? "오후" : "오전"} 정산 버튼을 누르지 않아 ${String(closedAt).slice(11, 16)} 에 자동으로 마감했습니다.`
-    : null;
+  const autoNote = !auto
+    ? null
+    : forced
+    ? // 받을 돈이 남은 채로 닫았다. 이 한 줄이 없으면 매출 숫자를 「다 받은
+      // 돈」으로 읽게 된다 — 미결제 금액만큼 장부가 부풀어 보인다.
+      `※ 미결제가 남은 채로 다음 영업 5분 전이 되어 ${String(closedAt).slice(11, 16)} 에 그대로 마감했습니다. 미결제 건은 위 ⚠️ 줄을 봐 주세요.`
+    : `※ ${shift === "day" ? "오후" : "오전"} 정산 버튼을 누르지 않아 ${String(closedAt).slice(11, 16)} 에 자동으로 마감했습니다.`;
 
   let line = { sent: false, error: "disabled" };
   // 저녁 마감의 첫 문자(오후 것만). 오전 정산을 누른 적 없는 날은 가를
@@ -543,6 +560,132 @@ async function performShiftClose({ shift, testId, req, auto = false }) {
   };
 }
 
+
+// ───────── 받을 돈이 남았으면 자동 마감을 미룬다 ─────────
+//
+// 2026-09-22 사장님: "자동으로 할 때 그런 상황이 생기면 무시하고 진행하지
+// 말고 라인으로 문자를 보내줘 그리고 대기 시켜주고 그러다 다음 영업 시간
+// 5분전까지도 안되면 그때는 그냥 강제로 해줘."
+//
+// 마감은 「여기까지 받았다」를 못 박는 일이다. 받을 돈이 남았는데 그대로
+// 박으면 그 돈은 장부에서 조용히 사라진다. 사람이 누를 때는 화면이 묻는다
+// ("미결제 N건을 전부 결제완료로 처리할까요?"). 자동은 물을 사람이 없으므로
+// 멈추고 사람을 부른다.
+//
+// 그렇다고 영영 기다리지는 않는다. 다음 장사가 시작되면 어제 돈과 오늘 돈이
+// 한 판에 섞인다 — 그 전에 끊어야 한다. 「다음 영업 5분 전」은 이 저장소가
+// 이미 쓰는 경계다(src/servicePeriod.js LEAD_MIN, 자동 오전 마감도 같은 규칙).
+// 사장님이 2026-09-10 에 오전 건으로 같은 말씀을 하셨다: "만약 그 다음
+// 영업시간 5분전까지 정산이 안 눌려 있으면 눌러줘."
+const PENDING_DATE = "pending_day_close_date";
+const PENDING_FORCE_AT = "pending_day_close_force_at";
+
+/**
+ * 아직 받을 돈이 남은 주문들. { count, amount, rows }
+ *
+ * 결산의 problem_order_count 를 쓰지 않는 이유: 그건 **2시간 이상 묵은 것만**
+ * 센다(src/settlement.js STALE_OPEN_ORDER_MS). 화면에 「문제 주문」으로
+ * 띄우기 위한 기준이라 그게 맞다. 하지만 마감을 미룰지는 「받을 돈이 하나라도
+ * 남았나」로 봐야 한다 — 22시에 들어온 미결제도 받을 돈이다.
+ */
+function unpaidOf(orders) {
+  const rows = (orders || []).filter((o) => OPEN_STATUSES.includes(o.status));
+  return {
+    count: rows.length,
+    amount: rows.reduce((sum, o) => sum + (o.total || 0), 0),
+    rows: rows.map((o) => ({
+      label: o.table_number ? `${o.table_number}번` : `#${o.id}`,
+      total: o.total || 0,
+    })),
+  };
+}
+
+/** 그 시각 다음의 「영업 시작 5분 전」. 영업시간이 없으면 null. */
+function pendingForceAt(fromLocalTs) {
+  const next = nextOpenAt(store.settings, fromLocalTs); // "YYYY-MM-DD HH:MM"
+  if (!next || next.length < 16) return null;
+  const date = next.slice(0, 10);
+  const [h, m] = next.slice(11, 16).split(":").map((x) => parseInt(x, 10));
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  const total = h * 60 + m - LEAD_MIN;
+  // 00:05 이전에 여는 가게는 없지만, 음수가 되면 시각이 엉키므로 바닥을 깐다.
+  const safe = total < 0 ? 0 : total;
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${date} ${pad(Math.floor(safe / 60))}:${pad(safe % 60)}:00`;
+}
+
+/** 미루기로 한 것을 적어둔다. store 문서를 통째로 쓰지 않는다(CLAUDE.md). */
+async function markDayClosePending(date, forceAt) {
+  store.settings[PENDING_DATE] = date;
+  store.settings[PENDING_FORCE_AT] = forceAt || null;
+  await saveFields({
+    [`settings.${PENDING_DATE}`]: date,
+    [`settings.${PENDING_FORCE_AT}`]: forceAt || null,
+  });
+}
+
+async function clearDayClosePending() {
+  delete store.settings[PENDING_DATE];
+  delete store.settings[PENDING_FORCE_AT];
+  await saveFields({ [`settings.${PENDING_DATE}`]: null, [`settings.${PENDING_FORCE_AT}`]: null });
+}
+
+let pendingClosePromise = null;
+
+/**
+ * 미뤄둔 마감이 있으면 들여다본다. 주문판이 부르는 자리에 붙어 있다
+ * (src/routes/orders.js GET / — 자동 오전 마감과 같은 자리).
+ *
+ * 세 갈래다:
+ *   · 사람이 그 사이에 눌렀다        → 표만 걷는다
+ *   · 미결제가 다 정리됐다            → 그 자리에서 마감한다 (기다릴 이유가 없다)
+ *   · 다음 영업 5분 전이 지났다       → 남아 있어도 그대로 마감한다
+ *
+ * 그 외에는 아무것도 하지 않는다. 표가 없으면 DB 도 안 건드린다 — 주문판이
+ * 4초마다 부르는 자리라 값싸야 한다.
+ */
+async function maybePendingDayClose(req) {
+  if (pendingClosePromise) return pendingClosePromise;
+  pendingClosePromise = runPendingDayClose(req);
+  try {
+    return await pendingClosePromise;
+  } finally {
+    pendingClosePromise = null;
+  }
+}
+
+async function runPendingDayClose(req) {
+  try {
+    if (testMode.currentId(req, store)) return;
+    const date = store.settings && store.settings[PENDING_DATE];
+    if (!date) return;
+
+    await connectDB();
+    const [snap] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
+    // 그 사이에 직원이 「🌙 오후 정산」을 눌렀으면 할 일이 없다.
+    if (snap && snap.day_closed_at) return clearDayClosePending();
+
+    const orders = await ordersInRange(date, date, req);
+    const unpaid = unpaidOf(orders);
+    const forceAt = store.settings[PENDING_FORCE_AT];
+    const due = !!forceAt && nowLocal() >= forceAt;
+    if (unpaid.count > 0 && !due) return; // 계속 기다린다
+
+    await performShiftClose({
+      shift: "day",
+      testId: null,
+      req,
+      auto: true,
+      forced: unpaid.count > 0,
+      date,
+    });
+    await clearDayClosePending();
+  } catch (e) {
+    // 여기서 실패해도 주문판은 그대로 돌아야 한다. 표는 남으므로 다음 요청이
+    // 다시 시도한다.
+    console.warn("미뤄둔 마감 처리 실패:", e && e.message);
+  }
+}
 
 /**
  * 정산한 것을 결제완료 칸에서 내린다 (claude/... 「정산하면 결제완료 칸이
@@ -808,6 +951,10 @@ router.get("/cron-close", async (req, res) => {
   await recordStoreSize(store, { getDb, connectDB, nowLocal });
   await save();
 
+  // 미뤄둔 지난 마감이 남아 있으면 먼저 본다. 보통은 주문판 폴링이 처리하지만
+  // (maybePendingDayClose), 그날 태블릿을 한 번도 안 켰으면 부를 사람이 없다.
+  await maybePendingDayClose(req);
+
   // 직원이 「🌙 오후 정산」을 이미 눌렀으면 아무것도 하지 않는다. 사장님:
   // "그 전에 직접 누르면 몰라도."
   //
@@ -819,10 +966,44 @@ router.get("/cron-close", async (req, res) => {
     return res.json({ ok: true, date, skipped: "closed_by_hand" });
   }
 
-  // 미결제로 남은 주문은 **건드리지 않는다.** 버튼 쪽은 직원에게 「전부
-  // 결제완료로 처리할까요?」를 묻고 나서 바꾸는데, 자동은 물을 사람이 없다.
-  // 받지도 않은 돈을 받은 것으로 적을 수는 없다. 그대로 두면 문자에
-  // 「⚠️ 미결제 N건」으로 나가므로 사장님이 아침에 보신다(src/line.js).
+  // 받을 돈이 남아 있으면 **마감하지 않는다.** 알리고 기다린다.
+  //
+  // 2026-09-22 사장님: "자동으로 할 때 그런 상황이 생기면 무시하고 진행하지
+  // 말고 라인으로 문자를 보내줘 그리고 대기 시켜주고."
+  //
+  // 사람이 누를 때는 화면이 묻고 나서 결제완료로 바꾼다. 자동은 물을 사람이
+  // 없는데, 받지도 않은 돈을 받은 것으로 적을 수는 없다.
+  const orders = await ordersInRange(date, date, req);
+  const unpaid = unpaidOf(orders);
+  if (unpaid.count > 0) {
+    const forceAt = pendingForceAt(nowLocal());
+    await markDayClosePending(date, forceAt);
+    let held = { ok: false, error: "disabled" };
+    if (store.settings.line_notify_enabled) {
+      held = await sendLineMessage(store, formatCloseHeldNotice(date, unpaid, { at: nowLocal(), forceAt }));
+    }
+    // 미뤘다는 것도 그날 칸에 적는다. 마감 문자 기록(line_day_*)과 섞지
+    // 않는다 — 하루 문자는 아직 안 나갔고, 「보냄」으로 적히면 거짓이 된다.
+    const snapshot = computeSettlement(orders, date, date, await halfOpts(date, date, req));
+    await saveSettlementSnapshot({
+      ...snapshot,
+      close_held_at: nowLocal(),
+      close_held_force_at: forceAt,
+      close_held_unpaid_count: unpaid.count,
+      close_held_line_ok: !!held.ok,
+      close_held_line_error: held.error || null,
+    });
+    return res.json({
+      ok: true,
+      date,
+      held: true,
+      unpaid_count: unpaid.count,
+      unpaid_amount: unpaid.amount,
+      force_at: forceAt,
+      line: held.ok ? { sent: true } : { sent: false, error: held.error },
+    });
+  }
+
   const result = await performShiftClose({ shift: "day", testId: null, req, auto: true });
   res.json({
     ok: true,
@@ -838,6 +1019,12 @@ module.exports = router;
 module.exports.maybeAutoCloseAm = maybeAutoCloseAm;
 module.exports.autoAmCutFor = autoAmCutFor;
 module.exports.AUTO_AM_DONE_SETTING = AUTO_AM_DONE_SETTING;
+// 미뤄둔 저녁 마감을 들여다보는 것. 자동 오전 마감과 **같은 자리**에 붙는다
+// (src/routes/orders.js GET /) — 그 시각에 가게 태블릿이 그 주소를 4초마다
+// 부르고 있다.
+module.exports.maybePendingDayClose = maybePendingDayClose;
+module.exports.PENDING_DATE = PENDING_DATE;
+module.exports.PENDING_FORCE_AT = PENDING_FORCE_AT;
 // 주문 목록도 결산과 **같은 기준**으로 갈라야 한다 (src/routes/orders.js
 // GET /history). 위의 오전 매출과 아래 오전 목록이 다른 규칙으로 갈리면
 // 둘 중 어느 쪽이 맞는지 알 방법이 없다.

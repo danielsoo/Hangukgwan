@@ -293,12 +293,55 @@ function formatShiftSummary(snapshot, opts = {}) {
   return blocks.join("\n\n");
 }
 
+/**
+ * 받을 돈이 남아 있어 **자동 마감을 미뤘다**는 알림.
+ *
+ * 2026-09-22 사장님: "자동으로 할 때 그런 상황이 생기면 무시하고 진행하지
+ * 말고 라인으로 문자를 보내줘 그리고 대기 시켜주고 그러다 다음 영업 시간
+ * 5분전까지도 안되면 그때는 그냥 강제로 해줘."
+ *
+ * 마감은 「여기까지 받았다」를 못 박는 일이다. 받을 돈이 남았는데 그대로
+ * 박으면 그 돈은 장부에서 조용히 사라진다. 그래서 자동은 멈추고 사람을
+ * 부른다.
+ *
+ * **언제 강제로 마감하는지를 같이 적는다.** 「기다립니다」만 적으면 언제까지
+ * 손을 대야 하는지 알 수 없어서, 결국 아무도 안 본 채로 그 시각이 온다.
+ *
+ * @param unpaid { count, amount, rows: [{ label, total }] }
+ * @param opts   { at, forceAt } — 확인한 시각 / 강제 마감 예정 시각
+ */
+function formatCloseHeldNotice(date, unpaid, opts = {}) {
+  const blocks = [];
+  blocks.push(
+    [`⏸️ 마감을 미뤘습니다 · ${shortDate(date)}${weekdayOf(date)}`, clockOf(opts.at) ? `${clockOf(opts.at)} 확인` : null]
+      .filter(Boolean)
+      .join("\n")
+  );
+  // 몇 건인지만 적으면 「얼마짜리인지」를 보려고 화면을 열어야 한다. 자리와
+  // 금액까지 적어두면 문자만 보고 누구를 찾아가야 하는지 안다. 다만 너무
+  // 길어지면 안 읽으므로 다섯 줄까지만 적고 나머지는 숫자로 줄인다.
+  const rows = (unpaid.rows || []).slice(0, 5).map((r) => `${r.label} · ${nt(r.total)}`);
+  const more = (unpaid.rows || []).length - rows.length;
+  if (more > 0) rows.push(`… 외 ${more}건`);
+  blocks.push(section(`아직 받지 못한 주문  ${unpaid.count}건 · ${nt(unpaid.amount)}`, rows));
+  blocks.push(
+    [
+      "결제를 마치거나 「🌙 오후 정산」을 눌러 주세요.",
+      opts.forceAt
+        ? `${shortDate(opts.forceAt)} ${clockOf(opts.forceAt)} 까지 그대로면 그때 그대로 마감합니다.`
+        : "다음 영업 시작 5분 전에 그대로 마감합니다.",
+    ].join("\n")
+  );
+  return blocks.join("\n\n");
+}
+
 module.exports = {
   sendLineMessage,
   replyLine,
   verifyLineSignature,
   formatSettlementSummary,
   formatShiftSummary,
+  formatCloseHeldNotice,
   getLineProfile,
   PAYMENT_METHOD_NAMES,
   DISCOUNT_NAMES,
