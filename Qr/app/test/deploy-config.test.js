@@ -127,6 +127,20 @@ check("소스가 그대로면 재빌드를 건너뛴다", /재빌드 생략/.tes
 out.push("\n[크론은 그대로]");
 check("정산 마감 크론 유지", Array.isArray(vercel.crons) && vercel.crons[0].path === "/api/settlements/cron-close");
 
+// 이 크론이 곧 **자동 저녁 정산**이다(src/routes/settlements.js cron-close).
+// 시각을 옮기면 마감과 LINE 문자가 같이 옮겨간다 — 조용히 바뀌면 사장님은
+// 문자가 안 온 날에야 아신다. 2026-09-22 사장님: "자동 저녁 정산은 23:00
+// 으로 해줘."
+//
+// Vercel 의 schedule 은 **UTC** 다. 타이베이는 UTC+8 이므로 23:00 = 15:00 UTC.
+// 여기를 "0 23 * * *" 로 적으면 대만 시각 오전 7시에 돈다 — 실제로 하기 쉬운
+// 실수라 숫자를 풀어서 적어 둔다.
+check(
+  "★ 자동 저녁 정산은 타이베이 23:00 (= UTC 15:00)",
+  vercel.crons[0].schedule === "0 15 * * *",
+  `${vercel.crons[0].schedule} — UTC 기준이다`
+);
+
 out.push("\n[홈페이지에 다른 주소가 박히지 않는가]");
 // 2026-09-10: 로컬에서 홈페이지만 따로 띄우는 줄 알고 Web/.env.local 에
 // NEXT_PUBLIC_QR_APP_URL=http://localhost:3000 을 넣었다가, 실제 로컬 확인

@@ -8,7 +8,9 @@ const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSiz
 const { serviceStartedAt } = require("../serviceStart");
 const { clearIdleSeats } = require("../partySize");
 const { nowLocal } = require("../time");
-const { sendLineMessage, formatSettlementSummary, formatShiftSummary } = require("../line");
+// formatSettlementSummary 는 이제 안 쓴다 — 밤 크론이 쓰던 간략한 서식이었는데,
+// 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
+const { sendLineMessage, formatShiftSummary } = require("../line");
 const testMode = require("../testMode");
 
 const router = express.Router();
@@ -379,13 +381,29 @@ router.post("/close", requireOwner, async (req, res) => {
 // 조용히 실패했다. 매출 숫자 자체는 응답으로 돌려주되, 그건 이미 그 화면의
 // 결제완료 칼럼에서 직원이 보고 있는 값이라 새로 새는 정보가 없다.
 router.post("/shift-close", requireAdmin, async (req, res) => {
+  const testId = testMode.currentId(req, store);
+  const shift = req.body && req.body.shift === "am" ? "am" : "day";
+  res.json(await performShiftClose({ shift, testId, req }));
+});
+
+/**
+ * 마감 한 번.
+ *
+ * 「🌅 오전 정산」·「🌙 오후 정산」 버튼(위 shift-close)과 밤 23:00 자동 저녁
+ * 마감(아래 cron-close)이 **같은 이 함수**를 부른다. 2026-09-22 이전에는
+ * 자동 쪽이 밤 크론 안에 따로 적혀 있었고, 그래서 버튼만 두 통(오후·하루)을
+ * 보내고 크론은 하루 한 통만 보냈다 — 사장님이 「저녁 정산이 안 온다」고 하신
+ * 것이 이것이다. 마감 규칙을 두 군데 적으면 반드시 갈린다.
+ *
+ * auto=true 면 문자 끝에 「버튼을 안 눌러 자동으로 마감했다」를 한 줄 붙이고
+ * 스냅샷에 day_closed_auto 를 남긴다 — 자동 오전 마감이 하는 것과 같다.
+ */
+async function performShiftClose({ shift, testId, req, auto = false }) {
   // 테스터 모드에서도 정산이 된다. 숫자와 화면은 진짜와 똑같이 돌아가되
   // 두 가지가 다르다(아래):
   //   · 스냅샷이 테스트 세션 것으로 따로 찍히고, 끄면 같이 사라진다
   //   · **LINE 문자는 안 나간다** — 직원 폰으로 가는 것이라 시험으로
   //     보낼 수 없다. 직원이 마감인 줄 알고 움직인다.
-  const testId = testMode.currentId(req, store);
-  const shift = req.body && req.body.shift === "am" ? "am" : "day";
   const date = taipeiDateString();
   const closedAt = nowLocal();
   const orders = await ordersInRange(date, date, req);
@@ -412,7 +430,7 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
       ...snapshot,
       am_closed_at: amClosedAt,
       last_shift_closed_at: closedAt,
-      ...(shift === "day" ? { day_closed_at: closedAt } : {}),
+      ...(shift === "day" ? { day_closed_at: closedAt, day_closed_auto: !!auto } : {}),
     },
     testId
   );
@@ -469,6 +487,12 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     pmPart = { revenue: (half.pm && half.pm.revenue) || 0, count: (half.pm && half.pm.paid_order_count) || 0 };
   }
 
+  // 자동으로 마감했으면 그렇다고 적는다. 안 적으면 사장님은 누가 눌렀다고
+  // 생각하신다 — 자동 오전 마감이 이미 같은 줄을 붙이고 있다.
+  const autoNote = auto
+    ? `※ ${shift === "day" ? "오후" : "오전"} 정산 버튼을 누르지 않아 ${String(closedAt).slice(11, 16)} 에 자동으로 마감했습니다.`
+    : null;
+
   let line = { sent: false, error: "disabled" };
   // 저녁 마감의 첫 문자(오후 것만). 오전 정산을 누른 적 없는 날은 가를
   // 기준이 없어서 안 나간다 — 없는 경계를 지어내는 것보다 낫다.
@@ -482,22 +506,24 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     // 전체를 보낸다(2026-09-16 사장님). 가게 크기 경고는 마지막 문자에만
     // 붙인다 — 같은 경고가 두 번 오면 그냥 소음이다.
     if (pmSnapshot) {
-      const pmResult = await sendLineMessage(
-        store,
-        formatShiftSummary(pmSnapshot, { shift: "pm", closedAt })
-      );
+      const pmLines = [formatShiftSummary(pmSnapshot, { shift: "pm", closedAt })];
+      if (autoNote) pmLines.push("", autoNote);
+      const pmResult = await sendLineMessage(store, pmLines.join("\n"));
       linePm = pmResult.ok ? { sent: true } : { sent: false, error: pmResult.error };
       await recordLineSend(date, "pm", { ok: linePm.sent, error: linePm.error }, testId);
     }
     const lines = [formatShiftSummary(snapshot, { shift, closedAt, amPart, pmPart })];
+    // 자동으로 마감했다는 것은 **첫 문자에만** 적는다. 같은 안내가 두 통에
+    // 다 있으면 소음이 되고, 정작 붙여야 할 가게 크기 경고와 섞인다.
     const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
+    if (!pmSnapshot && autoNote) lines.push("", autoNote);
     if (warn) lines.push("", warn);
     const result = await sendLineMessage(store, lines.join("\n"));
     line = result.ok ? { sent: true } : { sent: false, error: result.error };
   }
   if (!testId) await recordLineSend(date, shift, { ok: line.sent, error: line.error }, testId);
 
-  res.json({
+  return {
     ok: true,
     shift,
     date,
@@ -514,8 +540,8 @@ router.post("/shift-close", requireAdmin, async (req, res) => {
     line,
     // 저녁 마감의 첫 문자(오후 것만). 안 보낸 날은 null.
     line_pm: linePm,
-  });
-});
+  };
+}
 
 
 /**
@@ -742,12 +768,30 @@ router.post("/line-test", requireOwner, async (req, res) => {
   res.json({ ok: true });
 });
 
-// Hit once a day by Vercel Cron (see vercel.json) shortly after closing time
-// to snapshot *today's* business day automatically — this is the "영업
-// 시간이 끝나면 자동으로 결산" part. Vercel signs cron requests with an
-// `Authorization: Bearer $CRON_SECRET` header when CRON_SECRET is set as an
-// env var; there's no browser session on a cron request, so this can't use
-// requireOwner/requireAdmin like the routes above.
+// 자동 저녁 마감. 매일 밤 23:00(타이베이)에 Vercel Cron 이 부른다
+// (vercel.json — UTC 로 적으므로 "0 15 * * *").
+//
+// ── 2026-09-22 사장님: "오늘 또 저녁 정산이 라인으로 연락이 안왔어"
+//
+// 오전은 자동이 있었다(runAutoAmClose). 저녁은 없었다 — 「🌙 오후 정산」
+// 버튼을 눌러야만 마감이 되고 문자가 나갔다. 이 크론은 그 자리를 메우는
+// 예비였지만, **하루 요약 한 통만** 보냈다. 버튼이 보내는 두 통 중
+// 「오후 정산」 문자는 크론에 아예 없었다.
+//
+// 그래서 버튼을 안 누른 날은 오후 정산 문자가 어느 경로로도 안 나갔다.
+// 사장님이 "또"라고 하신 이유다.
+//
+// 이제 크론은 **버튼과 같은 함수**(performShiftClose)를 부른다. 스냅샷·
+// 정산 표시·빈자리 정리·문자 두 통이 전부 버튼 누른 것과 같다. 마감 규칙이
+// 한 곳에만 있으므로 다시 갈릴 자리가 없다.
+//
+// 시각은 사장님이 정하셨다(2026-09-22): "자동 저녁 정산은 23:00 으로 해줘.
+// 그 전에 직접 누르면 몰라도." 영업시간에서 끌어내지 않고 못을 박는다 —
+// 오전과 달리 저녁에는 「장사가 확실히 끝난 틈」이 없어서, 사장님이 아는
+// 시각 하나로 두는 편이 예측 가능하다.
+//
+// Vercel 은 CRON_SECRET 이 있으면 `Authorization: Bearer ...` 를 붙인다.
+// 크론 요청에는 브라우저 세션이 없어서 requireOwner/requireAdmin 을 못 쓴다.
 router.get("/cron-close", async (req, res) => {
   if (process.env.CRON_SECRET) {
     const header = req.get("authorization") || "";
@@ -756,43 +800,38 @@ router.get("/cron-close", async (req, res) => {
     }
   }
   const date = taipeiDateString();
-  const snapshot = computeSettlement(await ordersInRange(date, date), date);
-  await saveSettlementSnapshot(snapshot);
 
   // 사장님(2026-09-10): "3-4년 후에 내가 잊으면 큰일이잖아."
   // 매일 밤 여기서 store 문서 크기를 재둔다. 기준을 넘으면 관리자 화면에
-  // 띠가 뜨고 아래 마감 메시지에도 한 줄이 붙는다 — 사람이 달력에 적어두고
-  // 기억할 일이 아니다(src/storeSize.js).
+  // 띠가 뜨고 마감 메시지에도 한 줄이 붙는다 — 사람이 달력에 적어두고
+  // 기억할 일이 아니다(src/storeSize.js). 마감을 건너뛰는 날에도 잰다.
   await recordStoreSize(store, { getDb, connectDB, nowLocal });
   await save();
 
-  // 2026-09-10부터 마감 문자는 직원이 정산 버튼을 누를 때 나간다(위
-  // shift-close). 이 크론은 예비다 — 그날 정산을 누른 적이 있으면 같은
-  // 내용을 한 번 더 보내지 않는다. 사장님이 받기로 한 건 하루에 두 통
-  // (오전·하루)이지 세 통이 아니다.
+  // 직원이 「🌙 오후 정산」을 이미 눌렀으면 아무것도 하지 않는다. 사장님:
+  // "그 전에 직접 누르면 몰라도."
   //
-  // 보는 것은 **하루 정산**(day_closed_at) 하나다. 오전 정산만 누른 날은
-  // 저녁 마감 문자를 아직 아무도 못 받았으므로 여기서 보내야 한다. 예전에는
-  // last_shift_closed_at 을 봐서, 오전만 누른 날이면 그날 결산은 만들면서
-  // 문자는 건너뛰었다 — 2026-09-15 사장님: "정산이 되어있는 거 같은데
-  // line으로는 안오네?"
-  const [todaySnapshot] = await findDocs("daily_settlements", { date });
-  const alreadyClosedByHand = !!(todaySnapshot && todaySnapshot.day_closed_at);
-  // 건너뛸 때는 **아무것도 적지 않는다.** 건너뛴다는 것은 정산 버튼이 이미
+  // 건너뛸 때는 **아무것도 적지 않는다.** 건너뛴다는 것은 버튼이 이미
   // 마감했다는 뜻이고, 그때 「보냄」이 적혔다. 여기서 덮어쓰면 문자가 나간
   // 날이 「안 감」으로 바뀐다.
-  if (!alreadyClosedByHand) {
-    let lineResult = { ok: false, error: "disabled" };
-    if (store.settings.line_notify_enabled) {
-      const lines = [formatSettlementSummary(snapshot)];
-      const warn = sizeWarningLine(store.settings[SETTING_BYTES]);
-      if (warn) lines.push("", warn);
-      lineResult = await sendLineMessage(store, lines.join("\n"));
-    }
-    await recordLineSend(date, "day", lineResult, null);
+  const [todaySnapshot] = await findDocs("daily_settlements", { date });
+  if (todaySnapshot && todaySnapshot.day_closed_at) {
+    return res.json({ ok: true, date, skipped: "closed_by_hand" });
   }
 
-  res.json({ ok: true, date, problem_order_count: snapshot.problem_order_count, line_skipped: alreadyClosedByHand });
+  // 미결제로 남은 주문은 **건드리지 않는다.** 버튼 쪽은 직원에게 「전부
+  // 결제완료로 처리할까요?」를 묻고 나서 바꾸는데, 자동은 물을 사람이 없다.
+  // 받지도 않은 돈을 받은 것으로 적을 수는 없다. 그대로 두면 문자에
+  // 「⚠️ 미결제 N건」으로 나가므로 사장님이 아침에 보신다(src/line.js).
+  const result = await performShiftClose({ shift: "day", testId: null, req, auto: true });
+  res.json({
+    ok: true,
+    date,
+    auto: true,
+    problem_order_count: result.problem_order_count,
+    line: result.line,
+    line_pm: result.line_pm,
+  });
 });
 
 module.exports = router;

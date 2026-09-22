@@ -14,6 +14,24 @@
 //
 // 그리고 나갔는지 안 나갔는지를 그날 칸에 적는다. 이번에 원인을 찾을 때
 // 기록이 하나도 없어서 코드를 거꾸로 읽어야 했다.
+//
+// ── 2026-09-22: 크론이 「오후 정산」 문자를 안 보내고 있었다
+//
+// 사장님: "오늘 또 저녁 정산이 라인으로 연락이 안왔어."
+//
+// 위의 2026-09-15 수정으로 크론이 건너뛰지는 않게 됐다. 그런데 크론이 보내는
+// 것은 **하루 요약 한 통뿐**이었다. 버튼(「🌙 오후 정산」)은 두 통을 보낸다 —
+// 오후 것만 담은 문자와 하루 전체. 그 첫 통을 만드는 코드가 크론에는 아예
+// 없었다. 그래서 버튼을 안 누른 날은 「오후 정산」 문자가 어느 경로로도
+// 안 나갔다.
+//
+// 게다가 크론은 문자만 보내고 **마감 자체를 하지 않았다** — 정산 표시도
+// 빈자리 정리도 없었다. 사장님: "버튼을 눌러야만 되는 게 아니라 오전 정산이
+// 되면 오후 정산도 되게 해줘."
+//
+// 이제 크론은 버튼과 **같은 함수**(performShiftClose)를 부른다. 마감 규칙이
+// 한 곳에만 있으므로 다시 갈릴 자리가 없다. 시각은 타이베이 23:00
+// (vercel.json — UTC 로 "0 15 * * *", test/deploy-config.test.js 가 잰다).
 const fake = require("./fake-mongo");
 require.cache[require.resolve("mongodb")] = {
   id: require.resolve("mongodb"),
@@ -89,8 +107,34 @@ async function wipeSnapshot() {
   pushes = [];
   r = await staff.get("/api/settlements/cron-close");
   check("크론이 돈다", r.status === 200, `${r.status}`);
-  check("★ 저녁 마감 문자가 나간다 — 예전에는 여기서 건너뛰었다", pushes.length === 1, `${pushes.length}`);
-  check("건너뛰었다고 보고하지 않는다", r.body.line_skipped === false, JSON.stringify(r.body));
+  // 2026-09-22 부터 **두 통**이다 — 오후 것만 담은 문자와 하루 전체.
+  // 버튼(「🌙 오후 정산」)이 보내는 것과 같은 두 통이다. 예전에는 크론이
+  // 하루 요약 한 통만 보냈고, 그래서 버튼을 안 누른 날은 「오후 정산」
+  // 문자가 어느 경로로도 안 나갔다. 사장님: "오늘 또 저녁 정산이 라인으로
+  // 연락이 안왔어."
+  check("★ 저녁 마감 문자가 나간다 — 예전에는 여기서 건너뛰었다", pushes.length === 2, `${pushes.length}`);
+  check("★ 오후 것과 하루 것, 두 통이다", pushes.length === 2, `${pushes.length}`);
+  check("★ 첫 통이 오후 정산이다", /오후/.test(String(pushes[0] || "")), String(pushes[0] || "").slice(0, 40));
+  check(
+    "★ 자동으로 마감했다고 적는다 — 안 적으면 누가 누른 줄 안다",
+    /자동으로 마감/.test(String(pushes[0] || "")),
+    String(pushes[0] || "").slice(-60)
+  );
+  check("건너뛰었다고 보고하지 않는다", r.body.skipped === undefined && r.body.auto === true, JSON.stringify(r.body));
+
+  // 크론이 마감까지 한다 — 문자만 보내고 마는 것이 아니다. 사장님:
+  // "버튼을 눌러야만 되는 게 아니라 오전 정산이 되면 오후 정산도 되게 해줘."
+  s = await snap();
+  check("★ 크론이 day_closed_at 을 찍는다", !!(s && s.day_closed_at), JSON.stringify(s && s.day_closed_at));
+  check("★ 자동이었다고 표시한다", s && s.day_closed_auto === true, `${s && s.day_closed_auto}`);
+  check("★ 오후 문자 기록도 남는다", !!(s && s.line_pm_at), JSON.stringify(s && s.line_pm_at));
+  check("★ 오후 문자가 나갔다고 적힌다", s && s.line_pm_ok === true, `${s && s.line_pm_ok}`);
+
+  // 같은 크론이 두 번 불려도(재시도 등) 두 번 보내지 않는다 — 위에서
+  // day_closed_at 이 찍혔으므로 이제부터는 건너뛴다.
+  pushes = [];
+  r = await staff.get("/api/settlements/cron-close");
+  check("★ 크론을 두 번 불러도 문자는 한 벌뿐", pushes.length === 0, `${pushes.length}`);
 
   out.push("\n[하루 정산을 누른 날 — 두 번 보내지 않는다]");
   pushes = [];
@@ -104,7 +148,7 @@ async function wipeSnapshot() {
   pushes = [];
   r = await staff.get("/api/settlements/cron-close");
   check("★ 크론은 조용하다 — 같은 내용을 두 번 보내지 않는다", pushes.length === 0, `${pushes.length}`);
-  check("건너뛰었다고 보고한다", r.body.line_skipped === true, JSON.stringify(r.body));
+  check("건너뛰었다고 보고한다", r.body.skipped === "closed_by_hand", JSON.stringify(r.body));
 
   out.push("\n[나갔는지 안 나갔는지를 적어둔다]");
   s = await snap();
