@@ -863,6 +863,9 @@
       settlementOrdersNone: "이 조건에 맞는 주문이 없어요.",
       settlementOrdersTruncated: " (가장 최근 것부터 보여드려요. 더 보시려면 날짜를 좁혀주세요)",
       settlementOrdersPickupSuffix: "번",
+      settlementOrdersRounds: "{n}번에 나눠 주문",
+      settlementOrdersRoundNo: "{n}번째 주문",
+      settlementOrdersCountRounds: " · 주문 {n}번",
       settlementOrdersPaidWith: "결제:",
       settlementOrdersPaidAt: "결제 시각:",
       settlementOrdersStatus: "상태:",
@@ -1665,6 +1668,9 @@
       settlementOrdersNone: "沒有符合條件的訂單。",
       settlementOrdersTruncated: "（僅顯示最新的部分，若要看更多請縮小日期範圍）",
       settlementOrdersPickupSuffix: "號",
+      settlementOrdersRounds: "分 {n} 次點餐",
+      settlementOrdersRoundNo: "第 {n} 次點餐",
+      settlementOrdersCountRounds: " · 共 {n} 筆點餐",
       settlementOrdersPaidWith: "結帳方式：",
       settlementOrdersPaidAt: "結帳時間：",
       settlementOrdersStatus: "狀態：",
@@ -14591,37 +14597,154 @@
     renderSettlementOrders(data);
   }
 
+  /**
+   * 결산의 지난 주문을 **한 손님 단위**로 묶는다.
+   *
+   * 2026-09-23 사장님: "한 테이블에서 여러번 나눠서 주문해서 나중에 한 번에
+   * 결제할 때는 한 테이블에서 다 주문 한 걸로 잘 나오는데 결산에서는 건별로
+   * 나뉘어져 있어서 보기 좀 힘들어. 그거 통합해주고. 근데 포장은 냅둬야 돼."
+   *
+   * ── 묶는 근거를 새로 만들지 않는다
+   *
+   * pay-table 이 결제 한 번에 번호 하나를 붙여 둔다(src/routes/orders.js
+   * payment_ids). 그 자리 주석에 이렇게 적혀 있다 — "라운드가 몇 개로
+   * 나뉘어 있든 이 번호가 같으면 「손님이 한 번에 낸 돈」이다. 나중에 이전
+   * 주문이나 결산에서 되짚을 때 라운드를 다시 묶을 수 있는 유일한 근거다."
+   * 묶을 근거는 이미 있었고 결산만 안 쓰고 있었다.
+   *
+   * 시각이나 테이블 번호로 묶지 않는다. 같은 자리에 다음 손님이 앉으면
+   * 남의 밥값이 한 줄로 합쳐진다.
+   *
+   * ── 포장은 묶지 않는다
+   *
+   * 포장 카운터에 쌓이는 주문은 **서로 무관한 손님** 것이다(CLAUDE.md).
+   * 한 줄로 합치면 남의 주문이 한 손님 것으로 보인다. tables 가 아직 안
+   * 실려 있을 때를 대비해 pickup_number 로도 같이 걸러낸다 —
+   * isCounterOrder 하나만 믿으면 그 순간 포장이 통째로 묶인다.
+   *
+   * ── 번호를 여럿 가진 주문
+   *
+   * 부분결제로 두 번에 나눠 낸 주문은 번호를 둘 갖는다. 하나라도 겹치면
+   * 같은 묶음이다 — 첫 번호만 보면 「A 에서 반, B 에서 반」 낸 주문이
+   * 「B 만」 낸 주문과 갈라진다.
+   */
+  function groupSettlementOrders(orders) {
+    const groups = [];
+    const byPaymentId = new Map();
+    for (const o of orders || []) {
+      const solo = isCounterOrder(o) || o.pickup_number;
+      const ids = solo ? [] : o.payment_ids || [];
+      let g = null;
+      for (const pid of ids) {
+        const found = byPaymentId.get(pid);
+        if (!found) continue;
+        if (!g) g = found;
+        else if (g !== found) {
+          // 이 주문이 두 묶음을 잇는다 — 하나로 합친다.
+          g.push(...found);
+          for (const [k, v] of byPaymentId) if (v === found) byPaymentId.set(k, g);
+          groups.splice(groups.indexOf(found), 1);
+        }
+      }
+      if (!g) {
+        g = [];
+        groups.push(g);
+      }
+      g.push(o);
+      for (const pid of ids) byPaymentId.set(pid, g);
+    }
+    // 묶음 안은 시킨 순서대로 — 1번째, 2번째가 눈에 그대로 보여야 한다.
+    for (const g of groups) g.sort((a, b) => String(a.created_at || "").localeCompare(String(b.created_at || "")));
+    return groups;
+  }
+
+  /**
+   * 묶음 한 줄에 적히는 금액. 라운드마다의 할인까지 더해서 **실제로 받은 돈**.
+   *
+   * 한 건짜리 묶음은 settlementOrderTotalHtml 을 그대로 탄다 — 포장과 한 번만
+   * 시킨 손님은 화면이 예전과 한 글자도 안 달라야 한다. 여기서 따로 계산하면
+   * 언젠가 둘이 갈라진다.
+   */
+  function settlementGroupTotalHtml(group) {
+    if (group.length === 1) return settlementOrderTotalHtml(group[0]);
+    const gross = group.reduce((sum, o) => sum + Number(o.total || 0), 0);
+    const off = group.reduce((sum, o) => sum + Number(o.discount_amount || 0), 0);
+    return settlementOrderTotalHtml({ total: gross, discount_amount: off });
+  }
+
   function renderSettlementOrders(data) {
     const listEl = $("#settlementOrdersList");
     const countEl = $("#settlementOrdersCount");
     const orders = data.orders || [];
+    const groups = groupSettlementOrders(orders);
+    // 몇 줄이 보이는지를 적는다. 묶인 게 있으면 원래 몇 건이었는지도 같이 —
+    // 「5건」만 적혀 있는데 결제 건수는 8이면 어느 쪽이 맞는지 알 수 없다.
     countEl.textContent = orders.length
-      ? `${orders.length}${T("settlementCountSuffix")}${data.truncated ? T("settlementOrdersTruncated") : ""}`
+      ? `${groups.length}${T("settlementCountSuffix")}` +
+        (groups.length !== orders.length ? T("settlementOrdersCountRounds").replace("{n}", orders.length) : "") +
+        (data.truncated ? T("settlementOrdersTruncated") : "")
       : T("settlementOrdersNone");
-    listEl.innerHTML = orders
-      .map((o) => {
-        const time = String(o.created_at || "").slice(11, 16);
-        const day = String(o.created_at || "").slice(5, 10);
+    listEl.innerHTML = groups
+      .map((group) => {
+        const first = group[0];
+        const rounds = group.length;
+        const time = String(first.created_at || "").slice(11, 16);
+        const day = String(first.created_at || "").slice(5, 10);
         // 포장 카운터는 테이블 번호가 없다 — 픽업 번호와 이름으로 부른다.
-        const who = o.pickup_number && o.customer_name
-          ? `📦 ${o.pickup_number}${T("settlementOrdersPickupSuffix")} ${escapeHtml(o.customer_name)}`
-          : fmtOrderTableTag(o.table_number);
-        const peek = (o.items || []).map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
-        const open = settlementOrdersExpanded.has(o.id);
+        const who = first.pickup_number && first.customer_name
+          ? `📦 ${first.pickup_number}${T("settlementOrdersPickupSuffix")} ${escapeHtml(first.customer_name)}`
+          : fmtOrderTableTag(first.table_number);
+        const peek = group
+          .flatMap((o) => (o.items || []).map((it) => `${itemDisplayName(it)} x${it.qty}`))
+          .join(", ");
+        // 묶음 전체가 취소된 것일 때만 취소로 보인다. 한 라운드만 취소된
+        // 것을 묶음째 취소로 칠하면 받은 돈이 안 받은 것처럼 보인다.
+        const cancelled = group.every((o) => o.status === "cancelled");
+        const open = settlementOrdersExpanded.has(first.id);
+        const roundsBadge =
+          rounds > 1
+            ? ` <span class="stl-order-rounds">${T("settlementOrdersRounds").replace("{n}", rounds)}</span>`
+            : "";
         return `
-          <div class="stl-order${o.status === "cancelled" ? " cancelled" : ""}" data-order-id="${o.id}">
+          <div class="stl-order${cancelled ? " cancelled" : ""}" data-order-id="${first.id}">
             <div class="stl-order-head" role="button" tabindex="0">
               <span class="stl-order-time">${day} ${time}</span>
-              <span class="stl-order-table">${who}</span>
+              <span class="stl-order-table">${who}${roundsBadge}</span>
               <span class="stl-order-peek">${escapeHtml(peek)}</span>
-              <span class="stl-order-total">${settlementOrderTotalHtml(o)}</span>
+              <span class="stl-order-total">${settlementGroupTotalHtml(group)}</span>
               <span class="stl-order-actions">
-                <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
-                <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
+                ${
+                  // 묶음에는 머리의 인쇄·미리보기를 달지 않는다 — 어느 라운드를
+                  // 뽑는 것인지 알 수 없다. 펼치면 라운드마다 제 버튼이 있다.
+                  rounds === 1
+                    ? `<button type="button" class="stl-order-btn" data-stl-print="${first.id}">${T("printBtn")}</button>
+                       <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>`
+                    : ""
+                }
               </span>
               <span class="stl-order-caret">${open ? "▴" : "▾"}</span>
             </div>
-            ${open ? renderSettlementOrderBody(o) : ""}
+            ${
+              open
+                ? rounds === 1
+                  ? renderSettlementOrderBody(first)
+                  : group
+                      .map(
+                        (o, i) => `
+                        <div class="stl-order-round">
+                          <div class="stl-order-round-head">
+                            <span>${T("settlementOrdersRoundNo").replace("{n}", i + 1)} · ${String(o.created_at || "").slice(11, 16)}</span>
+                            <span class="stl-order-actions">
+                              <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
+                              <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
+                            </span>
+                          </div>
+                          ${renderSettlementOrderBody(o)}
+                        </div>`
+                      )
+                      .join("")
+                : ""
+            }
           </div>`;
       })
       .join("");

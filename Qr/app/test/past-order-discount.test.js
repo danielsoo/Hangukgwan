@@ -173,10 +173,19 @@ const slice = (src, header, end) => {
   check("자리 규칙이 있다", /\.round-discount-note/.test(css), "");
 
   out.push("\n[3. 결산의 지난 주문]");
+  // 2026-09-23: 줄이 주문 하나가 아니라 **한 손님의 묶음**이 됐다
+  // (admin.js groupSettlementOrders). 금액도 묶음 단위로 적는다. 다만
+  // settlementGroupTotalHtml 은 한 건짜리면 아래 settlementOrderTotalHtml 을
+  // 그대로 타므로, 이 시험이 지키던 「실수령액을 보여준다」는 그대로다.
   check(
     "★ 줄 금액이 실수령액을 보여준다",
-    /class="stl-order-total">\$\{settlementOrderTotalHtml\(o\)\}/.test(admin),
+    /class="stl-order-total">\$\{settlementGroupTotalHtml\(group\)\}/.test(admin),
     "total 만 적으면 결산 합계와 안 맞아 보인다"
+  );
+  check(
+    "★ 묶음 금액도 결국 같은 함수를 탄다 — 둘로 갈라지면 안 된다",
+    /function settlementGroupTotalHtml[\s\S]{0,400}return settlementOrderTotalHtml\(group\[0\]\)/.test(admin),
+    ""
   );
   const totalFn = slice(admin, "  function settlementOrderTotalHtml(o) {", "\n  }\n") + "\n  }";
   const totalHtml = new Function("money", `${totalFn}\n return settlementOrderTotalHtml;`)((v) =>

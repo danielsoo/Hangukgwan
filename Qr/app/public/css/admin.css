@@ -2035,6 +2035,33 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-order-total { text-align: right; font-weight: 700; white-space: nowrap; }
 .stl-order-caret { color: var(--muted); text-align: center; }
 .stl-order-body { padding: 2px 4px 14px 72px; font-size: 14.5px; color: var(--ink); }
+
+/* 한 손님이 여러 번에 나눠 시킨 것 — 결산에서는 한 줄로 묶는다
+   (admin.js groupSettlementOrders, 2026-09-23 사장님). 묶였다는 것이
+   **보여야** 한다. 안 보이면 금액이 왜 큰지 알 수 없다. */
+.stl-order-rounds {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--cream);
+  border-radius: 999px;
+  padding: 1px 8px;
+  white-space: nowrap;
+}
+/* 펼쳤을 때 라운드 하나하나. 왼쪽 선으로 「이 묶음에 속한 것」임을 보인다. */
+.stl-order-round { border-left: 3px solid var(--line); margin: 0 4px 4px 60px; }
+.stl-order-round-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 4px 12px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+/* 라운드 안에서는 왼쪽 여백을 줄인다 — 위에서 이미 한 번 들여썼다. */
+.stl-order-round .stl-order-body { padding-left: 12px; }
 /* 태블릿 세로처럼 좁으면 품목 미리보기를 접고 버튼을 살린다 — 품목은 줄을
    펼치면 다 보이지만, 인쇄 버튼은 여기 말고는 갈 곳이 없다. */
 @media (max-width: 900px) {
