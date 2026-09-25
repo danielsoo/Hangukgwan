@@ -152,6 +152,8 @@ function check(name, cond, extra = "") {
   check("★ 손님 화면이 고른 값을 담기 버튼에 더한다", /currentOptionPrice\(currentItem\)/.test(order_), "");
   // 사장님(2026-09-25): 옵션 값은 손님 화면에 안 보이게. 합계에는 더해진다(위).
   check("★ 손님 화면 칩에는 옵션 값을 안 적는다", !/money\(opt\.price\)/.test(order_) && /b\.textContent = optionLabel\(opt\.name\);/.test(order_), "칩에 「+NT$50」이 다시 붙었다");
+  check("★ 관리자 미리보기도 옵션 칩에 값을 안 적는다", !/pv-chip[^`]*`[^`]*\+NT\$/.test(admin) && /pv-chip\$\{i === 0 \? " picked" : ""\}">\$\{escapeHtml\(o\.name\)\}<\/span>/.test(admin), "미리보기가 손님 화면과 달라진다");
+  check("★ 관리자 조각은 이름과 값을 다른 칸에 적는다", /class="chip-price"/.test(admin) && /\.chip-price\s*\{/.test(fs.readFileSync(path.join(__dirname, "../public/css/admin.css"), "utf8")), "「100元 +NT$50」 한 줄이면 경계가 안 보인다");
   check("★ 관리자 수기 주문도 옵션 값을 더한다", /optionPriceOf\(mi\.options, option\)/.test(admin), "");
   check("★ 옵션을 바꾸면 금액이 다시 그려진다", /option = v;[\s\S]{0,60}?updateCommitLabel\(\)/.test(admin), "");
 
@@ -170,7 +172,7 @@ function check(name, cond, extra = "") {
   check("★ 「가격은 안 바뀌어요」 를 더 안 적는다", !/itemOptionsSingleHint: "[^"]*가격은 안 바뀌어요/.test(admin), "");
   check(
     "★ 값이 없는 옵션을 「무료」라고 지어내지 않는다",
-    /hasPriceSlot[\s\S]{0,200}?chipFreeAddon/.test(admin),
+    /if \(hasPriceSlot\)[\s\S]{0,200}?chipPriceFree/.test(admin),
     '"牛" 를 「무료」로 적으면 없는 말을 지어내는 것이다'
   );
   check("★ 개별 수량과 같이 쓰면 말해준다", /paintMixOptionsWarn/.test(admin) && /mixOptionsPriceWarn/.test(html), "값을 조용히 무시하는 것이 제일 나쁘다");

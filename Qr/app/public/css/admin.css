@@ -1353,6 +1353,12 @@ body:not(.role-staff) .staff-only { display: none !important; }
   padding: 5px 6px 5px 12px; font-size: 16px; color: var(--ink); max-width: 100%;
 }
 .chip-text { overflow-wrap: anywhere; }
+/* 옵션 값은 이름과 다른 칸이다 — 이름이 「100元」처럼 금액 모양이어도
+   어디까지가 이름이고 어디가 받을 돈인지 한눈에 갈린다. */
+.chip-price {
+  background: var(--navy); color: #fff; border-radius: 999px;
+  padding: 2px 10px; font-size: 14px; font-weight: 700; white-space: nowrap;
+}
 .chip-x {
   border: none; background: rgba(0,0,0,0.08); color: var(--ink);
   width: 20px; height: 20px; border-radius: 999px; cursor: pointer; line-height: 1;

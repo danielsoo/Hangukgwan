@@ -161,8 +161,28 @@ const PANES = ["basic", "price", "options", "display", "soldout"];
     const addonsValue = await page.locator("#f_addons").inputValue();
     check("추가 옵션은 「이름:가격」 으로 저장된다", addonsValue.includes("치즈 추가:30"), addonsValue);
     check("조각에는 값이 보인다",
-      (await add.locator(".chip-text").allTextContents()).some((t) => t.includes("치즈 추가 +NT$30")),
+      (await add.locator(".chip-price").allTextContents()).some((t) => t.includes("NT$30")),
+      JSON.stringify(await add.locator(".chip-price").allTextContents()));
+    check("★ 이름 칸에는 이름만 있다 — 값은 따로 된 칸",
+      (await add.locator(".chip-text").allTextContents()).includes("치즈 추가"),
       JSON.stringify(await add.locator(".chip-text").allTextContents()));
+
+    // 사장님(2026-09-25): "어디까지 이름이고 어디가 실제 금액인지 모르잖아".
+    // 이름이 금액 모양(「100元」)이어도 이름 칸과 값 칸이 갈려야 한다.
+    await opt.locator(".chip-entry").fill("100元");
+    await opt.locator(".chip-entry-price").fill("50");
+    await opt.locator(".chip-add-btn").click();
+    await page.waitForTimeout(250);
+    const moneyChip = opt.locator(".chip").last();
+    const nameTxt = await moneyChip.locator(".chip-text").textContent();
+    const priceTxt = await moneyChip.locator(".chip-price").textContent();
+    check("★ 「100元:50」 — 이름 칸은 「100元」 뿐이다", nameTxt === "100元", nameTxt);
+    check("★ 값은 「추가금」 딱지가 붙은 다른 칸이다", /추가금 NT\$50/.test(priceTxt || ""), priceTxt);
+    const [nameBg, priceBg] = await moneyChip.evaluate((c) => [
+      getComputedStyle(c.querySelector(".chip-text")).backgroundColor,
+      getComputedStyle(c.querySelector(".chip-price")).backgroundColor,
+    ]);
+    check("★ 두 칸이 눈으로도 갈린다(바탕색이 다르다)", nameBg !== priceBg, `${nameBg} / ${priceBg}`);
 
     // 이름에 쉼표나 콜론을 치면 값이 쪼개진다 — 지워서 받는다.
     await add.locator(".chip-entry").fill("계란:추가,둘");

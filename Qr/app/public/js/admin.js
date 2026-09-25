@@ -1202,8 +1202,10 @@
       chipAddonPricePlaceholder: "가격",
       chipAddBtn: "추가",
       chipFreeAddon: "(무료)",
+      chipPriceTag: "추가금",
+      chipPriceFree: "무료",
       itemOptionsSingleTitle: "하나만 고르는 옵션",
-      itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 값을 적으면 그만큼 가격이 올라가요 (크기 같은 것). 안 적으면 가격은 그대로예요.",
+      itemOptionsSingleHint: "손님이 이 중에서 하나만 골라요. 값을 적으면 그만큼 가격이 올라가요 (크기 같은 것). 안 적으면 가격은 그대로예요. 손님 화면에는 이름만 보이고 값은 합계에만 더해져요.",
       itemMixOptionsPriceWarn: "옵션별 개별 수량을 켜면 옵션에 적은 값은 안 붙어요. 옵션마다 수량이 따로라 어느 쪽 값인지 한 줄로 적을 수가 없거든요.",
       chipOptionNamePlaceholder: "이름 (예: 소고기, M)",
       itemPanePreview: "미리보기",
@@ -2004,8 +2006,10 @@
       chipAddonPricePlaceholder: "價格",
       chipAddBtn: "新增",
       chipFreeAddon: "(免費)",
+      chipPriceTag: "加價",
+      chipPriceFree: "免費",
       itemOptionsSingleTitle: "只能選一個的選項",
-      itemOptionsSingleHint: "顧客只會從中選一個。填了金額就會加價（例如尺寸），不填則價格不變。",
+      itemOptionsSingleHint: "顧客只會從中選一個。填了金額就會加價（例如尺寸），不填則價格不變。顧客畫面只顯示名稱，加價只算進合計。",
       itemMixOptionsPriceWarn: "開啟「各選項獨立數量」後，選項上填的金額不會生效 — 每個選項有各自的數量，無法只用一行標價。",
       chipOptionNamePlaceholder: "名稱（例：牛肉、M）",
       itemPanePreview: "預覽",
@@ -6959,16 +6963,15 @@
     const photo = $("#f_photo_preview") && !$("#f_photo_preview").hidden ? $("#f_photo_preview").src : "";
 
     // 한 줄짜리 고르기 묶음. picked 는 처음 골라져 있는 것(손님 화면도 첫
-    // 번째가 골라진 채로 열린다).
+    // 번째가 골라진 채로 열린다). 옵션 값은 손님 화면에 안 적으므로
+    // (order.js, 2026-09-25) 여기서도 이름만 보인다 — 합계에는 더한다.
     const radioRow = (title, raw, priced) => {
       const opts = priced ? parseOptions(raw) : optionNames(raw).map((n) => ({ name: n, price: 0 }));
       if (!opts.length) return "";
       return `<div class="pv-group"><div class="pv-group-title">${escapeHtml(title)}</div><div class="pv-chips">${opts
         .map(
           (o, i) =>
-            `<span class="pv-chip${i === 0 ? " picked" : ""}">${escapeHtml(o.name)}${
-              o.price ? ` +NT$${money(o.price)}` : ""
-            }</span>`
+            `<span class="pv-chip${i === 0 ? " picked" : ""}">${escapeHtml(o.name)}</span>`
         )
         .join("")}</div></div>`;
     };
@@ -7060,6 +7063,7 @@
       const chip = document.createElement("span");
       chip.className = "chip";
       let text = value;
+      let priceTag = null;
       if (priced) {
         // "볶음밥 추가:80" → "볶음밥 추가 +NT$80". 0 원은 무료 교환이라
         // (예: 飯換冬粉:0) 값 대신 그렇게 적어준다.
@@ -7068,15 +7072,24 @@
         // 2026-09-16 에 「하나만 고르는 옵션」도 값을 받게 되면서, 예전부터
         // 있던 "牛,豬" 같은 값이 이 칸에 들어오게 됐다. 그것을 「무료」라고
         // 적으면 없는 말을 지어내는 것이다 — 값을 정한 적이 없을 뿐이다.
+        //
+        // 이름과 값은 **다른 칸**에 적는다. 사장님(2026-09-25): "어디까지
+        // 이름이고 어디가 실제 금액인지 모르잖아" — 이름이 「100元」처럼
+        // 금액 모양이면 「100元 +NT$50」 한 줄에서 경계가 안 보인다. 값은
+        // 「추가금」 딱지를 단 따로 된 칸으로 뺀다.
         const hasPriceSlot = value.includes(":");
         const [name, priceStr] = value.split(":");
-        const price = parseInt((priceStr || "0").trim(), 10) || 0;
-        text = hasPriceSlot
-          ? `${(name || "").trim()} ${price ? `+NT$${money(price)}` : T("chipFreeAddon")}`
-          : (name || "").trim();
+        text = (name || "").trim();
+        if (hasPriceSlot) {
+          const price = parseInt((priceStr || "0").trim(), 10) || 0;
+          priceTag = price ? `${T("chipPriceTag")} NT$${money(price)}` : T("chipPriceFree");
+        }
       }
-      chip.innerHTML = `<span class="chip-text"></span><button type="button" class="chip-x" aria-label="remove">✕</button>`;
+      chip.innerHTML = `<span class="chip-text"></span>${
+        priceTag !== null ? `<span class="chip-price"></span>` : ""
+      }<button type="button" class="chip-x" aria-label="remove">✕</button>`;
       chip.querySelector(".chip-text").textContent = text;
+      if (priceTag !== null) chip.querySelector(".chip-price").textContent = priceTag;
       chip.querySelector(".chip-x").onclick = () => {
         const next = chipValuesOf(field).filter((_, i) => i !== idx);
         $(`#${field.dataset.chipFor}`).value = next.join(",");
