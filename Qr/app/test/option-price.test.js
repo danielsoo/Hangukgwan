@@ -150,7 +150,8 @@ function check(name, cond, extra = "") {
     check(`${who} 가 이름만 쓰는 자리를 따로 둔다`, /optionNames/.test(src), "");
   }
   check("★ 손님 화면이 고른 값을 담기 버튼에 더한다", /currentOptionPrice\(currentItem\)/.test(order_), "");
-  check("★ 손님 화면이 칩에 얼마가 붙는지 적는다", /opt\.price[\s\S]{0,120}?\+\$\{money\(opt\.price\)\}/.test(order_), "");
+  // 사장님(2026-09-25): 옵션 값은 손님 화면에 안 보이게. 합계에는 더해진다(위).
+  check("★ 손님 화면 칩에는 옵션 값을 안 적는다", !/money\(opt\.price\)/.test(order_) && /b\.textContent = optionLabel\(opt\.name\);/.test(order_), "칩에 「+NT$50」이 다시 붙었다");
   check("★ 관리자 수기 주문도 옵션 값을 더한다", /optionPriceOf\(mi\.options, option\)/.test(admin), "");
   check("★ 옵션을 바꾸면 금액이 다시 그려진다", /option = v;[\s\S]{0,60}?updateCommitLabel\(\)/.test(admin), "");
 

@@ -1075,11 +1075,12 @@
         optWrap.hidden = false;
         parseOptions(item.options).forEach((opt, i) => {
           const b = document.createElement("button");
-          // 값이 붙는 옵션은 얼마가 붙는지 그 자리에 적는다. 안 적으면
-          // 손님이 고르고 나서 합계가 왜 올랐는지 모른다.
-          b.textContent = opt.price
-            ? `${optionLabel(opt.name)} +${money(opt.price)}`
-            : optionLabel(opt.name);
+          // 옵션에 붙은 값은 칩에 적지 않는다 — 이름만 보인다.
+          //
+          // 사장님(2026-09-25): "옵션에 우리가 가격을 넣잖아. 그거 손님
+          // 화면에서는 안 보이게 해줘". 값은 그대로 담기 버튼 합계에
+          // 더해지고(updateAddBtnPrice), 종이에도 찍힌다.
+          b.textContent = optionLabel(opt.name);
           if (i === 0) b.classList.add("active");
           b.onclick = () => {
             currentOption = opt.name;
