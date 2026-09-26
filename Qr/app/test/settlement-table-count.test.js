@@ -82,12 +82,28 @@ const s = computeSettlement(orders, D, D, opts);
 check("★ 하루 전체 테이블 3 (5번 점심·7번·5번 저녁 — 9번은 아직)", s.table_count === 3, `${s.table_count}`);
 check("★ 포장은 테이블이 아니다 — 따로 4", s.takeout_count === 4, `${s.takeout_count}`);
 check("★ 아직 앉아 계신 9번을 뺐다고 말한다", s.open_table_count === 1, `${s.open_table_count}`);
-check("결제 완료 라운드는 그대로 센다(다른 숫자다)", s.paid_order_count === 12, `${s.paid_order_count}`);
+// 사장님(2026-09-26): "애초에 우리 테이블 세는 걸 그 고객 하나로 세는 그
+// 로직이랑 같잖아 ... 주문 건수 말하고 있잖아" — 주문 1건 = 손님 한 팀.
+check("★★ 주문 건수 = 테이블 3 + 포장 4 = 7 (라운드 12 가 아니다)", s.paid_order_count === 7, `${s.paid_order_count}`);
+check("라운드 수는 따로 남는다", s.paid_round_count === 12, `${s.paid_round_count}`);
+check("★ 주문당 평균도 팀으로 나눈다", s.avg_per_order === Math.round(s.total_revenue / 7), `${s.avg_per_order}`);
+{
+  const cash = orders.map((o) => Object.assign({}, o, { payment_method: "cash" }));
+  const c = computeSettlement(cash, D, D, opts);
+  const m = c.payment_method_breakdown.find((x) => x.method === "cash");
+  check("★ 결제수단별 건수도 팀으로 센다(7)", m && m.order_count === 7, JSON.stringify(m));
+  const t5 = c.table_breakdown.find((x) => x.table_number === "5");
+  check("★ 테이블별 건수 — 5번은 점심·저녁 두 팀(라운드 4 가 아니다)", t5 && t5.order_count === 2, JSON.stringify(t5));
+  const types = c.order_type_breakdown.reduce((a, e) => a + e.order_count, 0);
+  check("★ 매장/포장 건수를 더하면 주문 건수", types === 7, `${types}`);
+}
 
 out.push("\n[오전 + 오후 = 하루 전체]");
 const am = s.half_split.am;
 const pm = s.half_split.pm;
 check("★ 오전 테이블 2 (5번·7번)", am.table_count === 2, `${am.table_count}`);
+check("★ 오전 주문 건수 = 테이블 2 + 포장 1", am.paid_order_count === 3, `${am.paid_order_count}`);
+check("★★ 오전 + 오후 주문 건수 = 하루", am.paid_order_count + pm.paid_order_count === s.paid_order_count, `${am.paid_order_count}+${pm.paid_order_count}`);
 check("★ 오후 테이블 1 (5번 저녁)", pm.table_count === 1, `${pm.table_count}`);
 check("★★ 오전 + 오후 테이블 = 하루", am.table_count + pm.table_count === s.table_count, `${am.table_count}+${pm.table_count} vs ${s.table_count}`);
 check("★★ 오전 + 오후 포장 = 하루", am.takeout_count + pm.takeout_count === s.takeout_count, `${am.takeout_count}+${pm.takeout_count}`);
@@ -134,10 +150,9 @@ function fnSource(src, name) {
 }
 const I18N = {
   settlementTables: "테이블",
-  settlementTablesUnit: "팀",
   settlementTakeouts: "포장",
   settlementCountSuffix: "건",
-  settlementRoundsCount: "주문 {n}번",
+  settlementOrdersN: "주문 {n}건",
   settlementOrdersOpenGroups: " · 아직 결제 안 끝남 {n}",
   settlementOrdersCancelledGroups: " · 취소 {n}",
   settlementPaidCount: "결제 완료 주문",
@@ -168,7 +183,7 @@ if (fns) {
   check("★ 포장은 목록에서 각자 한 줄", groups.filter((g) => g[0].table_number === "COUNTER").length === 5, "");
   const core = (line) => line.replace(/^[^·]*· /, "").replace(/ · 아직.*$| · 취소.*$/, "");
   check(
-    "★★ 위 「테이블 · 포장 · 주문」과 목록 머리줄이 글자 그대로 같다",
+    "★★ 위 「주문 N건 (테이블 · 포장)」과 목록 머리줄이 글자 그대로 같다",
     core(heroLine) === fns.fmtSettlementOrdersCount(groups, history).split(" · 아직")[0].split(" · 취소")[0],
     `위: ${heroLine}\n        목록: ${listLine}`
   );

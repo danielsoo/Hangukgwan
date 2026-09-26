@@ -162,7 +162,8 @@ out.push("\n[손님 수와 객단가]");
     order({ id: 3, table_number: "7", party_size: 2, total: 400, items: [it(400, 1, "cash")] }),
   ], D);
   check("같은 테이블의 추가 주문은 인원을 다시 안 센다", r.guest_count === 6, String(r.guest_count));
-  check("주문당 평균", r.avg_per_order === Math.round(2000 / 3), String(r.avg_per_order));
+  // 주문 1건 = 손님 한 팀(2026-09-26). 5번이 두 번 시켜도 1건이라 2건으로 나눈다.
+  check("주문당 평균", r.avg_per_order === Math.round(2000 / 2), String(r.avg_per_order));
   check("1인당 평균", r.avg_per_guest === Math.round(2000 / 6), String(r.avg_per_guest));
   // 중간에 일행이 합류해 인원이 늘었으면 큰 쪽을 쓴다.
   const grew = computeSettlement([
@@ -205,7 +206,8 @@ out.push("\n[테이블별 매출]");
   check("테이블별로 합친다", r.table_breakdown[0].table_number === "5" && r.table_breakdown[0].revenue === 1500,
     JSON.stringify(r.table_breakdown));
   check("포장 카운터도 한 자리로 잡힌다", r.table_breakdown.some((e) => e.table_number === "COUNTER"));
-  check("건수도 센다", r.table_breakdown[0].order_count === 2);
+  // 5번이 두 번 시켰어도 한 팀 — 1건(2026-09-26, 주문 1건 = 손님 한 팀).
+  check("건수도 센다", r.table_breakdown[0].order_count === 1, JSON.stringify(r.table_breakdown[0]));
 }
 
 out.push("\n[빈 날에도 터지지 않는다]");

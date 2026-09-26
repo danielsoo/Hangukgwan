@@ -311,6 +311,52 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // 칸이 0 이 되어, 그날 오후 매출이 정말 0 인 줄 안다.
   const paidOrdersAll = shift ? rangeAll.filter((o) => o.status === "paid") : paidOrders;
   const cancelledOrders = rangeOrders.filter((o) => o.status === "cancelled");
+
+  // 팀(테이블·포장) — 위 visitsOf 주석. 오전/오후 칸은 손님 수와 같은
+  // 이유로 **거르기 전 것**으로 센다.
+  //
+  // **주문 건수도 이 팀으로 센다.** 사장님(2026-09-26): "애초에 우리
+  // 테이블 세는 걸 그 고객 하나로 세는 그 로직이랑 같잖아 ... 주문 건수
+  // 말하고 있잖아". 한 팀이 세 번 나눠 시켜도 주문은 1건이다 — 라운드
+  // 수로 세면 아래 지난 주문 목록(한 줄 = 한 팀)과 숫자가 안 맞는다.
+  // 결제수단별·매장/포장별·테이블별·할인별 「N건」도 같은 팀으로 센다.
+  // 라운드 수는 paid_round_count 로 따로 남긴다.
+  const halfMemo = new Map();
+  const halfFn = (o) => {
+    if (!halfMemo.has(o)) halfMemo.set(o, halfOf(o, opts));
+    return halfMemo.get(o);
+  };
+  const visitsAll = visitsOf(rangeAll, halfFn, opts);
+  const visitsShown = shift ? visitsAll.filter((v) => v.half === shift) : visitsAll;
+  const visitCounts = countVisits(visitsShown);
+  const halfVisitCounts = (h) => countVisits(visitsAll.filter((v) => v.half === h));
+  // 오전/오후 칸도 주문 건수·주문당 평균을 팀으로 센다(위와 같은 이유).
+  const halfPart = (paid, h) => {
+    const base = summarize(paid, h);
+    const c = halfVisitCounts(h);
+    const n = c.table_count + c.takeout_count;
+    return Object.assign(base, c, {
+      paid_round_count: base.paid_order_count,
+      paid_order_count: n,
+      avg_per_order: n ? Math.round(base.revenue / n) : 0,
+    });
+  };
+
+  // 주문 하나 → 그 주문이 속한 **끝난** 팀의 열쇠. 안 끝난 팀(안 낸
+  // 라운드가 남은)의 먼저 낸 라운드는 매출에는 들어가도 건수에는 안
+  // 들어간다 — 위 「주문 N건」과 아래 칸들의 건수가 같은 팀을 센다.
+  const finishedKeys = new Set(visitsAll.filter((v) => v.finished).map((v) => v.key));
+  const doneKeyOf = (o) => {
+    if (!o || o.kind === "vip_card_sale") return null;
+    const key = visitKeyOf(o, halfFn(o), opts);
+    return finishedKeys.has(key) ? key : null;
+  };
+  const addKey = (set, o) => {
+    const k = doneKeyOf(o);
+    if (k) set.add(k);
+  };
+
+
   // Both timestamps below come from nowLocal() (see src/time.js) — a plain
   // "YYYY-MM-DD HH:MM:SS" Taipei wall-clock string with no timezone
   // designator, which Date() parses using whatever timezone the running
@@ -414,7 +460,8 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
       const entry = paymentMethodMap.get(method) || { method, revenue: 0, gross: 0, order_ids: new Set() };
       entry.revenue += share;
       entry.gross += amount;
-      entry.order_ids.add(o.id);
+      // 건수는 팀 단위(위 doneKeyOf).
+      addKey(entry.order_ids, o);
       paymentMethodMap.set(method, entry);
     });
   }
@@ -431,13 +478,26 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
 
   // 매장 / 포장. 주문 단위의 order_type("dine_in" | "takeout" | "mixed")을
   // 쓴다. 섞인 주문(mixed)은 따로 세서, 셋을 더하면 결제 완료 건수와 맞는다.
+  //
+  // 건수는 팀 단위다. 한 팀이 매장으로 두 번, 포장으로 한 번 시켰으면 그
+  // 팀은 「섞임」 1건이다 — 칸마다 한 번씩 세면 셋을 더한 것이 주문 건수보다
+  // 커진다. 매출은 주문마다 제 칸에 그대로 들어간다.
   const orderTypeMap = new Map();
+  const teamTypes = new Map();
   for (const o of paidOrders) {
     const key = o.order_type || "dine_in";
     const e = orderTypeMap.get(key) || { order_type: key, revenue: 0, order_count: 0 };
     e.revenue += netTotalOf(o);
-    e.order_count += 1;
     orderTypeMap.set(key, e);
+    const team = doneKeyOf(o);
+    if (!team) continue;
+    const prev = teamTypes.get(team);
+    teamTypes.set(team, !prev || prev === key ? key : "mixed");
+  }
+  for (const type of teamTypes.values()) {
+    const e = orderTypeMap.get(type) || { order_type: type, revenue: 0, order_count: 0 };
+    e.order_count += 1;
+    orderTypeMap.set(type, e);
   }
   const orderTypeBreakdown = [...orderTypeMap.values()].sort((a, b) => b.revenue - a.revenue);
 
@@ -472,16 +532,18 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const discountMap = new Map();
   let discountTotal = 0;
   let vipCardDiscountTotal = 0; // VIP 카드(特約95折/VIP9折)가 깎아준 돈만
+  let bumpOrder = null;
   const bump = (key, amount) => {
     if (!amount) return;
-    const e = discountMap.get(key) || { discount_type: key, amount: 0, order_count: 0 };
+    const e = discountMap.get(key) || { discount_type: key, amount: 0, keys: new Set() };
     e.amount += amount;
-    e.order_count += 1;
+    addKey(e.keys, bumpOrder);
     discountMap.set(key, e);
   };
   for (const o of paidOrders) {
     const amount = o.discount_amount || 0;
     if (!amount) continue;
+    bumpOrder = o;
     discountTotal += amount;
     const vipPart = o.discount_vip_amount;
     const manualPart = o.discount_manual_amount;
@@ -501,7 +563,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     }
     if (manualPart) bump("manual", manualPart);
   }
-  const discountBreakdown = [...discountMap.values()].sort((a, b) => b.amount - a.amount);
+  const discountBreakdown = [...discountMap.values()]
+    .map((e) => ({ discount_type: e.discount_type, amount: e.amount, order_count: e.keys.size }))
+    .sort((a, b) => b.amount - a.amount);
 
   // VIP 카드가 적자인지 흑자인지. 카드를 판 돈에서 그 카드들이 깎아준 돈을
   // 뺀 것이다(src/routes/vipCards.js 의 POST /sell 이 카드 판매를
@@ -568,24 +632,13 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const guestCount = parties.reduce((a, p) => a + p.size, 0);
   const adultCount = parties.reduce((a, p) => a + p.adults, 0);
   const childCount = parties.reduce((a, p) => a + p.children, 0);
-  const avgPerOrder = paidOrders.length ? Math.round(totalRevenue / paidOrders.length) : 0;
+  const orderCount = visitCounts.table_count + visitCounts.takeout_count;
+  const avgPerOrder = orderCount ? Math.round(totalRevenue / orderCount) : 0;
   const avgPerGuest = guestCount ? Math.round(totalRevenue / guestCount) : 0;
 
-  // 팀(테이블·포장) — 위 visitsOf 주석. 오전/오후 칸은 손님 수와 같은
-  // 이유로 **거르기 전 것**으로 센다.
-  const halfMemo = new Map();
-  const halfFn = (o) => {
-    if (!halfMemo.has(o)) halfMemo.set(o, halfOf(o, opts));
-    return halfMemo.get(o);
-  };
-  const visitsAll = visitsOf(rangeAll, halfFn, opts);
-  const visitsShown = shift ? visitsAll.filter((v) => v.half === shift) : visitsAll;
-  const visitCounts = countVisits(visitsShown);
-  const halfVisitCounts = (h) => countVisits(visitsAll.filter((v) => v.half === h));
-
   const halfSplit = {
-    am: Object.assign(summarize(amPaid, "am"), halfVisitCounts("am")),
-    pm: Object.assign(summarize(pmPaid, "pm"), halfVisitCounts("pm")),
+    am: halfPart(amPaid, "am"),
+    pm: halfPart(pmPaid, "pm"),
     // 경계를 못 정해 어느 쪽에도 못 넣은 날들. 비어 있으면 두 몫의 합이
     // 총 매출과 정확히 같다.
     unsplit_dates: [...unsplitDates].sort(),
@@ -607,12 +660,14 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const tableMap = new Map();
   for (const o of paidOrders) {
     const key = String(o.table_number);
-    const e = tableMap.get(key) || { table_number: key, revenue: 0, order_count: 0 };
+    const e = tableMap.get(key) || { table_number: key, revenue: 0, keys: new Set() };
     e.revenue += netTotalOf(o);
-    e.order_count += 1;
+    addKey(e.keys, o);
     tableMap.set(key, e);
   }
-  const tableBreakdown = [...tableMap.values()].sort((a, b) => b.revenue - a.revenue);
+  const tableBreakdown = [...tableMap.values()]
+    .map((e) => ({ table_number: e.table_number, revenue: e.revenue, order_count: e.keys.size }))
+    .sort((a, b) => b.revenue - a.revenue);
 
   // Item breakdown across paid orders only (what actually sold in this range).
   const itemMap = new Map();
@@ -759,7 +814,9 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     shift: shift,
     generated_at: new Date().toISOString(),
     total_revenue: totalRevenue,
-    paid_order_count: paidOrders.length,
+    // 주문 건수 = 끝난 팀 수(테이블 + 포장). 라운드 수는 paid_round_count.
+    paid_order_count: orderCount,
+    paid_round_count: paidOrders.length,
     // 끝난 테이블 수 / 포장 손님 수 (visitsOf 주석). 지난 주문 목록이 같은
     // 열쇠(visit_key)로 묶으므로 두 화면의 숫자가 맞는다.
     table_count: visitCounts.table_count,

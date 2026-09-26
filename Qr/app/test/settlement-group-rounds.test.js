@@ -145,10 +145,11 @@ out.push("\n[화면에 그리는 쪽]");
   );
   check(
     "★ 줄 수와 원래 건수를 같이 적는다",
-    // 2026-09-26: 머리줄은 fmtSettlementOrdersCount 가 적는다 — 「테이블 N · 포장 M ·
-    // 주문 K번」. 원래 건수(주문 K번)를 같이 적는 것은 그대로다.
+    // 2026-09-26: 머리줄은 fmtSettlementOrdersCount 가 적는다 — 「주문 N건 (테이블 A ·
+    // 포장 B)」. 주문 1건 = 손님 한 팀이라 위 결산의 주문 건수와 같은 숫자다
+    // (test/settlement-table-count.test.js 가 글자 그대로 같은지 잰다).
     /fmtSettlementOrdersCount\(groups, orders\)/.test(render) &&
-      /settlementRoundsCount/.test(fnSource(admin, "fmtVisitCounts") || ""),
+      /settlementOrdersN/.test(fnSource(admin, "fmtVisitCounts") || ""),
     "「5건」만 적혀 있는데 결제 건수가 8이면 어느 쪽이 맞는지 알 수 없다"
   );
   check(

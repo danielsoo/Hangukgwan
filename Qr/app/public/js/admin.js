@@ -750,7 +750,7 @@
       settlementAmTitle: "🌅 오전",
       settlementPmTitle: "🌙 오후",
       settlementTotalBadge: "합산",
-      settlementHalfOrders: "결제",
+      settlementHalfOrders: "주문",
       settlementHalfOrdersUnit: "건",
       settlementAmUntil: "{t} 까지",
       settlementPmFrom: "{t} 부터",
@@ -869,9 +869,8 @@
       settlementOrdersOpenGroups: " · 아직 결제 안 끝남 {n}",
       settlementOrdersCancelledGroups: " · 취소 {n}",
       settlementTables: "테이블",
-      settlementTablesUnit: "팀",
       settlementTakeouts: "포장",
-      settlementRoundsCount: "주문 {n}번",
+      settlementOrdersN: "주문 {n}건",
       settlementTableCount: "테이블 수",
       settlementTableCountSub: "포장 {n}건 따로",
       settlementTableCountOpen: "아직 앉아 계신 {n}팀은 안 셌어요",
@@ -1566,7 +1565,7 @@
       settlementAmTitle: "🌅 上午",
       settlementPmTitle: "🌙 下午",
       settlementTotalBadge: "合計",
-      settlementHalfOrders: "結帳",
+      settlementHalfOrders: "訂單",
       settlementHalfOrdersUnit: "筆",
       settlementAmUntil: "至 {t}",
       settlementPmFrom: "{t} 起",
@@ -1685,9 +1684,8 @@
       settlementOrdersOpenGroups: " · 尚未結清 {n}",
       settlementOrdersCancelledGroups: " · 取消 {n}",
       settlementTables: "桌數",
-      settlementTablesUnit: "桌",
       settlementTakeouts: "外帶",
-      settlementRoundsCount: "點餐 {n} 次",
+      settlementOrdersN: "訂單 {n} 筆",
       settlementTableCount: "桌數",
       settlementTableCountSub: "另有外帶 {n} 筆",
       settlementTableCountOpen: "還在用餐的 {n} 桌未計入",
@@ -14293,18 +14291,22 @@
     if (data.table_count == null) {
       return `${period} · ${T("settlementPaidCount")} ${data.paid_order_count}${T("settlementCountSuffix")}`;
     }
-    return `${period} · ${fmtVisitCounts(data.table_count, data.takeout_count, data.paid_order_count)}`;
+    return `${period} · ${fmtVisitCounts(data.table_count, data.takeout_count)}`;
   }
 
   /**
-   * 「테이블 12 · 포장 3 · 주문 23번」. 결산 위의 줄과 지난 주문 목록이 이
+   * 「주문 15건 (테이블 12 · 포장 3)」. 결산 위의 줄과 지난 주문 목록이 이
    * 함수 하나로 적는다 — 두 곳이 따로 적으면 말이 또 갈라진다(2026-09-26).
+   *
+   * 주문 1건 = 손님 한 팀. 한 테이블이 세 번 나눠 시켜도 1건이다 — 사장님:
+   * "애초에 우리 테이블 세는 걸 그 고객 하나로 세는 그 로직이랑 같잖아".
    */
-  function fmtVisitCounts(tables, takeouts, rounds) {
-    const parts = [`${T("settlementTables")} ${Number(tables || 0).toLocaleString()}${T("settlementTablesUnit")}`];
-    if (takeouts) parts.push(`${T("settlementTakeouts")} ${Number(takeouts).toLocaleString()}${T("settlementCountSuffix")}`);
-    parts.push(T("settlementRoundsCount").replace("{n}", Number(rounds || 0).toLocaleString()));
-    return parts.join(" · ");
+  function fmtVisitCounts(tables, takeouts) {
+    const t = Number(tables || 0);
+    const k = Number(takeouts || 0);
+    const inner = [`${T("settlementTables")} ${t.toLocaleString()}`];
+    if (k) inner.push(`${T("settlementTakeouts")} ${k.toLocaleString()}`);
+    return `${T("settlementOrdersN").replace("{n}", (t + k).toLocaleString())} (${inner.join(" · ")})`;
   }
 
   /**
@@ -14325,8 +14327,7 @@
       else if (isCounterOrder(g[0]) || g[0].pickup_number) takeouts += 1;
       else tables += 1;
     }
-    const rounds = orders.filter((o) => o.status === "paid").length;
-    let text = fmtVisitCounts(tables, takeouts, rounds);
+    let text = fmtVisitCounts(tables, takeouts);
     if (open) text += T("settlementOrdersOpenGroups").replace("{n}", open);
     if (cancelled) text += T("settlementOrdersCancelledGroups").replace("{n}", cancelled);
     return text;
@@ -14800,7 +14801,7 @@
     // 2026-09-26 사장님: "영수증들 다시 보는 거의 숫자와 맨 위에 주문 건수랑
     // 숫자가 달라". 위는 결제 완료 라운드 수를, 여기는 취소·미결제까지 섞인
     // 줄 수를 세고 있었다. 이제 둘 다 「결제 완료 테이블 N · 포장 M · 주문 K번」
-    // 이고, 끝나지 않은 줄과 취소된 줄은 따로 적는다.
+    // 이고, 끝나지 않은 줄과 취소된 줄은 따로 적는다. 주문 1건 = 손님 한 팀.
     countEl.textContent = orders.length
       ? fmtSettlementOrdersCount(groups, orders) + (data.truncated ? T("settlementOrdersTruncated") : "")
       : T("settlementOrdersNone");
