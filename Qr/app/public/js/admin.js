@@ -14672,8 +14672,16 @@
     const countEl = $("#settlementOrdersCount");
     if (!listEl) return;
     const params = new URLSearchParams();
-    const start = $("#settlementStartDate").value;
-    const end = $("#settlementEndDate").value;
+    // 날짜 칸이 비어 있으면 **오늘**이다 — 위 결산이 그렇게 읽는다(서버가
+    // 빈 날짜를 오늘로 채운다).
+    //
+    // 2026-09-26 사장님: "여긴 테이블이 65개인데 2번 사진은 왜 131 개야".
+    // 결산 탭을 처음 열면 이 목록은 결산 응답을 기다리지 않고 먼저 출발하는데
+    // (loadSettlement), 그 순간 날짜 칸은 아직 비어 있다. 빈 날짜로 물으면
+    // 서버는 날짜를 안 걸고 **가장 최근 200건**을 준다 — 어제 저녁 것까지
+    // 섞여서 위의 오늘 숫자의 두 배가 나왔다.
+    const start = $("#settlementStartDate").value || taipeiTodayString();
+    const end = $("#settlementEndDate").value || start;
     // 위에서 오전만 보고 있으면 이 목록도 오전만. 위는 오전 매출인데 아래
     // 목록만 하루치면, 목록을 세어보다가 위 숫자를 의심하게 된다.
     if (settlementShift) params.set("shift", settlementShift);
