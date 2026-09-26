@@ -866,6 +866,15 @@
       settlementOrdersRounds: "{n}번에 나눠 주문",
       settlementOrdersRoundNo: "{n}번째 주문",
       settlementOrdersCountRounds: " · 주문 {n}번",
+      settlementOrdersOpenGroups: " · 아직 결제 안 끝남 {n}",
+      settlementOrdersCancelledGroups: " · 취소 {n}",
+      settlementTables: "테이블",
+      settlementTablesUnit: "팀",
+      settlementTakeouts: "포장",
+      settlementRoundsCount: "주문 {n}번",
+      settlementTableCount: "테이블 수",
+      settlementTableCountSub: "포장 {n}건 따로",
+      settlementTableCountOpen: "아직 앉아 계신 {n}팀은 안 셌어요",
       settlementOrdersPaidWith: "결제:",
       settlementOrdersPaidAt: "결제 시각:",
       settlementOrdersStatus: "상태:",
@@ -1673,6 +1682,15 @@
       settlementOrdersRounds: "分 {n} 次點餐",
       settlementOrdersRoundNo: "第 {n} 次點餐",
       settlementOrdersCountRounds: " · 共 {n} 筆點餐",
+      settlementOrdersOpenGroups: " · 尚未結清 {n}",
+      settlementOrdersCancelledGroups: " · 取消 {n}",
+      settlementTables: "桌數",
+      settlementTablesUnit: "桌",
+      settlementTakeouts: "外帶",
+      settlementRoundsCount: "點餐 {n} 次",
+      settlementTableCount: "桌數",
+      settlementTableCountSub: "另有外帶 {n} 筆",
+      settlementTableCountOpen: "還在用餐的 {n} 桌未計入",
       settlementOrdersPaidWith: "結帳方式：",
       settlementOrdersPaidAt: "結帳時間：",
       settlementOrdersStatus: "狀態：",
@@ -2859,6 +2877,15 @@
       const kids = Number(part.child_count || 0);
       put(`#settlement${side}Revenue`, nt(part.revenue || 0));
       put(`#settlement${side}Orders`, `${Number(part.paid_order_count || 0).toLocaleString()}${T("settlementHalfOrdersUnit")}`);
+      // 오전/오후 테이블 수. 포장이 있으면 옆에 따로 적는다 — 섞으면 「테이블
+      // 12」가 실제로는 9 테이블 + 포장 3 인지 알 수 없다.
+      put(
+        `#settlement${side}Tables`,
+        part.table_count == null
+          ? "–"
+          : `${Number(part.table_count).toLocaleString()}` +
+            (part.takeout_count ? ` (${T("settlementTakeouts")} ${part.takeout_count})` : "")
+      );
       put(`#settlement${side}Guests`, kids > 0 ? `${g} (${fmtGuestSplit(Number(part.adult_count || 0), kids)})` : String(g));
       put(`#settlement${side}PerGuest`, nt(part.avg_per_guest || 0));
       put(`#settlement${side}PerOrder`, nt(part.avg_per_order || 0));
@@ -13798,6 +13825,10 @@
     }
     $("#settlementAvgPerGuest").textContent = nt(data.avg_per_guest);
     $("#settlementAvgPerOrder").textContent = nt(data.avg_per_order);
+    // 테이블 수 (2026-09-26 사장님: "결산탭에 오전 오후 그리고 하루 전체,
+    // 기간 전체 테이블 수는 안나와있어"). 시킨 것이 전부 결제된 팀만 센다 —
+    // 회전 시간과 같은 팀이다(src/settlement.js visitsOf).
+    renderSettlementTableCount(data);
     $("#settlementTurnover").textContent =
       data.avg_turnover_minutes != null ? `${data.avg_turnover_minutes}${T("settlementTurnoverMinutes")}` : T("settlementTurnoverNoData");
 
@@ -13977,13 +14008,14 @@
     const dash = "—";
     [
       "#settlementRevenue", "#settlementGuests", "#settlementAvgPerGuest",
-      "#settlementAvgPerOrder", "#settlementTurnover",
+      "#settlementAvgPerOrder", "#settlementTurnover", "#settlementTableCount",
       "#settlementAmRevenue", "#settlementPmRevenue",
     ].forEach((sel) => { const el = $(sel); if (el) el.textContent = dash; });
     [
       "#settlementHeroSub", "#settlementGuestSplit", "#settlementTodayOnly",
       "#settlementAmOrders", "#settlementAmGuests", "#settlementAmPerGuest", "#settlementAmPerOrder",
       "#settlementPmOrders", "#settlementPmGuests", "#settlementPmPerGuest", "#settlementPmPerOrder",
+      "#settlementAmTables", "#settlementPmTables", "#settlementTableCountSub",
       "#settlementOrdersCount",
     ].forEach((sel) => { const el = $(sel); if (el) el.textContent = ""; });
     [
@@ -14233,11 +14265,71 @@
   }
 
   // 큰 숫자 아래 한 줄 — "75건 · 9월 9일" 처럼 그 숫자가 무엇의 합인지.
+  function renderSettlementTableCount(data) {
+    const el = $("#settlementTableCount");
+    if (!el) return;
+    const sub = $("#settlementTableCountSub");
+    if (data.table_count == null) {
+      el.textContent = "–";
+      if (sub) sub.hidden = true;
+      return;
+    }
+    el.textContent = Number(data.table_count).toLocaleString();
+    if (!sub) return;
+    const bits = [];
+    if (data.takeout_count) bits.push(T("settlementTableCountSub").replace("{n}", data.takeout_count));
+    // 오늘을 보는 중이면 아직 앉아 계신 자리가 있다. 조용히 빼면 「테이블이
+    // 왜 이것뿐이지」가 된다 — 뺀 것을 말한다.
+    if (data.open_table_count) bits.push(T("settlementTableCountOpen").replace("{n}", data.open_table_count));
+    sub.textContent = bits.join(" · ");
+    sub.hidden = bits.length === 0;
+  }
+
   function fmtSettlementHeroSub(data) {
     const period = data.date
       ? data.date
       : `${data.start_date} ~ ${data.end_date}`;
-    return `${period} · ${T("settlementPaidCount")} ${data.paid_order_count}${T("settlementCountSuffix")}`;
+    // 옛 정산 기록(저장된 스냅샷)에는 테이블 수가 없다 — 그때는 예전 문구.
+    if (data.table_count == null) {
+      return `${period} · ${T("settlementPaidCount")} ${data.paid_order_count}${T("settlementCountSuffix")}`;
+    }
+    return `${period} · ${fmtVisitCounts(data.table_count, data.takeout_count, data.paid_order_count)}`;
+  }
+
+  /**
+   * 「테이블 12 · 포장 3 · 주문 23번」. 결산 위의 줄과 지난 주문 목록이 이
+   * 함수 하나로 적는다 — 두 곳이 따로 적으면 말이 또 갈라진다(2026-09-26).
+   */
+  function fmtVisitCounts(tables, takeouts, rounds) {
+    const parts = [`${T("settlementTables")} ${Number(tables || 0).toLocaleString()}${T("settlementTablesUnit")}`];
+    if (takeouts) parts.push(`${T("settlementTakeouts")} ${Number(takeouts).toLocaleString()}${T("settlementCountSuffix")}`);
+    parts.push(T("settlementRoundsCount").replace("{n}", Number(rounds || 0).toLocaleString()));
+    return parts.join(" · ");
+  }
+
+  /**
+   * 지난 주문 목록의 머리줄. 묶음마다 끝났는지(시킨 것이 전부 결제됐는지)를
+   * 서버와 같은 규칙으로 가린다(src/settlement.js visitsOf) — 취소된 라운드는
+   * 테이블을 붙잡지 않고, 안 낸 라운드가 하나라도 있으면 아직 안 끝났다.
+   */
+  function fmtSettlementOrdersCount(groups, orders) {
+    const isOpen = (o) => o.status !== "paid" && o.status !== "cancelled";
+    let tables = 0;
+    let takeouts = 0;
+    let open = 0;
+    let cancelled = 0;
+    for (const g of groups) {
+      if (g.some((o) => o.kind === "vip_card_sale")) continue;
+      if (g.every((o) => o.status === "cancelled")) cancelled += 1;
+      else if (g.some(isOpen)) open += 1;
+      else if (isCounterOrder(g[0]) || g[0].pickup_number) takeouts += 1;
+      else tables += 1;
+    }
+    const rounds = orders.filter((o) => o.status === "paid").length;
+    let text = fmtVisitCounts(tables, takeouts, rounds);
+    if (open) text += T("settlementOrdersOpenGroups").replace("{n}", open);
+    if (cancelled) text += T("settlementOrdersCancelledGroups").replace("{n}", cancelled);
+    return text;
   }
 
   const SETTLEMENT_ITEMS_PREVIEW = 10;
@@ -14640,13 +14732,26 @@
    * 부분결제로 두 번에 나눠 낸 주문은 번호를 둘 갖는다. 하나라도 겹치면
    * 같은 묶음이다 — 첫 번호만 보면 「A 에서 반, B 에서 반」 낸 주문이
    * 「B 만」 낸 주문과 갈라진다.
+   *
+   * ── 서버가 준 열쇠(visit_key)가 있으면 그것 하나로 묶는다 (2026-09-26)
+   *
+   * 사장님: "시킨 모든 메뉴가 결제 되어야 한 테이블이 끝난거고 ... 영수증들
+   * 다시 보는 거의 숫자와 맨 위에 주문 건수랑 숫자가 달라". 위의 「테이블
+   * N」은 서버가 한 번 앉은 손님(착석) 단위로 센다(src/settlement.js
+   * visitKeyOf). 여기서 결제 번호로 따로 묶으면 친구끼리 나눠 낸 한
+   * 테이블이 두 줄이 되어 두 숫자가 또 갈라진다. 열쇠가 없는 응답(옛 서버)
+   * 일 때만 결제 번호로 묶는다.
    */
   function groupSettlementOrders(orders) {
     const groups = [];
     const byPaymentId = new Map();
     for (const o of orders || []) {
       const solo = isCounterOrder(o) || o.pickup_number;
-      const ids = solo ? [] : o.payment_ids || [];
+      const ids = solo
+        ? []
+        : o.visit_key
+          ? [`v:${o.visit_key}`]
+          : (o.payment_ids || []).map((pid) => `p:${pid}`);
       let g = null;
       for (const pid of ids) {
         const found = byPaymentId.get(pid);
@@ -14690,12 +14795,14 @@
     const countEl = $("#settlementOrdersCount");
     const orders = data.orders || [];
     const groups = groupSettlementOrders(orders);
-    // 몇 줄이 보이는지를 적는다. 묶인 게 있으면 원래 몇 건이었는지도 같이 —
-    // 「5건」만 적혀 있는데 결제 건수는 8이면 어느 쪽이 맞는지 알 수 없다.
+    // 몇 줄이 보이는지를 적는다 — **위 결산과 같은 말로.**
+    //
+    // 2026-09-26 사장님: "영수증들 다시 보는 거의 숫자와 맨 위에 주문 건수랑
+    // 숫자가 달라". 위는 결제 완료 라운드 수를, 여기는 취소·미결제까지 섞인
+    // 줄 수를 세고 있었다. 이제 둘 다 「결제 완료 테이블 N · 포장 M · 주문 K번」
+    // 이고, 끝나지 않은 줄과 취소된 줄은 따로 적는다.
     countEl.textContent = orders.length
-      ? `${groups.length}${T("settlementCountSuffix")}` +
-        (groups.length !== orders.length ? T("settlementOrdersCountRounds").replace("{n}", orders.length) : "") +
-        (data.truncated ? T("settlementOrdersTruncated") : "")
+      ? fmtSettlementOrdersCount(groups, orders) + (data.truncated ? T("settlementOrdersTruncated") : "")
       : T("settlementOrdersNone");
     listEl.innerHTML = groups
       .map((group) => {
@@ -14957,6 +15064,10 @@
     rows.push(["결산 기간", data.date || `${data.start_date} ~ ${data.end_date}`]);
     rows.push(["매출(결제완료)", data.total_revenue]);
     rows.push(["결제 완료 주문", data.paid_order_count]);
+    if (data.table_count != null) {
+      rows.push(["테이블 수(결제 끝난 팀)", data.table_count]);
+      rows.push(["포장", data.takeout_count || 0]);
+    }
     rows.push(["취소된 주문", data.cancelled_order_count]);
     rows.push(["미결제/문제 주문", data.problem_order_count]);
     rows.push(["평균 테이블 회전 시간(분)", data.avg_turnover_minutes ?? ""]);

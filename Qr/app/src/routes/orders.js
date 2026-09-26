@@ -11,7 +11,7 @@ const testMode = require("../testMode");
 const seating = require("../seating");
 const { serviceOf } = require("../servicePeriod");
 // 오전/오후를 가르는 규칙. 결산과 같은 함수를 쓴다.
-const { halfOf } = require("../settlement");
+const { halfOf, visitKeyOf } = require("../settlement");
 // 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
 const { maybeAutoCloseAm, maybePendingDayClose } = require("./settlements");
 
@@ -712,9 +712,14 @@ router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
   // 질의로 만들면 오히려 복잡해진다.
   // 결산과 **같은 함수**로 가른다 (src/settlement.js halfOf). 규칙이 두
   // 군데 있으면 언젠가 한쪽만 고쳐진다.
-  if (shift && start) {
+  // 오전/오후를 가를 기준. 가르지 않을 때도 필요하다 — 아래 visit_key 가
+  // 오전/오후를 열쇠에 넣는다(결산의 테이블 수와 같은 열쇠).
+  let opts = null;
+  if (start) {
     const { halfOpts } = require("./settlements");
-    const opts = await halfOpts(start, end, req);
+    opts = await halfOpts(start, end, req);
+  }
+  if (shift && opts) {
     list = list.filter((o) => halfOf(o, opts) === shift);
   }
 
@@ -731,6 +736,15 @@ router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
       return hay.includes(needle);
     });
   }
+
+  // 한 줄 = 한 팀. 결산 위의 「테이블 N · 포장 M」과 **같은 함수**로 묶는다
+  // (src/settlement.js visitKeyOf). 화면이 따로 묶으면 두 숫자가 또 갈라진다
+  // — 2026-09-26 사장님: "영수증들 다시 보는 거의 숫자와 맨 위에 주문
+  // 건수랑 숫자가 달라".
+  const counterTables = (opts && opts.counterTables) ||
+    (store.tables || []).filter((t) => t && t.is_counter).map((t) => String(t.number));
+  const keyOpts = Object.assign({}, opts || {}, { counterTables });
+  list = list.map((o) => Object.assign({}, o, { visit_key: visitKeyOf(o, halfOf(o, keyOpts), keyOpts) }));
 
   res.json({
     orders: list,

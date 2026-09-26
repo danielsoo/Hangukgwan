@@ -115,6 +115,94 @@ function partyKeyOf(o, half) {
 }
 
 /**
+ * 포장 카운터 주문인가.
+ *
+ * 포장 카운터에 쌓이는 주문은 서로 무관한 손님 것이다(CLAUDE.md). 한 팀으로
+ * 묶으면 그날 포장 손님 전부가 「한 테이블」이 되고, 회전 시간은 첫 포장
+ * 주문부터 마지막 포장 결제까지 — 몇 시간짜리 숫자가 된다.
+ *
+ * pickup_number 는 카운터 주문에만 붙는다(src/routes/orders.js). 그 전에
+ * 들어온 옛 카운터 주문은 부르는 쪽이 넘겨준 카운터 자리 번호로 가린다.
+ */
+function isCounterOrderOf(o, opts) {
+  if (!o) return false;
+  if (o.pickup_number != null && o.pickup_number !== "") return true;
+  const counters = opts && opts.counterTables;
+  return !!(counters && counters.includes(String(o.table_number)));
+}
+
+/**
+ * 결산이 「한 팀」으로 세는 열쇠 — 테이블 수, 회전 시간, 지난 주문 목록의
+ * 한 줄이 전부 이것 하나를 쓴다.
+ *
+ * 사장님(2026-09-26): "시킨 모든 메뉴가 결제 되어야 한 테이블이 끝난거고
+ * 테이블 회전시간도 그걸 바탕으로 계산하고 있었을 거야. 그리고 보면 밑에
+ * 오늘 나온 영수증들 다시 보는 거의 숫자와 맨 위에 주문 건수랑 숫자가 달라"
+ *
+ * 테이블은 손님 수와 같은 열쇠(partyKeyOf)로 묶는다 — 그래야 「테이블 N ·
+ * 손님 M」이 같은 무리를 센 숫자가 된다. 포장은 주문 하나가 한 손님이다.
+ */
+function visitKeyOf(o, half, opts) {
+  if (isCounterOrderOf(o, opts)) return `counter|${o.id}`;
+  return partyKeyOf(o, half);
+}
+
+/**
+ * 주문들을 팀 단위로 모은다. 한 팀은 **시킨 것이 전부 결제돼야** 끝난
+ * 것이다 — 아직 안 낸 라운드가 하나라도 있으면 그 팀은 아직 앉아 있다.
+ *
+ * 취소된 라운드는 팀을 붙잡지 않는다(낼 돈이 없다). 전부 취소된 팀은
+ * 끝난 테이블로 세지 않는다 — 받은 돈이 없다.
+ *
+ * halfFn(o) 는 그 주문이 오전/오후 어느 몫인지("am" | "pm" | null).
+ */
+function visitsOf(orders, halfFn, opts) {
+  const map = new Map();
+  for (const o of orders || []) {
+    if (!o || o.kind === "vip_card_sale") continue;
+    const half = halfFn(o);
+    const key = visitKeyOf(o, half, opts);
+    let v = map.get(key);
+    if (!v) {
+      v = {
+        key,
+        half: half || null,
+        counter: isCounterOrderOf(o, opts),
+        firstCreated: null,
+        lastPaid: null,
+        paidCount: 0,
+        openCount: 0,
+      };
+      map.set(key, v);
+    }
+    if (o.status === "cancelled") continue;
+    if (!v.firstCreated || o.created_at < v.firstCreated) v.firstCreated = o.created_at;
+    if (o.status === "paid") {
+      v.paidCount += 1;
+      const at = paidAtOf(o);
+      if (!v.lastPaid || at > v.lastPaid) v.lastPaid = at;
+    } else if (OPEN_STATUSES.includes(o.status)) {
+      v.openCount += 1;
+    }
+  }
+  const all = [...map.values()];
+  for (const v of all) v.finished = v.paidCount > 0 && v.openCount === 0;
+  return all;
+}
+
+/** 끝난 팀을 테이블과 포장으로 나눠 센다. */
+function countVisits(visits) {
+  const done = visits.filter((v) => v.finished);
+  return {
+    table_count: done.filter((v) => !v.counter).length,
+    takeout_count: done.filter((v) => v.counter).length,
+    // 아직 앉아 계신(안 낸 라운드가 남은) 테이블. 오늘을 보는 중이면 0 이
+    // 아닌 게 정상이다 — 화면이 「끝난 테이블만 셌다」를 말할 때 쓴다.
+    open_table_count: visits.filter((v) => !v.counter && v.openCount > 0).length,
+  };
+}
+
+/**
  * 주문 하나가 오전 몫인지 오후 몫인지. "am" | "pm" | null.
  *
  * **가르는 규칙은 여기 한 곳뿐이다.** 결산의 오전/오후 칸도, 「오전만 보기」로
@@ -483,9 +571,21 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   const avgPerOrder = paidOrders.length ? Math.round(totalRevenue / paidOrders.length) : 0;
   const avgPerGuest = guestCount ? Math.round(totalRevenue / guestCount) : 0;
 
+  // 팀(테이블·포장) — 위 visitsOf 주석. 오전/오후 칸은 손님 수와 같은
+  // 이유로 **거르기 전 것**으로 센다.
+  const halfMemo = new Map();
+  const halfFn = (o) => {
+    if (!halfMemo.has(o)) halfMemo.set(o, halfOf(o, opts));
+    return halfMemo.get(o);
+  };
+  const visitsAll = visitsOf(rangeAll, halfFn, opts);
+  const visitsShown = shift ? visitsAll.filter((v) => v.half === shift) : visitsAll;
+  const visitCounts = countVisits(visitsShown);
+  const halfVisitCounts = (h) => countVisits(visitsAll.filter((v) => v.half === h));
+
   const halfSplit = {
-    am: summarize(amPaid, "am"),
-    pm: summarize(pmPaid, "pm"),
+    am: Object.assign(summarize(amPaid, "am"), halfVisitCounts("am")),
+    pm: Object.assign(summarize(pmPaid, "pm"), halfVisitCounts("pm")),
     // 경계를 못 정해 어느 쪽에도 못 넣은 날들. 비어 있으면 두 몫의 합이
     // 총 매출과 정확히 같다.
     unsplit_dates: [...unsplitDates].sort(),
@@ -630,23 +730,16 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // 여전히 어림값이다. "손님이 앉았다/일어났다"는 사건이 데이터에 없어서,
   // 앉자마자 주문하지 않은 시간은 빠진다. 「대충 얼마나 걸리나」를 보는
   // 숫자이지 분 단위로 맞는 숫자가 아니다.
-  const tableDayMap = new Map();
-  for (const o of rangeOrders) {
-    // 여기서는 halfByOrder 를 쓰지 않는다 — 그 표는 결제된 주문만 담고 있어서,
-    // 아직 안 낸 주문이 같은 팀인데도 다른 열쇠로 갈라진다.
-    const key = partyKeyOf(o, o.service_period);
-    const entry = tableDayMap.get(key) || { minCreated: o.created_at, maxPaidUpdated: null };
-    if (o.created_at < entry.minCreated) entry.minCreated = o.created_at;
-    if (o.status === "paid" && (!entry.maxPaidUpdated || o.updated_at > entry.maxPaidUpdated)) {
-      entry.maxPaidUpdated = o.updated_at;
-    }
-    tableDayMap.set(key, entry);
-  }
+  //
+  // 2026-09-26: 끝난 팀만 잰다. 예전에는 안 낸 라운드가 남은 팀도 먼저 낸
+  // 라운드의 결제 시각까지로 쟀고, 포장 카운터는 하루 포장 손님 전체가 한
+  // 팀으로 묶여 몇 시간짜리 숫자를 만들었다. 끝나는 시각도 품목이 실제로
+  // 결제된 시각(paidAtOf)이다 — updated_at 은 결제 뒤에 고쳐도 움직인다.
   let turnoverSumMinutes = 0;
   let turnoverSamples = 0;
-  for (const { minCreated, maxPaidUpdated } of tableDayMap.values()) {
-    if (!maxPaidUpdated) continue;
-    const minutes = (new Date(maxPaidUpdated.replace(" ", "T")) - new Date(minCreated.replace(" ", "T"))) / 60000;
+  for (const v of visitsShown) {
+    if (v.counter || !v.finished || !v.firstCreated || !v.lastPaid) continue;
+    const minutes = (new Date(v.lastPaid.replace(" ", "T")) - new Date(v.firstCreated.replace(" ", "T"))) / 60000;
     if (minutes >= 0) {
       turnoverSumMinutes += minutes;
       turnoverSamples += 1;
@@ -667,6 +760,11 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     generated_at: new Date().toISOString(),
     total_revenue: totalRevenue,
     paid_order_count: paidOrders.length,
+    // 끝난 테이블 수 / 포장 손님 수 (visitsOf 주석). 지난 주문 목록이 같은
+    // 열쇠(visit_key)로 묶으므로 두 화면의 숫자가 맞는다.
+    table_count: visitCounts.table_count,
+    takeout_count: visitCounts.takeout_count,
+    open_table_count: visitCounts.open_table_count,
     cancelled_order_count: cancelledOrders.length,
     problem_order_count: problemOrders.length,
     // 부분결제로 미리 받았지만 아직 매출에 안 잡힌 돈 (위 주석 참고).
@@ -714,4 +812,13 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   };
 }
 
-module.exports = { computeSettlement, taipeiDateString, paidAtOf, halfBoundaryFor, halfOf, netTotalOf };
+module.exports = {
+  computeSettlement,
+  taipeiDateString,
+  paidAtOf,
+  halfBoundaryFor,
+  halfOf,
+  netTotalOf,
+  visitKeyOf,
+  isCounterOrderOf,
+};

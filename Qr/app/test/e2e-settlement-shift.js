@@ -131,7 +131,8 @@ const D = "2026-09-09";
   check("★ 고른 칸이 눈에 남는다", am.amActive === true && am.pmActive === false, JSON.stringify(am));
   check("★ 오후 칸은 그대로 살아 있다", /4,000/.test(am.pm), am.pm);
   check("★ 결제수단이 현금 하나로 줄었다", am.payMethods.length === 1, JSON.stringify(am.payMethods));
-  check("★ 주문 목록도 3건으로 줄었다", /^3/.test(am.orderCount.trim()), am.orderCount);
+  // 2026-09-26: 머리줄이 「테이블 N팀 · (포장 M건) · 주문 K번」 이 됐다.
+  check("★ 주문 목록도 3건으로 줄었다", /주문 3번/.test(am.orderCount), am.orderCount);
 
   out.push("\n[오후로 건너뛴다]");
   await page.locator("#settlementPmBox").click();
@@ -140,7 +141,7 @@ const D = "2026-09-09";
   check("★ 오후 것으로 바뀐다", /4,000/.test(pm.revenue), pm.revenue);
   check("고른 칸이 옮겨간다", pm.pmActive === true && pm.amActive === false, JSON.stringify(pm));
   check("결제수단은 LINE 하나", pm.payMethods.length === 1, JSON.stringify(pm.payMethods));
-  check("주문 목록은 2건", /^2/.test(pm.orderCount.trim()), pm.orderCount);
+  check("주문 목록은 2건", /주문 2번/.test(pm.orderCount), pm.orderCount);
 
   out.push("\n[같은 칸을 다시 누르면 합산으로]");
   await page.locator("#settlementPmBox").click();

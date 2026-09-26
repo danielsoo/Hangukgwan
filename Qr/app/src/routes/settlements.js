@@ -231,7 +231,10 @@ async function halfOpts(start, end, req) {
       day: d.line_day_at ? { at: d.line_day_at, ok: !!d.line_day_ok, error: d.line_day_error || null } : null,
     };
   }
-  return { amClosedAt, eveningStartsAt: eveningStartHm(), lineByDate };
+  // 포장 카운터 자리 번호. pickup_number 가 생기기 전의 옛 카운터 주문을
+  // 「한 테이블」로 묶지 않으려고 쓴다(src/settlement.js isCounterOrderOf).
+  const counterTables = (store.tables || []).filter((t) => t && t.is_counter).map((t) => String(t.number));
+  return { amClosedAt, eveningStartsAt: eveningStartHm(), lineByDate, counterTables };
 }
 
 /**
