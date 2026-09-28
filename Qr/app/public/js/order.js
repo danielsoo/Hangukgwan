@@ -1026,6 +1026,15 @@
       addonWrap.hidden = true;
     }
 
+    // 「本品項不適用任何優惠」 — 할인이 안 되는 메뉴에만(사장님 2026-09-28).
+    // 띄울지는 서버가 실제 할인 규칙으로 정해 보낸다(src/routes/menu.js
+    // no_discount). 화면이 분류 이름이나 메뉴 이름으로 따로 가리지 않는다.
+    const noDiscountHint = $("#noDiscountHint");
+    if (noDiscountHint) {
+      noDiscountHint.hidden = !item.no_discount;
+      noDiscountHint.textContent = item.no_discount ? t("noDiscountItem") : "";
+    }
+
     if (item.mix_options && item.options) {
       // e.g. 동판불고기: 牛/豬 get their own independent +/- counters instead
       // of a single radio choice, so a table can mix both in one line item.

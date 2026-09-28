@@ -6,7 +6,7 @@ const { withAvailability, today } = require("../availability");
 const { broadcastOnWrite } = require("../realtime");
 const { DELETED_AT, activeItems, deletedItems, isDeleted } = require("../menuItems");
 const { reserveId } = require("../db");
-const { isDiscountExcludedCategory, isDiscountExcludedMenuItem } = require("../discounts");
+const { isDiscountExcludedCategory, isDiscountExcludedMenuItem, isSetDiscountItem } = require("../discounts");
 const { nowLocal } = require("../time");
 const canEditMenu = requirePermission("menuEdit");
 
@@ -62,6 +62,15 @@ function categoriesWithItems(onlyAvailable) {
       ...i,
       discount_excluded: isDiscountExcludedMenuItem(i, c),
       discount_excluded_own: i.discount_excluded === undefined ? null : i.discount_excluded,
+      // 손님 화면의 「本品項不適用任何優惠」 를 띄울지.
+      //
+      // 사장님(2026-09-28): 신라면 김밥세트, 기타류 전체, 음료 전체에 그 문구를
+      // 넣어달라고 하셨다. 그 셋은 이미 결제 때 VIP 할인에서 빠지는 것들이다 —
+      // 기타·음료는 분류 할인 제외, 세트는 정가가 적힌 「이미 깎아 파는」 것
+      // (isSetDiscountItem). 이름으로 따로 적지 않고 **실제로 할인을 빼는 그
+      // 규칙**을 그대로 쓴다. 따로 적으면 문구는 「할인 없음」인데 결제에서는
+      // 깎이는 날이 온다.
+      no_discount: isDiscountExcludedMenuItem(i, c) || isSetDiscountItem(i),
     }));
     return { ...c, discount_excluded: catExcluded, items };
   });
