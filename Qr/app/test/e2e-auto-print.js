@@ -137,80 +137,74 @@ const STUB_PRINT = () => {
       String(id));
   }
 
-  out.push("\n[인쇄는 한 기기에서만]");
-  // 사장님: "하나에 고정으로 되거나 다른 곳에서 못 키게 막아줘."
+  out.push("\n[자동 인쇄는 켠 기기들이 같이 찍는다 — 2026-09-29]");
+  // 사장님(2026-09-29): "단말기(POS)별로 프린트를 별도로 사용할 수 있도록 ...
+  // 홀 프린터의 오류/고장 등 유사시 카운터 단말기/프린터를 즉시 교체 투입".
+  // 자동 인쇄는 「두 곳 다 자동」. 예전(09-10)의 「한 기기에서만 / 옮길지
+  // 묻기」는 이 결정으로 바뀌었다.
   {
     const d = await A.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
-    check("켠 기기가 서버에 적힌다", !!d.id, JSON.stringify(d));
+    check("켠 기기가 서버 목록에 적힌다", (d.devices || []).length === 1, JSON.stringify(d));
     check("어떤 기기인지도 적힌다", !!d.name, JSON.stringify(d));
     check("이 기기에서 인쇄한다고 보여준다",
       (await A.page.locator("#printDeviceNote").innerText()).length > 0,
       await A.page.locator("#printDeviceNote").innerText());
 
-    // 두 번째 기기 — 브라우저 컨텍스트가 다르면 localStorage 도 다르다.
+    // 두 번째 기기(카운터) — 브라우저 컨텍스트가 다르면 localStorage 도 다르다.
     const B = await newAdmin();
     await B.page.waitForTimeout(800);
-    check("다른 기기에는 「저쪽에서 인쇄한다」고 뜬다",
+    check("켜기 전에는 「어디서 찍는지」가 뜬다",
       (await B.page.locator("#printDeviceNote").innerText()).length > 0,
       await B.page.locator("#printDeviceNote").innerText());
-    check("빨갛게 눈에 띈다",
+    check("이 기기는 아직 안 찍으니 눈에 띈다",
       (await B.page.locator("#printDeviceNote").getAttribute("class")).includes("is-elsewhere"));
 
-    // 그냥 켜지지 않는다 — 물어본다.
-    B.page.removeAllListeners("dialog");
-    B.page.on("dialog", (d) => d.dismiss());
+    // 켠다 — 묻지 않는다. 뺏지도 않는다.
     await B.page.locator("#autoPrintToggle").check();
-    await B.page.waitForTimeout(500);
-    const asked = await B.page.locator("#appDialogBackdrop").isVisible();
-    check("옮길지 물어본다", asked);
-    if (asked) {
-      check("누가 인쇄 중인지 말해준다",
-        (await B.page.locator("#appDialogBackdrop").innerText()).length > 10,
-        await B.page.locator("#appDialogBackdrop").innerText());
-      // 취소 — 그대로 저쪽이 맡는다.
-      await B.page.locator("#appDialogBackdrop .danger-btn").first().click();
-      await B.page.waitForTimeout(400);
-      check("취소하면 안 켜진다", !(await B.page.locator("#autoPrintToggle").isChecked()));
-      const still = await B.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
-      check("인쇄 기기도 그대로", still.id === d.id, JSON.stringify(still));
-    }
+    await B.page.waitForTimeout(600);
+    check("★ 옮길지 묻지 않는다", !(await B.page.locator("#appDialogBackdrop").isVisible()));
+    const both = await B.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
+    check("★ 목록에 둘 다 있다", (both.devices || []).length === 2, JSON.stringify(both));
 
-    // 이번엔 옮긴다.
-    await B.page.locator("#autoPrintToggle").check();
-    await B.page.waitForTimeout(400);
-    if (await B.page.locator("#appDialogBackdrop").isVisible()) {
-      await B.page.locator("#appDialogBackdrop .primary-btn").first().click();
-      await B.page.waitForTimeout(600);
-    }
-    const moved = await B.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
-    check("옮기면 서버의 인쇄 기기가 바뀐다", moved.id && moved.id !== d.id, JSON.stringify(moved));
-
-    // 이제 새 주문이 오면 B 만 찍는다. A 는 스스로 물러난다.
+    // ★★ 새 주문 하나 — 두 기기가 각자 한 장씩(=각자 주방용+결제용 한 번).
     const beforeA = await printCount(A.page);
+    const beforeB = await printCount(B.page);
     await placeOrder(B.page);
-    await A.page.waitForTimeout(3000);
-    await B.page.waitForTimeout(3000);
-    check("옮겨간 기기가 찍는다", (await printCount(B.page)) >= 1, String(await printCount(B.page)));
-    check("빼앗긴 기기는 안 찍는다", (await printCount(A.page)) === beforeA,
-      `${await printCount(A.page)} vs ${beforeA}`);
-    // 1분마다 확인하므로 바로는 아닐 수 있다 — 직접 한 번 확인시킨다.
+    await A.page.waitForTimeout(3500);
+    await B.page.waitForTimeout(3500);
+    const dA = (await printCount(A.page)) - beforeA;
+    const dB = (await printCount(B.page)) - beforeB;
+    check("★★ 홀(A)도 찍는다", dA === 1, `${dA}`);
+    check("★★ 카운터(B)도 찍는다 — 먼저 찍은 쪽이 「조리 중」으로 넘겨도", dB === 1, `${dB}`);
+
     await A.page.reload({ waitUntil: "networkidle" });
     await A.page.waitForTimeout(1200);
-    check("빼앗긴 기기는 토글이 꺼져 있다", !(await A.page.locator("#autoPrintToggle").isChecked()));
-    check("빼앗긴 기기에 어디서 인쇄하는지 뜬다",
-      (await A.page.locator("#printDeviceNote").getAttribute("class")).includes("is-elsewhere"));
+    check("★ 다른 기기가 켰다고 이 기기 토글이 꺼지지 않는다", await A.page.locator("#autoPrintToggle").isChecked());
+    check("자동 인쇄 중인 기기가 둘 다 적힌다",
+      (await A.page.locator("#printDeviceNote").innerText()).includes("·"),
+      await A.page.locator("#printDeviceNote").innerText());
 
-    // 남의 것을 함부로 놓을 수 없다 — 폰에서 토글을 끄는 것만으로 태블릿
-    // 인쇄가 풀리면 안 된다.
-    const bad = await A.page.evaluate(async () => {
-      const r = await fetch("/api/settings/print-device", { method: "PUT",
+    // 남의 것을 함부로 놓을 수 없다 — 모르는 번호로 놓아도 목록은 그대로.
+    await A.page.evaluate(async () => {
+      await fetch("/api/settings/print-device", { method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: null, releaseId: "남의기기" }) });
-      return { status: r.status, body: await r.json() };
     });
-    check("남의 인쇄 기기는 못 놓는다", bad.status === 409, JSON.stringify(bad));
     const after = await A.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
-    check("그래서 그대로 남아 있다", after.id === moved.id, JSON.stringify(after));
+    check("★ 남의 번호로는 아무도 안 빠진다", (after.devices || []).length === 2, JSON.stringify(after));
+
+    // 카운터에서 끈다 — 카운터만 빠지고 홀은 계속 찍는다.
+    await B.page.locator("#autoPrintToggle").uncheck();
+    await B.page.waitForTimeout(600);
+    const one = await B.page.evaluate(async () => (await fetch("/api/settings/print-device")).json());
+    check("★ 끈 기기만 빠진다", (one.devices || []).length === 1, JSON.stringify(one));
+    const a2 = await printCount(A.page);
+    const b2 = await printCount(B.page);
+    await placeOrder(A.page);
+    await A.page.waitForTimeout(3500);
+    await B.page.waitForTimeout(3500);
+    check("홀은 계속 찍는다", (await printCount(A.page)) - a2 === 1, `${(await printCount(A.page)) - a2}`);
+    check("끈 카운터는 안 찍는다", (await printCount(B.page)) === b2, `${(await printCount(B.page)) - b2}`);
     await B.ctx.close();
   }
 

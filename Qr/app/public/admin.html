@@ -1084,6 +1084,8 @@
             하면 돼요. 켜져 있어도 QZ Tray 연결이 먼저 시도되고, 그게 실패해야만(즉 QZ Tray가 없는
             안드로이드에서는 항상) 이 방식으로 자동 전환돼요.
           </p>
+          <!-- 2026-09-29: 이 스위치는 기기마다 따로다(admin.js rawbtHere). -->
+          <p class="settings-hint" data-i18n="rawbtPerDeviceNote"><strong>이 스위치는 이 기기에만 적용돼요.</strong></p>
           <label class="perm-toggle-row"><span data-i18n="rawbtEnableLabel">RawBT 자동 인쇄 사용</span><input type="checkbox" id="rawbtEnabledToggle" /></label>
           <div id="rawbtTestStatus" class="settings-hint"></div>
           <button id="saveRawbtSettingsBtn" data-i18n="saveBtn">저장</button>

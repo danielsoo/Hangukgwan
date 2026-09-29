@@ -698,6 +698,10 @@
       printDeviceElsewhere: "🖨️ 지금은 {name}에서 인쇄해요",
       printDeviceUnknown: "다른 기기",
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
+      printDevicesList: "🖨️ 자동 인쇄 중: {list}",
+      printDeviceThis: "이 기기",
+      rawbtSavedHereMsg: "이 기기에 저장했어요 (다른 기기는 그대로예요)",
+      rawbtPerDeviceNote: "이 스위치는 이 기기에만 적용돼요. 홀 기기는 끄고, 블루투스 프린터를 쓰는 카운터 기기에서만 켜세요.",
       printDeviceKindPos: "주방 POS 앱",
       printDeviceKindTablet: "태블릿",
       printDeviceKindPhone: "폰",
@@ -1521,6 +1525,10 @@
       printDeviceElsewhere: "🖨️ 目前由{name}列印",
       printDeviceUnknown: "其他裝置",
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
+      printDevicesList: "🖨️ 自動列印中：{list}",
+      printDeviceThis: "這台裝置",
+      rawbtSavedHereMsg: "已儲存在這台裝置（其他裝置不受影響）",
+      rawbtPerDeviceNote: "這個開關只套用在這台裝置。外場裝置請關閉，只在使用藍牙印表機的櫃台裝置開啟。",
       printDeviceKindPos: "廚房 POS App",
       printDeviceKindTablet: "平板",
       printDeviceKindPhone: "手機",
@@ -4381,7 +4389,10 @@
   // 끊겼다든가) 그냥 찍는다 — 빌지가 두 장 나오는 것보다 안 나오는 게
   // 훨씬 비싸다. 오늘 9번 테이블에서 그 값을 치렀다.
   const DEVICE_ID_KEY = "hg_admin_deviceId";
-  let printDevice = { id: null, name: null, known: false };
+  // 2026-09-29: 담당 기기가 **목록**이다(src/routes/settings.js 주석). 사장님이
+  // 「홀과 카운터 두 곳 다 자동」을 고르셨다 — 한쪽 프린터가 죽어도 다른 쪽이
+  // 이미 찍고 있다. devices 는 자동 인쇄를 켠 기기들, id/name 은 옛 화면용 첫 칸.
+  let printDevice = { id: null, name: null, devices: [], known: false };
 
   function myDeviceId() {
     try {
@@ -4414,10 +4425,13 @@
       const res = await fetch("/api/settings/print-device");
       if (!res.ok) return;
       const d = await res.json();
-      printDevice = { id: d.id || null, name: d.name || null, known: true };
+      printDevice = { id: d.id || null, name: d.name || null, devices: Array.isArray(d.devices) ? d.devices : d.id ? [d] : [], known: true };
     } catch (e) {
       /* 못 읽었으면 마지막으로 알던 값을 그대로 둔다 */
     }
+  }
+  function amPrintDevice() {
+    return (printDevice.devices || []).some((d) => d.id === myDeviceId());
   }
 
   async function claimPrintDevice() {
@@ -4427,19 +4441,25 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: myDeviceId(), name: myDeviceName() }),
       });
-      if (res.ok) printDevice = { id: myDeviceId(), name: myDeviceName(), known: true };
+      if (res.ok) {
+        const d = await res.json();
+        printDevice = { id: d.id || null, name: d.name || null, devices: d.devices || [], known: true };
+      }
     } catch (e) {}
   }
 
   async function releasePrintDevice() {
-    if (printDevice.id && printDevice.id !== myDeviceId()) return; // 내 것이 아니면 놓을 것도 없다
+    // 목록에서 **나만** 빠진다 — 다른 기기의 자동 인쇄는 그대로 둔다.
     try {
-      await fetch("/api/settings/print-device", {
+      const res = await fetch("/api/settings/print-device", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: null, releaseId: myDeviceId() }),
       });
-      printDevice = { id: null, name: null, known: true };
+      if (res.ok) {
+        const d = await res.json();
+        printDevice = { id: d.id || null, name: d.name || null, devices: d.devices || [], known: true };
+      }
     } catch (e) {}
   }
 
@@ -4451,30 +4471,27 @@
    */
   function printHereAllowed() {
     if (!printDevice.known) return true;
-    if (!printDevice.id) return true;
-    return printDevice.id === myDeviceId();
+    if (!(printDevice.devices || []).length) return true;
+    // 목록에 없으면 찍지 않는다 — 켠 적 없는 폰에서 빌지가 나오면 안 된다.
+    // 이 기기의 토글이 켜져 있으면 syncPrintDevice 가 목록에 넣어 준다.
+    return amPrintDevice();
   }
 
   function renderPrintDeviceNote() {
     const el = $("#printDeviceNote");
     if (!el) return;
-    if (!printDevice.known || !printDevice.id) {
+    const list = printDevice.devices || [];
+    if (!printDevice.known || !list.length) {
       el.hidden = true;
       return;
     }
-    const mine = printDevice.id === myDeviceId();
-    el.textContent = mine
-      ? T("printDeviceHere")
-      : T("printDeviceElsewhere").replace("{name}", printDevice.name || T("printDeviceUnknown"));
+    // 자동 인쇄 중인 기기를 **전부** 적는다 — 「어디서 종이가 나오나」를 한눈에.
+    // 이 기기는 「이 기기」 로 적는다(종류 이름만으로는 어느 태블릿인지 모른다).
+    const mine = amPrintDevice();
+    const names = list.map((d) => (d.id === myDeviceId() ? T("printDeviceThis") : d.name || T("printDeviceUnknown")));
+    el.textContent = T("printDevicesList").replace("{list}", names.join(" · "));
     el.classList.toggle("is-elsewhere", !mine);
     el.hidden = false;
-    // 다른 기기가 가져갔는데 이 기기의 토글이 켜져 있으면, 켜져 있다고
-    // 믿고 있는 쪽이 틀린 것이다 — 조용히 안 찍히느니 꺼진 걸 보여준다.
-    if (!mine && autoPrintOn) {
-      autoPrintOn = false;
-      writeStoredToggle("hg_admin_autoPrintOn", false);
-      $("#autoPrintToggle").checked = false;
-    }
   }
 
   /**
@@ -4487,7 +4504,8 @@
    */
   async function syncPrintDevice() {
     await refreshPrintDevice();
-    if (autoPrintOn && !printDevice.id) await claimPrintDevice();
+    // 토글이 켜져 있으면 목록에 있어야 한다. 다른 기기를 밀어내지 않는다.
+    if (autoPrintOn && printDevice.known && !amPrintDevice()) await claimPrintDevice();
     renderPrintDeviceNote();
   }
 
@@ -4503,19 +4521,9 @@
   $("#autoPrintToggle").onchange = async (e) => {
     const want = e.target.checked;
     if (want) {
-      // 다른 기기가 인쇄를 맡고 있으면 물어본다 — 그냥 켜면 빌지가 두 벌
-      // 나온다(2026-09-10 사장님: "다른 곳에서 못 키게 막아줘").
-      await refreshPrintDevice();
-      if (printDevice.id && printDevice.id !== myDeviceId()) {
-        const ok = await showConfirm(T("printDeviceTakeoverConfirm").replace("{name}", printDevice.name || T("printDeviceUnknown")));
-        if (!ok) {
-          e.target.checked = false;
-          autoPrintOn = false;
-          writeStoredToggle("hg_admin_autoPrintOn", false);
-          renderPrintDeviceNote();
-          return;
-        }
-      }
+      // 2026-09-29 부터 뺏지 않는다 — 여러 기기가 같이 찍는다(사장님: 홀과
+      // 카운터 「두 곳 다 자동」). 예전(09-10 「다른 곳에서 못 키게 막아줘」)
+      // 에는 여기서 옮길지 물었다. 이제는 누가 같이 찍는지만 아래 줄에 적는다.
       autoPrintOn = true;
       writeStoredToggle("hg_admin_autoPrintOn", true);
       await claimPrintDevice();
@@ -4636,13 +4644,31 @@
     }
   }
 
+  // 막 들어온 주문인가 — 다른 기기가 찍고 「조리 중」으로 넘긴 주문을 이 기기도
+  // 따라 찍을지 가를 때만 쓴다(위 applyFreshOrders). created_at 은 타이베이
+  // 시각 문자열이고 이 기기도 가게 안에 있으니 같은 시계로 본다.
+  const PRINT_CATCHUP_MS = 3 * 60 * 1000;
+  function justArrived(o) {
+    const t = new Date(String(o.created_at || "").replace(" ", "T")).getTime();
+    if (!Number.isFinite(t)) return false;
+    return Date.now() - t < PRINT_CATCHUP_MS;
+  }
+
   function applyFreshOrders(fresh) {
     // 이 기기가 아직 판단하지 않은 신규 주문. 기준은 메모리가 아니라
     // 기기에 남는 기록이라(decidedOrderIds), 새로고침 중에 들어온 주문도
     // 여기에 잡힌다 — 그게 9번 테이블 빌지가 안 나온 이유였다.
     const firstEverOnThisDevice = decidedOrderIds === null;
     if (firstEverOnThisDevice) decidedOrderIds = new Set();
-    const pending = fresh.filter((o) => o.status === "new" && !decidedOrderIds.has(o.id));
+    // 「신규」만 보면 안 된다(2026-09-29). 기기가 여럿 찍으면 먼저 찍은 쪽이
+    // 주문을 「조리 중」으로 넘기고, 늦게 본 기기는 그 주문을 영영 못 찍는다 —
+    // 홀과 카운터 둘 다 찍으려던 것이 조용히 한 곳만 찍힌다. 그래서 막 들어온
+    // 주문(PRINT_CATCHUP_MS 안)은 조리 중이어도 이 기기가 아직 안 판단했으면
+    // 잡는다. 오래된 것은 안 잡는다 — 꺼져 있다 켠 기기가 이미 나간 빌지를
+    // 몰아 찍으면 안 된다.
+    const pending = fresh.filter(
+      (o) => !decidedOrderIds.has(o.id) && (o.status === "new" || (o.status === "preparing" && justArrived(o)))
+    );
 
     orders = fresh;
     // An order only needs the "인쇄 실패" flag while it's still sitting in
@@ -12687,13 +12713,28 @@
   // but see the GET route comment in settings.js — staff sessions can read
   // the saved config too, since printKitchenTicket() below needs it for
   // staff logins as well) ----------
+  // RawBT(블루투스) 사용 여부는 **기기마다**다(2026-09-29 사장님: "단말기(POS)별로
+  // 프린트를 별도로 사용할 수 있도록"). 카운터 레노버 패드는 RawBT 로 블루투스
+  // 프린터에, 홀은 POS 앱으로 LAN 프린터에 찍는다. 가게 전체 값 하나로 두면
+  // 한쪽에서 켠 것이 다른 쪽에도 켜진다. 이 기기에서 정한 적이 없으면 예전처럼
+  // 가게 전체 값(서버)을 따른다 — 이미 쓰던 태블릿이 배포 순간 안 찍히면 안 된다.
+  const RAWBT_HERE_KEY = "hg_admin_rawbtHere";
+  function rawbtHere(cfg) {
+    try {
+      const v = localStorage.getItem(RAWBT_HERE_KEY);
+      if (v === "1") return true;
+      if (v === "0") return false;
+    } catch (e) {}
+    return !!(cfg && cfg.rawbtEnabled);
+  }
+
   async function loadEscposSettings() {
     const res = await fetch("/api/settings/escpos");
     if (!res.ok) return;
     const data = await res.json();
     $("#escposEnabledToggle").checked = !!data.enabled;
     $("#escposPrinterNameInput").value = data.printerName || "";
-    $("#rawbtEnabledToggle").checked = !!data.rawbtEnabled;
+    $("#rawbtEnabledToggle").checked = rawbtHere(data);
   }
 
   $("#saveEscposSettingsBtn").onclick = async () => {
@@ -12726,18 +12767,13 @@
   // can't clobber the QZ Tray printerName/enabled fields saved by the
   // button above, or vice versa.
   $("#saveRawbtSettingsBtn").onclick = async () => {
-    const res = await fetch("/api/settings/escpos", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rawbtEnabled: $("#rawbtEnabledToggle").checked }),
-    });
+    // 서버가 아니라 **이 기기**에 적는다(위 rawbtHere).
     const msg = $("#rawbtMsg");
-    if (res.ok) {
-      const data = await res.json();
-      $("#rawbtEnabledToggle").checked = !!data.rawbtEnabled;
+    try {
+      localStorage.setItem(RAWBT_HERE_KEY, $("#rawbtEnabledToggle").checked ? "1" : "0");
       msg.style.color = "#1a8a44";
-      msg.textContent = T("rawbtSavedMsg");
-    } else {
+      msg.textContent = T("rawbtSavedHereMsg");
+    } catch (e) {
       msg.style.color = "#b5232c";
       msg.textContent = T("staffPasswordFailed");
     }
@@ -13217,7 +13253,7 @@
       try {
         const res = await fetch("/api/settings/escpos");
         const cfg = res.ok ? await res.json() : {};
-        if (cfg.rawbtEnabled && (await sendRasterTicketBytes(bytes, null))) return { ok: true, reason: null };
+        if (rawbtHere(cfg) && (await sendRasterTicketBytes(bytes, null))) return { ok: true, reason: null };
         // QZ Tray 는 같은 래스터 바이트를 base64 로 받는다 — 텍스트 모드로
         // 따로 만들지 않는다. 한국어·중국어는 프린터 코드페이지에 기대지
         // 않고 그림으로 찍는 편이 어느 기계에서도 같게 나온다.
@@ -13292,7 +13328,7 @@
         const res = await fetch("/api/settings/escpos");
         if (!res.ok) return false;
         const cfg = await res.json();
-        if (!cfg.rawbtEnabled) return false;
+        if (!rawbtHere(cfg)) return false;
       }
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
       const counter = isCounterOrder(o);
@@ -13351,7 +13387,7 @@
         const res = await fetch("/api/settings/escpos");
         if (!res.ok) return false;
         const cfg = await res.json();
-        if (!cfg.rawbtEnabled) return false;
+        if (!rawbtHere(cfg)) return false;
       }
 
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";

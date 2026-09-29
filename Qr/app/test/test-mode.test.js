@@ -359,9 +359,12 @@ function device() {
     //
     // print_device 는 「가게를 어떻게 운영하는가」가 아니라 「지금 어느 기기가
     // 켜져 있는가」다. 테스트로 만든 값이 아니므로 되돌릴 대상이 아니다.
+    // 2026-09-29 부터 담당은 목록이다(print_devices). 테스트 중에 켠 기기가
+    // 목록에 그대로 남아 있어야 한다 — 되돌리면 그 기기의 자동 인쇄가 조용히 멎는다.
     const pd = store.settings.print_device || {};
-    check("★ 테스트 중에 옮긴 담당이 그대로다", pd.id === "dev-tablet", JSON.stringify(pd));
-    check("★ 켜기 전 담당으로 돌아가지 않았다", pd.id !== "dev-off-lan", JSON.stringify(pd));
+    const pds = (store.settings.print_devices || []).map((d) => d.id);
+    check("★ 테스트 중에 켠 담당이 그대로다", pds.includes("dev-tablet") && pd.id === "dev-tablet", JSON.stringify(pds));
+    check("★ 켜기 전 목록으로 돌아가지 않았다", pds[0] !== "dev-off-lan", JSON.stringify(pds));
   }
 
   out.push("\n[12] 권한");

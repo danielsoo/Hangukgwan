@@ -1,6 +1,6 @@
 const express = require("express");
 const multer = require("multer");
-const { store, save, savePhoto, deletePhoto, getPhoto, getDb, connectDB } = require("../db");
+const { store, save, savePhoto, deletePhoto, getPhoto, getDb, connectDB, saveFields } = require("../db");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
 const { SETTING_BYTES, SETTING_CHECKED_AT, LIMIT_BYTES, levelFor, recordStoreSize } = require("../storeSize");
 const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, serviceStartedAt } = require("../serviceStart");
@@ -180,32 +180,67 @@ router.put("/order-hours", canEditSettings, async (req, res) => {
 // 스스로 양보하는 것이고, 이 값을 못 읽으면 화면은 그냥 찍는다
 // (public/js/admin.js 의 printHereAllowed). 빌지가 두 장 나오는 것보다
 // 안 나오는 게 훨씬 비싸다 — 오늘 9번 테이블에서 그 값을 치렀다.
+// ── 2026-09-29: 담당 기기가 **여럿**이 될 수 있다 ──────────────────────────
+//
+// 사장님(2026-09-29): "단말기(POS)별로 프린트를 별도로 사용할 수 있도록 설정
+// 요망. 홀 - LAN IP 프린터, 카운터 - Bluetooth 프린터 ... 각 위치(홀,카운터)
+// 에서 필요에 따라 출력하고자 함. 홀 프린터의 오류/고장 등 유사시 카운터
+// 단말기/프린터를 즉시 교체 투입하여 영업시간 공백 최소화." 그리고 새 주문
+// 자동 인쇄는 「두 곳 다 자동」을 고르셨다.
+//
+// 그래서 한 자리(print_device)를 서로 뺏던 것을 **목록**(print_devices)으로
+// 바꾼다. 자동 인쇄를 켠 기기는 목록에 들어가고, 끈 기기는 자기만 빠진다.
+// 다른 기기를 밀어내지 않는다 — 홀 프린터가 죽어도 카운터가 이미 찍고 있다.
+//
+// 옛 값(print_device 하나)은 읽을 때 목록 첫 칸으로 본다. 배포 순간 옛
+// 화면이 떠 있는 기기도 id/name 을 그대로 받는다.
+const MAX_PRINT_DEVICES = 5;
+function printDevicesOf(settings) {
+  if (Array.isArray(settings.print_devices)) return settings.print_devices.filter((d) => d && d.id);
+  const one = settings.print_device;
+  return one && one.id ? [one] : [];
+}
+function printDevicePayload(list) {
+  const first = list[0] || {};
+  return { devices: list, id: first.id || null, name: first.name || null, updated_at: first.updated_at || null };
+}
+async function savePrintDevices(list) {
+  store.settings.print_devices = list;
+  store.settings.print_device = list[0] || null;
+  // 작은 값 두 칸만 쓴다 — store 문서를 통째로 쓰지 않는다(CLAUDE.md).
+  await saveFields({ "settings.print_devices": list, "settings.print_device": list[0] || null });
+}
+
 router.get("/print-device", requireAdmin, (req, res) => {
-  const d = store.settings.print_device || {};
-  res.json({ id: d.id || null, name: d.name || null, updated_at: d.updated_at || null });
+  res.json(printDevicePayload(printDevicesOf(store.settings)));
 });
 
 router.put("/print-device", requireAdmin, async (req, res) => {
   const b = req.body || {};
   const id = String(b.id == null ? "" : b.id).trim().slice(0, 64);
+  let list = printDevicesOf(store.settings);
   if (!id) {
-    // 놓기. 자기가 들고 있을 때만 놓을 수 있다 — 안 그러면 폰에서 토글을
-    // 끄는 것만으로 태블릿의 인쇄가 풀린다.
-    const holder = (store.settings.print_device || {}).id || null;
-    if (holder && String(b.releaseId || "") !== holder) {
-      return res.status(409).json({ error: "not_holder", print_device: store.settings.print_device });
-    }
-    store.settings.print_device = null;
-    await save();
-    return res.json({ id: null, name: null, updated_at: null });
+    // 놓기 — **자기만** 빠진다. 폰에서 토글을 끄는 것으로 태블릿의 인쇄가
+    // 풀리면 안 된다(예전 not_holder 와 같은 이유). releaseId 가 목록에 없으면
+    // 할 일이 없다.
+    const rid = String(b.releaseId || "");
+    list = list.filter((d) => d.id !== rid);
+    await savePrintDevices(list);
+    return res.json(printDevicePayload(list));
   }
-  store.settings.print_device = {
+  const entry = {
     id,
     name: String(b.name == null ? "" : b.name).trim().slice(0, 40) || null,
     updated_at: nowLocal(),
   };
-  await save();
-  res.json(store.settings.print_device);
+  // 이미 있으면 이름·시각만 새로, 없으면 뒤에 붙인다. 너무 많으면 가장 오래
+  // 소식이 없던 것부터 뺀다 — 버린 폰이 영원히 목록에 남지 않게.
+  // 새로 켠 기기를 앞에 둔다 — 같은 초에 들어왔어도 방금 켠 쪽이 첫 칸이다.
+  list = [entry, ...list.filter((d) => d.id !== id)]
+    .sort((a, c) => String(c.updated_at || "").localeCompare(String(a.updated_at || "")))
+    .slice(0, MAX_PRINT_DEVICES);
+  await savePrintDevices(list);
+  res.json(printDevicePayload(list));
 });
 
 const upload = multer({
