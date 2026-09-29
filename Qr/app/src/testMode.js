@@ -205,7 +205,7 @@ async function start(db, store, { save, by }) {
 // print_device 는 「가게를 어떻게 운영하는가」가 아니라 「지금 어느 기기가
 // 켜져 있는가」다. 테스트로 만든 값이 아니므로 되돌릴 대상도 아니다.
 // print_devices — 2026-09-29 부터 담당 기기가 목록이다(src/routes/settings.js).
-const SNAPSHOT_SKIP = new Set([SETTING_KEY, "print_device", "print_devices", "printers"]);
+const SNAPSHOT_SKIP = new Set([SETTING_KEY, "print_device", "print_devices", "printers", "pad_profiles"]);
 
 function snapshotSettings(store) {
   const out = {};

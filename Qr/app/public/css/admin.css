@@ -2570,3 +2570,26 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-weight: 500;
   margin-right: 4px;
 }
+
+/* 패드 프로필 (2026-09-29) — 위쪽 「📍 주방」과 고르는 창. */
+.pad-profile-badge { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.35); color: #fff; padding: 6px 10px; border-radius: 999px; cursor: pointer; font-size: 15px; font-weight: 700; white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis; flex: 0 0 auto; }
+.pad-profile-badge.is-empty { font-weight: 400; color: #cfd3e0; }
+.pad-profile-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 14px 0; }
+.pad-profile-choices button { padding: 18px 12px; font-size: 20px; font-weight: 700; border-radius: 12px; border: 2px solid var(--line); background: #fff; cursor: pointer; }
+.pad-profile-choices button.is-current { border-color: var(--navy); background: #eef1f8; }
+.pad-profile-choices button small { display: block; font-size: 13px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+.pad-profile-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.pad-profile-row input[type="text"] { width: 140px; }
+.pad-profile-row label { white-space: nowrap; }
+.pad-touch-table { border-collapse: collapse; margin-top: 6px; }
+.pad-touch-table th, .pad-touch-table td { border-bottom: 1px solid var(--line); padding: 6px 12px; text-align: right; }
+.pad-touch-table th:first-child, .pad-touch-table td:first-child { text-align: left; }
+@media (max-width: 1100px) {
+  .pad-profile-badge { font-size: 14px; padding: 5px 8px; max-width: 110px; }
+}
+/* 📍 가 붙으면서 960 폭에서 탭 자리가 17px 모자랐다 — 위 줄 간격·언어 버튼을 조금 줄인다. */
+@media (max-width: 1000px) {
+  .admin-topbar { gap: 8px; }
+  .admin-lang-btn { padding: 5px 7px; font-size: 14px; }
+  .pad-profile-badge { padding: 4px 7px; }
+}

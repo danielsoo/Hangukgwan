@@ -70,6 +70,8 @@
       <button class="admin-lang-btn" data-admin-lang="ko">한국어</button>
       <button class="admin-lang-btn" data-admin-lang="zh">中文</button>
     </div>
+    <!-- 이 패드의 프로필(2026-09-29) — 누르면 바꾼다. 프로필이 없으면 숨는다. -->
+    <button id="padProfileBadge" class="pad-profile-badge" type="button" hidden></button>
     <button id="logoutBtn" class="logout-btn" data-i18n="logoutBtn">로그아웃</button>
   </header>
 
@@ -1098,6 +1100,17 @@
           <button id="savePrintersBtn" data-i18n="saveBtn">저장</button>
           <div class="save-msg" id="printersMsg" hidden></div>
         </div>
+        <!-- 패드 프로필 (2026-09-29). 패드마다 로그인 뒤 한 번 고른다. -->
+        <div class="settings-card">
+          <h3 data-i18n="padProfilesTitle">패드 프로필</h3>
+          <p class="settings-hint" data-i18n="padProfilesHint">「주방」「카운터」처럼 적어 두면, 패드에서 로그인할 때 어느 곳인지 한 번 고릅니다. 고르면 그 프로필의 프린터와 자동 인쇄가 그 패드에 적용돼요. 여러 패드가 같은 프로필을 써도 됩니다.</p>
+          <div id="padProfilesList"></div>
+          <button id="addPadProfileBtn" type="button" data-i18n="addPadProfileBtn">+ 프로필 추가</button>
+          <button id="savePadProfilesBtn" data-i18n="saveBtn">저장</button>
+          <div class="save-msg" id="padProfilesMsg" hidden></div>
+          <h4 data-i18n="padTouchesTitle">프로필별 터치 수</h4>
+          <table class="pad-touch-table" id="padTouchTable"></table>
+        </div>
         <div class="settings-card">
           <h3 data-i18n="rawbtSettingsTitle">주방 프린터 직접 인쇄 (RawBT · 안드로이드 태블릿)</h3>
           <p class="settings-hint" data-i18n="rawbtSettingsHint">
@@ -1566,6 +1579,18 @@
     <div class="modal-actions">
       <button class="danger-btn" id="partyEditCancel" data-i18n="appDialogCancel">취소</button>
       <button class="primary-btn" id="partyEditSave" data-i18n="editPartySave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 이 기기는 어디인가요? — 프로필을 고른다(2026-09-29). -->
+<div id="padProfileBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal pad-profile-modal">
+    <h3 data-i18n="padProfilePickTitle">이 기기는 어디인가요?</h3>
+    <p class="settings-hint" data-i18n="padProfilePickHint">고르면 그곳의 프린터와 자동 인쇄가 이 기기에 적용됩니다. 위쪽 📍 를 눌러 언제든 바꿀 수 있어요.</p>
+    <div id="padProfileChoices" class="pad-profile-choices"></div>
+    <div class="modal-actions">
+      <button class="danger-btn" id="padProfileNone" data-i18n="padProfileNone">프로필 없이 쓰기</button>
     </div>
   </div>
 </div>

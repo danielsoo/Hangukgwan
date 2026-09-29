@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const { store, save, savePhoto, deletePhoto, getPhoto, getDb, connectDB, saveFields } = require("../db");
+const padProfiles = require("../padProfiles");
 const { requireAdmin, requirePermission, requireOwner } = require("../auth");
 const { SETTING_BYTES, SETTING_CHECKED_AT, LIMIT_BYTES, levelFor, recordStoreSize } = require("../storeSize");
 const { SETTING_KEY: SERVICE_START_KEY, normalize: normalizeServiceStart, serviceStartedAt } = require("../serviceStart");
@@ -564,6 +565,34 @@ router.put("/printers", canEditSettings, async (req, res) => {
   // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
   await saveFields({ "settings.printers": list });
   res.json({ printers: list });
+});
+
+// 패드 프로필 (2026-09-29). 규칙은 src/padProfiles.js 에 있다.
+router.get("/pad-profiles", requireAdmin, (req, res) => {
+  res.json({ profiles: padProfiles.profilesOf(store.settings) });
+});
+
+router.put("/pad-profiles", canEditSettings, async (req, res) => {
+  const printers = Array.isArray(store.settings.printers) ? store.settings.printers : [];
+  const list = padProfiles.cleanProfiles((req.body || {}).profiles, printers);
+  if (!list) return res.status(400).json({ error: "invalid_profiles" });
+  store.settings.pad_profiles = list;
+  // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
+  await saveFields({ "settings.pad_profiles": list });
+  res.json({ profiles: list });
+});
+
+// 터치 수 — 패드가 1분마다 모아서 보낸다. store 문서가 아니라 따로 둔
+// 컬렉션에 $inc 로 더한다(여러 패드가 동시에 보내도 안 겹친다).
+router.post("/pad-touches", requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const r = await padProfiles.addTouches(getDb, connectDB, store.settings, b.profileId, b.count, nowLocal());
+  if (!r) return res.status(400).json({ error: "invalid_touches" });
+  res.json({ ok: true });
+});
+
+router.get("/pad-touches", requireAdmin, async (req, res) => {
+  res.json(await padProfiles.touchSummary(getDb, connectDB, nowLocal()));
 });
 
 router.put("/escpos", requireOwner, async (req, res) => {
