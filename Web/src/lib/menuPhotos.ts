@@ -19,7 +19,21 @@ import { useEffect, useState } from 'react'
 
 // 홈페이지 전용 사진 — public/photos/ 아래 파일. 메뉴 이름(한국어) → 경로.
 // 비어 있으면 메뉴 사진을 쓴다.
-export const SITE_PHOTOS: Record<string, string> = {}
+//
+// 2026-09-29: 메뉴 사진 일곱 장 중 다섯 장이 홈페이지와 어울리지 않았다 —
+// 끓이기 전 날것(부대찌개), 사진에 박힌 한자(돌솥비빔밥 「石鍋伴飯」·순두부
+// 「海鮮豆腐鍋」), 포스터 필터로 뭉개진 화질(해물파전), 밝은 조명의 날고기
+// (삼겹살). 그 메뉴 사진을 참고 이미지로 넣어 같은 요리·같은 그릇·같은 재료로
+// AI 가 다시 그린 것이다(Nano Banana 2). 닭갈비는 메뉴 사진 그대로이되 스캔
+// 흰 테두리만 잘라냈다(세로로 잘라 보이면 위아래에 흰 줄이 남는다).
+export const SITE_PHOTOS: Record<string, string> = {
+  부대찌개: '/photos/budae-jjigae.jpg',
+  돌솥비빔밥: '/photos/dolsot-bibimbap.jpg',
+  해물파전: '/photos/haemul-pajeon.jpg',
+  삼겹살: '/photos/samgyeopsal.jpg',
+  순두부찌개: '/photos/sundubu-jjigae.jpg',
+  닭갈비: '/photos/dakgalbi.jpg',
+}
 
 type MenuItem = { name_ko?: string; photo_url?: string | null }
 type MenuCategory = { items?: MenuItem[] }

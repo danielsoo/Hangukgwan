@@ -51,28 +51,34 @@ function check(name, cond, extra = "") {
   await page.goto(`${base}/menu/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
   const srcs = await page.$$eval("main img", (els) => els.map((e) => e.getAttribute("src")));
-  for (const ko of ["부대찌개", "돌솥비빔밥", "해물파전", "삼겹살", "닭갈비", "순두부찌개"]) {
-    check(`★ ${ko} — 메뉴 사진 그대로(${photoOf[ko]})`, !!photoOf[ko] && srcs.includes(photoOf[ko]), JSON.stringify(srcs));
+  // 분위기에 안 맞던 다섯 장은 홈페이지 전용 사진(Web/public/photos, AI 로 다시 그림).
+  const SITE = { 부대찌개: "/photos/budae-jjigae.jpg", 돌솥비빔밥: "/photos/dolsot-bibimbap.jpg", 해물파전: "/photos/haemul-pajeon.jpg", 삼겹살: "/photos/samgyeopsal.jpg", 순두부찌개: "/photos/sundubu-jjigae.jpg", 닭갈비: "/photos/dakgalbi.jpg" };
+  for (const [ko, src] of Object.entries(SITE)) {
+    check(`★ ${ko} — 홈페이지 전용 사진(${src})`, srcs.includes(src), JSON.stringify(srcs));
   }
+  const loaded = await page.$$eval("main img", (els) => els.filter((e) => e.getAttribute("src").startsWith("/photos/")).map((e) => e.naturalWidth));
+  check("★ 전용 사진 여섯 장이 실제로 열린다(깨지지 않는다)", loaded.length === 6 && loaded.every((w) => w >= 780), JSON.stringify(loaded));
+  if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT, fullPage: false, clip: { x: 0, y: 300, width: 1280, height: 1500 } }).catch(() => page.screenshot({ path: process.env.SHOT }));
 
   out.push("\n[첫 화면 — 대표 요리 큰 사진]");
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
   const homeSrcs = await page.$$eval("img", (els) => els.map((e) => e.getAttribute("src")));
-  check("★ 첫 대표 요리(부대찌개) 사진이 들어간다", homeSrcs.includes(photoOf["부대찌개"]), JSON.stringify(homeSrcs));
+  check("★ 첫 대표 요리(부대찌개) 사진이 들어간다", homeSrcs.includes("/photos/budae-jjigae.jpg"), JSON.stringify(homeSrcs));
 
   out.push("\n[사진 주소가 깨졌으면 깨진 그림 대신 빈 면]");
   await page.route("**/uploads/dish-*.jpg", (r) => r.fulfill({ status: 404, body: "" }));
   await page.goto(`${base}/menu/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
-  check("★ 깨진 그림이 안 남는다", (await page.$$eval("main img", (e) => e.length)) === 0, "");
+  check("★ 깨진 그림이 안 남는다", !(await page.$$eval("main img", (e) => e.map((x) => x.getAttribute("src")))).some((x) => x.startsWith("/uploads/")), "");
   await page.unroute("**/uploads/dish-*.jpg");
 
   out.push("\n[메뉴를 못 읽어도 화면이 안 깨진다]");
   await page.route("**/api/menu", (r) => r.fulfill({ status: 500, body: "x" }));
   await page.goto(`${base}/menu/`, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
-  check("사진 없이 빈 면으로 그린다", (await page.$$eval("main img", (e) => e.length)) === 0 && (await page.locator("main h3").count()) >= 6, "");
+  // 메뉴를 못 읽어도 홈페이지 전용 사진은 나온다.
+  check("메뉴를 못 읽어도 전용 사진 여섯 장은 나오고 화면이 안 깨진다", (await page.$$eval("main img", (e) => e.length)) === 6 && (await page.locator("main h3").count()) >= 6, "");
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
