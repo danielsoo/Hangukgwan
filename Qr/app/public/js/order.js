@@ -921,6 +921,7 @@
             <div class="item-name-row">
               <span class="item-name">${nameFor(item)}</span>
               ${meatIconsHtml(item)}
+              ${item.available ? "" : `<span class="badge badge-soldout">${t("soldOutBadge")}</span>`}
               ${item.is_signature ? `<span class="badge badge-signature">★ ${t("signature")}</span>` : ""}
               ${item.is_spicy ? `<span class="badge badge-spicy">🌶 ${t("spicy")}</span>` : ""}
             </div>

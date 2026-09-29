@@ -84,6 +84,8 @@ const I18N = {
     mixOptionsHintAfter: "牛豬比例可自由搭配",
     // 섞지 않는 메뉴(닭갈비·삼겹살 등)의 첫 주문 안내.
     minFirstOrderHint: "首次點餐這道菜合計需滿 {n} 份",
+    // 「오늘만」·「기간 지정」 품절 — 메뉴에 흐리게 보이며 이 배지가 붙는다(2026-09-29).
+    soldOutBadge: "已售完",
     // 할인이 안 되는 메뉴(사장님 2026-09-28 — 문구도 사장님이 정하셨다).
     noDiscountItem: "本品項不適用任何優惠",
     payOnlineBtn: "線上付款",
@@ -194,6 +196,7 @@ const I18N = {
     mixOptionsHint: "소/돼지 비율은 자유롭게 조절 가능, 첫 주문은 합계 최소 {n}인분이에요",
     mixOptionsHintAfter: "소/돼지 비율은 자유롭게 조절 가능해요",
     minFirstOrderHint: "첫 주문에서는 이 메뉴를 합계 {n}인분 이상 담아주세요",
+    soldOutBadge: "품절",
     noDiscountItem: "이 메뉴는 어떤 할인도 적용되지 않아요",
     payOnlineBtn: "온라인 결제",
     payOnlineConfirm: "이 테이블의 미결제 금액을 신용카드/LINE Pay/JKOPay 등으로 결제할까요?",
@@ -303,6 +306,7 @@ const I18N = {
     mixOptionsHint: "Mix beef and pork in any ratio — on your first order the combined total must be at least {n} servings",
     mixOptionsHintAfter: "Mix beef and pork in any ratio",
     minFirstOrderHint: "On your first order, this dish needs at least {n} servings in total",
+    soldOutBadge: "Sold out",
     noDiscountItem: "No discounts apply to this item",
     payOnlineBtn: "Pay Online",
     payOnlineConfirm: "Pay this table's outstanding balance now by credit card / LINE Pay / JKOPay?",

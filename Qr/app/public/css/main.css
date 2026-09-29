@@ -328,6 +328,8 @@ button.is-closed:hover {
   background-size: cover; background-position: center;
 }
 .item-unavailable { opacity: 0.4; pointer-events: none; }
+/* 「오늘만」·「기간 지정」 품절 배지 (2026-09-29). 흐린 줄 안에서도 읽히게 진하게. */
+.badge-soldout { background: #444; color: #fff; font-weight: 800; }
 
 /* Cart FAB */
 .cart-fab {

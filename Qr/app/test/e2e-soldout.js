@@ -94,15 +94,31 @@ function check(name, cond, extra = "") {
       clip: { x: tbl.x, y: tbl.y, width: tbl.width, height: Math.min(tbl.height, 260) } });
   }
 
-  out.push("\n[손님 화면에서 사라지고, 주문도 막힌다]");
+  // 2026-09-29 사장님: "1~3번째 품절은 메뉴에 보여지면서 품절로 표시되고
+  // 4번째 계속품절만 메뉴에서 아예 보여지지 않게." — 예전에는 「오늘만」도
+  // 손님 메뉴에서 통째로 사라졌다.
+  out.push("\n[「오늘만 품절」 — 손님 화면에 품절로 보이고, 주문은 막힌다]");
   const guest = await browser.newContext();
   const gp = await guest.newPage();
   await gp.goto(`${base}/order.html?table=7`, { waitUntil: "domcontentloaded" });
   const menuNow = await gp.evaluate(async () => {
     const cats = await (await fetch("/api/menu")).json();
-    return cats.flatMap((c) => c.items).map((i) => i.id);
+    return cats.flatMap((c) => c.items).map((i) => ({ id: i.id, available: i.available }));
   });
-  check("손님 메뉴에서 빠진다", !menuNow.includes(dishId), `${menuNow.length}개 중 남아 있음`);
+  const nowRow = menuNow.find((i) => i.id === dishId);
+  check("★★ 손님 메뉴에 남아 있다", !!nowRow, `${menuNow.length}개 중 없음`);
+  check("★ 품절로 온다(available 0)", nowRow && nowRow.available === 0, JSON.stringify(nowRow));
+  {
+    const dish = store.menuItems.find((m) => m.id === dishId);
+    await gp.waitForTimeout(1500);
+    const row = await gp.evaluate((zh) => {
+      const r = [...document.querySelectorAll(".item-row")].find((x) => x.textContent.includes(zh));
+      return r ? { cls: r.className, text: r.textContent, pe: getComputedStyle(r).pointerEvents } : null;
+    }, dish.name_zh);
+    check("★ 화면에 흐리게 보인다", row && /item-unavailable/.test(row.cls), JSON.stringify(row && row.cls));
+    check("★ 「已售完」 배지가 붙는다", row && /已售完|품절|Sold out/.test(row.text), row && row.text.slice(0, 80));
+    check("누를 수 없다", row && row.pe === "none", row && row.pe);
+  }
   const orderTry = await gp.evaluate(async (id) => {
     await fetch("/api/tables/7/party-size", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ partySize: 2 }) });
     const r = await fetch("/api/orders", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -179,6 +195,13 @@ function check(name, cond, extra = "") {
   }, dishId);
   check("계속 품절이면 available_stored 가 0", always.available_stored === 0, JSON.stringify(always));
   check("계속 품절을 고르면 기간은 지워진다", !always.soldout_from && !always.soldout_until, JSON.stringify(always));
+  {
+    const ids = await page.evaluate(async () => {
+      const cats = await (await fetch("/api/menu")).json();
+      return cats.flatMap((c) => c.items).map((i) => i.id);
+    });
+    check("★★ 「계속 품절」만 손님 메뉴에서 아예 빠진다", !ids.includes(dishId), `${ids.length}개 중 남아 있음`);
+  }
 
   await page.locator(`[data-soldout-id="${dishId}"]`).click();
   await page.waitForTimeout(400);

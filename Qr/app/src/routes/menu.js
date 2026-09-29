@@ -46,7 +46,15 @@ function categoriesWithItems(onlyAvailable) {
     let items = activeItems(store.menuItems)
       .filter((i) => i.category_id === c.id)
       .map((i) => withAvailability(i, store.settings));
-    if (onlyAvailable) items = items.filter((i) => i.available);
+    // 손님 화면에서 빼는 것은 **「계속 품절」뿐**이다.
+    //
+    // 사장님(2026-09-29): "현재 어떤 품절을 선택해도 메뉴에 나오지 않게
+    // 되어있음. 1~3번째 품절은 메뉴에 보여지면서 품절로 표시되고 4번째
+    // 계속품절만 메뉴에서 아예 보여지지 않게." — 「오늘만」·「기간 지정」은
+    // 곧 돌아오는 메뉴라 흐리게 「품절」로 보인다(public/js/order.js
+    // item-unavailable). 주문은 여전히 서버가 막는다(POST /api/orders 의
+    // isAvailableNow). available_stored 0 = 「계속 품절」 스위치가 켜진 것.
+    if (onlyAvailable) items = items.filter((i) => i.available || i.available_stored);
     items = items.sort((a, b) => a.sort_order - b.sort_order);
     // 할인 제외 여부는 **서버가 답을 내서** 내보낸다. 화면이 키 목록을
     // 받아 다시 판단하던 것을 그만둔다 — 같은 규칙을 두 군데서 적으면
