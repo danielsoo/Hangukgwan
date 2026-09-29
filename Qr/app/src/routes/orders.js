@@ -50,7 +50,15 @@ function optionPriceFor(mi, chosenName) {
   return optionPriceOf(mi.options, chosenName);
 }
 
-const { clearPartySizeIfSettled, movePartySize, seatingStartOf, savePartySize, partyPatchOf } = require("../partySize");
+const {
+  clearPartySizeIfSettled,
+  movePartySize,
+  seatingStartOf,
+  savePartySize,
+  partyPatchOf,
+  parsePartyAnswer,
+  seatPartyWithOrder,
+} = require("../partySize");
 const locationGate = require("../locationGate");
 const { isDeleted: isDeletedMenuItem } = require("../menuItems");
 const { isAvailableNow } = require("../availability");
@@ -312,7 +320,15 @@ router.post("/", async (req, res) => {
   // 마찬가지다 — 그 자리에 몇 명이 앉았는지는 아무 데도 안 쓰인다(결산에
   // 안 들어가므로). 없는 자리에 넣는 것은 여전히 막는다 — 그건 우회할
   // 규칙이 아니라 그냥 잘못된 주문이다.
-  if (!isTestDevice && !isTestTableOrder && !orderingTable.is_counter && !orderingTable.party_size) {
+  //
+  // 2026-09-29: 인원은 이제 **주문과 함께** 온다(req.body.party). 손님 폰이
+  // 답을 들고 있다가 첫 주문에 실어 보내고, 자리에 박는 것은 이 주문이 모든
+  // 검사를 통과한 뒤다(아래 seatPartyWithOrder — src/partySize.js 주석).
+  // 이미 앉아 계신 자리(party_size 가 있다)면 실려 온 값은 쓰지 않는다 —
+  // 두 번째 폰의 답이 앉아 계신 분들의 숫자를 덮으면 안 된다.
+  const pendingParty =
+    !orderingTable.is_counter && !orderingTable.party_size ? parsePartyAnswer((req.body || {}).party) : null;
+  if (!isTestDevice && !isTestTableOrder && !orderingTable.is_counter && !orderingTable.party_size && !pendingParty) {
     return res.status(400).json({ error: "party_size_required" });
   }
 
@@ -535,6 +551,21 @@ router.post("/", async (req, res) => {
   // 불필요한 DB 쓰기가 하나 늘어난다.
   const orderId = await reserveId("orders");
 
+  // 첫 주문이다 — 손님을 지금 앉힌다(위 pendingParty). 여기까지 왔다는 것은
+  // 메뉴·최소 수량·영업시간 검사를 전부 통과했다는 뜻이다. 그 전에 앉히면
+  // 주문이 거절됐을 때 「주문 없는 인원」 이 남는다 — 이번에 없애려는 바로 그것.
+  // 아래 주문의 인원 스냅숏과 착석(seating)이 이 값을 그대로 가져간다.
+  let seatedNow = null;
+  if (pendingParty && !orderingTable.party_size) {
+    seatedNow = { before: partyPatchOf(orderingTable), movedTo: orderingTable.moved_to };
+    seatPartyWithOrder(orderingTable, pendingParty, new Date().toISOString());
+    const testIdForSeat = testMode.currentId(req, store);
+    if (testIdForSeat) orderingTable.party_test_session = testIdForSeat;
+    else delete orderingTable.party_test_session;
+    // 새 손님이 앉았다 — 「자리가 옮겨졌어요」 안내는 여기서 끝난다(PUT 과 같다).
+    delete orderingTable.moved_to;
+  }
+
   // 시각을 한 번만 읽는다. created_at 과 아래 service_period 가 서로 다른
   // 순간을 가리키면, 16:24:59 에 들어온 주문이 「오후」로 찍히는 일이 생긴다.
   const createdAt = nowLocal();
@@ -611,7 +642,12 @@ router.post("/", async (req, res) => {
   };
   // 이 기기를 이 착석에 묶어 둔다. 자리 화면을 거치지 않고 들어온 기기도
   // 이 순간부터는 「이 착석의 기기」가 되고, 다음 손님이 앉으면 걸린다.
-  if (!isStaff) seating.bind(req, orderingTable.number, seating.seatingOf(orderingTable));
+  //
+  // 방금 앉힌 손님이면 force 로 묶는다 — 인원을 답한 그 기기가 이 착석의 첫
+  // 손님이다(예전 PUT /party-size 가 하던 일). 결제를 마치고 「더 시킬게요」
+  // 하는 손님의 폰은 방금 끝난 착석에 묶여 있어서, force 가 아니면 못 옮긴다.
+  if (seatedNow) seating.bind(req, orderingTable.number, seating.seatingOf(orderingTable), { force: true });
+  else if (!isStaff) seating.bind(req, orderingTable.number, seating.seatingOf(orderingTable));
   // 주문 한 건만 자기 컬렉션에 쓴다. store 문서도 같이 쓰는 건 주문 번호
   // 카운터(nextId)가 거기 살기 때문인데, 이제 그 문서는 30KB 근처라 값이
   // 싸다 — 예전에는 이 한 줄이 몇 MB를 다시 쓰는 일이었다.
@@ -633,6 +669,11 @@ router.post("/", async (req, res) => {
       await insertOrder(order);
       break;
     } catch (e) {
+      if (!(e && e.code === 11000) && seatedNow) {
+        // 주문이 안 들어갔으면 앉힌 것도 되돌린다 — 주문 없는 인원을 남기지 않는다.
+        Object.assign(orderingTable, seatedNow.before);
+        if (seatedNow.movedTo) orderingTable.moved_to = seatedNow.movedTo;
+      }
       if (!(e && e.code === 11000)) throw e;
       // 겹친 것이 「같은 표」인지 「같은 주문번호」인지를, 드라이버가 알려주는
       // 오류 모양(keyPattern 같은 것)에 기대지 않고 직접 물어본다. 그 모양은
@@ -653,6 +694,12 @@ router.post("/", async (req, res) => {
       // 떼고 넣는다 — 드물게 둘이 되는 편이 하나도 안 들어가는 것보다 낫다.
       if (attempt >= 2) delete order.client_request_id;
     }
+  }
+  // 주문이 들어갔다 — 이제 앉힌 인원을 쓴다. 자리는 인원 칸만(store 를 통째로
+  // 쓰지 않는다 — CLAUDE.md). 옮겨가라는 안내를 지웠으면 그 칸도.
+  if (seatedNow) {
+    await savePartySize(store, orderingTable.number);
+    if (seatedNow.movedTo) await patchArrayItem("tables", orderingTable.id, { moved_to: null });
   }
   rememberOrder(order);
   await broadcastOrdersChanged(req, [order.id]);

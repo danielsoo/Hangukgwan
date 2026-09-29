@@ -181,6 +181,14 @@ const body = (token) => ({ tableNumber: "7", items: CART, ...(token ? { clientRe
     cart: [{ itemId: 1, qty: 1, orderType: "dine_in", addons: [] }],
     cartTotal: () => 230,
     partySize: 2,
+    // 2026-09-29: 인원은 첫 주문과 함께 간다(order.js partyPending). 여기서는
+    // 이미 앉은 자리로 본다 — 재는 것은 「두 번 눌러도 한 번만 보낸다」다.
+    partyPending: false,
+    partyAdults: 2,
+    partyChildren: 0,
+    clearPendingParty() {},
+    rememberSeating() {},
+    orderedItemIds: new Set(),
     isCounterTable: false,
     counterCustomerName: null,
     pendingSeatingPrompt: null,

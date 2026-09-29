@@ -164,6 +164,43 @@
   // 자리 이동 안내가 「내 것」인지 가리는 데 쓰는 표시. refreshTableState 가
   // 이 값을 읽으므로 선언이 위에 있어야 한다.
   const SEAT_KEY = `hgk_seat_${tableNumber}`;
+
+  // 손님이 답해 둔 인원 — 아직 자리에 안 박혔다.
+  //
+  // 사장님(2026-09-29): "고객이 주문을 위해 검색하는 동안 인원수가 미리 등록돼
+  // 있어 혼선이 발생함 ... 주문이 완료됨과 동시에 테이블의 손님인원수가 기록될
+  // 수 있도록." 그래서 답하는 순간 서버에 보내지 않고 들고만 있다가, 첫 주문에
+  // 실어 보낸다(POST /api/orders 의 party — 서버가 주문을 받는 그 순간 앉힌다,
+  // src/partySize.js seatPartyWithOrder).
+  //
+  // 새로고침해도 다시 묻지 않게 이 탭에 적어 둔다. 30분이 지난 답은 버린다 —
+  // 직원이 같은 탭으로 다른 손님 수기 주문을 열 때 옛 답이 따라오면 안 된다.
+  let partyPending = false;
+  const PENDING_PARTY_KEY = `hgk_party_pending_${tableNumber}`;
+  const PENDING_PARTY_TTL_MS = 30 * 60 * 1000;
+  function savePendingParty() {
+    try {
+      sessionStorage.setItem(PENDING_PARTY_KEY, JSON.stringify({ a: partyAdults, c: partyChildren, at: Date.now() }));
+    } catch (e) {
+      /* 저장이 막혀도 이 화면에서는 들고 있다 */
+    }
+  }
+  function loadPendingParty() {
+    try {
+      const v = JSON.parse(sessionStorage.getItem(PENDING_PARTY_KEY) || "null");
+      if (!v || Date.now() - (v.at || 0) > PENDING_PARTY_TTL_MS) return null;
+      if (!(v.a + v.c >= 1)) return null;
+      return v;
+    } catch (e) {
+      return null;
+    }
+  }
+  function clearPendingParty() {
+    partyPending = false;
+    try {
+      sessionStorage.removeItem(PENDING_PARTY_KEY);
+    } catch (e) {}
+  }
   let movedNoticeShown = false;
 
   // 이 자리에 생긴 일을 바로 받아보는 통로(Pusher). 연결돼 있으면 폰이
@@ -1561,6 +1598,11 @@
       if (!res.ok) return 0;
       minSpendPerPerson = Number(d.min_spend_per_person) || 0;
       minSpendRequired = Number(d.min_spend_required) || 0;
+      // 첫 주문 전이면 서버는 아직 인원을 모른다(답은 이 폰에 있다). 같은 규칙 —
+      // 어른 수 × 1인 低消(src/minSpend.js payingCount) — 으로 여기서 센다.
+      if (partyPending && !d.party_size) {
+        minSpendRequired = minSpendPerPerson * (partyAdults == null ? partySize || 0 : partyAdults);
+      }
       return Number(d.min_spend_spent) || 0;
     } catch (e) {
       // 못 물어보면 안내를 건너뛴다. 네트워크가 잠깐 끊긴 것 때문에 손님이
@@ -1672,6 +1714,8 @@
           // order — see is_counter handling in src/routes/orders.js.
           customerName: isCounterTable ? counterCustomerName : undefined,
           customerPhone: isCounterTable ? counterCustomerPhone : undefined,
+          // 답해 둔 인원 — 첫 주문과 함께 자리에 박힌다(위 partyPending).
+          party: partyPending && !isCounterTable ? { adults: partyAdults, children: partyChildren } : undefined,
         }),
       });
       if (!res.ok) {
@@ -1697,6 +1741,11 @@
       const order = await res.json();
       activeOrderId = order.id;
       hasPriorOrder = true;
+      // 인원이 이제 자리에 있다(서버가 이 주문과 함께 앉혔다).
+      if (partyPending) {
+        clearPendingParty();
+        rememberSeating(order.seating);
+      }
       // 방금 시킨 메뉴는 이제 이 자리에서 「이미 올라간」 것이다.
       for (const it of order.items || []) if (it && it.item_id != null) orderedItemIds.add(String(it.item_id));
       saveOrderToHistory(order.id);
@@ -2429,7 +2478,20 @@
         // 구분이 생기기 전에 앉은 손님이면 서버가 전부 어른으로 채워 보낸다.
         partyAdults = data.party_adults == null ? data.party_size : data.party_adults;
         partyChildren = data.party_children || 0;
+        // 자리에 이미 있으면 이 탭이 들고 있던 답은 필요 없다(첫 주문이 이미
+        // 들어갔다 — 이 폰이든 옆 폰이든).
+        clearPendingParty();
         return; // already registered for this table's current party — don't ask again
+      }
+      // 아직 자리에 없다 — 이 탭에서 답해 둔 것이 있으면 그걸 쓴다. 주문을
+      // 보내기 전의 새로고침에 다시 묻지 않는다.
+      const pending = res.ok ? loadPendingParty() : null;
+      if (pending) {
+        partyAdults = pending.a;
+        partyChildren = pending.c;
+        partySize = pending.a + pending.c;
+        partyPending = true;
+        return;
       }
     } catch (e) {
       /* network error — fall through and ask, same as if none was registered */
@@ -2499,6 +2561,22 @@
   };
   $("#partySizeConfirmBtn").onclick = async () => {
     const btn = $("#partySizeConfirmBtn");
+    // 아직 이 자리에 주문이 없으면 **서버에 안 보낸다** — 들고 있다가 첫 주문에
+    // 실어 보낸다(위 partyPending, 2026-09-29). 관리자 화면에 주문 없는 인원이
+    // 뜨지 않는다.
+    //
+    // 이미 주문이 있는데 인원이 비어 있는 자리(있을 수 없는 상태를 고치는 중 —
+    // CLAUDE.md)는 예전처럼 바로 보낸다. 그 손님은 더 안 시킬 수도 있다.
+    if (!hasPriorOrder) {
+      partyAdults = adultsStep;
+      partyChildren = childrenStep;
+      partySize = adultsStep + childrenStep;
+      partyPending = true;
+      savePendingParty();
+      $("#partySizeBackdrop").hidden = true;
+      resetIdleTimer();
+      return;
+    }
     btn.disabled = true;
     try {
       const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
@@ -2518,6 +2596,7 @@
       partyAdults = adultsStep;
       partyChildren = childrenStep;
       partySize = adultsStep + childrenStep;
+      clearPendingParty();
       $("#partySizeBackdrop").hidden = true;
       resetIdleTimer();
     } catch (e) {

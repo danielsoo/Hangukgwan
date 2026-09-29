@@ -356,9 +356,49 @@ function editPartySize(table, seatingOrders, adults, children) {
   return { table, changedOrders };
 }
 
+/**
+ * 손님이 답해 둔 인원 — 주문과 함께 온 { adults, children } 를 읽는다.
+ * 말이 안 되면 null. (위 PUT 과 같은 범위: 합 1~50, 음수 없음.)
+ */
+function parsePartyAnswer(p) {
+  if (!p || typeof p !== "object") return null;
+  const adults = parseInt(p.adults, 10);
+  const children = parseInt(p.children, 10) || 0;
+  if (!Number.isFinite(adults) || adults < 0 || children < 0) return null;
+  const size = adults + children;
+  if (size < 1 || size > 50) return null;
+  return { adults, children };
+}
+
+/**
+ * 첫 주문이 들어가는 **그 순간에** 손님을 자리에 앉힌다.
+ *
+ * 사장님(2026-09-29): "고객이 주문을 위해 검색하는 동안 인원수가 미리 등록돼
+ * 있어 혼선이 발생함. 예전 손님기록인지 현재 손님이 주문중인지 혼란스러워
+ * 직접 삭제해야하는지 결정을 못함. 수정요청 - 주문이 완료됨과 동시에 테이블의
+ * 손님인원수가 기록될 수 있도록."
+ *
+ * 예전에는 손님이 인원을 답하는 순간 자리에 박혔다(PUT /party-size). 메뉴를
+ * 고르는 몇 분 동안 관리자 화면에는 주문 없는 「👥 3」 이 떠 있고, 직원은 그게
+ * 앞 손님 찌꺼기인지 지금 고르는 중인지 알 수 없었다. 이제 손님 폰은 답을
+ * 들고만 있다가 주문과 같이 보내고, 서버는 주문이 모든 검사를 통과한 뒤
+ * 여기서 앉힌다. 그래서 「주문 없는 인원」 이 생길 틈이 없다 — 인원과 메뉴는
+ * 하나의 세트다(CLAUDE.md).
+ *
+ * 착석 시각도 이때 찍는다 — 이 주문이 이 착석의 첫 주문이다.
+ */
+function seatPartyWithOrder(table, party, nowIso) {
+  table.party_size = party.adults + party.children;
+  table.party_adults = party.adults;
+  table.party_children = party.children;
+  table.party_size_updated_at = nowIso;
+}
+
 module.exports = {
   PARTY_KEYS,
   editPartySize,
+  parsePartyAnswer,
+  seatPartyWithOrder,
   clearPartyFields,
   clearIdleSeats,
   liveOrdersOf,
