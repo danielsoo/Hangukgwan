@@ -183,13 +183,14 @@
   function discountBaseOf(it) {
     return (it.unit_price || 0) * (it.qty || 0);
   }
-  // 소수점은 전부 내림, 기준은 「손님이 내는 금액」(src/discounts.js
-  // payableAfterRate). 화면·서버와 같은 식이어야 종이와 화면이 안 갈린다.
+  // 소수점은 사사오입, 기준은 「손님이 내는 금액」(src/discounts.js
+  // payableAfterRate, 2026-09-29 내림 → 사사오입). 화면·서버와 같은 식이어야
+  // 종이와 화면이 안 갈린다.
   function payableAfterRate(amount, rate) {
     const base = Number(amount) || 0;
     const r = Number(rate);
     if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
-    return Math.floor(base * r);
+    return Math.floor(Number((base * r).toFixed(6)) + 0.5);
   }
 
   // 사장님 요청(2026-09-07): "주문서 2장인출 한장은 지금처럼 주방용, 다른

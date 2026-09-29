@@ -51,12 +51,21 @@ function check(name, ok, detail) {
 const noDrink = () => false;
 const TE95 = 0.95;
 
-out.push("[A. 소수점은 전부 내림 — 기준은 손님이 내는 금액]");
-check("142.5 는 142 로 내린다", payableAfterRate(150, TE95) === 142, `${payableAfterRate(150, TE95)}`);
-check("그때 할인액은 8", discountByRate(150, TE95) === 8, `${discountByRate(150, TE95)}`);
+// 2026-09-29 사장님: "할인계산에서 개별항목별 절사 계산에서 사사오입 할인으로
+// 수정 요청." — 줄마다 따로 계산하는 것은 그대로, 줄 하나의 소수점만
+// 내림 → 사사오입. 굴리는 대상도 그대로 「손님이 내는 금액」.
+out.push("[A. 소수점은 사사오입 — 기준은 손님이 내는 금액]");
+check("★ 142.5 는 143 으로 올린다", payableAfterRate(150, TE95) === 143, `${payableAfterRate(150, TE95)}`);
+check("그때 할인액은 7", discountByRate(150, TE95) === 7, `${discountByRate(150, TE95)}`);
+check("★ .5 이상은 올리고 미만은 내린다 — 128 × 0.95 = 121.6 → 122, 132 × 0.95 = 125.4 → 125",
+  payableAfterRate(128, TE95) === 122 && payableAfterRate(132, TE95) === 125,
+  `${payableAfterRate(128, TE95)}, ${payableAfterRate(132, TE95)}`);
+check("★ 부동소수점으로 .49999… 가 나와도 .5 로 본다",
+  [150, 130, 170, 190, 210, 330].every((b) => payableAfterRate(b, TE95) === Math.floor((b * 95 + 50) / 100)),
+  [150, 130, 170, 190, 210, 330].map((b) => `${b}→${payableAfterRate(b, TE95)}`).join(" "));
 check("딱 떨어지면 그대로", payableAfterRate(200, TE95) === 190 && discountByRate(200, TE95) === 10, "");
-check("VIP9折도 같은 규칙 — 155 → 139", payableAfterRate(155, 0.9) === 139, `${payableAfterRate(155, 0.9)}`);
-check("반올림이면 140 이 나왔을 자리다", Math.round(155 * 0.9) === 140, "");
+check("★ VIP9折도 같은 규칙 — 155 × 0.9 = 139.5 → 140", payableAfterRate(155, 0.9) === 140, `${payableAfterRate(155, 0.9)}`);
+check("내림이었으면 139 가 나왔을 자리다", Math.floor(155 * 0.9) === 139, "");
 check("0원은 0원", payableAfterRate(0, TE95) === 0 && discountByRate(0, TE95) === 0, "");
 check("망가진 값에도 안 터진다", payableAfterRate(undefined, TE95) === 0 && discountByRate(null, TE95) === 0, "");
 
@@ -64,8 +73,8 @@ out.push("\n[스크린샷 ①: 韓式紫菜捲 NT$150, 特約95折]");
 const nori = [{ unit_price: 150, qty: 1 }];
 const d1 = computeDiscountAmount("te95", null, nori, null, noDrink);
 const line1 = payableAfterRate(discountBaseOf(nori[0]), TE95);
-check("★ 품목 줄이 142", line1 === 142, `${line1}`);
-check("★ 소계도 142 — 143 이 아니다", 150 - d1.total === 142, `${150 - d1.total}`);
+check("★ 품목 줄이 143", line1 === 143, `${line1}`);
+check("★ 소계도 143", 150 - d1.total === 143, `${150 - d1.total}`);
 check("★ 둘이 같다", line1 === 150 - d1.total, "여기가 갈리면 사장님이 본 그 1원이 다시 생긴다");
 
 out.push("\n[스크린샷 ②: 닭갈비 x4 = 밥값 1,200 + 泡麵 60 + 拌飯 70]");
@@ -97,18 +106,18 @@ check("줄 전체는 250", lineTotalOf(sized[0]) === 250, `${lineTotalOf(sized[0
 check("★ 기준은 200", discountBaseOf(sized[0]) === 200, `${discountBaseOf(sized[0])}`);
 check("★ 할인액 20 — 25 가 아니다", d3.total === 20, `${d3.total}`);
 
-out.push("\n[C. 줄마다 내림해서 더한다 — 합계를 한 번에 굴리지 않는다]");
+out.push("\n[C. 줄마다 반올림해서 더한다 — 합계를 한 번에 굴리지 않는다]");
 const two = [
   { unit_price: 150, qty: 1 },
   { unit_price: 150, qty: 1 },
 ];
 const perLine = computeVipDiscountItems("te95", two, null, noDrink);
-check("★ 줄 단위 합계는 16 (8+8)", perLine === 16, `${perLine}`);
+check("★ 줄 단위 합계는 14 (7+7)", perLine === 14, `${perLine}`);
 check("합계를 한 번에 굴리면 15 다", computeVipDiscount("te95", 300) === 15, `${computeVipDiscount("te95", 300)}`);
 check(
   "★ 결제에 쓰이는 건 줄 단위 쪽",
-  computeDiscountAmount("te95", null, two, null, noDrink).total === 16,
-  "이게 15 면 품목 줄 142+142=284 와 소계 285 가 또 어긋난다"
+  computeDiscountAmount("te95", null, two, null, noDrink).total === 14,
+  "이게 15 면 품목 줄 143+143=286 과 소계 285 가 또 어긋난다"
 );
 const three = [{ unit_price: 150, qty: 1 }, { unit_price: 150, qty: 1 }, { unit_price: 150, qty: 1 }];
 check(
@@ -118,13 +127,13 @@ check(
   ""
 );
 
-out.push("\n[재량 할인도 내림이다]");
+out.push("\n[재량 할인도 사사오입이다]");
 const m1 = computeDiscountAmount(null, { mode: "percent", value: 5 }, nori, null, noDrink);
-check("★ 150 의 5% 도 받는 돈을 내림 — 142", 150 - m1.total === 142, `${150 - m1.total}`);
+check("★ 150 의 5% 도 받는 돈을 반올림 — 143", 150 - m1.total === 143, `${150 - m1.total}`);
 const m2 = computeDiscountAmount(null, { mode: "amount", value: 10.7 }, nori, null, noDrink);
 check("★ 정액 10.7 은 10 으로 내린다", m2.total === 10, `${m2.total}`);
 const m3 = computeDiscountAmount("te95", { mode: "amount", value: 2 }, nori, null, noDrink);
-check("★ 둘을 같이 걸면 8 + 2", m3.total === 10 && 150 - m3.total === 140, `${m3.total}`);
+check("★ 둘을 같이 걸면 7 + 2", m3.total === 9 && 150 - m3.total === 141, `${m3.total}`);
 
 out.push("\n[화면·종이가 같은 식을 쓰는가]");
 const read = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");

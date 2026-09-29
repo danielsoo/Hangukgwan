@@ -8603,13 +8603,14 @@
     }, 0);
   }
   // src/discounts.js payableAfterRate/discountByRate 와 **같은 식이어야 한다.**
-  // 소수점은 전부 내림, 기준은 「손님이 내는 금액」(2026-09-16 사장님:
-  // "소숫점은 그냥 다 내림으로 하려고 해").
+  // 소수점은 사사오입, 기준은 「손님이 내는 금액」(2026-09-29 사장님: "개별
+  // 항목별 절사 계산에서 사사오입 할인으로"). 그 전(09-16)에는 내림이었다.
   function payableAfterRateClient(amount, rate) {
     const base = Number(amount) || 0;
     const r = Number(rate);
     if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
-    return Math.floor(base * r);
+    // 150 × 0.95 가 142.49999… 로 나와도 143 이 되게 한 번 정리하고 굴린다.
+    return Math.floor(Number((base * r).toFixed(6)) + 0.5);
   }
   function discountByRateClient(amount, rate) {
     const base = Number(amount) || 0;

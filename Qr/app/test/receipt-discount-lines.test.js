@@ -124,7 +124,9 @@ const ORDER = {
     { name_zh: "辣炒雞排", name_ko: "닭갈비", qty: 2, unit_price: 300, selected_addons: [{ name: "加點泡麵", price: 50 }] },
   ],
 };
-const DISCOUNT = { active: true, isPercent: true, rate: 0.95, discountedTotal: 847, label: "特約95折", amount: 43 };
+// 사사오입(2026-09-29): 230 × 0.95 = 218.5 → 219(-11), 600 × 0.95 = 570(-30).
+// 추가 옵션 100 은 안 깎인다. 합계 890 - 41 = 849.
+const DISCOUNT = { active: true, isPercent: true, rate: 0.95, discountedTotal: 849, label: "特約95折", amount: 41 };
 
 out.push("\n[結帳單 에는 한글이 한 자도 없다 — 실제로 만들어서 본다]");
 {
@@ -162,9 +164,9 @@ out.push("\n[結帳單 에는 한글이 한 자도 없다 — 실제로 만들�
     buildRaster(ORDER, "韓國館", null, null, { priceCopy: true, discount: DISCOUNT });
     const paper = drawn.join("\n");
     check("★ 래스터 結帳單 에 한글이 없다", !HANGUL.test(paper), JSON.stringify((paper.match(/[가-힣].{0,20}/) || [])[0] || ""));
-    check("★ 품목마다 원가와 할인가가 같이 찍힌다", /NT\$230 NT\$218/.test(paper), paper.slice(0, 400));
-    check("★ 合計 도 원가와 받은 돈이 같이", /NT\$890 NT\$847/.test(paper), "");
-    check("★ 할인 한 줄이 있다", paper.includes("特約95折") && paper.includes("-NT$43"), "");
+    check("★ 품목마다 원가와 할인가가 같이 찍힌다", /NT\$230 NT\$219/.test(paper), paper.slice(0, 400));
+    check("★ 合計 도 원가와 받은 돈이 같이", /NT\$890 NT\$849/.test(paper), "");
+    check("★ 할인 한 줄이 있다", paper.includes("特約95折") && paper.includes("-NT$41"), "");
 
     // 주문 변경 알림의 결제용 사본 — 여기 라벨이 한글이었다.
     drawn.length = 0;
@@ -192,19 +194,21 @@ out.push("\n[HTML 結帳單 도 같은 규칙]");
     const orderTypeLabel = () => "內用";
     const partyTag = (o) => (o && o.party_size ? " (" + o.party_size + ")" : "");
     const discountBaseOfClient = (it) => (it.unit_price||0)*(it.qty||0);
-    const payableAfterRateClient = (a, r) => Math.floor(a*r);
     const window = { HG_SPICE: { isSilentOnTicket: () => true } };
     function computeTicketDiscountInfo() { return ${JSON.stringify(DISCOUNT)}; }
   `;
   const banner = cut("  function testTicketBannerHtml(o, priceCopy) {", "\n  function buildReceiptBodyHtml(");
+  // 할인가 계산은 화면의 **진짜 함수**를 쓴다. 예전에는 여기에 내림 식을 따로
+  // 적어 넣어서, 화면이 사사오입으로 바뀌어도(2026-09-29) 이 시험은 몰랐다.
+  const rateFn = cut("  function payableAfterRateClient(", "\n  function discountByRateClient(");
   const bodyFn = cut("  function buildReceiptBodyHtml(o, priceCopy) {", "\n  // 위 buildReceiptBodyHtml()");
   // eslint-disable-next-line no-new-func
-  const build = new Function(`${helpers}\n${banner}\n${bodyFn}\n return buildReceiptBodyHtml;`)();
+  const build = new Function(`${helpers}\n${rateFn}\n${banner}\n${bodyFn}\n return buildReceiptBodyHtml;`)();
   const priceHtml = build({ ...ORDER, test_session: "test_table" }, true);
   check("★ HTML 結帳單 에 한글이 없다", !HANGUL.test(priceHtml), JSON.stringify((priceHtml.match(/[가-힣].{0,20}/) || [])[0] || ""));
   check("★ 가게 이름도 중국어로 떨어진다", priceHtml.includes("韓國館"), "설정에 中文 이름이 없어도 한글로 가면 안 된다");
   check("★ 中文 이름이 없는 품목은 영어로", priceHtml.includes("Stone Pot Bibimbap"), "");
-  check("★ 품목마다 원가에 줄을 긋는다", /item-price-orig">NT\$230<\/span> <span class="item-price-final">NT\$218/.test(priceHtml), "");
+  check("★ 품목마다 원가에 줄을 긋는다", /item-price-orig">NT\$230<\/span> <span class="item-price-final">NT\$219/.test(priceHtml), "");
   // 소스에 적힌 글자가 아니라 **실제로 만들어진 종이**로 본다 — 주석에
   // 「小計」라고 써 있는 것까지 세면 시험이 거짓말을 한다.
   check("★ 小計 줄은 없다 (B2)", !priceHtml.includes("小計"), "같은 금액이 두 번 적히면 헷갈린다");

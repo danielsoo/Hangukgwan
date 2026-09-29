@@ -157,7 +157,17 @@ function fullEligibleTotal(items, indexes) {
 }
 
 // ---------------------------------------------------------------------------
-// 소수점은 **전부 내림**이다.
+// 소수점은 **사사오입(반올림)**이다 — 2026-09-29 부터.
+//
+// 사장님(2026-09-29): "할인계산에서 개별항목별 절사 계산에서 사사오입 할인으로
+// 수정 요청." 줄마다 따로 계산해서 더하는 것(아래 computeVipDiscountItems)은
+// 그대로이고, 줄 하나의 소수점만 내림 → 반올림으로 바뀐다. 굴리는 대상도
+// 그대로 「손님이 내는 금액」이다: 150 × 0.95 = 142.5 → 143 (할인 7원).
+//
+// 부동소수점: 150 × 0.95 가 어떤 수에서는 142.49999… 로 나온다. 그대로
+// Math.round 하면 .5 가 내려간다. 소수 여섯째 자리에서 한 번 정리한 뒤 굴린다.
+//
+// ── 아래는 내림 시절(2026-09-16)의 기록이다 ──
 //
 // 2026-09-16 사장님(결제창 스크린샷과 함께): "결제창에서 할인적용시 1원단위
 // 불일치 / 소숫점은 그냥 다 내림으로 하려고 해."
@@ -174,17 +184,22 @@ function payableAfterRate(amount, rate) {
   const base = Number(amount) || 0;
   const r = Number(rate);
   if (!Number.isFinite(base) || !Number.isFinite(r)) return base;
-  return Math.floor(base * r);
+  return roundHalfUp(base * r);
 }
 
-// 위 규칙에서 나오는 할인액 = 원래 금액 - 내림한 실수령액.
+/** 사사오입. 142.5 → 143, 142.4999999997(부동소수점) → 143, 142.4 → 142. */
+function roundHalfUp(x) {
+  return Math.floor(Number(x.toFixed(6)) + 0.5);
+}
+
+// 위 규칙에서 나오는 할인액 = 원래 금액 - 반올림한 실수령액.
 function discountByRate(amount, rate) {
   const base = Number(amount) || 0;
   return base - payableAfterRate(base, rate);
 }
 // ---------------------------------------------------------------------------
 
-// 합계를 한 번에 굴리는 옛 방식 — 여기서도 내림을 쓴다. 지금 결제 경로는
+// 합계를 한 번에 굴리는 옛 방식 — 여기서도 같은 반올림을 쓴다. 지금 결제 경로는
 // computeVipDiscountItems(줄 단위)를 쓰지만, 품목 목록 없이 금액만 들고 있는
 // 자리(예: 옛 테스트, 외부 호출)가 남아 있어 남겨 둔다.
 function computeVipDiscount(vipDiscountType, eligibleTotal) {
@@ -193,7 +208,7 @@ function computeVipDiscount(vipDiscountType, eligibleTotal) {
   return discountByRate(eligibleTotal, rate);
 }
 
-// 실제 결제에서 쓰는 VIP 할인액 — **줄마다 따로 내림해서 더한다.**
+// 실제 결제에서 쓰는 VIP 할인액 — **줄마다 따로 반올림해서 더한다.**
 //
 // 합계를 한 번에 내림하면 품목 줄들의 합과 소계가 또 어긋난다(150짜리 둘이면
 // 줄은 142+142=284, 합계는 floor(300×0.95)=285). 화면이 품목마다 할인가를
@@ -243,7 +258,7 @@ function computeDiscountAmount(vipDiscountType, manualDiscount, items, indexes, 
   const afterVip = Math.max(0, fullEligibleTotal(items, indexes) - vipAmount);
   let manualAmount = 0;
   if (manualDiscount) {
-    // 퍼센트도 「받는 금액을 내림」(위 payableAfterRate) — 남은 금액 전체를
+    // 퍼센트도 「받는 금액을 반올림」(위 payableAfterRate) — 남은 금액 전체를
     // 한 번에 굴린다. 재량 할인은 품목별로 나눠 보여주지 않으니(화면에도
     // 소계/합계에만 뜬다) 줄 단위로 내릴 기준이 없다.
     manualAmount =
