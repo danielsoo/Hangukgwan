@@ -195,10 +195,29 @@ router.put("/order-hours", canEditSettings, async (req, res) => {
 // 옛 값(print_device 하나)은 읽을 때 목록 첫 칸으로 본다. 배포 순간 옛
 // 화면이 떠 있는 기기도 id/name 을 그대로 받는다.
 const MAX_PRINT_DEVICES = 5;
+// 소식이 끊긴 기기는 목록에서 뺀다(2026-09-29 사장님 화면: 「자동 인쇄 중:
+// 주방 POS 앱 (Hall) · 주방 POS 앱 (Hall) · 廚房 POS App」 — 앱을 다시 깔거나
+// 저장공간이 비워지면 같은 패드가 새 번호로 들어오고 옛 번호가 영영 남았다).
+// 자동 인쇄를 켠 기기는 1분마다 다시 알린다(admin.js). 앱이 꺼진 패드는
+// 어차피 못 찍으니 목록에 있을 이유가 없다.
+const PRINT_DEVICE_TTL_MS = 10 * 60 * 1000;
+function localMs(s) {
+  // nowLocal() 과 같은 모양 "YYYY-MM-DD HH:MM:SS" 끼리 빼므로 시간대가 상쇄된다
+  // (src/settlement.js 의 nowMs 주석과 같은 이유).
+  const t = new Date(String(s || "").replace(" ", "T")).getTime();
+  return Number.isFinite(t) ? t : NaN;
+}
 function printDevicesOf(settings) {
-  if (Array.isArray(settings.print_devices)) return settings.print_devices.filter((d) => d && d.id);
-  const one = settings.print_device;
-  return one && one.id ? [one] : [];
+  const raw = Array.isArray(settings.print_devices)
+    ? settings.print_devices
+    : settings.print_device && settings.print_device.id ? [settings.print_device] : [];
+  const now = localMs(nowLocal());
+  return raw.filter((d) => {
+    if (!d || !d.id) return false;
+    const t = localMs(d.updated_at);
+    // 시각이 없거나 못 읽는 옛 칸은 남겨 둔다 — 지우면 찍던 기기가 멎을 수 있다.
+    return !Number.isFinite(t) || !Number.isFinite(now) || now - t < PRINT_DEVICE_TTL_MS;
+  });
 }
 function printDevicePayload(list) {
   const first = list[0] || {};

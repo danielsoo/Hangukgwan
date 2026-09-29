@@ -166,7 +166,10 @@ html[data-admin-seen="1"] #loginScreen { display: none; }
 .tab-panel { }
 
 /* Orders board */
-.orders-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; font-size: 18px; }
+.orders-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; margin-bottom: 14px; font-size: 18px; }
+/* 2026-09-29 사장님 패드 화면: 「신규 / 주문 알림음」이 두 줄로 꺾였다. 체크박스
+   글자는 꺾지 않는다. 「자동 인쇄 중」 줄은 아래 한 줄을 통째로 쓴다. */
+.orders-toolbar > label { white-space: nowrap; }
 .orders-toolbar button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
 #refreshOrders { min-width: 110px; transition: background-color 0.15s, border-color 0.15s; }
 #refreshOrders:disabled { cursor: default; }
@@ -688,7 +691,7 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
    으로 추가된 저장 확인 표시(toggleSavedMsg)에 적용. */
 .toggle-saved-msg { color: var(--green); font-size: 14px; font-weight: 600; }
 /* 이 기기 프린터 고르기 (2026-09-29) — 손가락으로 누르기 좋은 크기. */
-.printer-pick { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.printer-pick { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; white-space: nowrap; }
 .printer-pick select { font-size: 16px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); min-height: 40px; }
 .printer-pick-test { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
 .printer-row { display: flex; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
@@ -702,7 +705,10 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
 .print-device-note {
   font-size: 13px;
   color: var(--muted);
-  white-space: nowrap;
+  /* 기기가 여럿이면 길어진다 — 아래 한 줄을 통째로 쓰고 필요하면 꺾인다. */
+  order: 10;
+  flex-basis: 100%;
+  white-space: normal;
 }
 .print-device-note.is-elsewhere {
   color: var(--red);

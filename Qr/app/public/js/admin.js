@@ -715,9 +715,10 @@
       addPrinterBtn: "+ 프린터 추가",
       printersInvalid: "이름과 IP 를 확인해 주세요",
       printDeviceThis: "이 기기",
+      printDeviceNotHere: "이 기기는 자동 인쇄 꺼짐",
       rawbtSavedHereMsg: "이 기기에 저장했어요 (다른 기기는 그대로예요)",
       rawbtPerDeviceNote: "이 스위치는 이 기기에만 적용돼요. 홀 기기는 끄고, 블루투스 프린터를 쓰는 카운터 기기에서만 켜세요.",
-      printDeviceKindPos: "주방 POS 앱",
+      printDeviceKindPos: "POS 앱",
       printDeviceKindTablet: "태블릿",
       printDeviceKindPhone: "폰",
       printDeviceKindPc: "PC",
@@ -1557,9 +1558,10 @@
       addPrinterBtn: "+ 新增印表機",
       printersInvalid: "請確認名稱與 IP",
       printDeviceThis: "這台裝置",
+      printDeviceNotHere: "這台未開自動列印",
       rawbtSavedHereMsg: "已儲存在這台裝置（其他裝置不受影響）",
       rawbtPerDeviceNote: "這個開關只套用在這台裝置。外場裝置請關閉，只在使用藍牙印表機的櫃台裝置開啟。",
-      printDeviceKindPos: "廚房 POS App",
+      printDeviceKindPos: "POS App",
       printDeviceKindTablet: "平板",
       printDeviceKindPhone: "手機",
       printDeviceKindPc: "電腦",
@@ -3359,6 +3361,10 @@
     // 사람이 토글을 누를 때나 바뀌는 값이다.
     setInterval(async () => {
       await refreshPrintDevice();
+      // 자동 인쇄가 켜져 있으면 「아직 여기 있다」고 다시 알린다 — 서버는 10분
+      // 넘게 소식이 없는 기기를 목록에서 뺀다(src/routes/settings.js
+      // PRINT_DEVICE_TTL_MS). 이름도 이때 새로 적힌다(프린터를 바꿨으면).
+      if (autoPrintOn) await claimPrintDevice();
       renderPrintDeviceNote();
     }, 60000);
     startPolling();
@@ -4449,9 +4455,10 @@
   function myDeviceName() {
     const ua = navigator.userAgent || "";
     if (appPrintBridge()) {
-      // 어느 프린터로 찍는지까지 — 「자동 인쇄 중: POS 앱(주방 프린터) · …」.
+      // 고른 프린터 이름으로 부른다 — 「자동 인쇄 중: 이 기기 · Counter」.
+      // 기기 종류(「POS 앱」)는 두 패드가 똑같아서 이름으로 못 가른다.
       const p = currentShopPrinter(appPrintBridge());
-      return p ? `${T("printDeviceKindPos")} (${p.name})` : T("printDeviceKindPos");
+      return p ? p.name : T("printDeviceKindPos");
     }
     if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return T("printDeviceKindTablet");
     if (/Mobile|iPhone|Android/i.test(ua)) return T("printDeviceKindPhone");
@@ -4526,8 +4533,13 @@
     // 자동 인쇄 중인 기기를 **전부** 적는다 — 「어디서 종이가 나오나」를 한눈에.
     // 이 기기는 「이 기기」 로 적는다(종류 이름만으로는 어느 태블릿인지 모른다).
     const mine = amPrintDevice();
-    const names = list.map((d) => (d.id === myDeviceId() ? T("printDeviceThis") : d.name || T("printDeviceUnknown")));
-    el.textContent = T("printDevicesList").replace("{list}", names.join(" · "));
+    const here = currentShopPrinter(appPrintBridge());
+    const names = list.map((d) =>
+      d.id === myDeviceId() ? (here ? `${T("printDeviceThis")}(${here.name})` : T("printDeviceThis")) : d.name || T("printDeviceUnknown")
+    );
+    // 같은 이름이 여러 번 나오면 한 번만 — 적는 것은 「어디서 종이가 나오나」다.
+    const uniq = [...new Set(names)];
+    el.textContent = (mine ? "" : T("printDeviceNotHere") + " · ") + T("printDevicesList").replace("{list}", uniq.join(" · "));
     el.classList.toggle("is-elsewhere", !mine);
     el.hidden = false;
   }
