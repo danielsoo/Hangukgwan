@@ -119,6 +119,21 @@
   // Defaults to false (= "treat as first order") so the safe direction on a
   // slow/failed check is asking for the minimum, not silently skipping it.
   let hasPriorOrder = false;
+  // 이 착석에서 이미 시킨 메뉴 id(문자열). 불판 「첫 주문 2인분」은 그 메뉴를
+  // **처음 시킬 때** 걸린다 — 2026-09-29 A16: 다른 메뉴를 먼저 시킨 뒤 동판
+  // 1인분이 그대로 들어갔다. 서버가 같은 함수로 센 것을 받아 쓴다
+  // (GET /api/tables/:n/party-size 의 ordered_item_ids, src/firstOrderMin.js).
+  let orderedItemIds = new Set();
+  // 이 메뉴를 지금 담을 때의 최소 수량. 0 이면 최소 없음.
+  //
+  // 포장 카운터는 예전 규칙 그대로 「이 기기의 첫 주문」이다 — 서버도 그렇게
+  // 본다(src/routes/orders.js). 거기 주문은 서로 무관한 손님 것이다.
+  function firstOrderMinFor(item) {
+    const min = (item && item.min_first_order_qty) || 0;
+    if (!min) return 0;
+    if (isCounterTable) return hasPriorOrder ? 0 : min;
+    return orderedItemIds.has(String(item.id)) ? 0 : min;
+  }
   let searchTerm = "";
   let statusPollTimer = null;
   let storeLat = null;
@@ -1050,9 +1065,9 @@
       if ($("#qtyHint")) $("#qtyHint").hidden = true;
       // 최소 수량은 「이 자리의 첫 주문」에만 걸린다. 이미 주문한 적이
       // 있으면 그 문장은 사실이 아니므로 비율 이야기만 남긴다.
-      const mixMin = item.min_first_order_qty || 0;
+      const mixMin = firstOrderMinFor(item);
       $("#mixOptionsHint").textContent =
-        mixMin && !hasPriorOrder
+        mixMin
           ? t("mixOptionsHint").replace("{n}", mixMin)
           : t("mixOptionsHintAfter");
       const opts = optionNames(item.options);
@@ -1063,7 +1078,7 @@
       renderMixOptions(opts);
     } else {
       mixWrap.hidden = true;
-      currentQty = item.min_first_order_qty && !hasPriorOrder ? item.min_first_order_qty : 1;
+      currentQty = firstOrderMinFor(item) || 1;
       $("#qtyVal").textContent = String(currentQty);
       qtyRow.hidden = false;
       // 왜 2 로 올라가 있는지 적어준다.
@@ -1075,8 +1090,8 @@
       // 읽는다.
       const qtyHint = $("#qtyHint");
       if (qtyHint) {
-        const minQty = item.min_first_order_qty || 0;
-        const show = minQty > 1 && !hasPriorOrder;
+        const minQty = firstOrderMinFor(item);
+        const show = minQty > 1;
         qtyHint.hidden = !show;
         qtyHint.textContent = show ? t("minFirstOrderHint").replace("{n}", minQty) : "";
       }
@@ -1219,7 +1234,7 @@
     if (currentItem.mix_options) {
       const opts = Object.keys(mixQty);
       const totalQty = opts.reduce((sum, o) => sum + mixQty[o], 0);
-      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      const requiredMin = firstOrderMinFor(currentItem) || 1;
       if (totalQty < requiredMin) {
         showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
         return;
@@ -1239,7 +1254,7 @@
         }
       });
     } else {
-      const requiredMin = currentItem.min_first_order_qty && !hasPriorOrder ? currentItem.min_first_order_qty : 1;
+      const requiredMin = firstOrderMinFor(currentItem) || 1;
       if (currentQty < requiredMin) {
         showToast((GRILL_MIN_MSG[lang] || GRILL_MIN_MSG.zh)(requiredMin));
         return;
@@ -1682,6 +1697,8 @@
       const order = await res.json();
       activeOrderId = order.id;
       hasPriorOrder = true;
+      // 방금 시킨 메뉴는 이제 이 자리에서 「이미 올라간」 것이다.
+      for (const it of order.items || []) if (it && it.item_id != null) orderedItemIds.add(String(it.item_id));
       saveOrderToHistory(order.id);
       // 포장 카운터는 「주문 한 건 = 손님 한 분」이다. 전화로 오는 포장 주문은
       // 직원이 같은 화면에서 계속 받는데, 이름과 전화번호가 sessionStorage 에
@@ -2405,6 +2422,7 @@
         return;
       }
       if (res.ok) hasPriorOrder = !!data.has_prior_order;
+      if (res.ok) orderedItemIds = new Set((data.ordered_item_ids || []).map(String));
       if (res.ok) rememberSeating(data.seating_started_at);
       if (res.ok && data.party_size) {
         partySize = data.party_size;

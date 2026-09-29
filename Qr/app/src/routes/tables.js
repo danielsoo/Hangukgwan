@@ -11,6 +11,7 @@ const {
   clearPartyFields,
 } = require("../partySize");
 const { openOrdersForTable, openOrdersForAll, ordersForSeating } = require("../orderQueries");
+const { orderedItemIdsOf } = require("../firstOrderMin");
 const testMode = require("../testMode");
 const minSpend = require("../minSpend");
 const seating = require("../seating");
@@ -369,6 +370,8 @@ router.get("/:tableNumber/party-size", async (req, res) => {
         party_adults: 1,
         party_children: 1,
         test_session: 1,
+        // 「이 자리에서 이 메뉴를 이미 시켰나」(아래 ordered_item_ids).
+        items: 1,
       },
     }),
   };
@@ -426,6 +429,10 @@ router.get("/:tableNumber/party-size", async (req, res) => {
     // /api/orders/table/:n 으로 한 번 더 물었다. 바로 위에서 이미 같은 착석
     // 주문을 계산했으므로 결과를 같이 보내 중복 API/주문 조회를 없앤다.
     has_prior_order: seatingOrders.length > 0,
+    // 이 착석에서 이미 시킨 메뉴. 불판 「첫 주문 2인분」은 **그 메뉴를 처음
+    // 시킬 때** 걸린다(2026-09-29 A16 — src/firstOrderMin.js). 서버가 주문을
+    // 받을 때 쓰는 것과 같은 함수로 센다.
+    ordered_item_ids: [...orderedItemIdsOf(seatingOrders)],
   });
 });
 

@@ -102,7 +102,9 @@ async function ordersForNewOrder(store, table, today) {
   const opts = {
     projection: { id: 1, table_number: 1, status: 1, created_at: 1 },
   };
-  if (!table.is_counter) return ordersForSeating(store, table, opts);
+  // 테이블은 품목도 가져온다 — 「이 자리에서 이 메뉴를 이미 시켰나」를
+  // 봐야 한다(src/firstOrderMin.js, 2026-09-29 A16 동판 1인분).
+  if (!table.is_counter) return ordersForSeating(store, table, { projection: { ...opts.projection, items: 1 } });
   // 포장 카운터의 짧은 픽업번호는 오늘 몇 번째 주문인지로 정한다.
   return findOrders(
     {

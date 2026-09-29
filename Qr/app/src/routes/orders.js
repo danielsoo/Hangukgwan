@@ -12,6 +12,7 @@ const seating = require("../seating");
 const { serviceOf } = require("../servicePeriod");
 // 오전/오후를 가르는 규칙. 결산과 같은 함수를 쓴다.
 const { halfOf, visitKeyOf } = require("../settlement");
+const { orderedItemIdsOf, firstOrderMinViolation } = require("../firstOrderMin");
 // 자동 오전 정산 (아래 GET / 주석). 라우터가 아니라 그 파일이 내보낸 함수다.
 const { maybeAutoCloseAm, maybePendingDayClose } = require("./settlements");
 
@@ -468,19 +469,32 @@ router.post("/", async (req, res) => {
   // 전체 가게 주문을 먼저 메모리에 채우지 않는다. 첫 주문 규칙·低消·포장
   // 픽업번호에 필요한 것은 이 테이블의 현재 착석(포장은 오늘)뿐이다.
   const tableOrders = await ordersForNewOrder(store, orderingTable, taipeiDateString());
-  const priorOrders = tableOrders.filter(
-    (o) => o.table_number === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
-  );
-  if (!isTestDevice && priorOrders.length === 0) {
-    const qtyByItem = {};
-    for (const v of validated) qtyByItem[v.item_id] = (qtyByItem[v.item_id] || 0) + v.qty;
-    for (const mi of store.menuItems) {
-      if (isDeletedMenuItem(mi)) continue;
-      if (!mi.min_first_order_qty) continue;
-      const orderedQty = qtyByItem[mi.id] || 0;
-      if (orderedQty > 0 && orderedQty < mi.min_first_order_qty) {
-        return res.status(400).json({ error: "grill_min_qty", itemId: mi.id, min: mi.min_first_order_qty });
+  if (!isTestDevice) {
+    // 2026-09-29: 「이 자리의 첫 주문」 → 「이 자리에서 이 메뉴를 처음 시킬 때」
+    // (src/firstOrderMin.js). A16 은 다른 메뉴를 먼저 시킨 뒤 동판 1인분이
+    // 그대로 들어갔다.
+    //
+    // 포장 카운터는 예전 규칙 그대로다 — 거기 쌓인 주문은 서로 무관한 손님
+    // 것이라 「이 자리에서 이미 시켰다」가 성립하지 않는다. 오늘 카운터에 안
+    // 끝난 주문이 하나도 없을 때만 본다.
+    let violation = null;
+    if (orderingTable.is_counter) {
+      const openHere = tableOrders.filter(
+        (o) => o.table_number === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
+      );
+      if (openHere.length === 0) {
+        violation = firstOrderMinViolation(store.menuItems, validated, null, isDeletedMenuItem);
       }
+    } else {
+      violation = firstOrderMinViolation(
+        store.menuItems,
+        validated,
+        orderedItemIdsOf(tableOrders),
+        isDeletedMenuItem
+      );
+    }
+    if (violation) {
+      return res.status(400).json({ error: "grill_min_qty", itemId: violation.itemId, min: violation.min });
     }
   }
 
