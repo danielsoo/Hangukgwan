@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useLanguage } from '@/context/LanguageContext'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
+import { useDishPhotos } from '@/lib/menuPhotos'
 
 const DISHES: { n: string; ko: string; zh: string; price: number; badge?: boolean }[] = [
   { n: '01', ko: '부대찌개', zh: '部隊鍋 · Army Stew · 3–4 人分食', price: 600, badge: true },
@@ -16,6 +17,9 @@ const DISHES: { n: string; ko: string; zh: string; price: number; badge?: boolea
 
 export default function SignatureSection() {
   const { tr } = useLanguage()
+  const photoOf = useDishPhotos()
+  // 큰 사진 한 장 — 대표 표시가 붙은 요리 중 사진이 있는 첫 번째.
+  const hero = DISHES.find((d) => d.badge && photoOf(d.ko))
   return (
     <section style={{ background: 'var(--bg-alt)' }}>
       <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) var(--shell-pad)' }}>
@@ -50,7 +54,7 @@ export default function SignatureSection() {
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 30 }} />
             <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: 'min(40ch, 100%)' }}>{tr.sig.note}</p>
             <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
-              <ImagePlaceholder label="招牌菜特寫 · A signature dish, close up" />
+              <ImagePlaceholder label="招牌菜特寫 · A signature dish, close up" src={hero ? photoOf(hero.ko) : undefined} alt={hero ? `${hero.ko} ${hero.zh.split(' · ')[0]}` : undefined} />
             </div>
           </div>
 

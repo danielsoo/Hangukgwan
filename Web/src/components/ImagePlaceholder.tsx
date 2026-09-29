@@ -1,5 +1,7 @@
 'use client'
 
+import { useState } from 'react'
+
 /**
  * 사진이 들어갈 자리. `src` 가 오면 사진을, 없으면 조용한 빈 면을 그린다.
  * 사진이 준비되면 각 호출부에 `src` 만 넘기면 되고 나머지는 그대로다.
@@ -27,12 +29,15 @@ export default function ImagePlaceholder({
   alt?: string
   minHeight?: string
 }) {
-  if (src) {
+  // 사진 주소가 깨졌으면(메뉴에서 지운 사진 등) 깨진 그림 대신 빈 면을 그린다.
+  const [failed, setFailed] = useState<string | null>(null)
+  if (src && failed !== src) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={alt || label}
+        onError={() => setFailed(src)}
         style={{
           position: minHeight ? undefined : 'absolute',
           inset: minHeight ? undefined : 0,

@@ -3,6 +3,7 @@
 import { useLanguage } from '@/context/LanguageContext'
 import { ORDER_URL } from '@/lib/config'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
+import { useDishPhotos } from '@/lib/menuPhotos'
 
 const DISHES: { ko: string; zh: string; price: number; badge?: boolean; label: string }[] = [
   { ko: '부대찌개', zh: '部隊鍋 · Army Stew', price: 600, badge: true, label: '부대찌개 部隊鍋' },
@@ -15,6 +16,7 @@ const DISHES: { ko: string; zh: string; price: number; badge?: boolean; label: s
 
 export default function MenuPage() {
   const { tr } = useLanguage()
+  const photoOf = useDishPhotos()
 
   return (
     <main style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) var(--shell-pad) clamp(70px, 9vw, 120px)' }}>
@@ -52,7 +54,7 @@ export default function MenuPage() {
         {DISHES.map((d) => (
           <div key={d.ko}>
             <div style={{ position: 'relative', aspectRatio: '3 / 4', marginBottom: 22 }}>
-              <ImagePlaceholder label={d.label} />
+              <ImagePlaceholder label={d.label} src={photoOf(d.ko)} />
               {d.badge && (
                 <span
                   style={{
