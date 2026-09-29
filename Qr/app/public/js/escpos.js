@@ -444,7 +444,12 @@
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
     const tableLabel = labelInfo.tableLabel || `桌號 ${o.table_number}${partyTag(o)}`;
-    const priceCopy = !!(opts && opts.priceCopy);
+    // opts.receipt = { method, paidAt } — 결제한 그 자리에서 손님에게 주는 영수증
+    // (2026-09-29 사장님: "손님은 자기가 시키고 결제한 것만 보면된다고 시간이랑
+    // 뭐 이런 것들"). 결제용(結帳單)과 같은 모양에 제목·결제 시각·결제 방식만
+    // 다르다. 참고용이라는 문구는 안 찍는다 — 이미 받은 돈이다.
+    const receipt = (opts && opts.receipt) || null;
+    const priceCopy = !!(opts && opts.priceCopy) || !!receipt;
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과.
     //
     // 2026-09-16 사장님: "vip 로 할인들어가는 그거는 할인 들어간 요소마다
@@ -536,13 +541,14 @@
       divider();
     }
 
-    line(`${storeName} ${notice ? (priceCopy ? "通知單 · 結帳" : "通知單 · 廚房") : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
+    line(`${storeName} ${receipt ? "收據" : notice ? (priceCopy ? "通知單 · 結帳" : "通知單 · 廚房") : priceCopy ? "結帳單" : "廚房出單"}`, sz("storeName", 17), wt("storeName", 900), { align: "center" });
     divider();
     row(tableLabel, orderTypeLabel(o), sz("tableNo", 13), wt("tableNo", 700), {
       badge: labelInfo.takeoutBox || null,
     });
     if (labelInfo.phoneLine) line(labelInfo.phoneLine, sz("time", 13), wt("time", 700));
-    line(new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW"), sz("time", 13), wt("time", 700));
+    if (receipt) line("結帳時間 " + new Date(String(receipt.paidAt || o.created_at).replace(" ", "T")).toLocaleString("zh-TW"), sz("time", 13), wt("time", 700));
+    else line(new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW"), sz("time", 13), wt("time", 700));
     divider();
 
     o.items.forEach((it) => {
@@ -630,7 +636,8 @@
     } else {
       row("合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
-    if (priceCopy) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
+    if (receipt && receipt.method) row("付款方式", receipt.method, sz("itemPrice", 13), wt("itemPrice", 700), { gapAfter: 6 });
+    if (priceCopy && !receipt) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
     // e0f1b86) — 다시는 채워지지 않으므로 렌더링을 지웠다. orderNote
     // 크기 설정 자체는 위 결제 참고 문구가 계속 쓰고 있어 그대로 둠.

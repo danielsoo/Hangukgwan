@@ -82,9 +82,15 @@ out.push("\n[4] 그 값이 종이까지 가는가 (public/js/admin.js)");
   check("★ 찍기 전에 먼저 기록한다", /jobs\.forEach\(\(j\) => printedNoticeKeys\.add\(j\.key\)\);[\s\S]{0,40}writeNoticeKeys\(\);/.test(src), "");
   check("담당 기기가 아니면 안 찍는다", /if \(!autoPrintOn \|\| !printHereAllowed\(\)\) return;/.test(src), "");
   check("★ 알림 인쇄가 주문 상태를 밀지 않는다", !/printNoticeTicket[\s\S]{0,2000}markPrintSucceededAndAdvance/.test(src), "");
-  check("★ 품목 변경은 두 장 — 주방용 + 결제용", /job\.notice\.kind === "changed"[\s\S]{0,300}priceCopy: true/.test(src), "");
-  check("자리 이동은 한 장 (금액이 그대로다)", /const parts = \[buildEscPosRasterTicket\(noticeOrder/.test(src), "");
-  check("두 장을 한 줄기로 보낸다", /sendRasterTicketParts\(parts, bridge\)/.test(src), "");
+  // 2026-09-29 사장님: "변경 후 전체 이딴 거 필요없다고 그냥 손님은 자기가
+  // 시키고 결제한 것만 보면된다고" — 품목 변경도 주방용 한 장이다. 손님
+  // 종이는 결제할 때 나오는 영수증(printPaymentReceipt).
+  {
+    const fn = src.slice(src.indexOf("async function printNoticeTicket("), src.indexOf("async function tryPrintViaRawBt("));
+    check("★ 품목 변경은 주방용 한 장 — 결제용(「변경 후 전체」)을 안 찍는다", fn.length > 0 && !/priceCopy: true/.test(fn), "");
+  }
+  check("주방용 한 장을 만든다", /const parts = \[buildEscPosRasterTicket\(noticeOrder/.test(src), "");
+  check("한 줄기로 보낸다", /sendRasterTicketParts\(parts, bridge\)/.test(src), "");
 }
 
 out.push("\n[5] 종이에 무슨 종이인지 적히는가 (public/js/escpos.js)");

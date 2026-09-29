@@ -699,6 +699,8 @@
       printDeviceUnknown: "다른 기기",
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
+      receiptPrintConfirm: "영수증을 출력하시겠습니까?",
+      receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
       printerPickDone: "✔ {name}(으)로 바꿨어요",
@@ -1539,6 +1541,8 @@
       printDeviceUnknown: "其他裝置",
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
+      receiptPrintConfirm: "要列印收據嗎？",
+      receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
       printerPickDone: "✔ 已改為 {name}",
@@ -8601,6 +8605,16 @@
               );
             }
           }
+          // 손님 영수증 — 결제 방식까지 고른 다음에 묻는다(2026-09-29 사장님:
+          // "그거까지 누르면 영수증을 출력하시겠습니까를 만드는거야").
+          // 이번에 결제한 품목만 찍는다. 결제가 실패했으면 묻지 않는다.
+          if (!results.some((r) => !r.ok) && (await showConfirm(T("receiptPrintConfirm")))) {
+            const labelParts = [];
+            if (discountType) labelParts.push(receiptDiscountLabelOf(discountType));
+            if (manualValue) labelParts.push(receiptDiscountLabelOf("manual"));
+            const printed = await printPaymentReceipt(tableNumber, selections, method, breakdown.total, labelParts.join(" + "));
+            if (!printed.ok && printed.reason) await showAlert(`${T("receiptPrintFailed")}\n${printed.reason}`);
+          }
           tableVipDiscountType = null; // 결제가 끝났으니 다음 결제를 위해 리셋
           tableManualDiscountValue = null;
           // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고
@@ -13353,6 +13367,92 @@
   //   · 한 장만 나간다 (주방용만 — 결제용 사본은 새 주문에만 의미가 있다)
   //   · 주문 상태를 건드리지 않는다. 「신규 → 조리 중」으로 밀어버리면
   //     아직 안 찍힌 주문을 찍힌 것으로 만든다.
+  /**
+   * 결제한 그 자리에서 손님 영수증 한 장.
+   *
+   * 사장님(2026-09-29): "결제할 때 품목 선택해서 결제한 것들만 눌러서 결제
+   * 누르고 결제 방식까지 나오잖아 현금 카드 라인 뭐 이런 거 그거까지 누르면
+   * 영수증을 출력하시겠습니까를 만드는거야." / "손님은 자기가 시키고 결제한
+   * 것만 보면된다고 시간이랑 뭐 이런 것들."
+   *
+   * **이번에 결제한 품목만** 찍는다 — 테이블 전체가 아니다. 할인은 품목마다
+   * 나누지 않고 한 줄 + 合計 로 보여준다(음료·기타·세트는 VIP 할인에서 빠져서
+   * 품목별로 그으면 틀린 줄이 생긴다).
+   *
+   * 못 찍으면 {ok:false, reason} — 부르는 쪽이 화면에 말한다(CLAUDE.md
+   * 「인쇄가 안 될 때 화면이 이유를 말해야 한다」).
+   */
+  const RECEIPT_METHOD_ZH = { cash: "現金", card: "信用卡", linepay: "LINE Pay", online: "線上付款", other: "其他" };
+  function buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel) {
+    const lines = [];
+    selections.forEach((x) => x.indexes.forEach((i) => {
+      const it = x.order.items[i];
+      if (it) lines.push(it);
+    }));
+    const gross = lines.reduce((sum, it) => sum + lineTotalOf(it), 0);
+    const off = Math.max(0, Math.min(gross, Number(discountTotal) || 0));
+    const anyTakeout = lines.some((it) => it.order_type === "takeout");
+    const allTakeout = lines.length > 0 && lines.every((it) => it.order_type === "takeout");
+    const first = selections[0] && selections[0].order;
+    return {
+      order: {
+        id: null,
+        table_number: String(tableNumber),
+        party_size: first ? first.party_size : null,
+        party_adults: first ? first.party_adults : null,
+        party_children: first ? first.party_children : null,
+        status: "paid",
+        order_type: allTakeout ? "takeout" : anyTakeout ? "mixed" : "dine_in",
+        created_at: nowLocalString(),
+        items: lines,
+        total: gross,
+      },
+      discount: off > 0
+        ? { active: true, isPercent: false, discountedTotal: gross - off, label: discountLabel || "折扣", amount: off }
+        : { active: false },
+    };
+  }
+  function nowLocalString() {
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+  async function printPaymentReceipt(tableNumber, selections, method, discountTotal, discountLabel) {
+    if (typeof buildEscPosRasterTicket !== "function") return { ok: false, reason: moveSlipFailReason() };
+    const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "韓國館";
+    const { order, discount } = buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel);
+    if (!order.items.length) return { ok: false, reason: null };
+    let bytes;
+    try {
+      bytes = buildEscPosRasterTicket(order, storeName, ticketFontSizes, { tableLabel: `桌號 ${tableNumber}${partyTag(order)}` }, {
+        receipt: { method: RECEIPT_METHOD_ZH[method] || method || "", paidAt: order.created_at },
+        discount,
+      });
+    } catch (e) {
+      console.warn("영수증을 만들지 못했습니다:", e);
+      return { ok: false, reason: moveSlipFailReason() };
+    }
+    const bridge = appPrintBridge();
+    if (bridge) {
+      if (await sendRasterTicketParts([bytes], bridge)) return { ok: true, reason: null };
+      return { ok: false, reason: moveSlipFailReason() };
+    }
+    try {
+      const res = await fetch("/api/settings/escpos");
+      const cfg = res.ok ? await res.json() : {};
+      if (rawbtHere(cfg) && (await sendRasterTicketParts([bytes], null))) return { ok: true, reason: null };
+      if (cfg.enabled && cfg.printerName && typeof qz !== "undefined") {
+        await ensureQzConnected();
+        const config = qz.configs.create(cfg.printerName);
+        await qz.print(config, [{ type: "raw", format: "command", flavor: "base64", data: bytesToBase64(bytes) }]);
+        return { ok: true, reason: null };
+      }
+    } catch (e) {
+      console.warn("영수증 인쇄 실패:", e);
+    }
+    return { ok: false, reason: moveSlipFailReason() };
+  }
+
   async function printNoticeTicket(job) {
     const o = job.order;
     try {
@@ -13387,19 +13487,12 @@
       if (!lines.length) return false;
 
       const noticeOrder = Object.assign({}, o, { items: lines });
+      // 주방용 한 장뿐이다. 2026-09-29 사장님: "변경 후 전체 이딴 거
+      // 필요없다고 그냥 손님은 자기가 시키고 결제한 것만 보면된다고" — 예전
+      // (09-10)에는 결제용 사본에 「변경 후 전체 / 異動後合計」를 찍어 한 장 더
+      // 내보냈다. 손님이 받을 종이는 이제 결제할 때 나오는 영수증이다
+      // (printPaymentReceipt).
       const parts = [buildEscPosRasterTicket(noticeOrder, storeName, ticketFontSizes, labelInfo, { notice: job.notice })];
-      // 품목이 바뀌면 받을 돈도 바뀐다. 새 주문과 똑같이 결제용 사본을 한 장
-      // 더 내보낸다 — 그 새 금액을 알려주는 종이가 이것 하나뿐이다.
-      // 자리 이동은 금액이 그대로라 주방용 한 장이면 된다.
-      if (job.notice.kind === "changed") {
-        parts.push(
-          buildEscPosRasterTicket(noticeOrder, storeName, ticketFontSizes, labelInfo, {
-            notice: job.notice,
-            priceCopy: true,
-            discount: computeTicketDiscountInfo(o),
-          })
-        );
-      }
       // 한 줄기로 보낸다 — 따로 보내면 두 번째가 조용히 사라진다
       // (sendRasterTicketParts 주석).
       return await sendRasterTicketParts(parts, bridge);
