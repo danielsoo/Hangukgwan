@@ -699,6 +699,19 @@
       printDeviceUnknown: "다른 기기",
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
+      printerPickLabel: "🖨️ 이 기기 프린터",
+      printerPickTest: "테스트",
+      printerPickDone: "✔ {name}(으)로 바꿨어요",
+      printerPickTestSent: "✔ {name}에 테스트 한 장을 보냈어요",
+      printerPickFailed: "✘ 프린터를 못 바꿨어요 — 다시 눌러 주세요",
+      printerPickNeedsUpdate: "앱을 1.5 로 업데이트해야 여기서 바꿀 수 있어요",
+      printerPickOther: "목록에 없음",
+      printerPickNone: "프린터 안 정해짐",
+      printersTitle: "가게 프린터 목록",
+      printersHint: "가게에 있는 프린터를 한 번만 적어 두세요(이름 + IP). 각 패드는 실시간 주문 화면 위의 「🖨️ 이 기기 프린터」에서 고르기만 하면 돼요 — 포트는 보통 9100 그대로 두세요.",
+      printersNamePlaceholder: "예: 주방 프린터",
+      addPrinterBtn: "+ 프린터 추가",
+      printersInvalid: "이름과 IP 를 확인해 주세요",
       printDeviceThis: "이 기기",
       rawbtSavedHereMsg: "이 기기에 저장했어요 (다른 기기는 그대로예요)",
       rawbtPerDeviceNote: "이 스위치는 이 기기에만 적용돼요. 홀 기기는 끄고, 블루투스 프린터를 쓰는 카운터 기기에서만 켜세요.",
@@ -1526,6 +1539,19 @@
       printDeviceUnknown: "其他裝置",
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
+      printerPickLabel: "🖨️ 這台的印表機",
+      printerPickTest: "測試",
+      printerPickDone: "✔ 已改為 {name}",
+      printerPickTestSent: "✔ 已送一張測試到 {name}",
+      printerPickFailed: "✘ 無法更換印表機，請再按一次",
+      printerPickNeedsUpdate: "App 需更新到 1.5 才能在這裡更換",
+      printerPickOther: "不在清單中",
+      printerPickNone: "尚未設定印表機",
+      printersTitle: "店內印表機清單",
+      printersHint: "把店裡的印表機登記一次（名稱 + IP）。各台平板只要在即時訂單畫面上方的「🖨️ 這台的印表機」選擇即可 — 連接埠一般維持 9100。",
+      printersNamePlaceholder: "例：廚房印表機",
+      addPrinterBtn: "+ 新增印表機",
+      printersInvalid: "請確認名稱與 IP",
       printDeviceThis: "這台裝置",
       rawbtSavedHereMsg: "已儲存在這台裝置（其他裝置不受影響）",
       rawbtPerDeviceNote: "這個開關只套用在這台裝置。外場裝置請關閉，只在使用藍牙印表機的櫃台裝置開啟。",
@@ -3322,6 +3348,8 @@
       loadPaymentSettings();
       loadEscposSettings();
     }
+    // 가게 프린터 목록 — 이 기기 프린터 고르기에 쓴다(POS 앱 안에서만 보인다).
+    await loadPrinters();
     await syncPrintDevice();
     // 다른 기기가 인쇄를 가져갔는지 가끔 본다. 자주 볼 이유는 없다 —
     // 사람이 토글을 누를 때나 바뀌는 값이다.
@@ -4393,6 +4421,8 @@
   // 「홀과 카운터 두 곳 다 자동」을 고르셨다 — 한쪽 프린터가 죽어도 다른 쪽이
   // 이미 찍고 있다. devices 는 자동 인쇄를 켠 기기들, id/name 은 옛 화면용 첫 칸.
   let printDevice = { id: null, name: null, devices: [], known: false };
+  // 가게 프린터 목록(설정 > 인쇄). 아래 loadPrinters 가 채운다.
+  let shopPrinters = [];
 
   function myDeviceId() {
     try {
@@ -4414,7 +4444,11 @@
   // 정확히 알 방법은 없으니 종류만 적는다.
   function myDeviceName() {
     const ua = navigator.userAgent || "";
-    if (appPrintBridge()) return T("printDeviceKindPos");
+    if (appPrintBridge()) {
+      // 어느 프린터로 찍는지까지 — 「자동 인쇄 중: POS 앱(주방 프린터) · …」.
+      const p = currentShopPrinter(appPrintBridge());
+      return p ? `${T("printDeviceKindPos")} (${p.name})` : T("printDeviceKindPos");
+    }
     if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return T("printDeviceKindTablet");
     if (/Mobile|iPhone|Android/i.test(ua)) return T("printDeviceKindPhone");
     return T("printDeviceKindPc");
@@ -13470,6 +13504,193 @@
   // ticket builder as the real print path, so this test print actually
   // exercises the fix for the Chinese-character garbling found on-site
   // (2026-09-06), not the old plain-text path that caused it.
+  // ── 가게 프린터 목록 · 이 기기 프린터 고르기 (2026-09-29) ────────────────
+  //
+  // 사장님: "현재 주방쪽이랑 카운터에 2개가 있어. 각 패드에 각 프린터기를
+  // 등록하고 싶어. 그래서 언제든 모르는 사람들도 굳이 포트 번호를 또 입력하고
+  // 이럴 거 없이 로그인한 상태에서 각 프린터기를 편하게 변동할 수 있게."
+  //
+  // 사장님이 설정 > 인쇄에서 한 번 적은 목록(이름 + IP)을, 각 패드가 실시간
+  // 주문 화면 위의 「🖨️ 이 기기 프린터 [▼]」에서 고른다. 고른 값은 그 패드의
+  // 한국관 POS 앱에 저장된다(앱 1.5 의 setPrinter). 계정이 아니라 기기의
+  // 설정이다 — 누가 로그인하든 주방 패드는 주방 프린터로 찍는다.
+  // (shopPrinters 는 printDevice 옆에 선언돼 있다 — 이름 짓기가 먼저 부른다.)
+
+  async function loadPrinters() {
+    try {
+      const res = await fetch("/api/settings/printers");
+      if (!res.ok) return;
+      const d = await res.json();
+      shopPrinters = Array.isArray(d.printers) ? d.printers : [];
+    } catch (e) {
+      return;
+    }
+    renderPrinterPick();
+    renderPrintersEditor();
+  }
+
+  // 앱이 지금 쓰고 있는 프린터가 목록의 무엇인가. 없으면 null.
+  function currentShopPrinter(bridge) {
+    let target = "";
+    try {
+      target = bridge && typeof bridge.target === "function" ? String(bridge.target() || "") : "";
+    } catch (e) {
+      target = "";
+    }
+    return shopPrinters.find((p) => `${p.ip}:${p.port}` === target) || null;
+  }
+
+  function flashPrinterPickMsg(text, ok) {
+    const msg = $("#printerPickMsg");
+    if (!msg) return;
+    msg.textContent = text;
+    msg.style.color = ok ? "" : "#b5232c";
+    msg.hidden = false;
+    clearTimeout(flashPrinterPickMsg.t);
+    flashPrinterPickMsg.t = setTimeout(() => (msg.hidden = true), ok ? 2500 : 6000);
+  }
+
+  function renderPrinterPick() {
+    const wrap = $("#printerPickWrap");
+    if (!wrap) return;
+    const bridge = appPrintBridge();
+    // 크롬에서는 고를 것이 없다 — 프린터에 직접 닿는 것은 POS 앱뿐이다.
+    wrap.hidden = !bridge || !shopPrinters.length;
+    if (wrap.hidden) return;
+    const sel = $("#printerPick");
+    const cur = currentShopPrinter(bridge);
+    let target = "";
+    try {
+      target = String(bridge.target() || "");
+    } catch (e) {}
+    const opts = shopPrinters.map(
+      (p) => `<option value="${escapeHtml(p.id)}"${cur && cur.id === p.id ? " selected" : ""}>${escapeHtml(p.name)}</option>`
+    );
+    // 목록에 없는 곳으로 찍고 있으면 그 사실을 그대로 보여준다 — 조용히 첫 칸을
+    // 골라 두면 「주방 프린터」로 보이는데 딴 데로 나간다.
+    if (!cur) opts.unshift(`<option value="" selected>${escapeHtml(target && target !== ":9100" ? `${T("printerPickOther")} ${target}` : T("printerPickNone"))}</option>`);
+    sel.innerHTML = opts.join("");
+    const canSet = typeof bridge.setPrinter === "function";
+    sel.disabled = !canSet;
+    if (!canSet) flashPrinterPickMsg(T("printerPickNeedsUpdate"), false);
+  }
+
+  if ($("#printerPick")) {
+    $("#printerPick").onchange = async (e) => {
+      const bridge = appPrintBridge();
+      const p = shopPrinters.find((x) => x.id === e.target.value);
+      if (!bridge || !p || typeof bridge.setPrinter !== "function") return;
+      let r = "";
+      try {
+        r = String(bridge.setPrinter(p.ip, p.port));
+      } catch (err) {
+        r = String(err && err.message);
+      }
+      if (r !== "ok") {
+        flashPrinterPickMsg(T("printerPickFailed"), false);
+        renderPrinterPick();
+        return;
+      }
+      flashPrinterPickMsg(T("printerPickDone").replace("{name}", p.name), true);
+      // 「자동 인쇄 중: …」 줄에 이 기기가 어느 프린터로 찍는지 보이게 이름을 새로 적는다.
+      if (autoPrintOn) {
+        await claimPrintDevice();
+        renderPrintDeviceNote();
+      }
+    };
+  }
+  if ($("#printerPickTest")) {
+    $("#printerPickTest").onclick = () => {
+      const bridge = appPrintBridge();
+      if (!bridge) return;
+      try {
+        const r = bridge.printBase64(bytesToBase64(buildPrinterTestBytes()));
+        if (r !== "queued") throw new Error(String(r));
+        const cur = currentShopPrinter(bridge);
+        flashPrinterPickMsg(T("printerPickTestSent").replace("{name}", cur ? cur.name : ""), true);
+      } catch (err) {
+        flashPrinterPickMsg(T("printerPickFailed"), false);
+      }
+    };
+  }
+
+  // 시험 한 장 — 설정의 RawBT 테스트와 같은 모양.
+  function buildPrinterTestBytes() {
+    const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
+    const sampleOrder = {
+      table_number: "TEST",
+      order_type: "dine_in",
+      created_at: new Date().toISOString().slice(0, 19).replace("T", " "),
+      items: [{ name_ko: "테스트 메뉴", name_zh: "測試菜品", qty: 1, note: "" }],
+      total: 0,
+      note: "",
+    };
+    return buildEscPosRasterTicket(sampleOrder, storeName, ticketFontSizes, { tableLabel: "桌號 TEST" });
+  }
+
+  // 설정 > 인쇄 — 가게 프린터 목록 편집(설정 권한이 있는 사람).
+  function renderPrintersEditor() {
+    const box = $("#printersList");
+    if (!box) return;
+    const rows = shopPrinters.length ? shopPrinters : [];
+    box.innerHTML = rows
+      .map(
+        (p) => `
+        <div class="printer-row" data-id="${escapeHtml(p.id)}">
+          <input type="text" class="printer-name" maxlength="20" value="${escapeHtml(p.name)}" placeholder="${escapeHtml(T("printersNamePlaceholder"))}" />
+          <input type="text" class="printer-ip" inputmode="decimal" value="${escapeHtml(p.ip)}" placeholder="192.168.0.10" />
+          <input type="number" class="printer-port" min="1" max="65535" value="${Number(p.port) || 9100}" />
+          <button type="button" class="printer-del">✕</button>
+        </div>`
+      )
+      .join("");
+    box.querySelectorAll(".printer-del").forEach((b) => {
+      b.onclick = () => {
+        b.closest(".printer-row").remove();
+      };
+    });
+  }
+  function readPrintersEditor() {
+    return [...document.querySelectorAll("#printersList .printer-row")].map((row) => ({
+      id: row.dataset.id || "",
+      name: row.querySelector(".printer-name").value.trim(),
+      ip: row.querySelector(".printer-ip").value.trim(),
+      port: parseInt(row.querySelector(".printer-port").value, 10) || 9100,
+    }));
+  }
+  if ($("#addPrinterBtn")) {
+    $("#addPrinterBtn").onclick = () => {
+      shopPrinters = readPrintersEditor().concat([{ id: "", name: "", ip: "", port: 9100 }]);
+      renderPrintersEditor();
+    };
+  }
+  if ($("#savePrintersBtn")) {
+    $("#savePrintersBtn").onclick = async () => {
+      const msg = $("#printersMsg");
+      const list = readPrintersEditor().filter((p) => p.name || p.ip);
+      let ok = false;
+      try {
+        const res = await fetch("/api/settings/printers", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ printers: list }),
+        });
+        if (res.ok) {
+          shopPrinters = (await res.json()).printers || [];
+          ok = true;
+        }
+      } catch (e) {}
+      msg.style.color = ok ? "#1a8a44" : "#b5232c";
+      msg.textContent = ok ? T("rawbtSavedMsg") : T("printersInvalid");
+      msg.hidden = false;
+      setTimeout(() => (msg.hidden = true), 3000);
+      if (ok) {
+        renderPrintersEditor();
+        renderPrinterPick();
+      }
+    };
+  }
+
   $("#testRawbtBtn").onclick = async () => {
     const status = $("#rawbtTestStatus");
     try {

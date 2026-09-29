@@ -503,6 +503,50 @@ router.get("/escpos", requireAdmin, (req, res) => {
   res.json(escposStatus());
 });
 
+// ── 가게 프린터 목록 (2026-09-29) ─────────────────────────────────────────
+//
+// 사장님: "현재 주방쪽이랑 카운터에 2개가 있어. 각 패드에 각 프린터기를
+// 등록하고 싶어. 그래서 언제든 모르는 사람들도 굳이 포트 번호를 또 입력하고
+// 이럴 거 없이 로그인한 상태에서 각 프린터기를 편하게 변동할 수 있게."
+// 카운터 프린터도 블루투스가 아니라 와이파이(IP)로 바꾸신다고 했다.
+//
+// 목록은 사장님이 한 번 적는다(이름 + IP, 포트는 기본 9100). 각 패드는
+// 화면에서 목록 중 하나를 고르기만 하고, 고른 값은 그 패드의 POS 앱에 저장된다
+// (kiosk-app setPrinter). 어느 패드가 무엇을 골랐는지는 패드에 남는다 —
+// 사람(계정)이 아니라 기기의 설정이다.
+const MAX_PRINTERS = 10;
+const HOST_RE = /^[0-9A-Za-z.\-]{1,253}$/;
+function cleanPrinters(list) {
+  if (!Array.isArray(list)) return null;
+  const out = [];
+  const seen = new Set();
+  for (const p of list.slice(0, MAX_PRINTERS)) {
+    if (!p || typeof p !== "object") continue;
+    const name = String(p.name == null ? "" : p.name).trim().slice(0, 20);
+    const ip = String(p.ip == null ? "" : p.ip).trim();
+    const port = parseInt(p.port, 10);
+    if (!name || !HOST_RE.test(ip)) return null;
+    let id = String(p.id || "").trim().slice(0, 32);
+    if (!id || seen.has(id)) id = `p${Date.now().toString(36)}${out.length}`;
+    seen.add(id);
+    out.push({ id, name, ip, port: port >= 1 && port <= 65535 ? port : 9100 });
+  }
+  return out;
+}
+
+router.get("/printers", requireAdmin, (req, res) => {
+  res.json({ printers: Array.isArray(store.settings.printers) ? store.settings.printers : [] });
+});
+
+router.put("/printers", canEditSettings, async (req, res) => {
+  const list = cleanPrinters((req.body || {}).printers);
+  if (!list) return res.status(400).json({ error: "invalid_printers" });
+  store.settings.printers = list;
+  // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
+  await saveFields({ "settings.printers": list });
+  res.json({ printers: list });
+});
+
 router.put("/escpos", requireOwner, async (req, res) => {
   const b = req.body || {};
   if (typeof b.enabled === "boolean") store.settings.escpos_enabled = b.enabled;

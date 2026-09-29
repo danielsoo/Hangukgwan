@@ -453,6 +453,33 @@ public class MainActivity extends Activity {
             sendToPrinter(bytes, false);
             return "queued";
         }
+
+        /**
+         * 관리자 화면에서 고른 프린터를 이 기기에 저장한다.
+         *
+         * 2026-09-29 사장님: "각 패드에 각 프린터기를 등록하고 싶어. 그래서
+         * 언제든 모르는 사람들도 굳이 포트 번호를 또 입력하고 이럴 거 없이
+         * 로그인한 상태에서 각 프린터기를 편하게 변동할 수 있게."
+         *
+         * 프린터 목록은 사장님이 관리자 설정에서 한 번 등록하고(주방 프린터,
+         * 카운터 프린터), 각 패드는 목록에서 고르기만 한다. 고르면 화면이 이
+         * 함수를 불러 여기 저장한다 — 설정 화면(왼쪽 아래 단추)과 같은 칸이다.
+         *
+         * 주소는 숫자·영문·점·하이픈만 받는다. 포트가 말이 안 되면 9100.
+         */
+        @JavascriptInterface
+        public String setPrinter(String ip, int port) {
+            String clean = ip == null ? "" : ip.trim();
+            if (!clean.matches("^[0-9A-Za-z.\\-]{1,253}$")) {
+                return "error: ip";
+            }
+            int p = (port >= 1 && port <= 65535) ? port : DEFAULT_PORT;
+            prefs().edit()
+                    .putString(KEY_PRINTER_IP, clean)
+                    .putInt(KEY_PRINTER_PORT, p)
+                    .apply();
+            return "ok";
+        }
     }
 
     // ---------------------------------------------------------------- settings

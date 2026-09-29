@@ -687,6 +687,15 @@ label > .field-reset-btn { display: block; margin-left: auto; margin-top: 6px; }
    보여서 인라인 전용으로 따로 뺌 — 2026-09-06, "저렇게 하니까 아슬해서" 피드백
    으로 추가된 저장 확인 표시(toggleSavedMsg)에 적용. */
 .toggle-saved-msg { color: var(--green); font-size: 14px; font-weight: 600; }
+/* 이 기기 프린터 고르기 (2026-09-29) — 손가락으로 누르기 좋은 크기. */
+.printer-pick { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.printer-pick select { font-size: 16px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); min-height: 40px; }
+.printer-pick-test { min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
+.printer-row { display: flex; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.printer-row .printer-name { flex: 1 1 140px; }
+.printer-row .printer-ip { flex: 1 1 140px; }
+.printer-row .printer-port { width: 90px; }
+.printer-row .printer-del { width: 40px; }
 
 /* 지금 어느 기기가 빌지를 뽑고 있는가. 이 기기면 조용한 회색, 다른
    기기면 눈에 띄게 — 「왜 안 나오지」 를 여기서 끝내야 한다. */

@@ -92,6 +92,13 @@
              켜는 것이라, 두 대에서 켜져 있으면 주문 하나에 빌지가 두 벌
              나온다(2026-09-10 사장님: "다른 곳에서 못 키게 막아줘"). -->
         <span id="printDeviceNote" class="print-device-note" hidden></span>
+        <!-- 이 기기(패드)가 어느 프린터로 찍는가 — 2026-09-29 사장님: "로그인한
+             상태에서 각 프린터기를 편하게 변동할 수 있게". POS 앱 안에서만 보인다. -->
+        <span id="printerPickWrap" class="printer-pick" hidden>
+          <label><span data-i18n="printerPickLabel">🖨️ 이 기기 프린터</span> <select id="printerPick"></select></label>
+          <button type="button" id="printerPickTest" class="printer-pick-test" data-i18n="printerPickTest">테스트</button>
+          <span id="printerPickMsg" class="toggle-saved-msg" hidden></span>
+        </span>
         <!-- 알림이 울리는 동안만 뜬다. 화면을 아무 데나 눌러도 멈추게 하면,
              다른 주문을 처리하느라 화면을 만지던 중에 새 주문이 들어왔을 때
              그 알림이 눌러보지도 못하고 꺼진다 — 정작 고치려던 "놓친다"가
@@ -1073,6 +1080,15 @@
           <button id="saveEscposSettingsBtn" data-i18n="saveBtn">저장</button>
           <button id="testEscposBtn" type="button" data-i18n="testEscposBtn">🖨️ 테스트 인쇄</button>
           <div class="save-msg" id="escposMsg" hidden></div>
+        </div>
+        <!-- 가게 프린터 목록 (2026-09-29). 각 패드는 실시간 주문 화면에서 고른다. -->
+        <div class="settings-card">
+          <h3 data-i18n="printersTitle">가게 프린터 목록</h3>
+          <p class="settings-hint" data-i18n="printersHint">가게에 있는 프린터를 한 번만 적어 두세요(이름 + IP).</p>
+          <div id="printersList"></div>
+          <button id="addPrinterBtn" type="button" data-i18n="addPrinterBtn">+ 프린터 추가</button>
+          <button id="savePrintersBtn" data-i18n="saveBtn">저장</button>
+          <div class="save-msg" id="printersMsg" hidden></div>
         </div>
         <div class="settings-card">
           <h3 data-i18n="rawbtSettingsTitle">주방 프린터 직접 인쇄 (RawBT · 안드로이드 태블릿)</h3>
