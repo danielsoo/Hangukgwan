@@ -76,6 +76,12 @@ check("★★ 다른 기기가 먼저 찍고 「조리 중」으로 넘긴 막 �
   "먼저 찍은 기기가 상태를 넘기면 늦게 본 기기는 영영 못 찍는다");
 check("오래된 것은 안 잡는다 — 켠 기기가 몰아 찍지 않게", /PRINT_CATCHUP_MS = 3 \* 60 \* 1000/.test(adminJs), "");
 
+// 사장님 패드(2026-09-29): 「자동 인쇄 중: 주방 POS 앱 (Hall) · 주방 POS 앱 (Hall) · …」
+// — 앱을 다시 깔면 같은 패드가 새 번호로 들어오고 옛 번호가 영영 남았다.
+check("★ 소식이 끊긴 기기는 목록에서 빠진다", /PRINT_DEVICE_TTL_MS = 10 \* 60 \* 1000/.test(settingsJs) && /now - t < PRINT_DEVICE_TTL_MS/.test(settingsJs), "");
+check("★ 켜 둔 기기는 1분마다 다시 알린다", /if \(autoPrintOn\) await claimPrintDevice\(\);/.test(adminJs), "");
+check("같은 이름은 한 번만 적는다", /new Set\(names\)/.test(adminJs), "");
+
 out.push("\n[RawBT(블루투스)는 기기마다]");
 check("★ 이 기기에 적는다", /localStorage\.setItem\(RAWBT_HERE_KEY/.test(adminJs), "");
 check("★ 인쇄 경로가 가게 전체 값 대신 이 기기 값을 본다", !/cfg\.rawbtEnabled &&|!cfg\.rawbtEnabled\)/.test(adminJs), "");
