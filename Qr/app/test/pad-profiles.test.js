@@ -107,6 +107,25 @@ function check(name, cond, extra = "") {
   check("7일 전은 빠진다", row(kitchen.id).week < 1000, "");
   check("날짜 거꾸로 세기 — 달이 바뀌어도", padProfiles.daysBack("2026-10-02", 3).join() === "2026-10-02,2026-10-01,2026-09-30", "");
 
+  out.push("\n[패드를 알아본다 — 어느 기기가 어느 프로필인지]");
+  // 2026-09-29 사장님: "저 프로필이랑 패드랑 인식을 하는거야? 인식을 못하면 저걸 하는 의미가 없잖아."
+  r = await boss.post("/api/settings/pad-seen").send({ deviceId: "dKitchenPad", profileId: kitchen.id, kind: "app", printer: "192.168.111.142:9100", canSetPrinter: true, autoPrint: true });
+  check("알린다", r.status === 200, `${r.status}`);
+  await boss.post("/api/settings/pad-seen").send({ deviceId: "dKitchenPad", profileId: kitchen.id, kind: "app", printer: "192.168.111.150:9100", canSetPrinter: true, autoPrint: true });
+  await boss.post("/api/settings/pad-seen").send({ deviceId: "dPhone", profileId: "pp_gone", kind: "phone" });
+  r = await boss.post("/api/settings/pad-seen").send({ deviceId: "bad id!", profileId: kitchen.id });
+  check("이상한 기기 번호는 거절", r.status === 400, `${r.status}`);
+  r = await boss.post("/api/settings/pad-seen").send({ deviceId: "dX", printer: "1.2.3.4:9100; rm", kind: "hacker" });
+  r = await boss.get("/api/settings/pad-devices");
+  const dev = (id) => (r.body.devices || []).find((d) => d.id === id) || {};
+  check("★★ 같은 기기는 한 줄 — 마지막 알림으로 덮인다", (r.body.devices || []).filter((d) => d.id === "dKitchenPad").length === 1 && dev("dKitchenPad").printer === "192.168.111.150:9100", JSON.stringify(r.body.devices));
+  check("★ 어느 프로필인지 안다", dev("dKitchenPad").profile === kitchen.id, JSON.stringify(dev("dKitchenPad")));
+  check("지운 프로필이면 「프로필 없음」", dev("dPhone").profile === "none", JSON.stringify(dev("dPhone")));
+  check("이상한 프린터 주소·종류는 안 받는다", dev("dX").printer === null && dev("dX").kind === "pc", JSON.stringify(dev("dX")));
+  check("방금 본 기기", dev("dKitchenPad").ago_ms != null && dev("dKitchenPad").ago_ms < 60000, JSON.stringify(dev("dKitchenPad")));
+  r = await request(app).get("/api/settings/pad-devices");
+  check("로그인 안 하면 못 본다", r.status === 401 || r.status === 403, `${r.status}`);
+
   out.push("\n[터치 수는 store 문서에 안 쌓인다]");
   check("★ store.settings 에 터치 수가 없다", !JSON.stringify(store.settings).includes("touch"), "");
 
@@ -118,7 +137,7 @@ function check(name, cond, extra = "") {
   check("프로필은 기기에 남는다(계정이 아니다)", /localStorage\.setItem\(PAD_PROFILE_KEY/.test(adminJs), "");
   check("★ 프로필이 정한 프린터를 앱에 적는다", /bridge\.setPrinter\(printer\.ip, printer\.port\)/.test(adminJs), "");
   check("★ 프린터를 못 바꾸면 말한다", /padProfilePrinterNeedsUpdate/.test(adminJs), "");
-  check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
+  check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*await reportPadSeen\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
   check("프로필을 고르면 「자동 인쇄 중」 이름이 프로필이 된다", /const prof = myPadProfile\(\);\s*\n\s*if \(prof\) return prof\.name;/.test(adminJs), "");
   // ko / zh 둘 다 있는가
   for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate"]) {

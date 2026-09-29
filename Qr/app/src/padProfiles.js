@@ -18,6 +18,13 @@ const NO_PROFILE = "none";
 // 1분에 이보다 많이 누를 수는 없다 — 잘못된 값이 통계를 망치지 않게.
 const MAX_TOUCHES_PER_POST = 5000;
 const SUMMARY_DAYS = 7;
+// 어느 패드가 어느 프로필을 쓰는지 — 패드가 1분마다 알린다(pad_devices).
+// 「프로필을 만들었는데 패드가 알아먹었나?」를 설정 화면에서 보려고 한다.
+const DEVICES_COLLECTION = "pad_devices";
+const DEVICE_KINDS = ["app", "tablet", "phone", "pc"];
+const TARGET_RE = /^[0-9A-Za-z.\-]{1,253}:\d{1,5}$/;
+// 이만큼 소식이 없으면 목록에서 뺀다(버린 폰·다시 깐 앱).
+const DEVICE_KEEP_MS = 7 * 86400000;
 
 function profilesOf(settings) {
   return Array.isArray(settings && settings.pad_profiles) ? settings.pad_profiles : [];
@@ -96,7 +103,50 @@ async function touchSummary(getDb, connectDB, localNow) {
   return { today, days, rows: Object.values(by) };
 }
 
+function localMs(s) {
+  const t = new Date(String(s || "").replace(" ", "T")).getTime();
+  return Number.isFinite(t) ? t : NaN;
+}
+
+async function markSeen(getDb, connectDB, settings, body, localNow) {
+  const b = body || {};
+  const deviceId = String(b.deviceId == null ? "" : b.deviceId).trim();
+  if (!/^[0-9A-Za-z_-]{1,64}$/.test(deviceId)) return null;
+  let profile = String(b.profileId == null ? "" : b.profileId) || NO_PROFILE;
+  if (profile !== NO_PROFILE && !profilesOf(settings).some((p) => p.id === profile)) profile = NO_PROFILE;
+  const kind = DEVICE_KINDS.includes(b.kind) ? b.kind : "pc";
+  const printer = typeof b.printer === "string" && TARGET_RE.test(b.printer) ? b.printer : null;
+  await connectDB();
+  await getDb()
+    .collection(DEVICES_COLLECTION)
+    .updateOne(
+      { _id: deviceId },
+      { $set: { profile, kind, printer, canSetPrinter: !!b.canSetPrinter, autoPrint: !!b.autoPrint, last_seen: localNow } },
+      { upsert: true }
+    );
+  return true;
+}
+
+async function listDevices(getDb, connectDB, localNow) {
+  await connectDB();
+  const now = localMs(localNow);
+  const docs = await getDb().collection(DEVICES_COLLECTION).find({}).toArray();
+  return docs
+    .map((d) => ({
+      id: String(d._id),
+      profile: d.profile || NO_PROFILE,
+      kind: d.kind || "pc",
+      printer: d.printer || null,
+      canSetPrinter: !!d.canSetPrinter,
+      autoPrint: !!d.autoPrint,
+      last_seen: d.last_seen || null,
+      ago_ms: Number.isFinite(now) && Number.isFinite(localMs(d.last_seen)) ? Math.max(0, now - localMs(d.last_seen)) : null,
+    }))
+    .filter((d) => d.ago_ms == null || d.ago_ms < DEVICE_KEEP_MS)
+    .sort((a, c) => (a.ago_ms ?? 1e15) - (c.ago_ms ?? 1e15));
+}
+
 module.exports = {
-  MAX_PROFILES, COLLECTION, NO_PROFILE, MAX_TOUCHES_PER_POST, SUMMARY_DAYS,
-  profilesOf, cleanProfiles, daysBack, addTouches, touchSummary,
+  MAX_PROFILES, COLLECTION, NO_PROFILE, MAX_TOUCHES_PER_POST, SUMMARY_DAYS, DEVICES_COLLECTION, DEVICE_KEEP_MS,
+  profilesOf, cleanProfiles, daysBack, addTouches, touchSummary, markSeen, listDevices,
 };

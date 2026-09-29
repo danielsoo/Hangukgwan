@@ -737,6 +737,19 @@
       padProfileAutoOn: "자동 인쇄",
       padProfileApplied: "📍 {name} 으로 설정했어요",
       padProfilePrinterNeedsUpdate: "📍 {name} — 프린터는 POS 앱 1.5 로 업데이트해야 바뀌어요",
+      padAgoNow: "방금",
+      padAgoMin: "{n}분 전",
+      padAgoHour: "{n}시간 전",
+      padAgoDay: "{n}일 전",
+      padDeviceThis: "이 기기",
+      padDeviceOffline: "(꺼져 있음)",
+      padDevicesNone: "아직 이 프로필을 고른 기기가 없어요 — 패드에서 로그인하면 고르는 창이 떠요",
+      padProfileDevicesCount: "이 프로필을 쓰는 기기 {n}대",
+      padDevicesUnassigned: "프로필 없이 쓰는 기기 {n}대",
+      padDeviceWrongPrinter: "⚠ 다른 프린터로 찍는 중: {p}",
+      padDeviceOldApp: "⚠ 앱 1.4 — 프린터를 못 바꿔요(1.5 로 업데이트)",
+      padDeviceNoApp: "⚠ POS 앱이 아니라 자동 인쇄가 안 돼요",
+      padDeviceAutoOff: "⚠ 이 기기는 자동 인쇄가 꺼져 있어요",
       printDeviceThis: "이 기기",
       printDeviceNotHere: "이 기기는 자동 인쇄 꺼짐",
       rawbtSavedHereMsg: "이 기기에 저장했어요 (다른 기기는 그대로예요)",
@@ -1603,6 +1616,19 @@
       padProfileAutoOn: "自動列印",
       padProfileApplied: "📍 已設定為 {name}",
       padProfilePrinterNeedsUpdate: "📍 {name} — 印表機需更新 POS App 1.5 才能切換",
+      padAgoNow: "剛剛",
+      padAgoMin: "{n} 分鐘前",
+      padAgoHour: "{n} 小時前",
+      padAgoDay: "{n} 天前",
+      padDeviceThis: "這台裝置",
+      padDeviceOffline: "（未開啟）",
+      padDevicesNone: "還沒有裝置選這個設定檔 — 平板登入時會出現選擇視窗",
+      padProfileDevicesCount: "使用這個設定檔的裝置 {n} 台",
+      padDevicesUnassigned: "未使用設定檔的裝置 {n} 台",
+      padDeviceWrongPrinter: "⚠ 正在用別台印表機列印：{p}",
+      padDeviceOldApp: "⚠ App 1.4 — 無法切換印表機（請更新 1.5）",
+      padDeviceNoApp: "⚠ 不是 POS App，無法自動列印",
+      padDeviceAutoOff: "⚠ 這台未開自動列印",
       printDeviceThis: "這台裝置",
       printDeviceNotHere: "這台未開自動列印",
       rawbtSavedHereMsg: "已儲存在這台裝置（其他裝置不受影響）",
@@ -3417,8 +3443,9 @@
       // PRINT_DEVICE_TTL_MS). 이름도 이때 새로 적힌다(프린터를 바꿨으면).
       if (autoPrintOn) await claimPrintDevice();
       renderPrintDeviceNote();
-      // 모아 둔 터치 수를 보낸다(패드 프로필별로 센다).
+      // 모아 둔 터치 수를 보낸다(패드 프로필별로 센다). 이 패드가 어느 프로필인지도.
       await flushPadTouches();
+      await reportPadSeen();
     }, 60000);
     startPolling();
   }
@@ -3536,7 +3563,7 @@
       if (btn.dataset.tab === "vip") loadVipCards();
       if (btn.dataset.tab === "accounts") loadAccounts();
       // 설정 > 인쇄의 「프로필별 터치 수」 — 들어올 때마다 새로 센다(보내지 않은 것도 먼저 보낸다).
-      if (btn.dataset.tab === "settings") flushPadTouches().then(loadPadTouches);
+      if (btn.dataset.tab === "settings") flushPadTouches().then(reportPadSeen).then(() => Promise.all([loadPadTouches(), loadPadDevices()]));
       // 결제 탭(item 22) — 배치도(zones)는 "테이블 / QR 코드" 탭에서만
       // 로드되던 데이터라, 그 탭을 아직 한 번도 안 열었어도 여기서 곧장
       // 볼 수 있도록 탭 전환 시점에 로드한다. tables는 로그인 직후
@@ -4647,6 +4674,7 @@
     }
     renderPrintDeviceNote();
     flashToggleSaved();
+    reportPadSeen();
   };
   // Reflect whatever was restored from localStorage above back onto the
   // actual checkboxes — otherwise the JS state and the visible UI disagree
@@ -13788,6 +13816,7 @@
       }
       flashPrinterPickMsg(T("printerPickDone").replace("{name}", p.name), true);
       renderPrinterPick();
+      reportPadSeen();
       // 「자동 인쇄 중: …」 줄에 이 기기가 어느 프린터로 찍는지 보이게 이름을 새로 적는다.
       if (autoPrintOn) {
         await claimPrintDevice();
@@ -13941,8 +13970,72 @@
   async function askPadProfileIfNeeded() {
     if (!padProfilesKnown || !padProfiles.length) return;
     const id = storedPadProfileId();
-    if (id === PAD_PROFILE_NONE || padProfiles.some((p) => p.id === id)) return;
+    const p = myPadProfile();
+    if (p) {
+      // 사장님이 설정에서 이 프로필의 프린터·자동 인쇄를 바꿨으면 패드가 따라간다.
+      // 바뀐 게 없으면 건드리지 않는다 — 패드에서 급히 바꾼 프린터(🖨️ 이 기기
+      // 프린터)를 새로고침할 때마다 되돌리면 안 된다.
+      if (padProfileSignature(p) !== appliedPadProfileSignature()) await applyPadProfile(p);
+      await reportPadSeen();
+      return;
+    }
+    if (id === PAD_PROFILE_NONE) {
+      await reportPadSeen();
+      return;
+    }
     await openPadProfilePicker();
+  }
+
+  const PAD_PROFILE_APPLIED_KEY = "hg_admin_padProfileApplied";
+  function padProfileSignature(p) {
+    const printer = shopPrinters.find((x) => x.id === p.printerId);
+    return `${p.id}|${printer ? `${printer.ip}:${printer.port}` : ""}|${p.autoPrint ? 1 : 0}`;
+  }
+  function appliedPadProfileSignature() {
+    try {
+      return localStorage.getItem(PAD_PROFILE_APPLIED_KEY) || "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  // 기기 종류 — 설정 화면의 「이 프로필을 쓰는 기기」 줄에 적는다.
+  function myDeviceKind() {
+    if (appPrintBridge()) return "app";
+    const ua = navigator.userAgent || "";
+    if (/iPad|Tablet/i.test(ua) || (/Android/i.test(ua) && !/Mobile/i.test(ua))) return "tablet";
+    if (/Mobile|iPhone|Android/i.test(ua)) return "phone";
+    return "pc";
+  }
+
+  /**
+   * 「이 패드는 지금 이 프로필이다」를 서버에 알린다 — 1분마다, 그리고 고를 때.
+   *
+   * 2026-09-29 사장님: "저 프로필이랑 패드랑 인식을 하는거야? 인식을 못하면
+   * 저걸 하는 의미가 없잖아." 패드가 무엇을 골랐고, 앱이 실제로 어느 프린터로
+   * 찍고 있는지를 설정 화면에서 볼 수 있게 한다.
+   */
+  async function reportPadSeen() {
+    const bridge = appPrintBridge();
+    let printer = null;
+    try {
+      printer = bridge && typeof bridge.target === "function" ? String(bridge.target() || "") || null : null;
+    } catch (e) {}
+    const p = myPadProfile();
+    try {
+      await fetch("/api/settings/pad-seen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId: myDeviceId(),
+          profileId: p ? p.id : PAD_PROFILE_NONE,
+          kind: myDeviceKind(),
+          printer,
+          canSetPrinter: !!(bridge && typeof bridge.setPrinter === "function"),
+          autoPrint: !!autoPrintOn,
+        }),
+      });
+    } catch (e) {}
   }
 
   function openPadProfilePicker() {
@@ -13980,6 +14073,7 @@
     renderPadProfileBadge();
     if (p) await applyPadProfile(p);
     renderPrintDeviceNote();
+    await reportPadSeen();
   }
 
   /** 프로필이 정한 것을 이 기기에 적용한다 — 프린터, 자동 인쇄. */
@@ -14009,8 +14103,14 @@
     if (autoPrintOn) await claimPrintDevice();
     else if (amPrintDevice()) await releasePrintDevice();
     // 프린터를 못 바꿨으면 말한다 — 조용히 옛 프린터로 찍으면 안 된다.
-    if (!printerOk) await showAlert(T("padProfilePrinterNeedsUpdate").replace("{name}", p.name));
-    else flashPrinterPickMsg(T("padProfileApplied").replace("{name}", p.name), true);
+    if (!printerOk) {
+      await showAlert(T("padProfilePrinterNeedsUpdate").replace("{name}", p.name));
+    } else {
+      try {
+        localStorage.setItem(PAD_PROFILE_APPLIED_KEY, padProfileSignature(p));
+      } catch (e) {}
+      flashPrinterPickMsg(T("padProfileApplied").replace("{name}", p.name), true);
+    }
   }
 
   if ($("#padProfileBadge")) $("#padProfileBadge").onclick = () => openPadProfilePicker();
@@ -14044,6 +14144,50 @@
   });
 
   // 설정 > 인쇄 — 프로필 편집과 터치 수.
+  // 설정 화면에서 「이 프로필을 쓰는 기기」 — 패드가 1분마다 알려 온 것(reportPadSeen).
+  let padDevices = [];
+  async function loadPadDevices() {
+    try {
+      const res = await fetch("/api/settings/pad-devices");
+      if (!res.ok) return;
+      padDevices = (await res.json()).devices || [];
+    } catch (e) {
+      return;
+    }
+    renderPadProfilesEditor();
+  }
+  function fmtAgo(ms) {
+    if (ms == null) return "";
+    const m = Math.floor(ms / 60000);
+    if (m < 2) return T("padAgoNow");
+    if (m < 60) return T("padAgoMin").replace("{n}", m);
+    if (m < 1440) return T("padAgoHour").replace("{n}", Math.floor(m / 60));
+    return T("padAgoDay").replace("{n}", Math.floor(m / 1440));
+  }
+  const PAD_DEVICE_KIND_KEY = { app: "printDeviceKindPos", tablet: "printDeviceKindTablet", phone: "printDeviceKindPhone", pc: "printDeviceKindPc" };
+  // 기기 한 줄 — 무엇이 맞고 무엇이 어긋났는지를 그대로 말한다.
+  function padDeviceLine(d, profile) {
+    const parts = [];
+    if (d.id === myDeviceId()) parts.push(`<b>${escapeHtml(T("padDeviceThis"))}</b>`);
+    parts.push(escapeHtml(T(PAD_DEVICE_KIND_KEY[d.kind] || "printDeviceKindPc")));
+    const warn = [];
+    const want = profile ? shopPrinters.find((x) => x.id === profile.printerId) : null;
+    if (d.kind === "app") {
+      const using = shopPrinters.find((x) => `${x.ip}:${x.port}` === d.printer);
+      const label = using ? using.name : d.printer || "?";
+      if (want && d.printer !== `${want.ip}:${want.port}`) warn.push(T("padDeviceWrongPrinter").replace("{p}", label));
+      else parts.push(`🖨️ ${escapeHtml(label)}${want ? " ✓" : ""}`);
+      if (!d.canSetPrinter) warn.push(T("padDeviceOldApp"));
+    } else if (profile && profile.autoPrint) {
+      warn.push(T("padDeviceNoApp"));
+    }
+    if (profile && profile.autoPrint && !d.autoPrint) warn.push(T("padDeviceAutoOff"));
+    const offline = d.ago_ms != null && d.ago_ms > 3 * 60000;
+    parts.push(`<span class="pad-device-ago${offline ? " is-off" : ""}">${escapeHtml(fmtAgo(d.ago_ms))}${offline ? " " + escapeHtml(T("padDeviceOffline")) : ""}</span>`);
+    return `<li class="pad-device${warn.length ? " is-warn" : ""}" data-device="${escapeHtml(d.id)}">${parts.join(" · ")}${warn
+      .map((w) => `<span class="pad-device-warn">${escapeHtml(w)}</span>`)
+      .join("")}</li>`;
+  }
   function renderPadProfilesEditor() {
     const box = $("#padProfilesList");
     if (!box) return;
@@ -14051,17 +14195,37 @@
       [`<option value="">${escapeHtml(T("padProfilePrinterKeep"))}</option>`]
         .concat(shopPrinters.map((x) => `<option value="${escapeHtml(x.id)}"${x.id === sel ? " selected" : ""}>🖨️ ${escapeHtml(x.name)}</option>`))
         .join("");
+    const devicesOf = (id) => padDevices.filter((d) => d.profile === id);
     box.innerHTML = padProfiles
-      .map(
-        (p) => `
+      .map((p) => {
+        const devs = p.id ? devicesOf(p.id) : [];
+        return `
         <div class="pad-profile-row" data-id="${escapeHtml(p.id)}">
-          <input type="text" class="pad-profile-name" maxlength="20" value="${escapeHtml(p.name)}" placeholder="${escapeHtml(T("padProfileNamePlaceholder"))}" />
-          <select class="pad-profile-printer">${printerOpts(p.printerId)}</select>
-          <label><input type="checkbox" class="pad-profile-auto"${p.autoPrint ? " checked" : ""} /> ${escapeHtml(T("padProfileAutoPrint"))}</label>
-          <button type="button" class="pad-profile-del">✕</button>
-        </div>`
-      )
+          <div class="pad-profile-fields">
+            <input type="text" class="pad-profile-name" maxlength="20" value="${escapeHtml(p.name)}" placeholder="${escapeHtml(T("padProfileNamePlaceholder"))}" />
+            <select class="pad-profile-printer">${printerOpts(p.printerId)}</select>
+            <label class="pad-profile-auto-label"><input type="checkbox" class="pad-profile-auto"${p.autoPrint ? " checked" : ""} /><span>${escapeHtml(T("padProfileAutoPrint"))}</span></label>
+            <button type="button" class="pad-profile-del" aria-label="delete">✕</button>
+          </div>
+          ${
+            p.id
+              ? `<div class="pad-profile-devices"><div class="pad-profile-devices-head">${escapeHtml(
+                  devs.length ? T("padProfileDevicesCount").replace("{n}", devs.length) : T("padDevicesNone")
+                )}</div>${devs.length ? `<ul>${devs.map((d) => padDeviceLine(d, p)).join("")}</ul>` : ""}</div>`
+              : ""
+          }
+        </div>`;
+      })
       .join("");
+    const loose = devicesOf(PAD_PROFILE_NONE);
+    if (loose.length) {
+      box.insertAdjacentHTML(
+        "beforeend",
+        `<div class="pad-profile-devices pad-profile-loose"><div class="pad-profile-devices-head">${escapeHtml(
+          T("padDevicesUnassigned").replace("{n}", loose.length)
+        )}</div><ul>${loose.map((d) => padDeviceLine(d, null)).join("")}</ul></div>`
+      );
+    }
     box.querySelectorAll(".pad-profile-del").forEach((b) => {
       b.onclick = () => b.closest(".pad-profile-row").remove();
     });

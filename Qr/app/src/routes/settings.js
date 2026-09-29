@@ -595,6 +595,18 @@ router.get("/pad-touches", requireAdmin, async (req, res) => {
   res.json(await padProfiles.touchSummary(getDb, connectDB, nowLocal()));
 });
 
+// 이 패드가 지금 어느 프로필인지 — 1분마다(그리고 고를 때) 알린다. 설정 화면이
+// 「주방: 패드 1대 · 🖨️ 주방 프린터 ✓ · 방금」처럼 보여준다.
+router.post("/pad-seen", requireAdmin, async (req, res) => {
+  const r = await padProfiles.markSeen(getDb, connectDB, store.settings, req.body, nowLocal());
+  if (!r) return res.status(400).json({ error: "invalid_device" });
+  res.json({ ok: true });
+});
+
+router.get("/pad-devices", requireAdmin, async (req, res) => {
+  res.json({ devices: await padProfiles.listDevices(getDb, connectDB, nowLocal()) });
+});
+
 router.put("/escpos", requireOwner, async (req, res) => {
   const b = req.body || {};
   if (typeof b.enabled === "boolean") store.settings.escpos_enabled = b.enabled;

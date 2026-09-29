@@ -145,6 +145,46 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   check("「주방」으로 있을 때 누른 것은 주방 몫", ((r.body.rows || []).find((x) => x.profile === kitchen.id) || { today: 0 }).today >= 1, JSON.stringify(r.body.rows));
   const tableText = await A.page.locator("#padTouchTable").textContent();
   check("★ 설정 화면 표에 프로필 이름과 수가 보인다", /카운터/.test(tableText) && /오늘/.test(tableText) && /최근 7일/.test(tableText), tableText);
+
+  out.push("\n[패드를 알아보는가 — 설정 화면에 「이 프로필을 쓰는 기기」]");
+  // 2026-09-29 사장님: "저 프로필이랑 패드랑 인식을 하는거야? 인식을 못하면 저걸 하는 의미가 없잖아."
+  // B 패드에서 누가 급히 주방 프린터로 바꿨다 — 프로필(카운터 프린터)과 어긋난다.
+  await B.page.locator('.admin-tabs button[data-tab="orders"]').click();
+  await B.page.selectOption("#printerPick", { label: KITCHEN.name });
+  await B.page.locator("#printerPickSave").click();
+  await B.page.waitForTimeout(800);
+  await A.page.locator('.admin-tabs button[data-tab="orders"]').click();
+  await A.page.locator('.admin-tabs button[data-tab="settings"]').click();
+  await A.page.locator('.settings-nav-btn[data-category="print"]').click();
+  await A.page.waitForTimeout(1000);
+  const counterBox = A.page.locator(`#padProfilesList .pad-profile-row[data-id="${counter.id}"] .pad-profile-devices`);
+  const cText = await counterBox.textContent();
+  check("★★ 「카운터」 아래에 패드 2대가 보인다", /2대/.test(cText) && (await counterBox.locator(".pad-device").count()) === 2, cText);
+  check("★ 이 기기는 「이 기기」로 적힌다", /이 기기/.test(cText), cText);
+  check("★ 맞는 프린터면 ✓", /카운터 프린터 ✓/.test(cText), cText);
+  check("★★ 프린터가 어긋난 패드는 빨간 경고", /다른 프린터로 찍는 중: 주방 프린터/.test(cText), cText);
+  check("방금 본 기기는 「방금」", /방금/.test(cText), cText);
+  const kText = await A.page.locator(`#padProfilesList .pad-profile-row[data-id="${kitchen.id}"] .pad-profile-devices`).textContent();
+  check("아무도 안 고른 프로필은 그렇다고 말한다", /아직 이 프로필을 고른 기기가 없어요/.test(kText), kText);
+  if (process.env.SHOT) await A.page.locator("#padProfilesList").screenshot({ path: process.env.SHOT });
+
+  out.push("\n[한 줄이 안 깨진다 — 이름·프린터·자동 인쇄·✕]");
+  const lay = await A.page.evaluate(() => {
+    const row = document.querySelector("#padProfilesList .pad-profile-row .pad-profile-fields");
+    const r = (sel) => row.querySelector(sel).getBoundingClientRect();
+    const name = r(".pad-profile-name"), sel = r(".pad-profile-printer"), lab = r(".pad-profile-auto-label"), del = r(".pad-profile-del");
+    const overlap = (a, b) => !(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top);
+    return {
+      noOverlap: !overlap(name, sel) && !overlap(sel, lab) && !overlap(lab, del) && !overlap(name, del) && !overlap(sel, del),
+      labelOneLine: lab.height < 30,
+      checkboxSmall: row.querySelector(".pad-profile-auto").getBoundingClientRect().width <= 24,
+      nameNotFull: name.width < row.getBoundingClientRect().width * 0.6,
+    };
+  });
+  check("★ 칸끼리 안 겹친다(✕ 가 글자를 안 덮는다)", lay.noOverlap, JSON.stringify(lay));
+  check("「새 주문 자동 인쇄」가 한 줄", lay.labelOneLine, JSON.stringify(lay));
+  check("체크박스가 제 크기", lay.checkboxSmall, JSON.stringify(lay));
+  check("이름 칸이 혼자 한 줄을 차지하지 않는다", lay.nameNotFull, JSON.stringify(lay));
   await B.ctx.close();
 
   out.push("\n[사장님 폰(크롬) — 「프로필 없이 쓰기」]");
@@ -158,6 +198,22 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   check("★ 다시 묻지 않는다", !(await C.page.locator("#padProfileBackdrop").isVisible()), "");
   check("📍 는 「프로필」로 보인다(누르면 고를 수 있다)", /프로필/.test(await C.page.locator("#padProfileBadge").textContent()), "");
   await C.ctx.close();
+
+  out.push("\n[크롬으로 연 패드가 「주방」을 고르면 — 자동 인쇄가 안 된다고 경고]");
+  {
+    const D = await pad({ app: false });
+    await D.page.locator("#padProfileChoices button", { hasText: "주방" }).first().click();
+    await D.page.waitForTimeout(800);
+    await D.ctx.close();
+    const devs = (await boss.get("/api/settings/pad-devices")).body.devices || [];
+    const d = devs.find((x) => x.profile === kitchen.id);
+    check("서버가 크롬 기기를 「주방」으로 안다", d && d.kind !== "app", JSON.stringify(devs));
+    await A.page.locator('.admin-tabs button[data-tab="orders"]').click();
+    await A.page.locator('.admin-tabs button[data-tab="settings"]').click();
+    await A.page.waitForTimeout(1000);
+    const t = await A.page.locator(`#padProfilesList .pad-profile-row[data-id="${kitchen.id}"] .pad-profile-devices`).textContent();
+    check("★ 「POS 앱이 아니라 자동 인쇄가 안 돼요」", /POS 앱이 아니라 자동 인쇄가 안 돼요/.test(t), t);
+  }
 
   out.push("\n[설정 > 인쇄 — 프로필 편집]");
   await A.page.locator('.settings-nav-btn[data-category="print"]').click();
@@ -173,6 +229,19 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   r = await boss.get("/api/settings/pad-profiles");
   const p3 = r.body.profiles[2] || {};
   check("★ 저장된다 — 이름·프린터", p3.name === "2층" && p3.printerId === kp.id, JSON.stringify(r.body.profiles));
+
+  out.push("\n[사장님이 프로필의 프린터를 바꾸면 패드가 따라간다]");
+  r = await boss.get("/api/settings/pad-profiles");
+  const profs = r.body.profiles.map((p) => (p.id === counter.id ? { ...p, printerId: kp.id } : p));
+  await boss.put("/api/settings/pad-profiles").send({ profiles: profs });
+  await A.page.reload({ waitUntil: "networkidle" });
+  await A.page.waitForTimeout(1500);
+  const set3 = await A.page.evaluate(() => window.__set);
+  check("★★ 다시 열면 앱 프린터가 새 프린터(주방)로", JSON.stringify(set3[set3.length - 1]) === JSON.stringify([KITCHEN.ip, KITCHEN.port]), JSON.stringify(set3));
+  await A.page.reload({ waitUntil: "networkidle" });
+  await A.page.waitForTimeout(1500);
+  // 가짜 앱의 기록(__set)은 새로고침마다 비워진다 — 이번 열기에서 부른 것이 없어야 한다.
+  check("★ 바뀐 게 없으면 다시 안 건드린다(패드에서 급히 바꾼 것을 안 되돌린다)", (await A.page.evaluate(() => window.__set.length)) === 0, JSON.stringify(await A.page.evaluate(() => window.__set)));
   await A.ctx.close();
 
   out.push("\n[패드 크기에서 위쪽이 안 깨진다 — 📍 가 붙어도]");
