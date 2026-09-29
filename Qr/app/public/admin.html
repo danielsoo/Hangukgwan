@@ -96,6 +96,9 @@
              상태에서 각 프린터기를 편하게 변동할 수 있게". POS 앱 안에서만 보인다. -->
         <span id="printerPickWrap" class="printer-pick" hidden>
           <label><span data-i18n="printerPickLabel">🖨️ 이 기기 프린터</span> <select id="printerPick"></select></label>
+          <!-- 고르기만 해서는 안 바뀐다 — 「저장」을 눌러야 이 패드에 적용된다
+               (2026-09-29 사장님: "프린터 고르는 거 고르고 저장까지 해야 적용되게"). -->
+          <button type="button" id="printerPickSave" class="printer-pick-test printer-pick-save" data-i18n="printerPickSave" disabled>저장</button>
           <button type="button" id="printerPickTest" class="printer-pick-test" data-i18n="printerPickTest">테스트</button>
           <span id="printerPickMsg" class="toggle-saved-msg" hidden></span>
         </span>
@@ -104,8 +107,13 @@
              그 알림이 눌러보지도 못하고 꺼진다 — 정작 고치려던 "놓친다"가
              그대로 남는다. 그래서 멈추는 자리는 이 버튼 하나다. -->
         <button id="alarmStopBtn" class="alarm-stop-btn" hidden data-i18n="alarmStopBtn">🔕 알림 끄기</button>
-        <button id="manualOrderBtn" data-i18n="manualOrderBtn">📝 수기 주문</button>
-        <button id="refreshOrders" data-i18n="refreshBtn">새로고침</button>
+        <!-- 두 버튼은 한 묶음으로 오른쪽에 — 패드 폭에서 줄이 꺾여도 「새로고침」만
+             혼자 떨어지지 않게(2026-09-29 사장님: "패드 크기 고려해서 유아이
+             망가지지 않았으면"). -->
+        <span class="orders-toolbar-actions">
+          <button id="manualOrderBtn" data-i18n="manualOrderBtn">📝 수기 주문</button>
+          <button id="refreshOrders" data-i18n="refreshBtn">새로고침</button>
+        </span>
       </div>
       <!-- 데이터 저장 공간이 한도에 가까워지면 뜨는 띠. 사장님(2026-09-10):
            "3-4년 후에 내가 잊으면 큰일이잖아" — 기억할 일로 두지 않는다. -->

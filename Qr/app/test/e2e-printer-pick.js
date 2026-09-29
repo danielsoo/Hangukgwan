@@ -98,11 +98,19 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   check("★ 포트를 입력하는 칸이 없다 — 고르기만", (await A.page.locator("#printerPickWrap input").count()) === 0, "");
 
   // 주방 프린터 고장 — 카운터 프린터로 바꾼다.
+  check("저장 버튼은 처음엔 잠겨 있다", await A.page.locator("#printerPickSave").isDisabled(), "");
   await A.page.selectOption("#printerPick", { label: COUNTER.name });
   await A.page.waitForTimeout(500);
+  // 2026-09-29 사장님: "프린터 고르는 거 고르고 저장까지 해야 적용되게 해줘."
+  check("★★ 고르기만 해서는 안 바뀐다", (await A.page.evaluate(() => window.__set.length)) === 0, "");
+  check("★ 「저장을 눌러야 바뀌어요」라고 말한다", /저장/.test(await A.page.locator("#printerPickMsg").textContent()), await A.page.locator("#printerPickMsg").textContent());
+  check("저장 버튼이 살아난다", !(await A.page.locator("#printerPickSave").isDisabled()), "");
+  await A.page.locator("#printerPickSave").click();
+  await A.page.waitForTimeout(500);
   const set = await A.page.evaluate(() => window.__set);
-  check("★★ 앱에 카운터 프린터 IP·포트가 저장된다", JSON.stringify(set) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(set));
+  check("★★ 저장을 누르면 앱에 카운터 프린터 IP·포트가 저장된다", JSON.stringify(set) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(set));
   check("바꿨다고 말해준다", /카운터 프린터/.test(await A.page.locator("#printerPickMsg").textContent()), await A.page.locator("#printerPickMsg").textContent());
+  check("저장한 뒤에는 저장 버튼이 다시 잠긴다", await A.page.locator("#printerPickSave").isDisabled(), "");
 
   await A.page.locator("#printerPickTest").click();
   await A.page.waitForTimeout(300);
@@ -139,6 +147,32 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
     await page.waitForTimeout(1200);
     check("숨는다", !(await page.locator("#printerPickWrap").isVisible()), "");
     await ctx.close();
+  }
+
+  out.push("\n[패드 크기에서 위쪽이 안 깨진다]");
+  // 2026-09-29 사장님 패드 사진: 탭 줄이 「회원(VIP) ㄱ」에서 잘렸고, 「신규 /
+  // 주문 알림음」이 두 줄로 꺾였다. "패드 크기 고려해서 유아이 망가지지 않았으면."
+  for (const [w, h] of [[1280, 800], [1024, 700], [960, 600], [800, 1280]]) {
+    const P = await pad({ target: "192.168.111.142:9100" });
+    await P.page.setViewportSize({ width: w, height: h });
+    await P.page.waitForTimeout(500);
+    const m = await P.page.evaluate(() => {
+      const tabs = document.querySelector(".admin-tabs");
+      const lab = [...document.querySelectorAll(".orders-toolbar > label")];
+      const a = document.querySelector("#manualOrderBtn").getBoundingClientRect();
+      const b = document.querySelector("#refreshOrders").getBoundingClientRect();
+      return {
+        tabsFit: tabs.scrollWidth <= tabs.clientWidth + 1,
+        labelsOneLine: lab.every((l) => l.getBoundingClientRect().height < 34),
+        buttonsTogether: Math.abs(a.top - b.top) < 2,
+        pageFits: document.documentElement.scrollWidth <= innerWidth,
+      };
+    });
+    check(`★ ${w}×${h}: 탭이 전부 보인다(밀지 않아도)`, m.tabsFit, JSON.stringify(m));
+    check(`${w}×${h}: 체크박스 글자가 안 꺾인다`, m.labelsOneLine, "");
+    check(`${w}×${h}: 수기 주문·새로고침이 같은 줄`, m.buttonsTogether, "");
+    check(`${w}×${h}: 화면이 옆으로 안 넘친다`, m.pageFits, "");
+    await P.ctx.close();
   }
 
   out.push("\n[앱]");

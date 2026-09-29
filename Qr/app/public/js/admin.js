@@ -703,6 +703,8 @@
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
+      printerPickSave: "저장",
+      printerPickPressSave: "「저장」을 눌러야 바뀌어요",
       printerPickDone: "✔ {name}(으)로 바꿨어요",
       printerPickTestSent: "✔ {name}에 테스트 한 장을 보냈어요",
       printerPickFailed: "✘ 프린터를 못 바꿨어요 — 다시 눌러 주세요",
@@ -1546,6 +1548,8 @@
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
+      printerPickSave: "儲存",
+      printerPickPressSave: "按「儲存」才會更換",
       printerPickDone: "✔ 已改為 {name}",
       printerPickTestSent: "✔ 已送一張測試到 {name}",
       printerPickFailed: "✘ 無法更換印表機，請再按一次",
@@ -13678,12 +13682,39 @@
     const canSet = typeof bridge.setPrinter === "function";
     sel.disabled = !canSet;
     if (!canSet) flashPrinterPickMsg(T("printerPickNeedsUpdate"), false);
+    paintPrinterPickSave();
   }
 
+  // 고르면 「저장」 버튼만 살아난다. 누르기 전에는 이 패드의 프린터가 안 바뀐다.
+  //
+  // 2026-09-29 사장님: "프린터 고르는 거 고르고 저장까지 해야 적용되게 해줘."
+  // 목록을 스치듯 건드린 것만으로 주방 패드가 카운터 프린터로 넘어가면, 영업
+  // 중에 빌지가 엉뚱한 곳으로 나간다.
+  function printerPickDirty() {
+    const bridge = appPrintBridge();
+    const sel = $("#printerPick");
+    if (!bridge || !sel || !sel.value) return false;
+    const cur = currentShopPrinter(bridge);
+    return !cur || cur.id !== sel.value;
+  }
+  function paintPrinterPickSave() {
+    const btn = $("#printerPickSave");
+    if (!btn) return;
+    const bridge = appPrintBridge();
+    const dirty = printerPickDirty();
+    btn.disabled = !dirty || !bridge || typeof bridge.setPrinter !== "function";
+    btn.classList.toggle("is-dirty", dirty);
+  }
   if ($("#printerPick")) {
-    $("#printerPick").onchange = async (e) => {
+    $("#printerPick").onchange = () => {
+      paintPrinterPickSave();
+      if (printerPickDirty()) flashPrinterPickMsg(T("printerPickPressSave"), true);
+    };
+  }
+  if ($("#printerPickSave")) {
+    $("#printerPickSave").onclick = async () => {
       const bridge = appPrintBridge();
-      const p = shopPrinters.find((x) => x.id === e.target.value);
+      const p = shopPrinters.find((x) => x.id === $("#printerPick").value);
       if (!bridge || !p || typeof bridge.setPrinter !== "function") return;
       let r = "";
       try {
@@ -13697,6 +13728,7 @@
         return;
       }
       flashPrinterPickMsg(T("printerPickDone").replace("{name}", p.name), true);
+      renderPrinterPick();
       // 「자동 인쇄 중: …」 줄에 이 기기가 어느 프린터로 찍는지 보이게 이름을 새로 적는다.
       if (autoPrintOn) {
         await claimPrintDevice();
