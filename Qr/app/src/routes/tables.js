@@ -1,5 +1,5 @@
 const express = require("express");
-const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto } = require("../db");
+const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto, saveOrders } = require("../db");
 const { requireAdmin, requirePermission } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const {
@@ -9,6 +9,8 @@ const {
   partyPatchOf,
   ordersOfSeating,
   clearPartyFields,
+  editPartySize,
+  savePartySize,
 } = require("../partySize");
 const { openOrdersForTable, openOrdersForAll, ordersForSeating } = require("../orderQueries");
 const { orderedItemIdsOf } = require("../firstOrderMin");
@@ -470,6 +472,46 @@ router.post("/:tableNumber/moved-ack", async (req, res) => {
 // 정하고, PUT 으로 답을 저장할 뿐이다). 예전에는 아무 보호가 없어서, 주소만
 // 알면 누구나 남의 테이블 인원수를 지울 수 있었다 — 이제 결제 탭의
 // 「손님 나감」 버튼이 실제로 쓰는 길이므로 확실히 막는다.
+// 직원이 앉아 계신 손님의 인원수를 고친다 — 결제 탭 테이블 창의 「인원 수정」.
+//
+// 사장님(2026-09-29): "수기로 수정하는 항목에 인원수 수정이 아직 없는듯.
+// 메뉴는 추가 취소 등 수정 가능한데, 인원수는 없는거같애." — 정말 없었다.
+// 비우기(DELETE)만 있었다.
+//
+// 위의 PUT 과 따로 둔다. PUT 은 손님이 앉아서 답하는 길이라 착석 토큰을
+// 묶고, 빈 자리면 새 착석을 연다. 여기는 **이미 앉아 계신** 손님의 숫자만
+// 고친다. 규칙은 src/partySize.js editPartySize.
+router.patch("/:tableNumber/party-size", requireAdmin, async (req, res) => {
+  const b = req.body || {};
+  const adults = parseInt(b.adults, 10);
+  const children = parseInt(b.children, 10) || 0;
+  if (!Number.isFinite(adults) || adults < 0 || children < 0) return res.status(400).json({ error: "invalid_party_size" });
+  const size = adults + children;
+  if (size < 1 || size > 50) return res.status(400).json({ error: "invalid_party_size" });
+  const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
+  if (!table) return res.status(404).json({ error: "table_not_found" });
+  const seatingOrders = await ordersForSeating(store, table);
+  const r = editPartySize(table, seatingOrders, adults, children);
+  if (r.error) return res.status(409).json({ error: r.error });
+  // 자리는 인원수 네 칸만, 주문은 바뀐 것만 쓴다 — store 문서를 통째로 쓰면
+  // 같은 순간 들어온 다른 요청이 한 일이 지워진다(CLAUDE.md).
+  await savePartySize(store, table.number);
+  if (r.changedOrders.length) {
+    await saveOrders(r.changedOrders);
+    // 메모리에 들고 있는 사본도 맞춘다 — 결제 창이 다음 폴링 전에 읽는다.
+    for (const o of r.changedOrders) {
+      const mem = (store.orders || []).find((x) => x.id === o.id);
+      if (mem && mem !== o) Object.assign(mem, { party_size: o.party_size, party_adults: o.party_adults, party_children: o.party_children });
+    }
+  }
+  res.json({
+    party_size: table.party_size,
+    party_adults: table.party_adults,
+    party_children: table.party_children,
+    orders_updated: r.changedOrders.length,
+  });
+});
+
 router.delete("/:tableNumber/party-size", requireAdmin, async (req, res) => {
   const table = store.tables.find((t) => t.number === String(req.params.tableNumber));
   if (!table) return res.status(404).json({ error: "table_not_found" });

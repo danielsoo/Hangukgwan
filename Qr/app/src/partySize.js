@@ -315,8 +315,50 @@ async function clearIdleSeats(store) {
   return cleared;
 }
 
+/**
+ * 직원이 앉아 계신 손님의 인원수를 고친다.
+ *
+ * 사장님(2026-09-29): "고객의 인원수 수정항목 추가 요청 ... 일부 고객은 기본
+ * 1인으로 설정된 인원수로 주문/식사를 함. 홀 준비하는 입장에서는 1인 고객에
+ * 맞게 준비했는데 현실은 수 명의 고객으로 식사준비를 다시 하게 됨. 그리고
+ * 궁극적으로는 식사 고객수 집계가 적어지게 되고, 누적되면 더 커지게 됨."
+ *
+ * 그래서 자리의 숫자만 고치면 안 된다. 결산의 손님 수는 **주문에 찍힌 인원**
+ * 으로 센다(src/settlement.js — 자리 쪽 숫자는 결제하면 사라진다). 이미
+ * 들어간 이 착석의 주문들에도 같은 숫자를 다시 찍어야 집계가 고쳐진다.
+ * 인원과 메뉴는 하나의 세트다(CLAUDE.md).
+ *
+ * 착석 시각(party_size_updated_at)은 건드리지 않는다 — 새로 앉힌 것이 아니라
+ * 앉아 계신 분의 숫자를 고치는 것이다. 시각이 밀리면 손님 폰의 「내 주문」이
+ * 비어 보인다(src/routes/tables.js PUT 주석, 2026-09-14).
+ *
+ * 순수 함수다 — 바꾼 자리와 주문을 돌려주고, 저장은 부르는 쪽이 한다.
+ * error: "counter"(포장 카운터는 인원이 없다), "no_seating"(아무도 안 앉았다 —
+ * 그때는 손님이 QR 로 답하거나 직원이 수기 주문 화면에서 넣는다).
+ */
+function editPartySize(table, seatingOrders, adults, children) {
+  if (!table) return { error: "table_not_found" };
+  if (table.is_counter) return { error: "counter" };
+  const live = (seatingOrders || []).filter((o) => o && o.status !== "cancelled");
+  if (!table.party_size && live.length === 0) return { error: "no_seating" };
+  const size = adults + children;
+  table.party_size = size;
+  table.party_adults = adults;
+  table.party_children = children;
+  const changedOrders = [];
+  for (const o of live) {
+    if (o.party_size === size && o.party_adults === adults && o.party_children === children) continue;
+    o.party_size = size;
+    o.party_adults = adults;
+    o.party_children = children;
+    changedOrders.push(o);
+  }
+  return { table, changedOrders };
+}
+
 module.exports = {
   PARTY_KEYS,
+  editPartySize,
   clearPartyFields,
   clearIdleSeats,
   liveOrdersOf,

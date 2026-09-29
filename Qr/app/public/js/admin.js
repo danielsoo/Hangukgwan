@@ -1004,6 +1004,14 @@
       clearPartySizeConfirm: "이 테이블의 등록된 인원수를 비울까요? 다음 손님에게 인원수를 다시 물어봅니다.",
       clearPartySizeDone: "인원수를 비웠습니다.",
       clearPartySizeFailed: "인원수를 비우지 못했습니다. 다시 시도해주세요.",
+      editPartyBtn: "👥 인원 수정",
+      editPartyTitle: "인원 수정",
+      editPartyHint: "이 자리에 이미 들어간 주문의 인원도 같이 고쳐져서 결산 손님 수에 반영돼요.",
+      editPartyAdults: "어른",
+      editPartyChildren: "아이",
+      editPartyTotal: "모두 {n}명",
+      editPartySave: "저장",
+      editPartyFailed: "인원수를 고치지 못했습니다. 다시 시도해주세요.",
       unpaidTotalLabel2: "미결제 합계:",
       paySelectedBtn: "결제 완료",
       paySelectedFailedMsg: "일부 품목은 결제 완료 처리에 실패했어요. 화면을 새로고침해서 다시 확인해주세요.",
@@ -1816,6 +1824,14 @@
       clearPartySizeConfirm: "要清除這桌已登記的人數嗎？下一位客人會重新被詢問人數。",
       clearPartySizeDone: "已清除人數。",
       clearPartySizeFailed: "清除人數失敗，請再試一次。",
+      editPartyBtn: "👥 修改人數",
+      editPartyTitle: "修改人數",
+      editPartyHint: "這桌已送出的訂單人數也會一起更新，結算的來客數會跟著改。",
+      editPartyAdults: "大人",
+      editPartyChildren: "小孩",
+      editPartyTotal: "共 {n} 位",
+      editPartySave: "儲存",
+      editPartyFailed: "修改人數失敗，請再試一次。",
       unpaidTotalLabel2: "未結帳金額：",
       paySelectedBtn: "結帳完成",
       paySelectedFailedMsg: "部分品項結帳失敗，請重新整理後再確認一次。",
@@ -2346,6 +2362,60 @@
    * 같은 규칙이 escpos.js 에도 있다(브라우저용 순수 함수라 이 파일을 못
    * 부른다). test/party-tag.test.js 가 둘이 글자 하나까지 같은지 잰다.
    */
+  /**
+   * 인원 수정 창 — 어른·아이를 −/+ 로 고친다. 저장했으면 true.
+   *
+   * 2026-09-29 사장님: "일부 고객은 기본 1인으로 설정된 인원수로 주문/식사를
+   * 함 ... 궁극적으로는 식사 고객수 집계가 적어지게 되고, 누적되면 더
+   * 커지게 됨." 서버가 자리와 이 착석의 주문들을 같이 고친다
+   * (PATCH /api/tables/:n/party-size, src/partySize.js editPartySize).
+   */
+  function openPartyEdit(tableNumber, table) {
+    return new Promise((resolve) => {
+      const back = $("#partyEditBackdrop");
+      let adults = table && table.party_size ? (table.party_adults != null ? table.party_adults : table.party_size) : 1;
+      let children = table && table.party_size ? table.party_children || 0 : 0;
+      const paint = () => {
+        $("#partyEditAdults").textContent = String(adults);
+        $("#partyEditChildren").textContent = String(children);
+        $("#partyEditTotal").textContent = T("editPartyTotal").replace("{n}", adults + children);
+        $("#partyEditSave").disabled = adults + children < 1;
+      };
+      const step = (who, d) => () => {
+        if (who === "a") adults = Math.max(0, Math.min(50, adults + d));
+        else children = Math.max(0, Math.min(50, children + d));
+        paint();
+      };
+      $("#partyEditAdultsMinus").onclick = step("a", -1);
+      $("#partyEditAdultsPlus").onclick = step("a", 1);
+      $("#partyEditChildrenMinus").onclick = step("c", -1);
+      $("#partyEditChildrenPlus").onclick = step("c", 1);
+      const finish = (v) => {
+        back.hidden = true;
+        resolve(v);
+      };
+      $("#partyEditCancel").onclick = () => finish(false);
+      $("#partyEditSave").onclick = async () => {
+        $("#partyEditSave").disabled = true;
+        try {
+          const res = await fetch(`/api/tables/${encodeURIComponent(tableNumber)}/party-size`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ adults, children }),
+          });
+          if (!res.ok) throw new Error("failed");
+          finish(true);
+        } catch (e) {
+          $("#partyEditSave").disabled = false;
+          // 조용히 닫지 않는다 — 고쳐진 줄 알고 넘어가면 집계가 그대로 틀린다.
+          await showAlert(T("editPartyFailed"));
+        }
+      };
+      paint();
+      back.hidden = false;
+    });
+  }
+
   function partyTag(o) {
     if (!o || !o.party_size) return "";
     if (o.party_adults == null) return ` (${o.party_size})`;
@@ -7847,6 +7917,10 @@
     // focusOrderId 로 좁혀 들어온 화면에서도 내놓지 않는다 — 거기서 누르면
     // 화면에 안 보이는 다른 주문까지 같이 옮겨진다.
     const showMoveTable = !!(table && !table.is_counter && unpaidOrders.length > 0 && !focusOrderId);
+    // 인원 수정 — 앉아 계신 손님이 있는 진짜 테이블에서(2026-09-29 사장님:
+    // "인원수 수정할 수 있도록 수정 요망"). 메뉴를 고치는 권한과 같은 권한이다
+    // — 인원과 메뉴는 하나의 세트다(CLAUDE.md).
+    const showEditParty = !!(table && !table.is_counter && (table.party_size || unpaidOrders.length > 0) && canEditOrder());
     // 시험용 자리라는 것을 결제창 맨 위에서 말해 준다 — 여기서 누른
     // 「결제 완료」는 결산 어디에도 안 남는다(2026-09-16 사장님).
     const testTableNoticeHtml = isTestTable(table)
@@ -7859,6 +7933,9 @@
         <p style="color:var(--muted);font-size:15px;margin:0;">${T("unpaidTotalLabel")} <strong>NT$${money(unpaidTotal)}</strong></p>
         ${showMoveTable
           ? `<button type="button" id="moveTableBtn" class="table-detail-clear-party">${T("moveTableBtn")}</button>`
+          : ""}
+        ${showEditParty
+          ? `<button type="button" id="editPartyBtn" class="table-detail-clear-party">${T("editPartyBtn")}</button>`
           : ""}
         ${showClearParty
           ? `<button type="button" id="clearPartySizeBtn" class="table-detail-clear-party">${T("clearPartySizeBtn")}</button>`
@@ -8118,6 +8195,16 @@
     }
     const moveBtn = $("#moveTableBtn");
     if (moveBtn) moveBtn.onclick = () => openMoveTable(tableNumber, label || openTableLabel);
+    const editPartyBtn = $("#editPartyBtn");
+    if (editPartyBtn) {
+      editPartyBtn.onclick = async () => {
+        const saved = await openPartyEdit(tableNumber, table);
+        if (!saved) return;
+        await loadTables();
+        openTableDetail(tableNumber, label, focusOrderId);
+        if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+      };
+    }
     const sellBtn = $("#vipSellBtn");
     if (sellBtn) {
       sellBtn.onclick = () => {

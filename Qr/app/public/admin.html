@@ -1518,6 +1518,32 @@
      alert() on this page -- a browser-native popup blocks the whole tab and
      looks nothing like the rest of the UI. See showConfirm()/showAlert()
      in admin.js. Alert mode just hides the Cancel button. -->
+<!-- 인원 수정 (2026-09-29 사장님: "고객의 인원수 수정항목 추가 요청").
+     결제 탭 테이블 창의 「👥 인원 수정」이 연다 — admin.js openPartyEdit. -->
+<div id="partyEditBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal party-edit-modal">
+    <h3 data-i18n="editPartyTitle">인원 수정</h3>
+    <div class="party-edit-row">
+      <span data-i18n="editPartyAdults">어른</span>
+      <button type="button" id="partyEditAdultsMinus">−</button>
+      <strong id="partyEditAdults">1</strong>
+      <button type="button" id="partyEditAdultsPlus">+</button>
+    </div>
+    <div class="party-edit-row">
+      <span data-i18n="editPartyChildren">아이</span>
+      <button type="button" id="partyEditChildrenMinus">−</button>
+      <strong id="partyEditChildren">0</strong>
+      <button type="button" id="partyEditChildrenPlus">+</button>
+    </div>
+    <p class="party-edit-total" id="partyEditTotal"></p>
+    <p class="party-edit-hint" data-i18n="editPartyHint">이 자리에 이미 들어간 주문의 인원도 같이 고쳐져서 결산 손님 수에 반영돼요.</p>
+    <div class="modal-actions">
+      <button class="danger-btn" id="partyEditCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="partyEditSave" data-i18n="editPartySave">저장</button>
+    </div>
+  </div>
+</div>
+
 <div id="appDialogBackdrop" class="modal-backdrop" hidden>
   <div class="modal app-dialog-modal">
     <p id="appDialogMessage"></p>

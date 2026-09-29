@@ -1646,6 +1646,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 
 /* 인앱 확인/알림 (see showConfirm()/showAlert() in admin.js) */
 .app-dialog-modal { max-width: 360px; text-align: center; }
+/* 인원 수정 — 손가락으로 누르기 좋게 버튼을 크게. */
+.party-edit-modal h3 { margin: 0 0 14px; }
+.party-edit-row { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 10px 0; font-size: 17px; }
+.party-edit-row span { min-width: 52px; text-align: left; }
+.party-edit-row button { width: 44px; height: 44px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 22px; cursor: pointer; }
+.party-edit-row strong { min-width: 32px; font-size: 22px; }
+.party-edit-total { font-weight: 700; margin: 12px 0 4px; }
+.party-edit-hint { font-size: 13px; color: var(--muted); margin: 0 0 16px; line-height: 1.5; }
 .app-dialog-modal #appDialogMessage { font-size: 16px; line-height: 1.6; margin: 4px 0 20px; white-space: pre-line; }
 .app-dialog-modal .modal-actions { justify-content: center; gap: 10px; }
 
