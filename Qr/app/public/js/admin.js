@@ -734,6 +734,7 @@
       padProfilePickHint: "고르면 그곳의 프린터와 자동 인쇄가 이 기기에 적용됩니다. 위쪽 📍 를 눌러 언제든 바꿀 수 있어요.",
       padProfileNone: "프로필 없이 쓰기",
       padProfileBadgeEmpty: "📍 프로필",
+      padProfileUnlockConfirm: "🔒 이 기기는 「{name}」(으)로 잠겨 있어요.\n잠금을 풀고 바꿀까요?",
       padProfileAutoOn: "자동 인쇄",
       padProfileApplied: "📍 {name} 으로 설정했어요",
       padProfilePrinterNeedsUpdate: "📍 {name} — 프린터는 POS 앱 1.5 로 업데이트해야 바뀌어요",
@@ -1613,6 +1614,7 @@
       padProfilePickHint: "選好後，該處的印表機與自動列印會套用到這台裝置。隨時可按上方 📍 更改。",
       padProfileNone: "不使用設定檔",
       padProfileBadgeEmpty: "📍 設定檔",
+      padProfileUnlockConfirm: "🔒 這台裝置已鎖定為「{name}」。\n要解鎖並更改嗎？",
       padProfileAutoOn: "自動列印",
       padProfileApplied: "📍 已設定為 {name}",
       padProfilePrinterNeedsUpdate: "📍 {name} — 印表機需更新 POS App 1.5 才能切換",
@@ -13960,7 +13962,8 @@
     if (!b) return;
     b.hidden = !padProfiles.length;
     const p = myPadProfile();
-    b.textContent = p ? `📍 ${p.name}` : T("padProfileBadgeEmpty");
+    // 🔒 — 잘못 스쳐서 바뀌지 않게 늘 잠겨 있다. 누르면 풀지 먼저 묻는다.
+    b.textContent = p ? `🔒📍 ${p.name}` : T("padProfileBadgeEmpty");
     b.title = p ? p.name : "";
     b.classList.toggle("is-empty", !p);
   }
@@ -14038,7 +14041,7 @@
     } catch (e) {}
   }
 
-  function openPadProfilePicker() {
+  function openPadProfilePicker(opts = {}) {
     return new Promise((resolve) => {
       const back = $("#padProfileBackdrop");
       const box = $("#padProfileChoices");
@@ -14059,6 +14062,13 @@
         btn.onclick = () => finish(btn.dataset.id);
       });
       $("#padProfileNone").onclick = () => finish(PAD_PROFILE_NONE);
+      // 📍 를 눌러 연 것이면 그냥 닫을 수 있다 — 처음 묻는 창에는 없다(골라야 한다).
+      const cancel = $("#padProfileCancel");
+      cancel.hidden = !opts.cancellable;
+      cancel.onclick = () => {
+        back.hidden = true;
+        resolve(null);
+      };
       back.hidden = false;
     });
   }
@@ -14113,7 +14123,15 @@
     }
   }
 
-  if ($("#padProfileBadge")) $("#padProfileBadge").onclick = () => openPadProfilePicker();
+  // 📍 는 잠겨 있다(2026-09-29 사장님: "잠금은 잘못 터치할 때를 방지해서 잠금으로
+  // 해주고 직원들이 직접 풀고 수정할 수 있게 해줘"). 권한이 아니라 실수 막기다 —
+  // 누구든 「풀고 바꾸기」를 한 번 더 누르면 바꿀 수 있다. 고르고 나면 다시 잠긴다.
+  if ($("#padProfileBadge")) {
+    $("#padProfileBadge").onclick = async () => {
+      if (myPadProfile() && !(await showConfirm(T("padProfileUnlockConfirm").replace("{name}", myPadProfile().name)))) return;
+      await openPadProfilePicker({ cancellable: true });
+    };
+  }
 
   // 터치 수 — 화면을 누를 때마다 하나. 1분마다(그리고 화면을 떠날 때) 모아서
   // 보낸다. 누를 때마다 보내면 영업 중에 요청이 수백 개가 된다.

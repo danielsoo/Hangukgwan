@@ -139,8 +139,9 @@ function check(name, cond, extra = "") {
   check("★ 프린터를 못 바꾸면 말한다", /padProfilePrinterNeedsUpdate/.test(adminJs), "");
   check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*await reportPadSeen\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
   check("프로필을 고르면 「자동 인쇄 중」 이름이 프로필이 된다", /const prof = myPadProfile\(\);\s*\n\s*if \(prof\) return prof\.name;/.test(adminJs), "");
+  check("★ 📍 는 잠겨 있다 — 누르면 풀지 먼저 묻는다", /showConfirm\(T\("padProfileUnlockConfirm"\)/.test(adminJs), "");
   // ko / zh 둘 다 있는가
-  for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate"]) {
+  for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate", "padProfileUnlockConfirm"]) {
     const n = (adminJs.match(new RegExp(`\\b${k}:`, "g")) || []).length;
     check(`i18n ${k} 한국어·중국어`, n === 2, `${n}`);
   }

@@ -87,6 +87,7 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   out.push("[주방 패드 — 처음 로그인하면 묻는다]");
   const A = await pad({ target: "192.168.111.150:9100" });
   check("★ 「이 기기는 어디인가요?」가 뜬다", await A.page.locator("#padProfileBackdrop").isVisible(), "");
+  check("처음 묻는 창에는 「취소」가 없다 — 골라야 한다", !(await A.page.locator("#padProfileCancel").isVisible()), "");
   const choices = await A.page.locator("#padProfileChoices button").allTextContents();
   check("프로필 두 개가 보인다", choices.length === 2 && /주방/.test(choices[0]) && /카운터/.test(choices[1]), JSON.stringify(choices));
   check("어느 프린터인지도 적혀 있다", /주방 프린터/.test(choices[0]), choices[0]);
@@ -98,16 +99,37 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   check("★ 자동 인쇄가 켜진다", await A.page.locator("#autoPrintToggle").isChecked(), "");
   let devs = await printDevices();
   check("★ 「자동 인쇄 중」 목록에 「주방」으로 들어간다", devs.some((d) => d.name === "주방"), JSON.stringify(devs));
-  check("★ 위에 「📍 주방」이 보인다", (await A.page.locator("#padProfileBadge").textContent()) === "📍 주방", await A.page.locator("#padProfileBadge").textContent());
+  check("★ 위에 「📍 주방」이 보인다", (await A.page.locator("#padProfileBadge").textContent()) === "🔒📍 주방", await A.page.locator("#padProfileBadge").textContent());
   check("프린터 고르기 칸도 주방 프린터", (await A.page.locator("#printerPick option:checked").textContent()) === KITCHEN.name, "");
 
   await A.page.reload({ waitUntil: "networkidle" });
   await A.page.waitForTimeout(1500);
   check("★ 새로고침하면 다시 묻지 않는다(기기에 남는다)", !(await A.page.locator("#padProfileBackdrop").isVisible()), "");
-  check("「📍 주방」 그대로", (await A.page.locator("#padProfileBadge").textContent()) === "📍 주방", "");
+  check("「📍 주방」 그대로", (await A.page.locator("#padProfileBadge").textContent()) === "🔒📍 주방", "");
 
-  out.push("\n[📍 를 눌러 카운터로 바꾼다 — 홀 프린터 고장]");
+  out.push("\n[📍 는 잠겨 있다 — 잘못 스쳐도 안 바뀐다]");
+  // 2026-09-29 사장님: "잠금은 잘못 터치할 때를 방지해서 잠금으로 해주고 직원들이 직접 풀고 수정할 수 있게 해줘"
   await A.page.locator("#padProfileBadge").click();
+  await A.page.waitForTimeout(300);
+  check("★ 누르면 먼저 「잠겨 있어요 — 풀고 바꿀까요?」", await A.page.locator("#appDialogBackdrop").isVisible() && /잠겨 있어요/.test(await A.page.locator("#appDialogMessage").textContent()), await A.page.locator("#appDialogMessage").textContent());
+  check("★ 아직 고르는 창은 안 뜬다", !(await A.page.locator("#padProfileBackdrop").isVisible()), "");
+  await A.page.locator("#appDialogCancel").click();
+  await A.page.waitForTimeout(300);
+  check("★★ 「취소」면 아무것도 안 바뀐다", !(await A.page.locator("#padProfileBackdrop").isVisible()) && (await A.page.locator("#padProfileBadge").textContent()) === "🔒📍 주방", "");
+  // 풀었지만 마음이 바뀌었다 — 고르는 창에서 「취소」.
+  await A.page.locator("#padProfileBadge").click();
+  await A.page.locator("#appDialogOk").click();
+  await A.page.waitForTimeout(300);
+  check("풀면 고르는 창이 뜬다", await A.page.locator("#padProfileBackdrop").isVisible(), "");
+  check("★ 고르는 창에 「취소」가 있다", await A.page.locator("#padProfileCancel").isVisible(), "");
+  const nBefore = await A.page.evaluate(() => window.__set.length);
+  await A.page.locator("#padProfileCancel").click();
+  await A.page.waitForTimeout(300);
+  check("★ 취소하면 그대로(프린터도 안 건드린다)", (await A.page.locator("#padProfileBadge").textContent()) === "🔒📍 주방" && (await A.page.evaluate(() => window.__set.length)) === nBefore, "");
+
+  out.push("\n[풀고 카운터로 바꾼다 — 홀 프린터 고장]");
+  await A.page.locator("#padProfileBadge").click();
+  await A.page.locator("#appDialogOk").click();
   await A.page.waitForTimeout(300);
   check("창이 다시 뜬다", await A.page.locator("#padProfileBackdrop").isVisible(), "");
   check("지금 프로필이 표시된다", /주방/.test(await A.page.locator("#padProfileChoices button.is-current").textContent()), "");
@@ -115,7 +137,7 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   await A.page.waitForTimeout(800);
   const set2 = await A.page.evaluate(() => window.__set);
   check("★★ 앱이 카운터 프린터로 바뀐다", JSON.stringify(set2[set2.length - 1]) === JSON.stringify([COUNTER.ip, COUNTER.port]), JSON.stringify(set2));
-  check("「📍 카운터」", (await A.page.locator("#padProfileBadge").textContent()) === "📍 카운터", "");
+  check("「📍 카운터」", (await A.page.locator("#padProfileBadge").textContent()) === "🔒📍 카운터", "");
   devs = await printDevices();
   const mine = devs.filter((d) => d.name === "카운터" || d.name === "주방");
   check("★ 같은 기기가 두 번 들어가지 않고 이름만 바뀐다", mine.length === 1 && mine[0].name === "카운터", JSON.stringify(devs));
