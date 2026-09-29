@@ -52,10 +52,10 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   const [kitchen, counter] = r.body.profiles;
 
   const browser = await launchBrowser();
-  async function pad({ target = "192.168.111.150:9100", app: isApp = true, viewport = { width: 1280, height: 800 } } = {}) {
+  async function pad({ target = "192.168.111.150:9100", app: isApp = true, viewport = { width: 1280, height: 800 }, androidId = null } = {}) {
     const ctx = await browser.newContext({ viewport });
     if (isApp) {
-      await ctx.addInitScript((target) => {
+      await ctx.addInitScript(({ target, androidId }) => {
         window.__set = [];
         window.__target = sessionStorage.getItem("__fakeTarget") || target;
         window.HangukgwanPrint = {
@@ -69,7 +69,12 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
             return "ok";
           },
         };
-      }, target);
+        // 앱 1.6 — 다시 깔아도 같은 기기 번호(ANDROID_ID)와 모델 이름.
+        if (androidId) {
+          window.HangukgwanPrint.deviceId = () => androidId;
+          window.HangukgwanPrint.deviceModel = () => "LENOVO TB-X606F";
+        }
+      }, { target, androidId });
     }
     const page = await ctx.newPage();
     page.on("dialog", (d) => d.dismiss());
@@ -251,6 +256,37 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   r = await boss.get("/api/settings/pad-profiles");
   const p3 = r.body.profiles[2] || {};
   check("★ 저장된다 — 이름·프린터", p3.name === "2층" && p3.printerId === kp.id, JSON.stringify(r.body.profiles));
+
+  out.push("\n[앱을 지웠다 다시 깔아도 자리를 기억한다 — 앱 1.6]");
+  {
+    const E1 = await pad({ target: "", androidId: "lenovo42" });
+    await E1.page.locator("#padProfileChoices button", { hasText: "카운터" }).first().click();
+    await E1.page.waitForTimeout(800);
+    await E1.ctx.close(); // 앱 삭제 — 저장 공간(localStorage)과 앱의 프린터 설정이 전부 사라진다
+    const E2 = await pad({ target: "", androidId: "lenovo42" });
+    check("★★ 다시 깐 패드에 「이 기기는 어디인가요?」가 안 뜬다", !(await E2.page.locator("#padProfileBackdrop").isVisible()), "");
+    check("★★ 「🔒📍 카운터」로 돌아온다", (await E2.page.locator("#padProfileBadge").textContent()) === "🔒📍 카운터", await E2.page.locator("#padProfileBadge").textContent());
+    const es = await E2.page.evaluate(() => window.__set);
+    check("★ 앱 프린터도 카운터 프린터로 다시 적힌다", JSON.stringify(es[es.length - 1]) === JSON.stringify([COUNTER.ip, COUNTER.port]), JSON.stringify(es));
+    check("자동 인쇄도 다시 켜진다", await E2.page.locator("#autoPrintToggle").isChecked(), "");
+
+    out.push("\n[사장님이 설정 화면에서 그 패드를 「주방」으로 옮긴다]");
+    await A.page.locator('.admin-tabs button[data-tab="orders"]').click();
+    await A.page.locator('.admin-tabs button[data-tab="settings"]').click();
+    await A.page.waitForTimeout(1000);
+    const li = A.page.locator('#padProfilesList .pad-device[data-device="alenovo42"]');
+    check("★ 설정에 모델 이름이 보인다", /LENOVO TB-X606F/.test(await li.textContent()), await li.textContent());
+    await li.locator(".pad-device-move").selectOption(kitchen.id);
+    await A.page.waitForTimeout(1000);
+    check("옮긴 뒤 「주방」 아래로 간다", (await A.page.locator(`#padProfilesList .pad-profile-row[data-id="${kitchen.id}"] .pad-device[data-device="alenovo42"]`).count()) === 1, "");
+    // 패드는 1분마다 알리며 따라간다 — 시험에서는 새로 열어 바로 본다.
+    await E2.page.reload({ waitUntil: "networkidle" });
+    await E2.page.waitForTimeout(1500);
+    check("★★ 패드가 「주방」으로 바뀐다", (await E2.page.locator("#padProfileBadge").textContent()) === "🔒📍 주방", await E2.page.locator("#padProfileBadge").textContent());
+    const es2 = await E2.page.evaluate(() => window.__set);
+    check("★ 앱 프린터도 주방 프린터로", JSON.stringify(es2[es2.length - 1]) === JSON.stringify([KITCHEN.ip, KITCHEN.port]), JSON.stringify(es2));
+    await E2.ctx.close();
+  }
 
   out.push("\n[사장님이 프로필의 프린터를 바꾸면 패드가 따라간다]");
   r = await boss.get("/api/settings/pad-profiles");

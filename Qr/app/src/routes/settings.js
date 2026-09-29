@@ -600,7 +600,14 @@ router.get("/pad-touches", requireAdmin, async (req, res) => {
 router.post("/pad-seen", requireAdmin, async (req, res) => {
   const r = await padProfiles.markSeen(getDb, connectDB, store.settings, req.body, nowLocal());
   if (!r) return res.status(400).json({ error: "invalid_device" });
-  res.json({ ok: true });
+  res.json({ ok: true, ...r });
+});
+
+// 사장님이 설정 화면에서 기기를 다른 프로필로 옮긴다.
+router.put("/pad-devices/:id", canEditSettings, async (req, res) => {
+  const r = await padProfiles.assignDevice(getDb, connectDB, store.settings, req.params.id, (req.body || {}).profileId);
+  if (!r) return res.status(400).json({ error: "invalid_device" });
+  res.json({ ok: true, ...r });
 });
 
 router.get("/pad-devices", requireAdmin, async (req, res) => {

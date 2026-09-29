@@ -751,6 +751,8 @@
       padDeviceOldApp: "⚠ 앱 1.4 — 프린터를 못 바꿔요(1.5 로 업데이트)",
       padDeviceNoApp: "⚠ POS 앱이 아니라 자동 인쇄가 안 돼요",
       padDeviceAutoOff: "⚠ 이 기기는 자동 인쇄가 꺼져 있어요",
+      padDeviceMove: "이 기기의 프로필",
+      padDeviceMoveFailed: "옮기지 못했어요. 다시 해 주세요.",
       printDeviceThis: "이 기기",
       printDeviceNotHere: "이 기기는 자동 인쇄 꺼짐",
       rawbtSavedHereMsg: "이 기기에 저장했어요 (다른 기기는 그대로예요)",
@@ -1631,6 +1633,8 @@
       padDeviceOldApp: "⚠ App 1.4 — 無法切換印表機（請更新 1.5）",
       padDeviceNoApp: "⚠ 不是 POS App，無法自動列印",
       padDeviceAutoOff: "⚠ 這台未開自動列印",
+      padDeviceMove: "這台裝置的設定檔",
+      padDeviceMoveFailed: "無法變更，請再試一次。",
       printDeviceThis: "這台裝置",
       printDeviceNotHere: "這台未開自動列印",
       rawbtSavedHereMsg: "已儲存在這台裝置（其他裝置不受影響）",
@@ -4524,6 +4528,15 @@
   let padProfilesKnown = false;
 
   function myDeviceId() {
+    // POS 앱 1.6 은 다시 깔아도 같은 기기 번호를 준다 — 그걸 쓴다. 저장 공간이
+    // 지워져도 인쇄 기기 목록·패드 프로필이 같은 패드로 알아본다.
+    const bridge = appPrintBridge();
+    if (bridge && typeof bridge.deviceId === "function") {
+      try {
+        const aid = String(bridge.deviceId() || "").replace(/[^0-9A-Za-z]/g, "").slice(0, 40);
+        if (aid) return `a${aid}`;
+      } catch (e) {}
+    }
     try {
       let id = localStorage.getItem(DEVICE_ID_KEY);
       if (!id) {
@@ -13972,21 +13985,50 @@
   // 없이 쓰기」를 고른 기기(사장님 폰 등)는 다시 묻지 않는다.
   async function askPadProfileIfNeeded() {
     if (!padProfilesKnown || !padProfiles.length) return;
+    // 먼저 서버에 묻는다 — 앱을 다시 깔아 패드가 자리를 잊었거나, 사장님이 설정
+    // 화면에서 이 패드를 다른 프로필로 옮겼으면 서버 값이 온다(adoptServerProfile).
+    const adopted = await reportPadSeen();
     const id = storedPadProfileId();
     const p = myPadProfile();
+    if (adopted && p) return; // 방금 따라가며 적용까지 했다
     if (p) {
       // 사장님이 설정에서 이 프로필의 프린터·자동 인쇄를 바꿨으면 패드가 따라간다.
       // 바뀐 게 없으면 건드리지 않는다 — 패드에서 급히 바꾼 프린터(🖨️ 이 기기
       // 프린터)를 새로고침할 때마다 되돌리면 안 된다.
       if (padProfileSignature(p) !== appliedPadProfileSignature()) await applyPadProfile(p);
-      await reportPadSeen();
       return;
     }
-    if (id === PAD_PROFILE_NONE) {
-      await reportPadSeen();
-      return;
-    }
+    if (id === PAD_PROFILE_NONE) return;
     await openPadProfilePicker();
+  }
+
+  // 서버가 이 패드에 기억해 둔 프로필의 「몇 번째 결정」인가(src/padProfiles.js markSeen).
+  const PAD_PROFILE_REV_KEY = "hg_admin_padProfileRev";
+  function storedPadProfileRev() {
+    try {
+      return parseInt(localStorage.getItem(PAD_PROFILE_REV_KEY), 10) || 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+  /**
+   * 서버의 답을 따른다. 서버 rev 가 더 크면(다시 깐 패드, 사장님이 옮긴 패드)
+   * 그 프로필로 바꾸고 적용한다. 바꿨으면 true.
+   */
+  async function adoptServerProfile(r) {
+    if (!r || !r.profileId) return false;
+    const rev = parseInt(r.rev, 10) || 0;
+    const changed = rev > storedPadProfileRev() && r.profileId !== storedPadProfileId();
+    try {
+      localStorage.setItem(PAD_PROFILE_REV_KEY, String(rev));
+      if (changed) localStorage.setItem(PAD_PROFILE_KEY, r.profileId);
+    } catch (e) {}
+    if (!changed) return false;
+    renderPadProfileBadge();
+    const p = myPadProfile();
+    if (p) await applyPadProfile(p);
+    renderPrintDeviceNote();
+    return true;
   }
 
   const PAD_PROFILE_APPLIED_KEY = "hg_admin_padProfileApplied";
@@ -14018,27 +14060,37 @@
    * 저걸 하는 의미가 없잖아." 패드가 무엇을 골랐고, 앱이 실제로 어느 프린터로
    * 찍고 있는지를 설정 화면에서 볼 수 있게 한다.
    */
-  async function reportPadSeen() {
+  async function reportPadSeen(opts = {}) {
     const bridge = appPrintBridge();
     let printer = null;
     try {
       printer = bridge && typeof bridge.target === "function" ? String(bridge.target() || "") || null : null;
     } catch (e) {}
-    const p = myPadProfile();
+    let model = null;
     try {
-      await fetch("/api/settings/pad-seen", {
+      model = bridge && typeof bridge.deviceModel === "function" ? String(bridge.deviceModel() || "") || null : null;
+    } catch (e) {}
+    let r = null;
+    try {
+      const res = await fetch("/api/settings/pad-seen", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           deviceId: myDeviceId(),
-          profileId: p ? p.id : PAD_PROFILE_NONE,
+          // 고른 그대로 보낸다(안 골랐으면 빈 값 — 서버는 그때 자기 값을 지킨다).
+          profileId: storedPadProfileId(),
+          rev: storedPadProfileRev(),
+          chose: !!opts.chose,
           kind: myDeviceKind(),
+          model,
           printer,
           canSetPrinter: !!(bridge && typeof bridge.setPrinter === "function"),
           autoPrint: !!autoPrintOn,
         }),
       });
+      if (res.ok) r = await res.json();
     } catch (e) {}
+    return adoptServerProfile(r);
   }
 
   function openPadProfilePicker(opts = {}) {
@@ -14083,7 +14135,8 @@
     renderPadProfileBadge();
     if (p) await applyPadProfile(p);
     renderPrintDeviceNote();
-    await reportPadSeen();
+    // 「패드에서 골랐다」 — 서버가 이 값을 이 기기에 기억한다(다시 깔아도 돌아온다).
+    await reportPadSeen({ chose: true });
   }
 
   /** 프로필이 정한 것을 이 기기에 적용한다 — 프린터, 자동 인쇄. */
@@ -14187,7 +14240,8 @@
   function padDeviceLine(d, profile) {
     const parts = [];
     if (d.id === myDeviceId()) parts.push(`<b>${escapeHtml(T("padDeviceThis"))}</b>`);
-    parts.push(escapeHtml(T(PAD_DEVICE_KIND_KEY[d.kind] || "printDeviceKindPc")));
+    const kindName = T(PAD_DEVICE_KIND_KEY[d.kind] || "printDeviceKindPc");
+    parts.push(escapeHtml(d.model ? `${kindName} (${d.model})` : kindName));
     const warn = [];
     const want = profile ? shopPrinters.find((x) => x.id === profile.printerId) : null;
     if (d.kind === "app") {
@@ -14202,7 +14256,14 @@
     if (profile && profile.autoPrint && !d.autoPrint) warn.push(T("padDeviceAutoOff"));
     const offline = d.ago_ms != null && d.ago_ms > 3 * 60000;
     parts.push(`<span class="pad-device-ago${offline ? " is-off" : ""}">${escapeHtml(fmtAgo(d.ago_ms))}${offline ? " " + escapeHtml(T("padDeviceOffline")) : ""}</span>`);
-    return `<li class="pad-device${warn.length ? " is-warn" : ""}" data-device="${escapeHtml(d.id)}">${parts.join(" · ")}${warn
+    // 사장님이 여기서 이 기기를 다른 프로필로 옮긴다 — 패드는 1분 안에 따라간다.
+    const cur = d.profile || PAD_PROFILE_NONE;
+    const move = `<select class="pad-device-move" aria-label="${escapeHtml(T("padDeviceMove"))}">${padProfiles
+      .filter((x) => x.id)
+      .map((x) => `<option value="${escapeHtml(x.id)}"${x.id === cur ? " selected" : ""}>📍 ${escapeHtml(x.name)}</option>`)
+      .concat([`<option value="${PAD_PROFILE_NONE}"${cur === PAD_PROFILE_NONE ? " selected" : ""}>${escapeHtml(T("padTouchesNone"))}</option>`])
+      .join("")}</select>`;
+    return `<li class="pad-device${warn.length ? " is-warn" : ""}" data-device="${escapeHtml(d.id)}"><div class="pad-device-main"><span>${parts.join(" · ")}</span>${move}</div>${warn
       .map((w) => `<span class="pad-device-warn">${escapeHtml(w)}</span>`)
       .join("")}</li>`;
   }
@@ -14246,6 +14307,25 @@
     }
     box.querySelectorAll(".pad-profile-del").forEach((b) => {
       b.onclick = () => b.closest(".pad-profile-row").remove();
+    });
+    box.querySelectorAll(".pad-device-move").forEach((sel) => {
+      sel.onchange = async () => {
+        const id = sel.closest(".pad-device").dataset.device;
+        sel.disabled = true;
+        let ok = false;
+        try {
+          const res = await fetch(`/api/settings/pad-devices/${encodeURIComponent(id)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ profileId: sel.value }),
+          });
+          ok = res.ok;
+        } catch (e) {}
+        if (!ok) await showAlert(T("padDeviceMoveFailed"));
+        // 이 기기를 옮겼으면 지금 바로 따라간다(다른 패드는 1분 안에).
+        if (ok && id === myDeviceId()) await reportPadSeen();
+        await loadPadDevices();
+      };
     });
   }
   function readPadProfilesEditor() {

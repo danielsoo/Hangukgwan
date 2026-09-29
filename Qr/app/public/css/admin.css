@@ -2607,3 +2607,5 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .admin-lang-btn { padding: 5px 7px; font-size: 14px; }
   .pad-profile-badge { padding: 4px 7px; }
 }
+.settings-card .pad-device-main { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.settings-card .pad-device-main select.pad-device-move { width: auto; margin: 0; padding: 4px 8px; font-size: 14px; }

@@ -108,23 +108,73 @@ function localMs(s) {
   return Number.isFinite(t) ? t : NaN;
 }
 
+function cleanProfileId(settings, raw) {
+  const id = String(raw == null ? "" : raw);
+  if (!id) return null;
+  if (id === NO_PROFILE) return NO_PROFILE;
+  return profilesOf(settings).some((p) => p.id === id) ? id : NO_PROFILE;
+}
+
+/**
+ * 패드가 「나는 지금 이 프로필」이라고 알린다. 서버는 기기마다 프로필을 기억한다.
+ *
+ * 2026-09-29 사장님: 앱을 지웠다 다시 깔거나 앱 데이터를 지워도 패드가 자리를
+ * 잊지 않게. 앱 1.6 은 다시 깔아도 같은 기기 번호(ANDROID_ID)를 준다 — 그
+ * 번호로 서버에 남은 프로필을 돌려준다.
+ *
+ * 누가 마지막으로 정했는가는 rev(바꾼 횟수)로 가린다.
+ *  - 패드에서 골랐다(chose) → 서버가 그 값을 받고 rev+1.
+ *  - 서버 rev 가 패드가 아는 rev 보다 크다 → 서버가 이긴다(다시 깐 패드는 0,
+ *    설정 화면에서 사장님이 옮긴 경우도 여기). 패드는 돌려받은 값을 따른다.
+ *  - 그 밖에는 패드가 들고 있는 값을 그대로 적는다.
+ * 돌려주는 값: { profileId, rev } — 패드는 이것을 따른다.
+ */
 async function markSeen(getDb, connectDB, settings, body, localNow) {
   const b = body || {};
   const deviceId = String(b.deviceId == null ? "" : b.deviceId).trim();
   if (!/^[0-9A-Za-z_-]{1,64}$/.test(deviceId)) return null;
-  let profile = String(b.profileId == null ? "" : b.profileId) || NO_PROFILE;
-  if (profile !== NO_PROFILE && !profilesOf(settings).some((p) => p.id === profile)) profile = NO_PROFILE;
+  const sent = cleanProfileId(settings, b.profileId);
+  const padRev = Math.max(0, parseInt(b.rev, 10) || 0);
   const kind = DEVICE_KINDS.includes(b.kind) ? b.kind : "pc";
   const printer = typeof b.printer === "string" && TARGET_RE.test(b.printer) ? b.printer : null;
+  const model = typeof b.model === "string" ? b.model.replace(/[^\w .()\-+]/g, "").trim().slice(0, 40) || null : null;
   await connectDB();
-  await getDb()
-    .collection(DEVICES_COLLECTION)
-    .updateOne(
-      { _id: deviceId },
-      { $set: { profile, kind, printer, canSetPrinter: !!b.canSetPrinter, autoPrint: !!b.autoPrint, last_seen: localNow } },
-      { upsert: true }
-    );
-  return true;
+  const col = getDb().collection(DEVICES_COLLECTION);
+  const doc = await col.findOne({ _id: deviceId });
+  const serverRev = (doc && doc.rev) || 0;
+  let profile = doc && doc.profile ? cleanProfileId(settings, doc.profile) : null;
+  let rev = serverRev;
+  if (b.chose && sent) {
+    profile = sent;
+    rev = serverRev + 1;
+  } else if (serverRev > padRev && profile) {
+    // 서버가 이긴다 — 패드가 들고 있는 값은 무시한다.
+  } else if (sent) {
+    profile = sent;
+    // 이 기능 전에 고른 패드는 rev 가 없다(0). 1 로 올려 두어야 다시 깔았을 때
+    // (패드 rev 0) 서버 값이 이긴다.
+    if (!rev) rev = 1;
+  }
+  const set = { kind, printer, canSetPrinter: !!b.canSetPrinter, autoPrint: !!b.autoPrint, last_seen: localNow, rev };
+  if (profile) set.profile = profile;
+  if (model) set.model = model;
+  await col.updateOne({ _id: deviceId }, { $set: set }, { upsert: true });
+  return { profileId: profile, rev };
+}
+
+/** 설정 화면에서 사장님이 「이 패드 = 주방」으로 옮긴다. 패드는 1분 안에 따라간다. */
+async function assignDevice(getDb, connectDB, settings, deviceId, profileId) {
+  const id = String(deviceId || "");
+  if (!/^[0-9A-Za-z_-]{1,64}$/.test(id)) return null;
+  const profile = cleanProfileId(settings, profileId);
+  if (!profile) return null;
+  await connectDB();
+  const col = getDb().collection(DEVICES_COLLECTION);
+  const doc = await col.findOne({ _id: id });
+  if (!doc) return null;
+  const rev = (doc.rev || 0) + 1;
+  await col.updateOne({ _id: id }, { $set: { profile, rev } });
+  return { profileId: profile, rev };
 }
 
 async function listDevices(getDb, connectDB, localNow) {
@@ -135,6 +185,7 @@ async function listDevices(getDb, connectDB, localNow) {
     .map((d) => ({
       id: String(d._id),
       profile: d.profile || NO_PROFILE,
+      model: d.model || null,
       kind: d.kind || "pc",
       printer: d.printer || null,
       canSetPrinter: !!d.canSetPrinter,
@@ -148,5 +199,5 @@ async function listDevices(getDb, connectDB, localNow) {
 
 module.exports = {
   MAX_PROFILES, COLLECTION, NO_PROFILE, MAX_TOUCHES_PER_POST, SUMMARY_DAYS, DEVICES_COLLECTION, DEVICE_KEEP_MS,
-  profilesOf, cleanProfiles, daysBack, addTouches, touchSummary, markSeen, listDevices,
+  profilesOf, cleanProfiles, daysBack, addTouches, touchSummary, markSeen, assignDevice, listDevices,
 };

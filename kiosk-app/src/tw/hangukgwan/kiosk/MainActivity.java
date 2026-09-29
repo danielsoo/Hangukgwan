@@ -11,6 +11,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.text.InputType;
 import android.util.Base64;
 import android.util.Log;
@@ -479,6 +480,25 @@ public class MainActivity extends Activity {
                     .putInt(KEY_PRINTER_PORT, p)
                     .apply();
             return "ok";
+        }
+
+        /**
+         * 이 패드의 고유 번호(1.6, 2026-09-29) — 앱을 지웠다 다시 깔아도 같다
+         * (안드로이드 8 부터 ANDROID_ID 는 「기기 + 서명 키」마다 하나라, 같은
+         * 키로 서명한 앱이면 그대로다). 관리자 화면이 이 번호로 「이 패드 = 주방」을
+         * 서버에 묶어 둔다. 브라우저 저장 공간(localStorage)은 앱을 지우면 같이
+         * 지워져서, 거기에만 두면 패드가 자기 자리를 잊는다.
+         */
+        @JavascriptInterface
+        public String deviceId() {
+            String id = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+            return id == null ? "" : id;
+        }
+
+        /** 설정 화면에서 패드를 구별하라고 — 예: 「LENOVO TB-X606F」. */
+        @JavascriptInterface
+        public String deviceModel() {
+            return (Build.MANUFACTURER + " " + Build.MODEL).trim();
         }
     }
 

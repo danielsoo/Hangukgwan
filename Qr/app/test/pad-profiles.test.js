@@ -126,6 +126,47 @@ function check(name, cond, extra = "") {
   r = await request(app).get("/api/settings/pad-devices");
   check("로그인 안 하면 못 본다", r.status === 401 || r.status === 403, `${r.status}`);
 
+  out.push("\n[앱을 다시 깔아도 자리를 기억한다 — 서버가 기기 번호로]");
+  // 2026-09-29 사장님: 앱을 지웠다 다시 깔거나 앱 데이터를 지우면 패드가 잊어버리던 것.
+  const seen = (b) => boss.post("/api/settings/pad-seen").send({ kind: "app", ...b });
+  r = await seen({ deviceId: "aLenovo1", profileId: counter.id, chose: true, rev: 0, model: "LENOVO TB-X606F" });
+  check("패드에서 고르면 rev 1", r.body.profileId === counter.id && r.body.rev === 1, JSON.stringify(r.body));
+  r = await seen({ deviceId: "aLenovo1", profileId: counter.id, rev: 1 });
+  check("그냥 알리면 그대로", r.body.profileId === counter.id && r.body.rev === 1, JSON.stringify(r.body));
+  // 다시 깔았다 — 패드는 아무것도 모른다(프로필 없음, rev 0).
+  r = await seen({ deviceId: "aLenovo1", profileId: "", rev: 0 });
+  check("★★ 다시 깐 패드에 서버가 「카운터」를 돌려준다", r.body.profileId === counter.id && r.body.rev === 1, JSON.stringify(r.body));
+  // 앱 데이터를 지웠는데 누가 첫 창에서 「주방」을 눌렀다 — 그건 새 결정이다.
+  r = await seen({ deviceId: "aLenovo1", profileId: kitchen.id, chose: true, rev: 1 });
+  check("패드에서 새로 고르면 그게 이긴다(rev 2)", r.body.profileId === kitchen.id && r.body.rev === 2, JSON.stringify(r.body));
+  // 옛 판 패드가 rev 없이 들고 있는 값을 보내도 서버의 더 새 결정을 안 덮는다.
+  r = await seen({ deviceId: "aLenovo1", profileId: counter.id, rev: 1 });
+  check("★ 옛 값이 새 결정을 덮지 않는다", r.body.profileId === kitchen.id && r.body.rev === 2, JSON.stringify(r.body));
+
+  out.push("\n[사장님이 설정 화면에서 「이 패드 = 카운터」로 옮긴다]");
+  r = await boss.put("/api/settings/pad-devices/aLenovo1").send({ profileId: counter.id });
+  check("옮겨진다(rev 3)", r.status === 200 && r.body.profileId === counter.id && r.body.rev === 3, JSON.stringify(r.body));
+  r = await seen({ deviceId: "aLenovo1", profileId: kitchen.id, rev: 2 });
+  check("★★ 패드가 다음에 알릴 때 「카운터」를 받는다", r.body.profileId === counter.id && r.body.rev === 3, JSON.stringify(r.body));
+  r = await boss.put("/api/settings/pad-devices/nobody").send({ profileId: counter.id });
+  check("없는 기기는 거절", r.status === 400, `${r.status}`);
+  r = await boss.put("/api/settings/pad-devices/aLenovo1").send({ profileId: "" });
+  check("빈 프로필은 거절", r.status === 400, `${r.status}`);
+  r = await request(app).put("/api/settings/pad-devices/aLenovo1").send({ profileId: counter.id });
+  check("로그인 안 하면 못 옮긴다", r.status === 401 || r.status === 403, `${r.status}`);
+  r = await boss.get("/api/settings/pad-devices");
+  const len = (r.body.devices || []).find((d) => d.id === "aLenovo1") || {};
+  check("★ 기기 모델 이름이 남는다", len.model === "LENOVO TB-X606F", JSON.stringify(len));
+
+  out.push("\n[이 기능 전에 고른 패드도 다시 깔았을 때 돌아온다]");
+  // rev 없이 저장된 옛 기록
+  await require("../src/db").getDb().collection(padProfiles.DEVICES_COLLECTION).updateOne(
+    { _id: "aOld" }, { $set: { profile: kitchen.id, kind: "app" } }, { upsert: true });
+  r = await seen({ deviceId: "aOld", profileId: kitchen.id, rev: 0 });
+  check("알리면 rev 1 로 올라간다", r.body.rev === 1, JSON.stringify(r.body));
+  r = await seen({ deviceId: "aOld", profileId: "", rev: 0 });
+  check("★ 그 뒤 다시 깔면 돌아온다", r.body.profileId === kitchen.id, JSON.stringify(r.body));
+
   out.push("\n[터치 수는 store 문서에 안 쌓인다]");
   check("★ store.settings 에 터치 수가 없다", !JSON.stringify(store.settings).includes("touch"), "");
 
@@ -140,6 +181,12 @@ function check(name, cond, extra = "") {
   check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*await reportPadSeen\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
   check("프로필을 고르면 「자동 인쇄 중」 이름이 프로필이 된다", /const prof = myPadProfile\(\);\s*\n\s*if \(prof\) return prof\.name;/.test(adminJs), "");
   check("★ 📍 는 잠겨 있다 — 누르면 풀지 먼저 묻는다", /showConfirm\(T\("padProfileUnlockConfirm"\)/.test(adminJs), "");
+  const java = fs.readFileSync(path.join(__dirname, "../../../kiosk-app/src/tw/hangukgwan/kiosk/MainActivity.java"), "utf8");
+  check("★ 앱 1.6 이 기기 번호를 준다(ANDROID_ID)", /@JavascriptInterface\s+public String deviceId\(\)/.test(java) && /Settings\.Secure\.ANDROID_ID/.test(java), "");
+  check("앱이 모델 이름을 준다", /public String deviceModel\(\)/.test(java), "");
+  check("★ 화면이 앱의 기기 번호를 쓴다", /bridge\.deviceId\(\)/.test(adminJs), "");
+  const build = fs.readFileSync(path.join(__dirname, "../../../kiosk-app/build.sh"), "utf8");
+  check("앱 판 1.6", /VERSION_NAME:-1\.6/.test(build) && /VERSION_CODE:-7/.test(build), "");
   // ko / zh 둘 다 있는가
   for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate", "padProfileUnlockConfirm"]) {
     const n = (adminJs.match(new RegExp(`\\b${k}:`, "g")) || []).length;
