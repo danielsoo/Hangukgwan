@@ -130,6 +130,79 @@ function computeItemMovers(
   return { ...window, insufficient: false, up: up.slice(0, LIMIT), down: down.slice(0, LIMIT) };
 }
 
+/**
+ * 시간대가 바뀐 메뉴 — 늘 저녁에 팔리던 것이 점심에 팔리기 시작했나.
+ *
+ * 2026-09-30 사장님: "시간대별로 팔리는 것도 추이를 보고 싶어. 늘 저녁에만
+ * 팔리던 메뉴가 갑자기 점심에 팔리기 시작하면 그것도 보고 싶고."
+ *
+ * 메뉴마다 「점심 쪽으로 얼마나 치우쳐 팔리나」(점심 비중)를 잰다. 개수 그대로가
+ * 아니라 **그 시간대 손님 수에 비례해서** — 점심 손님 100명당 몇 개, 저녁 손님
+ * 100명당 몇 개를 구해 점심 몫이 얼마인지 본다. 점심 손님이 유난히 많았던 주라서
+ * 모든 메뉴가 점심으로 쏠려 보이는 것은 이렇게 걸러진다.
+ *
+ * 평소 4주와 최근 7일의 점심 비중이 25%p 넘게 바뀌면 고른다. 양쪽 다 6개 이상은
+ * 팔려야 한다(두세 개로는 쏠림을 말할 수 없다).
+ */
+const SHIFT_MIN_QTY = 6;
+const SHIFT_MIN_DELTA = 0.25;
+function computeTimeShift(orders, { today, firstDay = null, halfOf, guests = {}, menuItems = [] } = {}) {
+  const end = addDays(today, -1);
+  const recentStart = addDays(end, -(RECENT_DAYS - 1));
+  const baseEnd = addDays(recentStart, -1);
+  const baseStart = addDays(baseEnd, -(BASE_DAYS - 1));
+  const from = firstDay && firstDay > baseStart ? firstDay : baseStart;
+  const g = { recentAm: 0, recentPm: 0, baseAm: 0, basePm: 0, ...guests };
+  if (!halfOf || !(g.recentAm > 0 && g.recentPm > 0 && g.baseAm > 0 && g.basePm > 0)) return [];
+  const byItem = new Map();
+  for (const o of orders || []) {
+    if (!o || o.status !== "paid") continue;
+    const d = String(o.created_at || "").slice(0, 10);
+    if (d < from || d > end) continue;
+    const h = halfOf(o);
+    if (h !== "am" && h !== "pm") continue;
+    const recent = d >= recentStart;
+    for (const it of o.items || []) {
+      const qty = Number(it && it.qty) || 0;
+      if (qty <= 0) continue;
+      const key = String(it.item_id != null ? it.item_id : it.name_ko || it.name_zh || "");
+      if (!key) continue;
+      const row = byItem.get(key) || { item_id: key, name_ko: it.name_ko || null, name_zh: it.name_zh || null, rAm: 0, rPm: 0, bAm: 0, bPm: 0 };
+      row[(recent ? "r" : "b") + (h === "am" ? "Am" : "Pm")] += qty;
+      byItem.set(key, row);
+    }
+  }
+  // 점심 비중 — 손님 수로 맞춘 점심 판매율 / (점심 + 저녁 판매율).
+  const share = (am, pm, gAm, gPm) => {
+    const a = am / gAm;
+    const p = pm / gPm;
+    return a + p > 0 ? a / (a + p) : null;
+  };
+  const menuById = new Map((menuItems || []).map((m) => [String(m.id), m]));
+  const out = [];
+  for (const row of byItem.values()) {
+    if (row.rAm + row.rPm < SHIFT_MIN_QTY || row.bAm + row.bPm < SHIFT_MIN_QTY) continue;
+    const before = share(row.bAm, row.bPm, g.baseAm, g.basePm);
+    const now = share(row.rAm, row.rPm, g.recentAm, g.recentPm);
+    if (before == null || now == null || Math.abs(now - before) < SHIFT_MIN_DELTA) continue;
+    const m = menuById.get(row.item_id);
+    out.push({
+      item_id: row.item_id,
+      name_ko: (m && m.name_ko) || row.name_ko,
+      name_zh: (m && m.name_zh) || row.name_zh,
+      kind: now > before ? "to_lunch" : "to_dinner",
+      lunch_share_before: Math.round(before * 100),
+      lunch_share_now: Math.round(now * 100),
+      recent_am: row.rAm,
+      recent_pm: row.rPm,
+      base_am: row.bAm,
+      base_pm: row.bPm,
+    });
+  }
+  out.sort((a, b) => Math.abs(b.lunch_share_now - b.lunch_share_before) - Math.abs(a.lunch_share_now - a.lunch_share_before));
+  return out.slice(0, LIMIT);
+}
+
 /** 작은 선의 5주 — [시작, 끝] 날짜 쌍. 라우트가 주마다 손님 수를 세는 데 쓴다. */
 function weekRanges(today) {
   const end = addDays(today, -1);
@@ -137,4 +210,4 @@ function weekRanges(today) {
   return [0, 1, 2, 3, 4].map((k) => [addDays(baseStart, k * 7), addDays(baseStart, k * 7 + 6)]);
 }
 
-module.exports = { computeItemMovers, weekRanges, RECENT_DAYS, BASE_DAYS, MIN_DIFF, addDays };
+module.exports = { computeItemMovers, computeTimeShift, weekRanges, RECENT_DAYS, BASE_DAYS, MIN_DIFF, addDays };

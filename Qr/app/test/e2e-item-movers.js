@@ -40,15 +40,20 @@ function check(name, cond, extra = "") {
   const items = store.menuItems.filter((m) => !m.deleted_at).slice(0, 20);
   const [up, down] = items;
   let id = 800000;
-  const sell = async (m, d, qty) => insertOrder({
-    id: ++id, table_number: "5", status: "paid", created_at: `${d} 12:00:00`, updated_at: `${d} 12:30:00`,
+  const sell = async (m, d, qty, half = "am") => qty && insertOrder({
+    id: ++id, table_number: half === "am" ? "5" : "6", status: "paid", service_period: half,
+    created_at: `${d} ${half === "am" ? "12" : "18"}:00:00`, updated_at: `${d} ${half === "am" ? "12" : "18"}:30:00`,
     total: m.price * qty, party_size: 2, payment_method: "cash",
-    items: [{ item_id: m.id, name_ko: m.name_ko, name_zh: m.name_zh, qty, unit_price: m.price, paid: true, paid_at: `${d} 12:30:00` }],
+    items: [{ item_id: m.id, name_ko: m.name_ko, name_zh: m.name_zh, qty, unit_price: m.price, paid: true, paid_at: `${d} ${half === "am" ? "12" : "18"}:30:00` }],
   });
+  const shifty = items[2];
   for (let d = addDays(recentStart, -28); d <= end; d = addDays(d, 1)) {
     const recent = d >= recentStart;
     await sell(up, d, recent ? 5 : 1);   // 주 7 → 35
     await sell(down, d, recent ? 0 || 0 : 3); // 주 21 → 0
+    // 저녁에만 팔리던 것이 최근엔 점심에도(저녁 손님이 같이 있게 저녁 주문은 매일).
+    await sell(shifty, d, 2, "pm");
+    if (recent) await sell(shifty, d, 2, "am");
   }
   // 오늘 — 판매 비중용으로 20가지를 조금씩
   for (let i = 0; i < items.length; i++) await sell(items[i], today, 20 - i);
@@ -68,16 +73,28 @@ function check(name, cond, extra = "") {
 
   out.push("[요즘 달라진 메뉴]");
   const tabText = await page.locator("#settlementMoversTab").textContent();
-  check("★ 탭 이름에 ▲▼ 개수가 붙어 누르지 않아도 보인다", /▲1/.test(tabText) && /▼1/.test(tabText), tabText);
+  check("★ 탭 이름에 ▲▼ 개수가 붙어 누르지 않아도 보인다", /▲\d/.test(tabText) && /▼1/.test(tabText), tabText);
   await page.locator("#settlementMoversTab").click();
   await page.waitForTimeout(400);
   const upText = await page.locator("#settlementMoversUp").textContent();
   const downText = await page.locator("#settlementMoversDown").textContent();
   check("★★ 늘어난 메뉴가 보인다", upText.includes(up.name_ko) && /\+400%/.test(upText), upText);
   check("★★ 안 팔리게 된 메뉴가 보인다(7일간 0개)", downText.includes(down.name_ko) && /7일간 0개/.test(downText), downText);
-  check("5주 흐름 선이 있다", (await page.locator("#settlementMoversUp .stl-mover-spark").count()) === 1, "");
+  check("줄마다 5주 흐름 선이 있다", (await page.locator("#settlementMoversUp .stl-mover-spark").count()) === (await page.locator("#settlementMoversUp .stl-mover").count()), "");
   check("「7일간 0개」가 한 줄", await page.evaluate(() => [...document.querySelectorAll(".stl-mover-tag")].every((t) => t.getBoundingClientRect().height < 28)), "");
   check("어느 기간을 견줬는지 말한다", /어제까지 7일/.test(await page.locator("#settlementMoversNote").textContent()), "");
+  const ts = await page.locator("#settlementTimeShift").textContent();
+  check("★★ 「🔄 시간대가 바뀐 메뉴」 — 저녁 메뉴가 점심으로", ts.includes(shifty.name_ko) && /점심으로/.test(ts) && /점심 비중 0% → 50%/.test(ts), ts);
+  check("탭 이름에 🔄 개수도", /🔄1/.test(await page.locator("#settlementMoversTab").textContent()), await page.locator("#settlementMoversTab").textContent());
+  await page.locator('#settlementMoversShift button[data-shift="am"]').click();
+  await page.waitForTimeout(800);
+  const amUp = await page.locator("#settlementMoversUp").textContent();
+  check("★ 🌅 점심만 보면 — 점심에 새로 뜬 메뉴", amUp.includes(shifty.name_ko) && /새로 뜸/.test(amUp), amUp);
+  check("점심만 볼 때는 「시간대가 바뀐 메뉴」 칸을 숨긴다", !(await page.locator("#settlementTimeShiftWrap").isVisible()), "");
+  check("안내에 「점심」이라고 적힌다", /점심/.test(await page.locator("#settlementMoversNote").textContent()), "");
+  if (process.env.SHOT_AM) await page.locator('.stl-pane[data-pane="soldMovers"]').screenshot({ path: process.env.SHOT_AM });
+  await page.locator('#settlementMoversShift button[data-shift="all"]').click();
+  await page.waitForTimeout(800);
   await page.locator(".stl-tabs[data-tabgroup='sold']").screenshot({ path: process.env.SHOT_MOVERS || "/dev/null" }).catch(() => {});
   if (process.env.SHOT_MOVERS) await page.locator('.stl-pane[data-pane="soldMovers"]').screenshot({ path: process.env.SHOT_MOVERS });
 

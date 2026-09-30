@@ -919,6 +919,15 @@
       moversStopped: "7일간 0개",
       moversSoldOut: "지금 품절",
       moversFailed: "달라진 메뉴를 불러오지 못했어요.",
+      moversShiftAll: "하루 전체",
+      moversShiftAm: "🌅 점심",
+      moversShiftPm: "🌙 저녁",
+      timeShiftTitle: "🔄 시간대가 바뀐 메뉴",
+      timeShiftHint: "메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소 4주와 최근 7일을 견줬어요.",
+      timeShiftRow: "점심 비중 {before}% → {now}% · 최근 7일 점심 {am}개 · 저녁 {pm}개",
+      timeShiftToLunch: "☀ 점심으로",
+      timeShiftToDinner: "🌙 저녁으로",
+      timeShiftNone: "점심·저녁 사이로 옮겨간 메뉴는 없어요.",
       settlementPieEmpty: "아직 팔린 것이 없어요",
       settlementPieOther: "기타",
       settlementItemTrendTitle: "메뉴별 추이",
@@ -1817,6 +1826,15 @@
       moversStopped: "7 天 0 份",
       moversSoldOut: "目前售完",
       moversFailed: "無法載入變化菜色。",
+      moversShiftAll: "全天",
+      moversShiftAm: "🌅 午餐",
+      moversShiftPm: "🌙 晚餐",
+      timeShiftTitle: "🔄 時段改變的菜色",
+      timeShiftHint: "以該時段每 100 位客人的銷售數，比較每道菜在午餐或晚餐賣得較多，並對比平時 4 週與最近 7 天。",
+      timeShiftRow: "午餐比重 {before}% → {now}% · 最近 7 天 午餐 {am} 份 · 晚餐 {pm} 份",
+      timeShiftToLunch: "☀ 轉向午餐",
+      timeShiftToDinner: "🌙 轉向晚餐",
+      timeShiftNone: "沒有在午餐與晚餐之間轉移的菜色。",
       settlementPieEmpty: "目前還沒有賣出任何品項",
       settlementPieOther: "其他",
       settlementItemTrendTitle: "單品趨勢",
@@ -15716,14 +15734,39 @@
         <span class="stl-mover-tag">${escapeHtml(tag)}</span>
       </div>`;
   }
+  // 하루 전체 / 점심만 / 저녁만.
+  let moversShift = "all";
+  document.querySelectorAll("#settlementMoversShift button").forEach((b) => {
+    b.onclick = () => {
+      moversShift = b.dataset.shift;
+      document.querySelectorAll("#settlementMoversShift button").forEach((x) => x.classList.toggle("active", x === b));
+      loadItemMovers();
+    };
+  });
+  // 점심·저녁 사이로 옮겨간 메뉴 한 줄 — 「점심 비중 20% → 55%」와 막대 두 개.
+  function timeShiftRowHtml(m) {
+    const bar = (pct, cls) => `<span class="stl-shift-bar ${cls}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span>`;
+    return `
+      <div class="stl-mover is-${m.kind === "to_lunch" ? "up" : "down"} stl-shift-row" data-item-id="${escapeHtml(String(m.item_id))}">
+        <div class="stl-mover-main">
+          <span class="stl-mover-name">${escapeHtml(itemDisplayName(m))}</span>
+          <span class="stl-mover-sub">${escapeHtml(
+            T("timeShiftRow").replace("{before}", m.lunch_share_before).replace("{now}", m.lunch_share_now).replace("{am}", m.recent_am).replace("{pm}", m.recent_pm)
+          )}</span>
+        </div>
+        <span class="stl-shift-bars">${bar(m.lunch_share_before, "is-before")}${bar(m.lunch_share_now, "is-now")}</span>
+        <span class="stl-mover-tag">${escapeHtml(T(m.kind === "to_lunch" ? "timeShiftToLunch" : "timeShiftToDinner"))}</span>
+      </div>`;
+  }
   async function loadItemMovers() {
     const up = $("#settlementMoversUp");
     const down = $("#settlementMoversDown");
     const note = $("#settlementMoversNote");
     if (!up || !down) return;
+    const shiftNow = moversShift;
     let d;
     try {
-      const res = await fetch("/api/settlements/item-movers");
+      const res = await fetch(`/api/settlements/item-movers${shiftNow === "all" ? "" : `?shift=${shiftNow}`}`);
       if (!res.ok) throw new Error(String(res.status));
       d = await res.json();
     } catch (e) {
@@ -15736,18 +15779,32 @@
       note.innerHTML = escapeHtml(
         d.insufficient
           ? T("moversInsufficient")
-          : T("moversNote")
+          : (shiftNow === "all" ? "" : `${T(shiftNow === "am" ? "moversShiftAm" : "moversShiftPm")} · `) +
+            T("moversNote")
               .replace("{recent}", `${md(d.recent_start)}~${md(d.recent_end)}`)
               .replace("{base}", `${md(d.base_start)}~${md(d.base_end)}`)
               .replace("{rg}", Number(d.recent_guests || 0).toLocaleString())
               .replace("{bg}", Number(d.base_guests || 0).toLocaleString())
       ).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
     }
+    if (shiftNow !== moversShift) return; // 그 사이 다른 시간대를 눌렀다
     const cnt = $("#settlementMoversCount");
-    if (cnt) {
+    // 탭 이름의 개수는 「하루 전체」 기준이다 — 점심/저녁을 눌러도 바뀌지 않는다.
+    if (cnt && shiftNow === "all") {
       const nu = d.insufficient ? 0 : (d.up || []).length;
       const nd = d.insufficient ? 0 : (d.down || []).length;
-      cnt.innerHTML = nu || nd ? `${nu ? `<b class="is-up">▲${nu}</b>` : ""}${nd ? ` <b class="is-down">▼${nd}</b>` : ""}` : "";
+      const ns = (d.time_shift || []).length;
+      cnt.innerHTML = [nu ? `<b class="is-up">▲${nu}</b>` : "", nd ? `<b class="is-down">▼${nd}</b>` : "", ns ? `<b class="is-shift">🔄${ns}</b>` : ""].filter(Boolean).join(" ");
+    }
+    const tsWrap = $("#settlementTimeShiftWrap");
+    const ts = $("#settlementTimeShift");
+    if (tsWrap && ts) {
+      tsWrap.hidden = shiftNow !== "all";
+      if (shiftNow === "all") {
+        ts.innerHTML = (d.time_shift || []).length
+          ? d.time_shift.map(timeShiftRowHtml).join("")
+          : `<p class="stl-note">${escapeHtml(T("timeShiftNone"))}</p>`;
+      }
     }
     up.innerHTML = d.insufficient ? "" : (d.up || []).length ? d.up.map((m) => moverRowHtml(m, "up")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneUp"))}</p>`;
     down.innerHTML = d.insufficient ? "" : (d.down || []).length ? d.down.map((m) => moverRowHtml(m, "down")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneDown"))}</p>`;

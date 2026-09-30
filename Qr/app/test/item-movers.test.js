@@ -12,7 +12,7 @@ process.env.NODE_ENV = "test";
 process.env.SESSION_SECRET = "item-movers";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 
-const { computeItemMovers, addDays } = require("../src/itemMovers");
+const { computeItemMovers, computeTimeShift, addDays } = require("../src/itemMovers");
 
 let pass = 0;
 let fail = 0;
@@ -118,6 +118,46 @@ out.push("\n[손님 수에 비례해서 본다]");
   check("★ 손님 수를 모르면 억지로 말하지 않는다", computeItemMovers(orders3, { today: TODAY }).insufficient === true, "");
 }
 
+out.push("\n[시간대가 바뀐 메뉴]");
+// 2026-09-30 사장님: "늘 저녁에만 팔리던 메뉴가 갑자기 점심에 팔리기 시작하면 그것도 보고 싶고."
+{
+  const H = (half) => (o) => o.__half;
+  function sellH(orders, itemId, name, from, to, perDay, half) {
+    for (let d = from; d <= to; d = addDays(d, 1)) {
+      if (!perDay) continue;
+      orders.push({ id: ++seq, status: "paid", __half: half, created_at: `${d} ${half === "am" ? "12" : "18"}:00:00`, items: [{ item_id: itemId, name_ko: name, qty: perDay }] });
+    }
+  }
+  const halfOf = (o) => o.__half;
+  const orders = [];
+  // 동판불고기: 늘 저녁에만 → 최근에는 점심에도
+  sellH(orders, 1, "동판불고기", BASE_START, END, 2, "pm");
+  sellH(orders, 1, "동판불고기", RECENT_START, END, 2, "am");
+  // 김치찌개: 점심·저녁 고르게 — 그대로
+  sellH(orders, 2, "김치찌개", BASE_START, END, 2, "am"); sellH(orders, 2, "김치찌개", BASE_START, END, 2, "pm");
+  // 삼겹살: 점심에 팔리다가 최근엔 저녁으로
+  sellH(orders, 3, "삼겹살", BASE_START, BASE_END, 2, "am"); sellH(orders, 3, "삼겹살", RECENT_START, END, 2, "pm");
+  // 사이다: 너무 적다
+  sellH(orders, 4, "사이다", "2026-09-29", "2026-09-29", 1, "am"); sellH(orders, 4, "사이다", "2026-09-01", "2026-09-02", 1, "pm");
+  const guests = { recentAm: 70, recentPm: 70, baseAm: 280, basePm: 280 };
+  const r = computeTimeShift(orders, { today: TODAY, halfOf, guests });
+  const by = Object.fromEntries(r.map((m) => [m.name_ko, m]));
+  check("★★ 늘 저녁에만 팔리던 메뉴가 점심에도 → 「점심으로」", by["동판불고기"] && by["동판불고기"].kind === "to_lunch" && by["동판불고기"].lunch_share_before === 0 && by["동판불고기"].lunch_share_now === 50, JSON.stringify(by["동판불고기"]));
+  check("★ 반대로 — 점심 메뉴가 저녁으로", by["삼겹살"] && by["삼겹살"].kind === "to_dinner", JSON.stringify(by["삼겹살"]));
+  check("고르게 팔리는 메뉴는 안 뜬다", !by["김치찌개"], "");
+  check("몇 개 안 팔린 메뉴로는 말하지 않는다", !by["사이다"], "");
+
+  // 점심 손님만 네 배 온 주 — 점심 판매도 네 배. 손님 비례로 보면 그대로다.
+  const o2 = [];
+  sellH(o2, 2, "김치찌개", BASE_START, BASE_END, 2, "am"); sellH(o2, 2, "김치찌개", BASE_START, END, 2, "pm");
+  sellH(o2, 2, "김치찌개", RECENT_START, END, 8, "am");
+  const busyLunch = computeTimeShift(o2, { today: TODAY, halfOf, guests: { recentAm: 280, recentPm: 70, baseAm: 280, basePm: 280 } });
+  check("★★ 점심 손님이 많이 온 주라 점심에 더 팔린 것 → 안 뜬다", !busyLunch.length, JSON.stringify(busyLunch));
+  const flat = computeTimeShift(o2, { today: TODAY, halfOf, guests: { recentAm: 70, recentPm: 70, baseAm: 280, basePm: 280 } });
+  check("같은 판매를 손님 수 그대로로 보면 「점심으로」가 뜬다(비례가 하는 일)", flat.length === 1 && flat[0].kind === "to_lunch", JSON.stringify(flat));
+  check("★ 시간대 손님 수를 모르면 말하지 않는다", computeTimeShift(orders, { today: TODAY, halfOf }).length === 0, "");
+}
+
 out.push("\n[서버]");
 (async () => {
   const request = require("supertest");
@@ -129,10 +169,13 @@ out.push("\n[서버]");
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
   r = await boss.get("/api/settlements/item-movers");
   check("사장님은 본다", r.status === 200 && Array.isArray(r.body.up) && Array.isArray(r.body.down), JSON.stringify(r.body));
+  check("하루 전체에는 시간대가 바뀐 메뉴가 같이 온다", Array.isArray(r.body.time_shift) && r.body.shift === "all", JSON.stringify(r.body));
+  r = await boss.get("/api/settlements/item-movers?shift=am");
+  check("점심만 볼 수 있다", r.status === 200 && r.body.shift === "am" && !("time_shift" in r.body), JSON.stringify(r.body));
   const fs = require("fs");
   const adminJs = fs.readFileSync(require("path").join(__dirname, "../public/js/admin.js"), "utf8");
   check("★ 판매 비중에 「기타」로 묶지 않는다", !/settlementPieOther"\)\} \(\$\{rest\.length\}\)/.test(adminJs) && /const slices = sorted\.map/.test(adminJs), "");
-  for (const k of ["moversTitle", "moversNote", "moversNew", "moversStopped", "moversSoldOut"]) {
+  for (const k of ["moversTitle", "moversNote", "moversNew", "moversStopped", "moversSoldOut", "moversShiftAm", "timeShiftTitle", "timeShiftRow", "timeShiftToLunch", "timeShiftNone"]) {
     check(`i18n ${k} 두 언어`, adminJs.split(`${k}:`).length - 1 === 2, "");
   }
   console.log(out.join("\n"));

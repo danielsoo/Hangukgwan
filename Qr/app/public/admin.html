@@ -544,6 +544,12 @@
                  어제까지 7일을 그 전 4주 주 평균과 견준다(src/itemMovers.js). 위 날짜
                  칸과 상관없이 늘 「지금」을 본다. -->
             <div class="stl-pane owner-only" data-pane="soldMovers" hidden>
+              <!-- 하루 전체 / 점심만 / 저녁만 — 2026-09-30 사장님: "시간대별로 팔리는 것도 추이를 보고 싶어." -->
+              <div class="stl-movers-shift" id="settlementMoversShift">
+                <button type="button" data-shift="all" class="active" data-i18n="moversShiftAll">하루 전체</button>
+                <button type="button" data-shift="am" data-i18n="moversShiftAm">🌅 점심</button>
+                <button type="button" data-shift="pm" data-i18n="moversShiftPm">🌙 저녁</button>
+              </div>
               <p class="stl-note" id="settlementMoversNote"></p>
               <div class="stl-movers">
                 <div class="stl-movers-col">
@@ -554,6 +560,12 @@
                   <h4 data-i18n="moversDownTitle">▼ 갑자기 덜 팔리는 메뉴</h4>
                   <div id="settlementMoversDown"></div>
                 </div>
+              </div>
+              <!-- 늘 저녁에 팔리던 메뉴가 점심에 팔리기 시작했나(하루 전체에서만). -->
+              <div class="stl-time-shift" id="settlementTimeShiftWrap">
+                <h4 data-i18n="timeShiftTitle">🔄 시간대가 바뀐 메뉴</h4>
+                <p class="stl-note" data-i18n="timeShiftHint">메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소 4주와 최근 7일을 견줬어요.</p>
+                <div id="settlementTimeShift"></div>
               </div>
             </div>
           </section>

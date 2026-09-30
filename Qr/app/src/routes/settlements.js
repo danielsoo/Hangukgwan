@@ -15,7 +15,7 @@ const { nowLocal } = require("../time");
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
 const { sendLineMessage, formatShiftSummary, formatCloseHeldNotice } = require("../line");
 const testMode = require("../testMode");
-const { computeItemMovers, weekRanges, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
+const { computeItemMovers, computeTimeShift, weekRanges, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
 const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
@@ -352,32 +352,56 @@ router.get("/item-movers", requireOwner, async (req, res) => {
   const baseStart = addDays(end, -(RECENT_DAYS + BASE_DAYS - 1));
   const started = serviceStartedAt(store);
   const firstDay = started ? String(started).slice(0, 10) : null;
-  const orders = await ordersInRange(baseStart, end, req);
+  const all = await ordersInRange(baseStart, end, req);
+  // 점심·저녁은 결산의 오전/오후 정산과 같은 기준(halfOf)으로 가른다.
+  // 2026-09-30 사장님: "시간대별로 팔리는 것도 추이를 보고 싶어."
+  const opts = await halfOpts(baseStart, end, req);
+  const shift = req.query.shift === "am" || req.query.shift === "pm" ? req.query.shift : null;
+  const halfOfO = (o) => halfOf(o, opts);
+  const orders = shift ? all.filter((o) => halfOfO(o) === shift) : all;
   // 손님 수 — 결산과 같은 규칙(한 팀은 한 번 · 포장 한 건은 한 명). 2026-09-30
-  // 사장님: "집계 날짜와 인원수 수량과 비례해서 해야돼."
+  // 사장님: "집계 날짜와 인원수 수량과 비례해서 해야돼." 점심만/저녁만 볼 때는 그
+  // 시간대 손님만 센다.
   const recentStart = addDays(end, -(RECENT_DAYS - 1));
   const baseEnd = addDays(recentStart, -1);
   const baseFrom = firstDay && firstDay > baseStart ? firstDay : baseStart;
-  const guestsIn = async (s, e) => {
+  const guestsIn = (list, s, e) => {
     if (s > e) return 0;
-    const part = orders.filter((o) => {
+    const part = list.filter((o) => {
       const d = String(o.created_at || "").slice(0, 10);
       return d >= s && d <= e;
     });
-    const st = computeSettlement(part, s, e, await halfOpts(s, e, req));
+    const st = computeSettlement(part, s, e, opts);
     return (st.guest_count || 0) + (st.takeout_count || 0);
   };
-  res.json(
-    computeItemMovers(orders, {
+  const result = computeItemMovers(orders, {
+    today,
+    firstDay,
+    menuItems: store.menuItems || [],
+    isSoldOut: (m) => !isAvailableNow(m, store.settings),
+    recentGuests: guestsIn(orders, recentStart, end),
+    baseGuests: guestsIn(orders, baseFrom, baseEnd),
+    weekGuests: weekRanges(today).map(([s, e]) => guestsIn(orders, s < baseFrom ? baseFrom : s, e)),
+  });
+  // 하루 전체를 볼 때만 — 점심/저녁 사이로 옮겨간 메뉴.
+  if (!shift) {
+    const amOrders = all.filter((o) => halfOfO(o) === "am");
+    const pmOrders = all.filter((o) => halfOfO(o) === "pm");
+    result.time_shift = computeTimeShift(all, {
       today,
       firstDay,
+      halfOf: halfOfO,
       menuItems: store.menuItems || [],
-      isSoldOut: (m) => !isAvailableNow(m, store.settings),
-      recentGuests: await guestsIn(recentStart, end),
-      baseGuests: await guestsIn(baseFrom, baseEnd),
-      weekGuests: await Promise.all(weekRanges(today).map(([s, e]) => guestsIn(s < baseFrom ? baseFrom : s, e))),
-    })
-  );
+      guests: {
+        recentAm: guestsIn(amOrders, recentStart, end),
+        recentPm: guestsIn(pmOrders, recentStart, end),
+        baseAm: guestsIn(amOrders, baseFrom, baseEnd),
+        basePm: guestsIn(pmOrders, baseFrom, baseEnd),
+      },
+    });
+  }
+  result.shift = shift || "all";
+  res.json(result);
 });
 
 function addDays(dateStr, n) {
