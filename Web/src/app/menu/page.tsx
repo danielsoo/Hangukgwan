@@ -1,7 +1,7 @@
 'use client'
 
 import { useLanguage } from '@/context/LanguageContext'
-import { ORDER_URL } from '@/lib/config'
+import { MENU_URL } from '@/lib/config'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
 import { useDishPhotos } from '@/lib/menuPhotos'
 
@@ -117,7 +117,7 @@ export default function MenuPage() {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '18px 30px', marginTop: 48 }}>
           <a
-            href={ORDER_URL}
+            href={MENU_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="hg-cta-solid"

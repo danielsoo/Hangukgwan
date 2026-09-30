@@ -18,5 +18,9 @@ const QR_APP_BASE_URL = process.env.NEXT_PUBLIC_QR_APP_URL || ''
 // "온라인 주문" — 매장 테이블이 아니라 포장 카운터.
 export const ORDER_URL = `${QR_APP_BASE_URL}/t/COUNTER`
 
+// 「전체 메뉴 열기」 — 메뉴만 본다. 인원·포장 정보를 묻지 않고 주문 버튼도 없다.
+// 2026-09-30 사장님: "이걸 누르면 포장 qr 로 들어가는데 메뉴만 볼 수 있게 해줘."
+export const MENU_URL = `${QR_APP_BASE_URL}/menu-view`
+
 // 관리자 화면. 사장/직원 계정에만 링크를 보여준다(Header.tsx, account/page.tsx).
 export const ADMIN_URL = `${QR_APP_BASE_URL}/admin`

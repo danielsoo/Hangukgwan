@@ -1,5 +1,11 @@
 (function () {
   const tableNumber = decodeURIComponent(location.pathname.split("/t/")[1] || "").trim();
+  // 메뉴 보기 전용(/menu-view) — 2026-09-30 사장님: 홈페이지의 「전체 메뉴 열기」를
+  // 누르면 포장 QR 로 들어가는데 "메뉴만 볼 수 있게 해줘 그래서 인원, 포장 정보
+  // 필요 없이 주문은 안되지만 메뉴는 볼 수 있게." 같은 화면을 쓰되 인원·포장 정보를
+  // 묻지 않고, 장바구니·주문 버튼을 숨긴다. 서버의 주문 길은 건드리지 않는다
+  // (자리 번호가 없으니 주문이 들어갈 곳도 없다).
+  const VIEW_ONLY = /^\/menu-view\/?$/.test(location.pathname);
   // Always defaults to Chinese (this is a Taiwan restaurant) — not persisted
   // across page loads, so every fresh scan starts back at the default. A
   // fresh load happens naturally once a table is settled and re-scanned by
@@ -415,7 +421,8 @@
     document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
       el.placeholder = t(el.dataset.i18nPlaceholder);
     });
-    $("#tableBadge").textContent = isCounterTable ? t("counterBadge") : `${t("table")} ${tableNumber}`;
+    $("#tableBadge").textContent = VIEW_ONLY ? t("menuViewBadge") : isCounterTable ? t("counterBadge") : `${t("table")} ${tableNumber}`;
+    if (VIEW_ONLY) $("#viewOnlyBanner").textContent = t("menuViewNotice");
     $("#langPillLabel").textContent = LANG_PILL_LABEL[lang] || "Language";
     document.querySelectorAll(".lang-option").forEach((b) => {
       if (b.dataset.lang) b.classList.toggle("active", b.dataset.lang === lang);
@@ -549,6 +556,11 @@
   function applyOrderingState() {
     const closed = orderingClosed();
     const banner = $("#closedBanner");
+    // 보기 전용 — 주문 시간 안내는 필요 없다(주문을 받지 않는 화면이다).
+    if (VIEW_ONLY) {
+      banner.hidden = true;
+      return;
+    }
     // 없어진 자리는 영업시간과 무관하다 — 기다린다고 열리지 않으므로
     // 영업시간 안내 대신 무엇을 하면 되는지만 적는다.
     if (tableGone) {
@@ -2629,6 +2641,7 @@
     $("#idleWarningBanner").hidden = true;
   }
   function resetIdleTimer() {
+    if (VIEW_ONLY) return;
     hideIdleWarning();
     clearTimeout(idleTimer);
     clearTimeout(idleWarningTimer);
@@ -2651,7 +2664,9 @@
   });
   $("#idleExtendBtn").onclick = () => resetIdleTimer();
   $("#idleAckBtn").onclick = () => hideIdleWarning();
-  resetIdleTimer();
+  // 보기 전용은 3분 뒤 잠그지 않는다 — 주문하던 세션을 지키려는 잠금이라 메뉴만
+  // 보는 손님에게는 이유가 없다.
+  if (!VIEW_ONLY) resetIdleTimer();
 
   applyStaticI18n();
   // 설정 → 메뉴 순서는 예전 그대로 둔다. 바뀐 것은 「인원수를 언제 묻는가」뿐이다.
@@ -2664,5 +2679,11 @@
   // 돌면 「지금 주문할 수 있는가」를 모르는 채로 인원수를 묻게 된다.
   // 설정을 못 받아온 경우에는 예전처럼 묻는다(기본값이 "열림"이다). 네트워크가
   // 잠깐 끊긴 것 때문에 앉아 계신 손님이 주문을 못 하게 되면 더 나쁘다.
-  settingsReady.then(() => initPartySize()).then(checkPriorOrder);
+  if (VIEW_ONLY) {
+    // 인원·포장 이름/전화를 묻지 않고, 이 자리의 지난 주문도 보지 않는다.
+    document.body.classList.add("view-only");
+    $("#viewOnlyBanner").hidden = false;
+  } else {
+    settingsReady.then(() => initPartySize()).then(checkPriorOrder);
+  }
 })();
