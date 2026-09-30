@@ -103,16 +103,22 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
 
   // 주방 프린터 고장 — 카운터 프린터로 바꾼다.
   check("저장 버튼은 처음엔 잠겨 있다", await A.page.locator("#printerPickSave").isDisabled(), "");
+  // 2026-09-30 사장님: "Hall, Counter 선택을 해도 최초 설정값으로 프린트 되고 있어."
+  // 두 패드가 알려 온 값이 처음 IP 그대로였다 — 고르기만 하고 작은 「저장」은
+  // 안 눌렀다. 이제 고르면 바로 확인 창이 뜨고 「예」가 곧 저장이다.
   await A.page.selectOption("#printerPick", { label: COUNTER.name });
-  await A.page.waitForTimeout(500);
-  // 2026-09-29 사장님: "프린터 고르는 거 고르고 저장까지 해야 적용되게 해줘."
-  check("★★ 고르기만 해서는 안 바뀐다", (await A.page.evaluate(() => window.__set.length)) === 0, "");
-  check("★ 「저장을 눌러야 바뀌어요」라고 말한다", /저장/.test(await A.page.locator("#printerPickMsg").textContent()), await A.page.locator("#printerPickMsg").textContent());
-  check("저장 버튼이 살아난다", !(await A.page.locator("#printerPickSave").isDisabled()), "");
-  await A.page.locator("#printerPickSave").click();
-  await A.page.waitForTimeout(500);
+  await A.page.waitForTimeout(400);
+  check("★★ 고르면 바로 「카운터 프린터로 바꿀까요?」를 묻는다", await A.page.locator("#appDialogBackdrop").isVisible() && /카운터 프린터/.test(await A.page.locator("#appDialogMessage").textContent()), await A.page.locator("#appDialogMessage").textContent());
+  check("★ 묻는 동안에는 안 바뀐다(스치기만 해서는 안 바뀐다)", (await A.page.evaluate(() => window.__set.length)) === 0, "");
+  await A.page.locator("#appDialogCancel").click();
+  await A.page.waitForTimeout(300);
+  check("★ 「취소」면 그대로 — 칸도 원래 프린터로 돌아온다", (await A.page.evaluate(() => window.__set.length)) === 0 && (await A.page.locator("#printerPick option:checked").textContent()) === KITCHEN.name, await A.page.locator("#printerPick option:checked").textContent());
+  await A.page.selectOption("#printerPick", { label: COUNTER.name });
+  await A.page.waitForTimeout(400);
+  await A.page.locator("#appDialogOk").click();
+  await A.page.waitForTimeout(600);
   const set = await A.page.evaluate(() => window.__set);
-  check("★★ 저장을 누르면 앱에 카운터 프린터 IP·포트가 저장된다", JSON.stringify(set) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(set));
+  check("★★ 「예」를 누르면 앱에 카운터 프린터 IP·포트가 저장된다", JSON.stringify(set) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(set));
   check("바꿨다고 말해준다", /카운터 프린터/.test(await A.page.locator("#printerPickMsg").textContent()), await A.page.locator("#printerPickMsg").textContent());
   check("저장한 뒤에는 저장 버튼이 다시 잠긴다", await A.page.locator("#printerPickSave").isDisabled(), "");
   st = await A.page.locator("#printerPickStatus").textContent();

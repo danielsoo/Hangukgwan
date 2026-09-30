@@ -712,6 +712,7 @@
       printerPickFailed: "✘ 프린터를 못 바꿨어요 — 다시 눌러 주세요",
       printerPickNeedsUpdate: "앱을 1.5 로 업데이트해야 여기서 바꿀 수 있어요",
       printerPickStatus: "앱 {ver} · 지금 찍는 곳: {where}",
+      printerPickConfirm: "이 기기의 프린터를 「{name}」(으)로 바꿀까요?",
       printerPickOther: "목록에 없음",
       printerPickNone: "프린터 안 정해짐",
       printersTitle: "가게 프린터 목록",
@@ -1597,6 +1598,7 @@
       printerPickFailed: "✘ 無法更換印表機，請再按一次",
       printerPickNeedsUpdate: "App 需更新到 1.5 才能在這裡更換",
       printerPickStatus: "App {ver} · 目前列印到：{where}",
+      printerPickConfirm: "要把這台裝置的印表機改為「{name}」嗎？",
       printerPickOther: "不在清單中",
       printerPickNone: "尚未設定印表機",
       printersTitle: "店內印表機清單",
@@ -13909,9 +13911,21 @@
     btn.classList.toggle("is-dirty", dirty);
   }
   if ($("#printerPick")) {
-    $("#printerPick").onchange = () => {
+    // 고르면 바로 「○○ 로 바꿀까요?」를 묻는다 — 「예」가 곧 저장이다.
+    //
+    // 2026-09-30 사장님: "Hall, Counter 선택을 해도 최초 설정값으로 프린트 되고
+    // 있어." 서버에 두 패드가 알려 온 값이 둘 다 처음 IP 그대로였다 — 목록에서
+    // 고르기만 하고 옆의 작은 「저장」 버튼은 안 눌렀다. 09-29 의 "고르고 저장까지
+    // 해야 적용되게"(스치기만 해서는 안 바뀌게)는 이 확인 창이 지킨다.
+    $("#printerPick").onchange = async () => {
       paintPrinterPickSave();
-      if (printerPickDirty()) flashPrinterPickMsg(T("printerPickPressSave"), true);
+      if (!printerPickDirty()) return;
+      const p = shopPrinters.find((x) => x.id === $("#printerPick").value);
+      if (p && (await showConfirm(T("printerPickConfirm").replace("{name}", p.name)))) {
+        await $("#printerPickSave").onclick();
+      } else {
+        renderPrinterPick(); // 취소 — 원래 프린터로 되돌려 보여준다
+      }
     };
   }
   if ($("#printerPickSave")) {
