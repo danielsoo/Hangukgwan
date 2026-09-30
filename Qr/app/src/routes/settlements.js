@@ -1,6 +1,6 @@
 const express = require("express");
 const { activeItems } = require("../menuItems");
-const { store, save, nextId, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
+const { store, save, findOrders, getDb, connectDB, findDocs, saveDoc, saveOrders, saveFields } = require("../db");
 const { requireOwner, requireAdmin, requireTodayForStaff } = require("../auth");
 const { computeSettlement, taipeiDateString, paidAtOf, halfOf, netTotalOf } = require("../settlement");
 const { serviceCutAt, serviceCutHm, LEAD_MIN } = require("../servicePeriod");
@@ -64,9 +64,19 @@ async function saveSettlementSnapshot(snapshot, testId) {
     ? { date: snapshot.date, test_session: testId }
     : { date: snapshot.date, test_session: { $exists: false } };
   const [existing] = await findDocs("daily_settlements", key);
+  // 새 기록의 번호는 **날짜로** 만든다(ds-2026-09-23). 예전에는 store 의 번호
+  // 카운터(nextId)였는데, 아침 자동 오전 정산·밤 마감 미룸이 새 기록을 만들면서
+  // 그 카운터를 저장하지 않았다. 그래서 다음 날 다른 인스턴스가 **같은 번호**를
+  // 받아 replaceOne 으로 **전날 기록을 덮어썼다** — 2026-09-30 사장님 화면에서
+  // 23·24·29일 정산 기록이 목록에서 사라진 원인이다(위 합계는 주문으로 다시
+  // 세므로 멀쩡했다). 날짜마다 한 줄이라 날짜 번호는 겹칠 수가 없다.
   const row = existing
     ? { ...existing, ...snapshot }
-    : { id: nextId("daily_settlements"), ...snapshot, ...(testId ? { test_session: testId } : {}) };
+    : {
+        id: testId ? `ds-${snapshot.date}-${testId}` : `ds-${snapshot.date}`,
+        ...snapshot,
+        ...(testId ? { test_session: testId } : {}),
+      };
   await saveDoc("daily_settlements", row);
   return row;
 }
@@ -349,13 +359,54 @@ router.get("/history", requireOwner, async (req, res) => {
   // 평소 기기는 진짜 마감만. 한 화면에 섞이면 어느 줄이 진짜 장부인지
   // 알 수 없게 된다.
   const testId = testMode.currentId(req, store);
-  const list = await findDocs(
+  let list = await findDocs(
     "daily_settlements",
     { test_session: testId ? testId : { $exists: false } },
     { sort: { date: -1 }, limit: 90 }
   );
+  if (!testId && (await backfillMissingSnapshots(list, req))) {
+    list = await findDocs("daily_settlements", { test_session: { $exists: false } }, { sort: { date: -1 }, limit: 90 });
+  }
   res.json(list);
 });
+
+/**
+ * 기록이 빠진 지난 날을 주문으로 다시 계산해 채운다 — 문자는 보내지 않는다.
+ *
+ * 2026-09-30 사장님: "보면 22일 25일 사이에 아무것도 없는데 여기서는 데이터가
+ * 보여 왜 그래?" — 위 합계는 주문을 그 자리에서 세고, 왼쪽 목록은 저장된
+ * 기록이다. 기록이 번호 겹침으로 덮여 사라졌다(saveSettlementSnapshot 주석).
+ * 주문은 남아 있으므로 같은 숫자를 다시 만들 수 있다.
+ *
+ * 가장 오래된 기록 날짜부터(그 전의 날은 지어내지 않는다) 어제까지, 최대
+ * 60일만 본다. 한 번 채우면 다음부터는 할 일이 없다. 채웠으면 true.
+ */
+const BACKFILL_MAX_DAYS = 60;
+async function backfillMissingSnapshots(list, req) {
+  try {
+    const have = new Set((list || []).map((s) => s && s.date).filter(Boolean));
+    if (!have.size) return false;
+    const earliest = [...have].sort()[0];
+    const today = taipeiDateString();
+    const dayMs = 86400000;
+    const toDate = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const startMs = Math.max(Date.parse(`${earliest}T00:00:00Z`), Date.parse(`${today}T00:00:00Z`) - BACKFILL_MAX_DAYS * dayMs);
+    let filled = false;
+    for (let ms = startMs; toDate(ms) < today; ms += dayMs) {
+      const d = toDate(ms);
+      if (have.has(d)) continue;
+      const orders = await ordersInRange(d, d, req);
+      const snapshot = computeSettlement(orders, d, d, await halfOpts(d, d, req));
+      await saveSettlementSnapshot({ ...snapshot, backfilled_at: nowLocal() });
+      filled = true;
+    }
+    return filled;
+  } catch (e) {
+    // 채우지 못해도 목록은 보여야 한다.
+    console.warn("빠진 정산 기록 채우기 실패:", e && e.message);
+    return false;
+  }
+}
 
 // Manually snapshot a given date (defaults to today) into permanent history.
 // Safe to call more than once for the same date — replaces any existing
