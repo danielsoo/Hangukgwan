@@ -711,6 +711,7 @@
       printerPickTestSent: "✔ {name}에 테스트 한 장을 보냈어요",
       printerPickFailed: "✘ 프린터를 못 바꿨어요 — 다시 눌러 주세요",
       printerPickNeedsUpdate: "앱을 1.5 로 업데이트해야 여기서 바꿀 수 있어요",
+      printerPickStatus: "앱 {ver} · 지금 찍는 곳: {where}",
       printerPickOther: "목록에 없음",
       printerPickNone: "프린터 안 정해짐",
       printersTitle: "가게 프린터 목록",
@@ -1595,6 +1596,7 @@
       printerPickTestSent: "✔ 已送一張測試到 {name}",
       printerPickFailed: "✘ 無法更換印表機，請再按一次",
       printerPickNeedsUpdate: "App 需更新到 1.5 才能在這裡更換",
+      printerPickStatus: "App {ver} · 目前列印到：{where}",
       printerPickOther: "不在清單中",
       printerPickNone: "尚未設定印表機",
       printersTitle: "店內印表機清單",
@@ -13841,6 +13843,7 @@
     // 골라 두면 「주방 프린터」로 보이는데 딴 데로 나간다.
     if (!cur) opts.unshift(`<option value="" selected>${escapeHtml(target && target !== ":9100" ? `${T("printerPickOther")} ${target}` : T("printerPickNone"))}</option>`);
     sel.innerHTML = opts.join("");
+    renderPrinterPickStatus(bridge, cur, target);
     const canSet = typeof bridge.setPrinter === "function";
     // 프로필이 프린터를 정한 패드에서는 여기서 못 바꾼다 — 골라도 찍기 직전에
     // 프로필 프린터로 되돌아간다. 바꾸려면 📍 에서 프로필을 바꾼다.
@@ -13858,6 +13861,30 @@
       msg.hidden = false;
     }
     paintPrinterPickSave();
+  }
+
+  /**
+   * 「앱 1.6 · 지금 찍는 곳: 카운터 프린터 (192.168.111.150:9100)」 — 늘 보인다.
+   *
+   * 2026-09-30 사장님: "Hall, Counter 선택을 해도 최초 설정값으로 프린트 되고
+   * 있어. 최초 설정값을 142 하면 … 프린트되고, 150 으로 하면 … 안됨." 앱은
+   * 찍을 때마다 저장된 IP 를 읽으므로, 이 증상은 화면이 앱의 프린터를 못 바꾸고
+   * 있다는 뜻이다 — 대개 앱이 옛 판(setPrinter 없음)일 때. 무엇이 깔려 있고
+   * 실제로 어디로 나가는지를 패드 화면에서 바로 보게 한다.
+   */
+  function appVersionLabel(bridge) {
+    if (!bridge) return "";
+    if (typeof bridge.deviceId === "function") return "1.6+";
+    if (typeof bridge.setPrinter === "function") return "1.5";
+    return "1.4-";
+  }
+  function renderPrinterPickStatus(bridge, cur, target) {
+    const el = $("#printerPickStatus");
+    if (!el) return;
+    const ver = appVersionLabel(bridge);
+    const where = cur ? `${cur.name} (${target})` : target && target !== ":9100" ? target : T("printerPickNone");
+    el.textContent = T("printerPickStatus").replace("{ver}", ver).replace("{where}", where);
+    el.classList.toggle("is-old", ver === "1.4-");
   }
 
   // 고르면 「저장」 버튼만 살아난다. 누르기 전에는 이 패드의 프린터가 안 바뀐다.

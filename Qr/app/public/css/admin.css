@@ -2612,3 +2612,6 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 위 여백(mm) 줄 — 굵기 칸 자리에 「mm」 를 둔다(2026-09-30). */
 .ticket-top-margin-field { border-top: 1px dashed var(--line); padding-top: 10px; }
 .ticket-font-field .ticket-top-margin-unit { flex: none; width: 64px; text-align: center; color: var(--muted); font-size: 14px; }
+/* 이 패드의 앱 판·지금 찍는 곳 — 늘 보이는 작은 한 줄(2026-09-30). */
+.printer-pick .printer-pick-status { flex-basis: 100%; font-size: 13px; color: var(--muted); white-space: normal; }
+.printer-pick .printer-pick-status.is-old { color: #b5232c; font-weight: 700; }

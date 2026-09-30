@@ -96,6 +96,10 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   const selText = await A.page.locator("#printerPick option:checked").textContent();
   check("★ 지금 쓰는 프린터가 골라져 있다(주방)", selText === KITCHEN.name, selText);
   check("★ 포트를 입력하는 칸이 없다 — 고르기만", (await A.page.locator("#printerPickWrap input").count()) === 0, "");
+  // 2026-09-30 사장님: "Hall, Counter 선택을 해도 최초 설정값으로 프린트 되고 있어" —
+  // 앱 판과 앱이 실제로 찍는 곳을 패드 화면에 늘 적는다.
+  let st = await A.page.locator("#printerPickStatus").textContent();
+  check("★ 앱 판과 지금 찍는 곳이 늘 보인다", /앱 1\.5/.test(st) && st.includes(`${KITCHEN.name} (${KITCHEN.ip}:9100)`), st);
 
   // 주방 프린터 고장 — 카운터 프린터로 바꾼다.
   check("저장 버튼은 처음엔 잠겨 있다", await A.page.locator("#printerPickSave").isDisabled(), "");
@@ -111,6 +115,8 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   check("★★ 저장을 누르면 앱에 카운터 프린터 IP·포트가 저장된다", JSON.stringify(set) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(set));
   check("바꿨다고 말해준다", /카운터 프린터/.test(await A.page.locator("#printerPickMsg").textContent()), await A.page.locator("#printerPickMsg").textContent());
   check("저장한 뒤에는 저장 버튼이 다시 잠긴다", await A.page.locator("#printerPickSave").isDisabled(), "");
+  st = await A.page.locator("#printerPickStatus").textContent();
+  check("★★ 저장하면 「지금 찍는 곳」이 바로 카운터로 바뀐다(앱이 실제로 바뀌었다)", st.includes(`${COUNTER.name} (${COUNTER.ip}:9100)`), st);
 
   await A.page.locator("#printerPickTest").click();
   await A.page.waitForTimeout(300);
@@ -130,6 +136,8 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   out.push("\n[옛 앱(1.4) — 고를 수 없다고 말한다]");
   const C = await pad({ target: "192.168.111.142:9100", withSetPrinter: false });
   check("고르기 칸이 잠긴다", await C.page.locator("#printerPick").isDisabled(), "");
+  const oldSt = await C.page.locator("#printerPickStatus").textContent();
+  check("★★ 옛 앱이면 「앱 1.4-」가 빨갛게 늘 보인다", /앱 1\.4-/.test(oldSt) && (await C.page.locator("#printerPickStatus.is-old").count()) === 1, oldSt);
   check("★ 앱을 업데이트하라고 말한다 — 조용히 안 바뀌지 않는다",
     /1\.5/.test(await C.page.locator("#printerPickMsg").textContent()), await C.page.locator("#printerPickMsg").textContent());
   await C.ctx.close();
