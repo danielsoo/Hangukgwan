@@ -1126,9 +1126,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-pie-canvas { flex: 0 0 auto; }
 .stl-pie-legend { flex: 1 1 260px; min-width: 240px; }
 .stl-pie-item {
-  display: grid; grid-template-columns: 14px minmax(0, 1fr) 58px 46px;
-  align-items: center; gap: 8px; padding: 3px 0; font-size: 16px;
+  display: grid; grid-template-columns: 22px 14px minmax(0, 1fr) 58px 46px;
+  align-items: center; gap: 8px; padding: 3px 0; font-size: 16px; break-inside: avoid;
 }
+.stl-pie-rank { text-align: right; font-size: 13px; color: var(--muted); }
+/* 전 메뉴를 적으면 50줄이 넘는다(2026-09-30 「기타」 없앰) — 한 줄로 길게 늘이지
+   않고 폭이 되는 만큼 여러 단으로 나눈다. */
+.stl-pie-legend.is-long { flex-basis: 100%; column-width: 280px; column-gap: 28px; }
 .stl-pie-swatch { width: 14px; height: 14px; border-radius: 4px; display: block; }
 .stl-pie-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stl-pie-qty { text-align: right; font-weight: 700; }
@@ -2615,3 +2619,18 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 이 패드의 앱 판·지금 찍는 곳 — 늘 보이는 작은 한 줄(2026-09-30). */
 .printer-pick .printer-pick-status { flex-basis: 100%; font-size: 13px; color: var(--muted); white-space: normal; }
 .printer-pick .printer-pick-status.is-old { color: #b5232c; font-weight: 700; }
+
+/* 요즘 달라진 메뉴(2026-09-30) — 어제까지 7일 vs 그 전 주 평균. */
+.stl-movers { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px 28px; }
+.stl-movers-col h4 { margin: 4px 0 8px; font-size: 16px; }
+.stl-mover { display: grid; grid-template-columns: minmax(0, 1fr) 70px minmax(64px, auto); align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.stl-mover-main { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+.stl-mover-name { font-weight: 700; font-size: 16px; }
+.stl-mover-sub { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+.stl-mover-soldout { font-size: 12px; font-weight: 700; color: #b5232c; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+.stl-mover-tag { text-align: right; font-weight: 800; font-size: 15px; white-space: nowrap; }
+.stl-mover.is-up { color: inherit; }
+.stl-mover.is-up .stl-mover-tag, .stl-mover.is-up .stl-mover-spark { color: #1a8a44; }
+.stl-mover.is-down .stl-mover-tag, .stl-mover.is-down .stl-mover-spark { color: #c2410c; }
+.stl-movers-count b.is-up { color: #1a8a44; }
+.stl-movers-count b.is-down { color: #c2410c; }

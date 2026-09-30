@@ -15,6 +15,8 @@ const { nowLocal } = require("../time");
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
 const { sendLineMessage, formatShiftSummary, formatCloseHeldNotice } = require("../line");
 const testMode = require("../testMode");
+const { computeItemMovers, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
+const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
 
@@ -339,6 +341,26 @@ router.get("/item-trend", requireOwner, async (req, res) => {
     total_qty: points.reduce((s, p) => s + p.qty, 0),
     points,
   });
+});
+
+// 갑자기 잘 팔리거나 안 팔리는 메뉴 — 어제까지 7일 vs 그 전 4주 주 평균.
+// 2026-09-30 사장님: "메뉴가 갑자기 안 팔리거나 갑자기 잘팔리거나 이런 걸
+// 꾸준히 체크하면서 보여줬으면." 계산은 src/itemMovers.js.
+router.get("/item-movers", requireOwner, async (req, res) => {
+  const today = taipeiDateString();
+  const end = addDays(today, -1);
+  const baseStart = addDays(end, -(RECENT_DAYS + BASE_DAYS - 1));
+  const started = serviceStartedAt(store);
+  const firstDay = started ? String(started).slice(0, 10) : null;
+  const orders = await ordersInRange(baseStart, end, req);
+  res.json(
+    computeItemMovers(orders, {
+      today,
+      firstDay,
+      menuItems: store.menuItems || [],
+      isSoldOut: (m) => !isAvailableNow(m, store.settings),
+    })
+  );
 });
 
 function addDays(dateStr, n) {

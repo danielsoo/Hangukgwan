@@ -490,6 +490,8 @@
               <button type="button" class="stl-tab" data-pane="soldItems" data-i18n="settlementItemsTitle">품목별 판매 현황</button>
               <button type="button" class="stl-tab" data-pane="allMenu" data-i18n="settlementAllMenuTitle">전체 메뉴 (많이 팔린 순)</button>
               <button type="button" class="stl-tab" data-pane="soldPie" data-i18n="settlementPieTitle">판매 비중</button>
+              <!-- 요즘 달라진 메뉴(2026-09-30) — 탭 이름에 ▲▼ 개수가 붙어 누르지 않아도 보인다. 사장님만. -->
+              <button type="button" class="stl-tab owner-only" data-pane="soldMovers" id="settlementMoversTab"><span data-i18n="moversTitle">📈 요즘 달라진 메뉴</span> <span id="settlementMoversCount" class="stl-movers-count"></span></button>
             </div>
             <div class="stl-pane" data-pane="soldCategory">
               <div class="stl-bars" id="settlementCategoryBars"></div>
@@ -535,6 +537,24 @@
                 <div class="stl-pie-legend" id="settlementPieLegend"></div>
               </div>
               <p class="stl-note" id="settlementPieNote"></p>
+            </div>
+
+            <!-- 요즘 달라진 메뉴 — 2026-09-30 사장님: "메뉴가 갑자기 안 팔리거나 갑자기
+                 잘팔리거나 이런 걸 꾸준히 체크하면서 보여줬으면." 결산 탭을 열 때마다
+                 어제까지 7일을 그 전 4주 주 평균과 견준다(src/itemMovers.js). 위 날짜
+                 칸과 상관없이 늘 「지금」을 본다. -->
+            <div class="stl-pane owner-only" data-pane="soldMovers" hidden>
+              <p class="stl-note" id="settlementMoversNote"></p>
+              <div class="stl-movers">
+                <div class="stl-movers-col">
+                  <h4 data-i18n="moversUpTitle">▲ 갑자기 잘 팔리는 메뉴</h4>
+                  <div id="settlementMoversUp"></div>
+                </div>
+                <div class="stl-movers-col">
+                  <h4 data-i18n="moversDownTitle">▼ 갑자기 덜 팔리는 메뉴</h4>
+                  <div id="settlementMoversDown"></div>
+                </div>
+              </div>
             </div>
           </section>
 

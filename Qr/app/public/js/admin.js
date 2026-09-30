@@ -906,7 +906,19 @@
       settlementAllMenuHead: "메뉴 {total}개 중 {sold}개가 팔렸어요. 한 개도 안 팔린 메뉴는 {unsold}개 — 아래로 내리면 나와요.",
       settlementAllMenuAllSold: "✓ 메뉴 {total}개가 전부 한 번씩은 팔렸어요",
       settlementPieTitle: "판매 비중",
-      settlementPieNote: "많이 팔린 {n}가지와 나머지를 묶은 「기타」예요. 많이 팔린 것일수록 조각이 넓고 두껍게 올라와요. 정확한 수는 옆의 숫자로 보세요.",
+      settlementPieNote: "팔린 {n}가지 전부예요. 많이 팔린 8가지는 색으로, 나머지는 회색 조각으로 그렸어요. 많이 팔린 것일수록 조각이 넓고 두껍게 올라와요. 정확한 수는 옆의 숫자로 보세요.",
+      moversTitle: "📈 요즘 달라진 메뉴",
+      moversUpTitle: "▲ 갑자기 잘 팔리는 메뉴",
+      moversDownTitle: "▼ 갑자기 덜 팔리는 메뉴",
+      moversNote: "어제까지 7일({recent})을 그 전 주 평균({base})과 견줬어요. 결산 탭을 열 때마다 다시 봐요. 위 날짜 칸과는 상관없어요.",
+      moversInsufficient: "아직 견줄 기록이 한 주도 안 돼요. 며칠 더 쌓이면 보여드릴게요.",
+      moversNoneUp: "크게 늘어난 메뉴는 없어요.",
+      moversNoneDown: "크게 줄어든 메뉴는 없어요.",
+      moversRow: "최근 7일 {recent}개 · 평소 주 {base}개",
+      moversNew: "새로 뜸",
+      moversStopped: "7일간 0개",
+      moversSoldOut: "지금 품절",
+      moversFailed: "달라진 메뉴를 불러오지 못했어요.",
       settlementPieEmpty: "아직 팔린 것이 없어요",
       settlementPieOther: "기타",
       settlementItemTrendTitle: "메뉴별 추이",
@@ -1792,7 +1804,19 @@
       settlementAllMenuHead: "{total} 項中賣出 {sold} 項。完全沒賣出的有 {unsold} 項 — 往下捲就看得到。",
       settlementAllMenuAllSold: "✓ {total} 項菜單今天都至少賣出一份",
       settlementPieTitle: "銷售佔比",
-      settlementPieNote: "銷量前 {n} 名，其餘合併為「其他」。賣得越多的品項，扇形越寬、也越厚。實際份數請看右側數字。",
+      settlementPieNote: "售出的全部 {n} 項。前 8 名以顏色表示，其餘為灰色扇形。賣得越多的品項，扇形越寬、也越厚。實際份數請看右側數字。",
+      moversTitle: "📈 最近變化的菜色",
+      moversUpTitle: "▲ 突然賣得好的菜色",
+      moversDownTitle: "▼ 突然賣得少的菜色",
+      moversNote: "以昨天為止的 7 天（{recent}）對比之前的每週平均（{base}）。每次打開結算頁都會重新計算，與上方日期無關。",
+      moversInsufficient: "可比較的紀錄還不到一週，再累積幾天就會顯示。",
+      moversNoneUp: "沒有明顯增加的菜色。",
+      moversNoneDown: "沒有明顯減少的菜色。",
+      moversRow: "最近 7 天 {recent} 份 · 平時每週 {base} 份",
+      moversNew: "新熱門",
+      moversStopped: "7 天 0 份",
+      moversSoldOut: "目前售完",
+      moversFailed: "無法載入變化菜色。",
       settlementPieEmpty: "目前還沒有賣出任何品項",
       settlementPieOther: "其他",
       settlementItemTrendTitle: "單品趨勢",
@@ -15166,6 +15190,7 @@
     // 전체 메뉴(많이 팔린 순)와 판매 비중. 둘은 별개의 탭이다.
     renderAllMenuBars(data);
     renderItemTrendPicker(data);
+    if (currentRole === "owner") loadItemMovers();
     try {
       renderSoldPie(data);
     } catch (e) {
@@ -15654,6 +15679,73 @@
   // 색이 차례로 옅어지므로 색 자체가 순위를 말해준다. 마지막은 「기타」용
   // 중립 회색이다.
   const PIE_COLORS = ["#23415f", "#2f6076", "#3f7d85", "#5c9a92", "#87b3a3", "#b3c7b0", "#d4c9a8", "#c7ab84", "#aeb4b8"];
+  // 9위부터는 옅은 회색 둘을 번갈아 — 「기타」로 묶지 않고 조각마다 경계가 보이게.
+  const PIE_TAIL_COLORS = ["#aeb4b8", "#c5cacd"];
+  function pieColorOf(i) {
+    return i < PIE_SLICES ? PIE_COLORS[i] : PIE_TAIL_COLORS[(i - PIE_SLICES) % 2];
+  }
+  /**
+   * 요즘 달라진 메뉴 — 어제까지 7일 vs 그 전 4주 주 평균(src/itemMovers.js).
+   *
+   * 2026-09-30 사장님: "메뉴가 갑자기 안 팔리거나 갑자기 잘팔리거나 이런 걸
+   * 꾸준히 체크하면서 보여줬으면 좋겠는데 가능한가?" 결산 탭을 열 때마다 다시
+   * 잰다. 메뉴마다 5주 흐름을 작은 선으로 같이 그려, 「한 주 튄 것」인지
+   * 「계속 내려가는 것」인지 바로 보이게 한다.
+   */
+  function moversSpark(weeks) {
+    const w = 70, h = 22, pad = 2;
+    const max = Math.max(1, ...weeks);
+    const pts = weeks.map((v, i) => [pad + (i * (w - pad * 2)) / (weeks.length - 1), h - pad - (v / max) * (h - pad * 2)]);
+    const path = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+    const last = pts[pts.length - 1];
+    return `<svg class="stl-mover-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.4" fill="currentColor"/></svg>`;
+  }
+  function moverRowHtml(m, dir) {
+    const tag =
+      m.kind === "new" ? T("moversNew") : m.kind === "stopped" ? T("moversStopped") : `${m.change_pct > 0 ? "+" : ""}${m.change_pct}%`;
+    return `
+      <div class="stl-mover is-${dir}" data-item-id="${escapeHtml(String(m.item_id))}">
+        <div class="stl-mover-main">
+          <span class="stl-mover-name">${escapeHtml(itemDisplayName(m))}</span>
+          ${m.sold_out ? `<span class="stl-mover-soldout">${escapeHtml(T("moversSoldOut"))}</span>` : ""}
+          <span class="stl-mover-sub">${escapeHtml(T("moversRow").replace("{recent}", m.recent).replace("{base}", m.base))}</span>
+        </div>
+        ${moversSpark(m.weeks || [])}
+        <span class="stl-mover-tag">${escapeHtml(tag)}</span>
+      </div>`;
+  }
+  async function loadItemMovers() {
+    const up = $("#settlementMoversUp");
+    const down = $("#settlementMoversDown");
+    const note = $("#settlementMoversNote");
+    if (!up || !down) return;
+    let d;
+    try {
+      const res = await fetch("/api/settlements/item-movers");
+      if (!res.ok) throw new Error(String(res.status));
+      d = await res.json();
+    } catch (e) {
+      if (note) note.textContent = T("moversFailed");
+      return;
+    }
+    const md = (s) => String(s || "").slice(5).replace("-", "/");
+    if (note) {
+      note.textContent = d.insufficient
+        ? T("moversInsufficient")
+        : T("moversNote")
+            .replace("{recent}", `${md(d.recent_start)}~${md(d.recent_end)}`)
+            .replace("{base}", `${md(d.base_start)}~${md(d.base_end)}`);
+    }
+    const cnt = $("#settlementMoversCount");
+    if (cnt) {
+      const nu = d.insufficient ? 0 : (d.up || []).length;
+      const nd = d.insufficient ? 0 : (d.down || []).length;
+      cnt.innerHTML = nu || nd ? `${nu ? `<b class="is-up">▲${nu}</b>` : ""}${nd ? ` <b class="is-down">▼${nd}</b>` : ""}` : "";
+    }
+    up.innerHTML = d.insufficient ? "" : (d.up || []).length ? d.up.map((m) => moverRowHtml(m, "up")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneUp"))}</p>`;
+    down.innerHTML = d.insufficient ? "" : (d.down || []).length ? d.down.map((m) => moverRowHtml(m, "down")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneDown"))}</p>`;
+  }
+
   function renderSoldPie(data) {
     const canvas = $("#settlementPie");
     const legend = $("#settlementPieLegend");
@@ -15669,27 +15761,26 @@
       if (note) note.textContent = "";
       return;
     }
-    // 수량 순으로 위 몇 가지 + 「기타」. 40조각짜리 원은 아무것도 안 알려준다.
+    // 2026-09-30 사장님: "기타로 하지 말고 전체다 적어주고." — 예전에는 위 8가지 +
+    // 「기타(46)」였다. 이제 전부 한 조각씩 그리고 범례에도 전부 적는다. 9위부터는
+    // 옅은 회색 두 가지를 번갈아 칠해 조각 경계만 보이게 한다(색이 순위를 말한다).
     const sorted = [...items].sort((a, b) => b.qty - a.qty);
-    const top = sorted.slice(0, PIE_SLICES);
-    const rest = sorted.slice(PIE_SLICES);
-    const slices = top.map((it) => ({ name: itemDisplayName(it), qty: it.qty }));
-    if (rest.length) {
-      slices.push({ name: `${T("settlementPieOther")} (${rest.length})`, qty: rest.reduce((s, it) => s + it.qty, 0) });
-    }
+    const slices = sorted.map((it) => ({ name: itemDisplayName(it), qty: it.qty }));
     drawPie3d(ctx, canvas, slices, totalQty);
+    legend.classList.toggle("is-long", slices.length > 12);
     legend.innerHTML = slices
       .map(
         (sl, i) => `
           <div class="stl-pie-item">
-            <span class="stl-pie-swatch" style="background:${PIE_COLORS[i % PIE_COLORS.length]}"></span>
+            <span class="stl-pie-rank">${i + 1}</span>
+            <span class="stl-pie-swatch" style="background:${pieColorOf(i)}"></span>
             <span class="stl-pie-name">${escapeHtml(sl.name)}</span>
             <span class="stl-pie-qty">${sl.qty}${T("settlementQtySuffix")}</span>
             <span class="stl-pie-pct">${Math.round((sl.qty / totalQty) * 100)}%</span>
           </div>`
       )
       .join("");
-    if (note) note.textContent = T("settlementPieNote").replace("{n}", Math.min(PIE_SLICES, sorted.length));
+    if (note) note.textContent = T("settlementPieNote").replace("{n}", sorted.length);
   }
 
   /**
@@ -15790,7 +15881,7 @@
     };
 
     order.forEach((p) => {
-      const base = PIE_COLORS[p.i % PIE_COLORS.length];
+      const base = pieColorOf(p.i);
       // 옆면은 위에서 아래로 조금씩 어두워진다 — 평평하게 칠하면 색종이처럼
       // 보이고, 세게 어둡게 하면 다시 모형처럼 보인다.
       const wall = ctx.createLinearGradient(0, cy - p.lift, 0, cy + ry * 0.6);
@@ -15840,7 +15931,7 @@
       const tx = cx + Math.cos(p.mid) * rx * 0.58;
       const ty = cy + Math.sin(p.mid) * ry * 0.58 - p.lift;
       // 옅은 조각 위에 흰 글씨를 얹으면 안 읽힌다.
-      ctx.fillStyle = lum(PIE_COLORS[p.i % PIE_COLORS.length]) > 0.62 ? "rgba(30,40,52,0.85)" : "rgba(255,255,255,0.95)";
+      ctx.fillStyle = lum(pieColorOf(p.i)) > 0.62 ? "rgba(30,40,52,0.85)" : "rgba(255,255,255,0.95)";
       ctx.fillText(String(p.sl.qty), tx, ty);
     });
   }

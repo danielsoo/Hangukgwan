@@ -130,7 +130,8 @@ const SOLD = 12; // 12가지를 판다 — 위 8가지 + 「기타」가 되는�
   // 많이 팔리는 거가 올라가는 거지." 두께는 눈으로 재기 어려우니, 그릴 때
   // 쓴 값을 화면에 적어 두고 그것을 본다(canvas.dataset.lifts).
   const lifts = await page.evaluate(() => JSON.parse(document.querySelector("#settlementPie").dataset.lifts || "[]"));
-  check("조각 수만큼 두께가 있다", lifts.length === 9, JSON.stringify(lifts));
+  // 2026-09-30 사장님: "기타로 하지 말고 전체다 적어주고" — 팔린 12가지가 전부 조각이다.
+  check("조각 수만큼 두께가 있다", lifts.length === 12, JSON.stringify(lifts));
   // 앞 8개는 12,11,10...5 로 내려간다. 두께도 그 순서를 따라야 한다.
   const top8 = lifts.slice(0, 8);
   check("★ 많이 팔린 순서대로 두꺼워진다", top8.every((v, i) => i === 0 || v <= top8[i - 1]), JSON.stringify(top8));
@@ -148,9 +149,11 @@ const SOLD = 12; // 12가지를 판다 — 위 8가지 + 「기타」가 되는�
       pct: el.querySelector(".stl-pie-pct").textContent.trim(),
     }))
   );
-  check("★ 조각이 너무 많지 않다 (위 8가지 + 기타)", legend.length === 9, `${legend.length}줄`);
-  check("★ 나머지는 「기타」로 묶인다", /기타|其他/.test(legend[8].name), legend[8].name);
-  check("기타에 몇 가지인지 적힌다", /\(4\)/.test(legend[8].name), legend[8].name);
+  // 예전(09-11)에는 위 8가지 + 「기타(4)」였다. 2026-09-30 사장님: "기타로 하지 말고
+  // 전체다 적어주고."
+  check("★ 팔린 것 전부가 범례에 적힌다(12가지)", legend.length === 12, `${legend.length}줄`);
+  check("★ 「기타」로 묶지 않는다", !legend.some((l) => /기타|其他/.test(l.name)), legend.map((l) => l.name).join(","));
+  check("9위부터도 제 이름으로 적힌다", legend[8] && legend[8].name && !/\(\d+\)$/.test(legend[8].name), legend[8] && legend[8].name);
   check("★ 수량이 글자로 적힌다", /^12/.test(legend[0].qty), legend[0].qty);
   check("★ 퍼센트도 같이 적힌다", legend.every((l) => /%$/.test(l.pct)), JSON.stringify(legend.map((l) => l.pct)));
   const sum = legend.reduce((s, l) => s + parseInt(l.qty, 10), 0);
