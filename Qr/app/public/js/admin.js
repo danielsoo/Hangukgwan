@@ -6148,13 +6148,16 @@
   // 기다리지 않고) 카드가 바로 조리중 칸으로 옮겨가 보이게 하고, 서버에는
   // 그 뒤에 실제 PATCH를 보낸다 — 실패해도 다음 loadOrders()의 폴링이
   // 서버의 실제 상태로 다시 맞춰준다(다른 곳의 낙관적 업데이트들과 동일).
+  //
+  // 2026-09-30 사장님: "실시간 주문 들어오고 자동으로 바로 조리 중으로 넘어가는데
+  // 이거 전에 우리가 의도해서 넣었던 거긴 한데 다시 없애려고 해. 직접 조리중
+  // 누르거나 … 드래그하거나 그렇게 움직이게 해줘. 자동으로 안 움직이게." —
+  // 이제 인쇄가 돼도 상태는 그대로 둔다(신규 주문 칸에 남는다). 이름은 부르는
+  // 곳이 많아 그대로 둔다. 같은 주문을 두 번 찍지 않는 것은 상태가 아니라
+  // decidedOrderIds(기기마다 남는 「판단한 주문」)가 맡는다.
   function markPrintSucceededAndAdvance(o) {
     markPrintSucceeded(o.id);
-    if (o.status === "new") {
-      o.status = "preparing";
-      updateOrderStatus(o.id, "preparing");
-      renderOrders();
-    }
+    renderOrders();
   }
 
   // 사다리의 어느 칸에서 떨어졌는지. 이 한 줄이 「왜 안 나왔는가」를 찾는

@@ -135,16 +135,14 @@ check("드래그로 칼럼을 옮겨도 응답으로 갱신한다", /applyOrderU
 check("테이블 상세의 단계/결제 버튼도 마찬가지", /applied = applyOrderUpdate\(await updateOrderStatus\(orderId, toStatus\)\)/.test(adminSrc));
 
 // 결과를 버리는 호출이 남아 있으면 그 자리는 알림에 매달려 있을 가능성이
-// 높다. 지금 허용되는 것은 두 가지뿐이다.
+// 높다. 예전에는 인쇄 뒤 「조리 중」으로 넘기는 한 곳(markPrintSucceededAndAdvance)
+// 이 있었는데, 2026-09-30 사장님이 자동으로 넘기는 것을 없앴다("자동으로 안
+// 움직이게") — 이제 한 곳도 없어야 한다.
 const bareCalls = (adminSrc.match(/^\s*updateOrderStatus\(/gm) || []).length;
+check("결과를 안 쓰는 상태 변경 호출이 없다", bareCalls === 0, `${bareCalls}곳`);
 check(
-  "결과를 안 쓰는 호출은 한 곳뿐 (markPrintSucceededAndAdvance — 스스로 renderOrders 한다)",
-  bareCalls === 1,
-  `${bareCalls}곳`
-);
-check(
-  "그 한 곳은 로컬 상태를 고치고 다시 그린다",
-  /o\.status = "preparing";\s*\n\s*updateOrderStatus\(o\.id, "preparing"\);\s*\n\s*renderOrders\(\);/.test(adminSrc)
+  "★ 인쇄가 돼도 주문 상태를 바꾸지 않는다(신규 주문 칸에 남는다)",
+  /function markPrintSucceededAndAdvance\(o\) \{\s*\n\s*markPrintSucceeded\(o\.id\);\s*\n\s*renderOrders\(\);\s*\n\s*\}/.test(adminSrc)
 );
 
 out.push("\n[8] 칼럼 정렬 규칙이 서버와 같아야 한다");

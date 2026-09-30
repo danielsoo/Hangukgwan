@@ -175,7 +175,14 @@ const STUB_PRINT = () => {
     const dA = (await printCount(A.page)) - beforeA;
     const dB = (await printCount(B.page)) - beforeB;
     check("★★ 홀(A)도 찍는다", dA === 1, `${dA}`);
-    check("★★ 카운터(B)도 찍는다 — 먼저 찍은 쪽이 「조리 중」으로 넘겨도", dB === 1, `${dB}`);
+    check("★★ 카운터(B)도 찍는다", dB === 1, `${dB}`);
+    // 2026-09-30 사장님: "자동으로 바로 조리 중으로 넘어가는데 … 다시 없애려고 해 …
+    // 자동으로 안 움직이게." 두 기기가 다 찍고 나서도 주문은 「신규」에 남는다.
+    const st = await A.page.evaluate(async () => (await (await fetch("/api/orders")).json()).map((o) => o.status));
+    check("★★ 찍혀도 「신규」에 그대로 — 자동으로 「조리 중」으로 안 넘어간다", st.length > 0 && st.every((x) => x === "new"), JSON.stringify(st));
+    await A.page.waitForTimeout(3500);
+    const again = (await printCount(A.page)) - beforeA;
+    check("★ 「신규」에 남아 있어도 같은 주문을 또 찍지 않는다", again === 1, `${again}`);
 
     await A.page.reload({ waitUntil: "networkidle" });
     await A.page.waitForTimeout(1200);
