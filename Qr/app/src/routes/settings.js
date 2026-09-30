@@ -661,7 +661,7 @@ const TICKET_WEIGHT_KEYS = TICKET_FONT_KEYS.map((k) => `${k}Weight`);
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
   const out = {};
-  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS]) if (typeof saved[k] === "number") out[k] = saved[k];
+  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
   return out;
 }
 
@@ -690,7 +690,16 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
     // 반올림해서 항상 실제로 로드된 굵기 중 하나가 되게 한다.
     if (Number.isFinite(v)) store.settings.ticket_font_sizes[k] = Math.max(100, Math.min(900, Math.round(v / 100) * 100));
   }
-  await save();
+  // 종이 맨 위 여백(mm, 0.5 단위, 0~30). 2026-09-30 사장님: "주문서 상단 여백을
+  // 조정할 수 있는 기능도 함께 추가해줘." 앱 빌지는 1mm = 8점으로 그린다(escpos.js).
+  {
+    const v = Number(b.topMargin);
+    if (b.topMargin !== undefined && b.topMargin !== null && b.topMargin !== "" && Number.isFinite(v)) {
+      store.settings.ticket_font_sizes.topMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
+    }
+  }
+  // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
+  await saveFields({ "settings.ticket_font_sizes": store.settings.ticket_font_sizes });
   res.json(ticketFontSizesStatus());
 });
 

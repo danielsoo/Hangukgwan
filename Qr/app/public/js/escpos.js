@@ -438,6 +438,16 @@
       return new Uint8Array(bytes);
   }
 
+  const DEFAULT_TOP_MARGIN_MM = 3.5;
+  const MAX_TOP_MARGIN_MM = 30;
+  function ticketTopMarginDots(fs) {
+    const mm = Number(fs && fs.topMargin);
+    const v = Number.isFinite(mm) ? Math.max(0, Math.min(MAX_TOP_MARGIN_MM, mm)) : DEFAULT_TOP_MARGIN_MM;
+    // 글자는 y 보다 몇 점 위까지 올라온다 — 0mm 여도 첫 줄 윗부분이 잘리지 않게
+    // 6점(약 0.75mm)은 남긴다(test/e2e-ticket-top-margin.js 가 잰다).
+    return Math.max(6, Math.round(v * 8));
+  }
+
   function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
     const sz = (k, d) => fs[k] || d;
@@ -469,7 +479,10 @@
     const mctx = measureCanvas.getContext("2d");
 
     const ops = []; // { type: 'text'|'row'|'divider', ..., y }
-    let y = 28;
+    // 종이 맨 위에서 첫 글자까지의 여백. 2026-09-30 사장님: "주문서 상단 여백을
+    // 조정할 수 있는 기능도 함께 추가해줘." 설정 > 인쇄에서 mm 로 정한다
+    // (fontSizes.topMargin). 203dpi 프린터라 1mm = 8점. 기본 3.5mm = 예전 고정값 28점.
+    let y = ticketTopMarginDots(fs);
 
     function line(text, px, weight, opts) {
       opts = opts || {};

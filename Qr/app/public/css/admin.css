@@ -2609,3 +2609,6 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .settings-card .pad-device-main { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .settings-card .pad-device-main select.pad-device-move { width: auto; margin: 0; padding: 4px 8px; font-size: 14px; }
+/* 위 여백(mm) 줄 — 굵기 칸 자리에 「mm」 를 둔다(2026-09-30). */
+.ticket-top-margin-field { border-top: 1px dashed var(--line); padding-top: 10px; }
+.ticket-font-field .ticket-top-margin-unit { flex: none; width: 64px; text-align: center; color: var(--muted); font-size: 14px; }

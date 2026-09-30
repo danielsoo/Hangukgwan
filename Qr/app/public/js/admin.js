@@ -700,6 +700,7 @@
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
       printReceiptBtn: "🧾 영수증",
+      tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -1583,6 +1584,7 @@
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
       printReceiptBtn: "🧾 收據",
+      tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -5709,6 +5711,9 @@
     totalWeight: 900,
     orderNoteWeight: 400,
     printTimeWeight: 400,
+    // 종이 맨 위 여백(mm). 2026-09-30 사장님: "주문서 상단 여백을 조정할 수 있는
+    // 기능도 함께 추가해줘." 3.5mm 가 예전 고정값(앱 빌지 28점)이다.
+    topMargin: 3.5,
   };
   let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
 
@@ -5958,7 +5963,7 @@
     font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
     color: #000;
   }
-  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; }
+  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; padding-top: ${Number.isFinite(Number(fs.topMargin)) ? Math.max(0, Math.min(30, Number(fs.topMargin))) : 3}mm; }
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: ${fs.storeName}px; font-weight: ${fs.storeNameWeight}; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
@@ -6005,6 +6010,15 @@
 </head><body>
   ${bodyHtml}
 </body></html>`;
+  }
+
+  // QZ Tray 글자 인쇄(ESC/POS 텍스트)의 위 여백 — 줄바꿈 한 번이 약 3.75mm.
+  // 그림 빌지(escpos.js ticketTopMarginDots)와 달리 한 줄 단위로만 늘릴 수 있고,
+  // 기본(3.5mm)보다 줄일 수는 없다(프린터가 원래 두는 여백).
+  function topFeedText() {
+    const mm = Number(ticketFontSizes && ticketFontSizes.topMargin);
+    const extra = Number.isFinite(mm) ? mm - 3.5 : 0;
+    return extra > 0 ? "\n".repeat(Math.round(extra / 3.75)) : "";
   }
 
   function buildTicketHtml(o, fontSizes, opts) {
@@ -6252,6 +6266,7 @@
     totalWeight: "tfsTotalWeight",
     orderNoteWeight: "tfsOrderNoteWeight",
     printTimeWeight: "tfsPrintTimeWeight",
+    topMargin: "tfsTopMargin",
   };
 
   // A small sample order for the live actual-size preview in the settings
@@ -6297,7 +6312,8 @@
     const out = {};
     for (const k of Object.keys(TICKET_FONT_INPUT_IDS)) {
       const el = $("#" + TICKET_FONT_INPUT_IDS[k]);
-      const v = el ? parseInt(el.value, 10) : NaN;
+      // 위 여백은 0.5mm 단위라 소수를 받는다. 나머지는 정수.
+      const v = el ? (k === "topMargin" ? parseFloat(el.value) : parseInt(el.value, 10)) : NaN;
       if (Number.isFinite(v)) out[k] = v;
     }
     return out;
@@ -13005,8 +13021,8 @@
       const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o) });
       const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
       await qz.print(config, [
-        { type: "raw", format: "command", flavor: "plain", data: rawKitchen },
-        { type: "raw", format: "command", flavor: "plain", data: rawPriceCopy },
+        { type: "raw", format: "command", flavor: "plain", data: topFeedText() + rawKitchen },
+        { type: "raw", format: "command", flavor: "plain", data: topFeedText() + rawPriceCopy },
       ]);
       return true;
     } catch (e) {
