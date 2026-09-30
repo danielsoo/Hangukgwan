@@ -178,7 +178,7 @@ function check(name, cond, extra = "") {
   check("프로필은 기기에 남는다(계정이 아니다)", /localStorage\.setItem\(PAD_PROFILE_KEY/.test(adminJs), "");
   check("★ 프로필이 정한 프린터를 앱에 적는다", /bridge\.setPrinter\(printer\.ip, printer\.port\)/.test(adminJs), "");
   check("★ 프린터를 못 바꾸면 말한다", /padProfilePrinterNeedsUpdate/.test(adminJs), "");
-  check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*await reportPadSeen\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
+  check("★ 터치는 모아서 보낸다 — 누를 때마다가 아니라", /padTouchCount\+\+/.test(adminJs) && /await flushPadTouches\(\);\s*\n\s*await refreshPadConfigQuietly\(\);\s*\n\s*await reportPadSeen\(\);\s*\n\s*\}, 60000\);/.test(adminJs), "");
   check("프로필을 고르면 「자동 인쇄 중」 이름이 프로필이 된다", /const prof = myPadProfile\(\);\s*\n\s*if \(prof\) return prof\.name;/.test(adminJs), "");
   check("★ 📍 는 잠겨 있다 — 누르면 풀지 먼저 묻는다", /showConfirm\(T\("padProfileUnlockConfirm"\)/.test(adminJs), "");
   const java = fs.readFileSync(path.join(__dirname, "../../../kiosk-app/src/tw/hangukgwan/kiosk/MainActivity.java"), "utf8");
@@ -187,8 +187,16 @@ function check(name, cond, extra = "") {
   check("★ 화면이 앱의 기기 번호를 쓴다", /bridge\.deviceId\(\)/.test(adminJs), "");
   const build = fs.readFileSync(path.join(__dirname, "../../../kiosk-app/build.sh"), "utf8");
   check("앱 판 1.6", /VERSION_NAME:-1\.6/.test(build) && /VERSION_CODE:-7/.test(build), "");
+  // 2026-09-30 사장님: "설치 할 때 입력한 IP 192.168.111.142 프린터 정보를 그대로 사용하는 듯"
+  const ensureFn = adminJs.slice(adminJs.indexOf("function ensureProfilePrinter("), adminJs.indexOf("function profilePrinter()"));
+  check("★★ 프로필이 정한 프린터로 앱을 맞춘다", /bridge\.setPrinter\(want\.ip, want\.port\)/.test(ensureFn), "");
+  const sendFn = adminJs.slice(adminJs.indexOf("async function sendRasterTicketParts("), adminJs.indexOf("async function sendRasterTicketParts(") + 600);
+  check("★★ 찍기 직전마다 맞춘다(앱에 남은 옛 IP 로 안 나간다)", sendFn.indexOf("ensureProfilePrinter(bridge)") > 0 && sendFn.indexOf("ensureProfilePrinter(bridge)") < sendFn.indexOf("bridge.printBase64("), "");
+  check("모든 앱 인쇄 자리에서 맞춘다", (adminJs.match(/ensureProfilePrinter\(bridge\);\s*\n\s*const r(esult)? = bridge\.printBase64\(/g) || []).length === 3, "");
+  check("화면을 열 때도 맞춘다", /await askPadProfileIfNeeded\(\);[\s\S]{0,200}ensureProfilePrinter\(\)/.test(adminJs), "");
+  check("★ 프로필이 정했으면 「이 기기 프린터」 칸은 잠긴다", /sel\.disabled = !canSet \|\| !!byProfile;/.test(adminJs), "");
   // ko / zh 둘 다 있는가
-  for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate", "padProfileUnlockConfirm"]) {
+  for (const k of ["padProfilesTitle", "padProfilePickTitle", "padProfileNone", "padTouchesTitle", "padTouchesNone", "padProfilePrinterNeedsUpdate", "padProfileUnlockConfirm", "printerPickByProfile"]) {
     const n = (adminJs.match(new RegExp(`\\b${k}:`, "g")) || []).length;
     check(`i18n ${k} 한국어·중국어`, n === 2, `${n}`);
   }

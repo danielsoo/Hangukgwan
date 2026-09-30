@@ -59,7 +59,8 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
         window.__set = [];
         window.__target = sessionStorage.getItem("__fakeTarget") || target;
         window.HangukgwanPrint = {
-          printBase64() { return "queued"; },
+          // 찍을 때 앱이 어느 주소로 보냈는지 남긴다.
+          printBase64() { (window.__jobs = window.__jobs || []).push(window.__target); return "queued"; },
           target() { return window.__target; },
           available() { return true; },
           setPrinter(ip, port) {
@@ -175,21 +176,45 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
 
   out.push("\n[패드를 알아보는가 — 설정 화면에 「이 프로필을 쓰는 기기」]");
   // 2026-09-29 사장님: "저 프로필이랑 패드랑 인식을 하는거야? 인식을 못하면 저걸 하는 의미가 없잖아."
-  // B 패드에서 누가 급히 주방 프린터로 바꿨다 — 프로필(카운터 프린터)과 어긋난다.
+  out.push("\n[프로필이 프린터의 주인이다 — 앱 설정에 남은 옛 IP 로 안 찍는다]");
+  // 2026-09-30 사장님(앱 1.6 을 깐 뒤): "설치 할 때 입력한 IP 192.168.111.142 프린터
+  // 정보를 그대로 사용하는 듯 / 설정값에서 프린터 IP 주소를 공백으로 처리하면
+  // POS 2대 모두 프린터를 찾지 못함." — 예전에는 프로필을 고를 때 한 번만 앱에 넣었다.
   await B.page.locator('.admin-tabs button[data-tab="orders"]').click();
-  await B.page.selectOption("#printerPick", { label: KITCHEN.name });
-  await B.page.locator("#printerPickSave").click();
-  await B.page.waitForTimeout(800);
+  await B.page.waitForTimeout(3000); // 「설정했어요」가 잠깐 떴다 사라진 뒤
+  check("★ 프로필이 프린터를 정한 패드에서는 「이 기기 프린터」 칸이 잠긴다", await B.page.locator("#printerPick").isDisabled(), "");
+  check("★ 왜 잠겼는지 글로 보인다(패드에는 마우스 올리기가 없다)", /프로필/.test(await B.page.locator("#printerPickMsg").textContent()) && await B.page.locator("#printerPickMsg").isVisible(), await B.page.locator("#printerPickMsg").textContent());
+  // 앱 설정 화면에서 누가 설치 때 IP(.142, 주방)로 되돌려 놓았다.
+  await B.page.evaluate((t) => { window.__target = t; sessionStorage.setItem("__fakeTarget", t); window.__set = []; }, `${KITCHEN.ip}:${KITCHEN.port}`);
+  await B.page.locator("#printerPickTest").click();
+  await B.page.waitForTimeout(500);
+  let bs = await B.page.evaluate(() => [window.__set, window.__target]);
+  check("★★ 찍기 직전에 프로필 프린터(카운터)로 맞춘다 — 옛 IP 로 안 나간다", bs[1] === `${COUNTER.ip}:${COUNTER.port}` && JSON.stringify(bs[0]) === JSON.stringify([[COUNTER.ip, COUNTER.port]]), JSON.stringify(bs));
+  // 앱 설정의 IP 를 비웠다.
+  await B.page.evaluate(() => { window.__target = ":9100"; sessionStorage.setItem("__fakeTarget", ":9100"); window.__set = []; });
+  await B.page.locator("#printerPickTest").click();
+  await B.page.waitForTimeout(500);
+  bs = await B.page.evaluate(() => [window.__set, window.__target, (window.__jobs || []).slice(-1)[0]]);
+  check("★★ 앱 IP 를 비워도 프로필 프린터로 찍힌다", bs[1] === `${COUNTER.ip}:${COUNTER.port}` && bs[2] === `${COUNTER.ip}:${COUNTER.port}`, JSON.stringify(bs));
+  // 화면을 새로 열 때도 맞춘다(찍기 전에 설정 화면의 ✓ 가 맞게).
+  await B.page.evaluate((t) => sessionStorage.setItem("__fakeTarget", t), `${KITCHEN.ip}:${KITCHEN.port}`);
+  await B.page.reload({ waitUntil: "networkidle" });
+  await B.page.waitForTimeout(1500);
+  check("★ 다시 열면 바로 맞춘다", (await B.page.evaluate(() => window.__target)) === `${COUNTER.ip}:${COUNTER.port}`, await B.page.evaluate(() => window.__target));
+
+  // 옛 앱(1.4)이라 프린터를 못 바꾸는 패드 — 설정 화면이 빨간 줄로 말해야 한다.
+  await boss.post("/api/settings/pad-seen").send({ deviceId: "dOldApp", profileId: counter.id, kind: "app", printer: `${KITCHEN.ip}:${KITCHEN.port}`, canSetPrinter: false, autoPrint: true });
   await A.page.locator('.admin-tabs button[data-tab="orders"]').click();
   await A.page.locator('.admin-tabs button[data-tab="settings"]').click();
   await A.page.locator('.settings-nav-btn[data-category="print"]').click();
   await A.page.waitForTimeout(1000);
   const counterBox = A.page.locator(`#padProfilesList .pad-profile-row[data-id="${counter.id}"] .pad-profile-devices`);
   const cText = await counterBox.textContent();
-  check("★★ 「카운터」 아래에 패드 2대가 보인다", /2대/.test(cText) && (await counterBox.locator(".pad-device").count()) === 2, cText);
+  check("★★ 「카운터」 아래에 패드가 보인다(2대 + 옛 앱 1대)", /3대/.test(cText) && (await counterBox.locator(".pad-device").count()) === 3, cText);
   check("★ 이 기기는 「이 기기」로 적힌다", /이 기기/.test(cText), cText);
   check("★ 맞는 프린터면 ✓", /카운터 프린터 ✓/.test(cText), cText);
-  check("★★ 프린터가 어긋난 패드는 빨간 경고", /다른 프린터로 찍는 중: 주방 프린터/.test(cText), cText);
+  check("★ 두 패드 모두 카운터 프린터 ✓", (cText.match(/카운터 프린터 ✓/g) || []).length === 2, cText);
+  check("★★ 프린터를 못 바꾸는 옛 앱은 빨간 경고", /다른 프린터로 찍는 중: 주방 프린터/.test(cText) && /1\.4/.test(cText), cText);
   check("방금 본 기기는 「방금」", /방금/.test(cText), cText);
   const kText = await A.page.locator(`#padProfilesList .pad-profile-row[data-id="${kitchen.id}"] .pad-profile-devices`).textContent();
   check("아무도 안 고른 프로필은 그렇다고 말한다", /아직 이 프로필을 고른 기기가 없어요/.test(kText), kText);
@@ -299,7 +324,7 @@ const COUNTER = { name: "카운터 프린터", ip: "192.168.111.150", port: 9100
   await A.page.reload({ waitUntil: "networkidle" });
   await A.page.waitForTimeout(1500);
   // 가짜 앱의 기록(__set)은 새로고침마다 비워진다 — 이번 열기에서 부른 것이 없어야 한다.
-  check("★ 바뀐 게 없으면 다시 안 건드린다(패드에서 급히 바꾼 것을 안 되돌린다)", (await A.page.evaluate(() => window.__set.length)) === 0, JSON.stringify(await A.page.evaluate(() => window.__set)));
+  check("★ 이미 맞는 프린터면 다시 안 건드린다", (await A.page.evaluate(() => window.__set.length)) === 0, JSON.stringify(await A.page.evaluate(() => window.__set)));
   await A.ctx.close();
 
   out.push("\n[패드 크기에서 위쪽이 안 깨진다 — 📍 가 붙어도]");

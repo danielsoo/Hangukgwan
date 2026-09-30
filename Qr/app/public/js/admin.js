@@ -706,6 +706,7 @@
       printerPickSave: "저장",
       printerPickPressSave: "「저장」을 눌러야 바뀌어요",
       printerPickDone: "✔ {name}(으)로 바꿨어요",
+      printerPickByProfile: "📍 {name} 프로필의 프린터예요 — 바꾸려면 위쪽 📍 에서 프로필을 바꾸세요",
       printerPickTestSent: "✔ {name}에 테스트 한 장을 보냈어요",
       printerPickFailed: "✘ 프린터를 못 바꿨어요 — 다시 눌러 주세요",
       printerPickNeedsUpdate: "앱을 1.5 로 업데이트해야 여기서 바꿀 수 있어요",
@@ -1588,6 +1589,7 @@
       printerPickSave: "儲存",
       printerPickPressSave: "按「儲存」才會更換",
       printerPickDone: "✔ 已改為 {name}",
+      printerPickByProfile: "📍 {name} 設定檔的印表機 — 要更改請按上方 📍 換設定檔",
       printerPickTestSent: "✔ 已送一張測試到 {name}",
       printerPickFailed: "✘ 無法更換印表機，請再按一次",
       printerPickNeedsUpdate: "App 需更新到 1.5 才能在這裡更換",
@@ -3440,6 +3442,8 @@
     // 패드 프로필 — 이 기기가 아직 안 골랐으면 「이 기기는 어디인가요?」.
     await loadPadProfiles();
     await askPadProfileIfNeeded();
+    // 프로필이 정한 프린터로 앱을 맞춘다 — 예전에 고른 패드도, 앱 설정을 비운 패드도.
+    if (ensureProfilePrinter()) renderPrinterPick();
     // 다른 기기가 인쇄를 가져갔는지 가끔 본다. 자주 볼 이유는 없다 —
     // 사람이 토글을 누를 때나 바뀌는 값이다.
     setInterval(async () => {
@@ -3451,6 +3455,7 @@
       renderPrintDeviceNote();
       // 모아 둔 터치 수를 보낸다(패드 프로필별로 센다). 이 패드가 어느 프로필인지도.
       await flushPadTouches();
+      await refreshPadConfigQuietly();
       await reportPadSeen();
     }, 60000);
     startPolling();
@@ -13186,6 +13191,8 @@
     if (!list.length) return false;
 
     if (bridge) {
+      // 프로필이 정한 프린터로 — 찍기 직전에 맞춘다(ensureProfilePrinter).
+      ensureProfilePrinter(bridge);
       const result = bridge.printBase64(bytesToBase64(concatBytes(list)));
       if (result === "queued") return true;
       // The app shows its own on-screen message for a real failure (no
@@ -13791,7 +13798,11 @@
     msg.style.color = ok ? "" : "#b5232c";
     msg.hidden = false;
     clearTimeout(flashPrinterPickMsg.t);
-    flashPrinterPickMsg.t = setTimeout(() => (msg.hidden = true), ok ? 2500 : 6000);
+    flashPrinterPickMsg.t = setTimeout(() => {
+      msg.hidden = true;
+      // 잠깐 뜬 말이 사라지면 「프로필의 프린터예요」 안내로 돌아간다.
+      if (profilePrinter() && appPrintBridge()) renderPrinterPick();
+    }, ok ? 2500 : 6000);
   }
 
   function renderPrinterPick() {
@@ -13815,8 +13826,21 @@
     if (!cur) opts.unshift(`<option value="" selected>${escapeHtml(target && target !== ":9100" ? `${T("printerPickOther")} ${target}` : T("printerPickNone"))}</option>`);
     sel.innerHTML = opts.join("");
     const canSet = typeof bridge.setPrinter === "function";
-    sel.disabled = !canSet;
+    // 프로필이 프린터를 정한 패드에서는 여기서 못 바꾼다 — 골라도 찍기 직전에
+    // 프로필 프린터로 되돌아간다. 바꾸려면 📍 에서 프로필을 바꾼다.
+    const byProfile = profilePrinter();
+    sel.disabled = !canSet || !!byProfile;
+    wrap.classList.toggle("is-profile", !!byProfile);
+    wrap.title = byProfile ? T("printerPickByProfile").replace("{name}", (myPadProfile() || {}).name || "") : "";
     if (!canSet) flashPrinterPickMsg(T("printerPickNeedsUpdate"), false);
+    else if (byProfile) {
+      // 패드에는 마우스 올리기가 없다 — 왜 잠겼는지 글로 계속 보여준다.
+      const msg = $("#printerPickMsg");
+      clearTimeout(flashPrinterPickMsg.t);
+      msg.textContent = wrap.title;
+      msg.style.color = "";
+      msg.hidden = false;
+    }
     paintPrinterPickSave();
   }
 
@@ -13826,6 +13850,7 @@
   // 목록을 스치듯 건드린 것만으로 주방 패드가 카운터 프린터로 넘어가면, 영업
   // 중에 빌지가 엉뚱한 곳으로 나간다.
   function printerPickDirty() {
+    if (profilePrinter()) return false;
     const bridge = appPrintBridge();
     const sel = $("#printerPick");
     if (!bridge || !sel || !sel.value) return false;
@@ -13877,6 +13902,7 @@
       const bridge = appPrintBridge();
       if (!bridge) return;
       try {
+        ensureProfilePrinter(bridge);
         const r = bridge.printBase64(bytesToBase64(buildPrinterTestBytes()));
         if (r !== "queued") throw new Error(String(r));
         const cur = currentShopPrinter(bridge);
@@ -14062,6 +14088,61 @@
     if (p) await applyPadProfile(p);
     renderPrintDeviceNote();
     return true;
+  }
+
+  /**
+   * 이 패드의 프로필이 프린터를 정했으면, 앱이 **그 프린터로** 찍게 맞춘다.
+   *
+   * 2026-09-30 사장님(앱 1.6 을 깐 뒤): "현상은 그대로.. 설치 할 때 입력한 IP
+   * 192.168.111.142 프린터 정보를 그대로 사용하는 듯 / 설정값에서 프린터 IP
+   * 주소를 공백으로 처리하면 POS 2대 모두 프린터를 찾지 못함."
+   *
+   * 예전에는 프로필을 **고를 때 한 번만** 앱에 넣고, 그 뒤로는 「바뀐 게 없으면
+   * 안 건드림」이었다. 그래서 앱 설정에 남은 옛 IP(설치 때 적은 .142)나 지워진
+   * 빈칸이 그대로 쓰였다. 이제 프로필이 프린터의 주인이다 — 화면을 열 때, 1분마다,
+   * 그리고 **찍기 직전마다** 앱의 프린터가 프로필 프린터와 같은지 보고 다르면
+   * 맞춘다. 급히 다른 프린터로 찍어야 하면 📍 에서 다른 프로필을 고른다.
+   *
+   * 프로필이 없거나 프로필의 프린터가 「그대로」면 아무것도 안 한다(앱 설정대로).
+   * 돌려주는 값: 맞췄으면 true, 할 일이 없었거나 못 맞췄으면 false.
+   */
+  function ensureProfilePrinter(bridge = appPrintBridge()) {
+    const want = profilePrinter();
+    if (!bridge || !want) return false;
+    let target = "";
+    try {
+      target = String(bridge.target() || "");
+    } catch (e) {}
+    if (target === `${want.ip}:${want.port}`) return false;
+    if (typeof bridge.setPrinter !== "function") return false; // 옛 앱 — 화면이 이미 말하고 있다
+    let ok = false;
+    try {
+      ok = String(bridge.setPrinter(want.ip, want.port)) === "ok";
+    } catch (e) {
+      ok = false;
+    }
+    // 설정 화면의 「🖨️ … ✓」가 바로 맞게 — 1분을 기다리지 않고 알린다.
+    if (ok) reportPadSeen();
+    return ok;
+  }
+  // 이 패드의 프로필이 정한 가게 프린터(없으면 null).
+  function profilePrinter() {
+    const p = myPadProfile();
+    return (p && p.printerId && shopPrinters.find((x) => x.id === p.printerId)) || null;
+  }
+
+  // 사장님이 설정에서 프린터 IP·프로필을 바꾸면 켜져 있는 패드도 따라가야 한다.
+  // 편집 칸은 다시 그리지 않는다(쓰고 있던 것이 지워진다) — 값만 새로 받는다.
+  async function refreshPadConfigQuietly() {
+    try {
+      const [pr, pp] = await Promise.all([fetch("/api/settings/printers"), fetch("/api/settings/pad-profiles")]);
+      if (pr.ok) shopPrinters = (await pr.json()).printers || [];
+      if (pp.ok) padProfiles = (await pp.json()).profiles || [];
+    } catch (e) {
+      return;
+    }
+    renderPadProfileBadge();
+    if (ensureProfilePrinter()) renderPrinterPick();
   }
 
   const PAD_PROFILE_APPLIED_KEY = "hg_admin_padProfileApplied";
@@ -14442,6 +14523,7 @@
       const bytes = buildEscPosRasterTicket(sampleOrder, storeName, ticketFontSizes, { tableLabel: "桌號 TEST" });
       const bridge = appPrintBridge();
       if (bridge) {
+        ensureProfilePrinter(bridge);
         const result = bridge.printBase64(bytesToBase64(bytes));
         if (result !== "queued") {
           throw new Error(String(result));
