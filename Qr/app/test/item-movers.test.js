@@ -54,11 +54,12 @@ out.push("[고르는 규칙]");
   // 오늘 주문은 안 센다(장사 중)
   sell(orders, 1, "삼겹살", TODAY, TODAY, 100);
 
-  const r = computeItemMovers(orders, { today: TODAY, menuItems: [{ id: 3, name_ko: "순두부찌개" }], isSoldOut: (m) => m.id === 3 });
+  // 손님은 매일 20명으로 같다 — 기준 28일 560명, 최근 7일 140명.
+  const r = computeItemMovers(orders, { today: TODAY, menuItems: [{ id: 3, name_ko: "순두부찌개" }], isSoldOut: (m) => m.id === 3, recentGuests: 140, baseGuests: 560 });
   const up = Object.fromEntries(r.up.map((m) => [m.name_ko, m]));
   const down = Object.fromEntries(r.down.map((m) => [m.name_ko, m]));
   check("기간 — 어제까지 7일, 그 전 4주", r.recent_start === RECENT_START && r.recent_end === END && r.base_start === BASE_START && r.base_end === BASE_END, JSON.stringify(r));
-  check("★★ 늘어난 메뉴를 잡는다(주 14 → 35, +150%)", up["삼겹살"] && up["삼겹살"].recent === 35 && up["삼겹살"].base === 14 && up["삼겹살"].change_pct === 150, JSON.stringify(up["삼겹살"]));
+  check("★★ 늘어난 메뉴를 잡는다(손님 100명당 10 → 25개, +150%)", up["삼겹살"] && up["삼겹살"].recent === 35 && up["삼겹살"].expected === 14 && up["삼겹살"].base_per100 === 10 && up["삼겹살"].recent_per100 === 25 && up["삼겹살"].change_pct === 150, JSON.stringify(up["삼겹살"]));
   check("★ 오늘 판 것은 안 센다", up["삼겹살"] && up["삼겹살"].recent === 35, "");
   check("★★ 줄어든 메뉴를 잡는다(주 21 → 7)", down["해물파전"] && down["해물파전"].kind === "down" && down["해물파전"].change_pct === -67, JSON.stringify(down["해물파전"]));
   check("★★ 아예 안 팔린 메뉴 — 「7일간 0개」", down["순두부찌개"] && down["순두부찌개"].kind === "stopped" && down["순두부찌개"].recent === 0, JSON.stringify(down["순두부찌개"]));
@@ -77,12 +78,44 @@ out.push("\n[서비스 시작 전은 기준에서 뺀다]");
   sell(orders, 1, "삼겹살", "2026-09-08", BASE_END, 2);  // 서비스 시작 뒤 15일, 하루 2 → 주 14
   sell(orders, 1, "삼겹살", "2026-08-26", "2026-09-07", 50); // 시작 전 시험 주문 — 안 센다
   sell(orders, 1, "삼겹살", RECENT_START, END, 5);
-  const r = computeItemMovers(orders, { today: TODAY, firstDay: "2026-09-08" });
+  const r = computeItemMovers(orders, { today: TODAY, firstDay: "2026-09-08", recentGuests: 140, baseGuests: 300 });
   check("기준 날 수 = 서비스 시작 뒤 15일", r.base_days === 15 && r.base_start === "2026-09-08", JSON.stringify(r));
   const m = r.up.find((x) => x.name_ko === "삼겹살");
-  check("★ 주 평균을 그 날 수로 맞춘다(14)", m && m.base === 14, JSON.stringify(m));
-  const r2 = computeItemMovers(orders, { today: TODAY, firstDay: "2026-09-20" });
+  check("★ 그 날들의 손님 수로 맞춘다(평소대로라면 14개)", m && m.expected === 14, JSON.stringify(m));
+  const r2 = computeItemMovers(orders, { today: TODAY, firstDay: "2026-09-20", recentGuests: 140, baseGuests: 60 });
   check("★ 기준이 한 주도 안 되면 억지로 말하지 않는다", r2.insufficient === true && !r2.up.length && !r2.down.length, JSON.stringify(r2));
+}
+
+out.push("\n[손님 수에 비례해서 본다]");
+// 2026-09-30 사장님: "전체적인 개수를 비교하면 안되고 집계 날짜와 인원수 수량과
+// 비례해서 해야돼."
+{
+  const orders = [];
+  // 모든 메뉴가 두 배로 팔린 주 — 그런데 손님도 두 배로 왔다.
+  sell(orders, 1, "삼겹살", BASE_START, BASE_END, 2); sell(orders, 1, "삼겹살", RECENT_START, END, 4);
+  sell(orders, 2, "해물파전", BASE_START, BASE_END, 3); sell(orders, 2, "해물파전", RECENT_START, END, 6);
+  const busy = computeItemMovers(orders, { today: TODAY, recentGuests: 280, baseGuests: 560 });
+  check("★★ 손님이 두 배 온 주에 다 같이 두 배 → 아무것도 안 뜬다", !busy.up.length && !busy.down.length, JSON.stringify(busy.up.concat(busy.down).map((x) => x.name_ko)));
+  const flat = computeItemMovers(orders, { today: TODAY, recentGuests: 140, baseGuests: 560 });
+  check("같은 판매를 손님 수 그대로로 보면 둘 다 늘었다", flat.up.length === 2, JSON.stringify(flat.up.map((x) => x.name_ko)));
+
+  // 휴무가 끼어 손님이 반만 온 주 — 다 같이 반으로 줄었다.
+  const orders2 = [];
+  sell(orders2, 1, "삼겹살", BASE_START, BASE_END, 4); sell(orders2, 1, "삼겹살", RECENT_START, "2026-09-25", 4);
+  sell(orders2, 2, "해물파전", BASE_START, BASE_END, 6); sell(orders2, 2, "해물파전", RECENT_START, "2026-09-25", 6);
+  const slow = computeItemMovers(orders2, { today: TODAY, recentGuests: 60, baseGuests: 560 });
+  check("★★ 쉬는 날이 끼어 손님이 적은 주 → 「덜 팔림」으로 안 뜬다", !slow.down.length, JSON.stringify(slow.down.map((x) => x.name_ko)));
+
+  // 손님은 두 배인데 한 메뉴만 그대로 — 사실은 손이 덜 가는 것이다.
+  const orders3 = [];
+  sell(orders3, 1, "삼겹살", BASE_START, BASE_END, 3); sell(orders3, 1, "삼겹살", RECENT_START, END, 6);
+  sell(orders3, 2, "해물파전", BASE_START, BASE_END, 3); sell(orders3, 2, "해물파전", RECENT_START, END, 3);
+  const r3 = computeItemMovers(orders3, { today: TODAY, recentGuests: 280, baseGuests: 560 });
+  check("★ 손님이 두 배인데 그대로인 메뉴 → 「덜 팔림」", r3.down.some((x) => x.name_ko === "해물파전") && !r3.up.length, JSON.stringify(r3));
+  const r4 = computeItemMovers(orders3, { today: TODAY, recentGuests: 280, baseGuests: 560, weekGuests: [140, 140, 140, 140, 280] });
+  const pf = r4.down.find((x) => x.name_ko === "해물파전");
+  check("★ 작은 선도 손님 100명당 — 손님 두 배인 마지막 주는 절반으로 내려간다", pf && JSON.stringify(pf.weeks_per100) === JSON.stringify([15, 15, 15, 15, 7.5]), JSON.stringify(pf && pf.weeks_per100));
+  check("★ 손님 수를 모르면 억지로 말하지 않는다", computeItemMovers(orders3, { today: TODAY }).insufficient === true, "");
 }
 
 out.push("\n[서버]");

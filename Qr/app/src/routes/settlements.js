@@ -15,7 +15,7 @@ const { nowLocal } = require("../time");
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
 const { sendLineMessage, formatShiftSummary, formatCloseHeldNotice } = require("../line");
 const testMode = require("../testMode");
-const { computeItemMovers, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
+const { computeItemMovers, weekRanges, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
 const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
@@ -353,12 +353,29 @@ router.get("/item-movers", requireOwner, async (req, res) => {
   const started = serviceStartedAt(store);
   const firstDay = started ? String(started).slice(0, 10) : null;
   const orders = await ordersInRange(baseStart, end, req);
+  // 손님 수 — 결산과 같은 규칙(한 팀은 한 번 · 포장 한 건은 한 명). 2026-09-30
+  // 사장님: "집계 날짜와 인원수 수량과 비례해서 해야돼."
+  const recentStart = addDays(end, -(RECENT_DAYS - 1));
+  const baseEnd = addDays(recentStart, -1);
+  const baseFrom = firstDay && firstDay > baseStart ? firstDay : baseStart;
+  const guestsIn = async (s, e) => {
+    if (s > e) return 0;
+    const part = orders.filter((o) => {
+      const d = String(o.created_at || "").slice(0, 10);
+      return d >= s && d <= e;
+    });
+    const st = computeSettlement(part, s, e, await halfOpts(s, e, req));
+    return (st.guest_count || 0) + (st.takeout_count || 0);
+  };
   res.json(
     computeItemMovers(orders, {
       today,
       firstDay,
       menuItems: store.menuItems || [],
       isSoldOut: (m) => !isAvailableNow(m, store.settings),
+      recentGuests: await guestsIn(recentStart, end),
+      baseGuests: await guestsIn(baseFrom, baseEnd),
+      weekGuests: await Promise.all(weekRanges(today).map(([s, e]) => guestsIn(s < baseFrom ? baseFrom : s, e))),
     })
   );
 });

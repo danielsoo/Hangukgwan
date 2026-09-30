@@ -910,11 +910,11 @@
       moversTitle: "📈 요즘 달라진 메뉴",
       moversUpTitle: "▲ 갑자기 잘 팔리는 메뉴",
       moversDownTitle: "▼ 갑자기 덜 팔리는 메뉴",
-      moversNote: "어제까지 7일({recent})을 그 전 주 평균({base})과 견줬어요. 결산 탭을 열 때마다 다시 봐요. 위 날짜 칸과는 상관없어요.",
-      moversInsufficient: "아직 견줄 기록이 한 주도 안 돼요. 며칠 더 쌓이면 보여드릴게요.",
+      moversNote: "어제까지 7일({recent} · 손님 {rg}명)을 그 전({base} · 손님 {bg}명)과 **손님 100명당 판매 수**로 견줬어요. 손님이 많거나 적었던 주라서 달라 보이는 건 빼고, 정말 손이 더 가거나 덜 가는 메뉴만 골라요. 결산 탭을 열 때마다 다시 봐요.",
+      moversInsufficient: "아직 견줄 기록(손님 수)이 한 주도 안 돼요. 며칠 더 쌓이면 보여드릴게요.",
       moversNoneUp: "크게 늘어난 메뉴는 없어요.",
       moversNoneDown: "크게 줄어든 메뉴는 없어요.",
-      moversRow: "최근 7일 {recent}개 · 평소 주 {base}개",
+      moversRow: "최근 7일 {recent}개 · 손님 100명당 {rp}개 (평소 {bp}개)",
       moversNew: "새로 뜸",
       moversStopped: "7일간 0개",
       moversSoldOut: "지금 품절",
@@ -1808,11 +1808,11 @@
       moversTitle: "📈 最近變化的菜色",
       moversUpTitle: "▲ 突然賣得好的菜色",
       moversDownTitle: "▼ 突然賣得少的菜色",
-      moversNote: "以昨天為止的 7 天（{recent}）對比之前的每週平均（{base}）。每次打開結算頁都會重新計算，與上方日期無關。",
-      moversInsufficient: "可比較的紀錄還不到一週，再累積幾天就會顯示。",
+      moversNote: "以昨天為止的 7 天（{recent} · 客人 {rg} 位）對比之前（{base} · 客人 {bg} 位），以**每 100 位客人的銷售數**比較。排除因客人多或少造成的差異，只挑出真正變受歡迎或變冷門的菜色。每次打開結算頁都會重新計算。",
+      moversInsufficient: "可比較的紀錄（客人數）還不到一週，再累積幾天就會顯示。",
       moversNoneUp: "沒有明顯增加的菜色。",
       moversNoneDown: "沒有明顯減少的菜色。",
-      moversRow: "最近 7 天 {recent} 份 · 平時每週 {base} 份",
+      moversRow: "最近 7 天 {recent} 份 · 每 100 位客人 {rp} 份（平時 {bp} 份）",
       moversNew: "新熱門",
       moversStopped: "7 天 0 份",
       moversSoldOut: "目前售完",
@@ -15692,9 +15692,11 @@
    * 잰다. 메뉴마다 5주 흐름을 작은 선으로 같이 그려, 「한 주 튄 것」인지
    * 「계속 내려가는 것」인지 바로 보이게 한다.
    */
-  function moversSpark(weeks) {
+  function moversSpark(raw) {
+    // 손님 수를 모르는 주(null)는 0 으로 그리지 않고 옆 주 값으로 잇는다.
+    const weeks = raw.map((v, i) => (v == null ? raw.slice(0, i).reverse().find((x) => x != null) || 0 : v));
     const w = 70, h = 22, pad = 2;
-    const max = Math.max(1, ...weeks);
+    const max = Math.max(0.1, ...weeks);
     const pts = weeks.map((v, i) => [pad + (i * (w - pad * 2)) / (weeks.length - 1), h - pad - (v / max) * (h - pad * 2)]);
     const path = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
     const last = pts[pts.length - 1];
@@ -15708,9 +15710,9 @@
         <div class="stl-mover-main">
           <span class="stl-mover-name">${escapeHtml(itemDisplayName(m))}</span>
           ${m.sold_out ? `<span class="stl-mover-soldout">${escapeHtml(T("moversSoldOut"))}</span>` : ""}
-          <span class="stl-mover-sub">${escapeHtml(T("moversRow").replace("{recent}", m.recent).replace("{base}", m.base))}</span>
+          <span class="stl-mover-sub">${escapeHtml(T("moversRow").replace("{recent}", m.recent).replace("{rp}", m.recent_per100).replace("{bp}", m.base_per100))}</span>
         </div>
-        ${moversSpark(m.weeks || [])}
+        ${moversSpark(m.weeks_per100 || m.weeks || [])}
         <span class="stl-mover-tag">${escapeHtml(tag)}</span>
       </div>`;
   }
@@ -15730,11 +15732,16 @@
     }
     const md = (s) => String(s || "").slice(5).replace("-", "/");
     if (note) {
-      note.textContent = d.insufficient
-        ? T("moversInsufficient")
-        : T("moversNote")
-            .replace("{recent}", `${md(d.recent_start)}~${md(d.recent_end)}`)
-            .replace("{base}", `${md(d.base_start)}~${md(d.base_end)}`);
+      // 「**…**」 는 굵게 — 무엇으로 견줬는지가 이 칸의 요점이다.
+      note.innerHTML = escapeHtml(
+        d.insufficient
+          ? T("moversInsufficient")
+          : T("moversNote")
+              .replace("{recent}", `${md(d.recent_start)}~${md(d.recent_end)}`)
+              .replace("{base}", `${md(d.base_start)}~${md(d.base_end)}`)
+              .replace("{rg}", Number(d.recent_guests || 0).toLocaleString())
+              .replace("{bg}", Number(d.base_guests || 0).toLocaleString())
+      ).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
     }
     const cnt = $("#settlementMoversCount");
     if (cnt) {
