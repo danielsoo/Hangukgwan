@@ -66,7 +66,7 @@ function check(name, cond, extra = "") {
         body: JSON.stringify({ zoneId: zones[0].id, x: 20 + Math.random() * 400, y: 40, width: 70, height: 70 }) });
     }, [T, food.id]);
   }
-  async function payTable(T, answer) {
+  async function payTable(T) {
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(800);
     const before = await page.evaluate(() => window.__jobs.length);
@@ -83,28 +83,46 @@ function check(name, cond, extra = "") {
     await page.waitForTimeout(1500);
     const askShown = await page.locator("#appDialogBackdrop").isVisible();
     const askText = askShown ? await page.locator("#appDialogMessage").innerText() : "";
-    if (askShown) {
-      await page.locator(answer ? "#appDialogOk" : "#appDialogCancel").click();
-      await page.waitForTimeout(1200);
-    }
     const after = await page.evaluate(() => window.__jobs.length);
     const paid = store.orders.filter((o) => o.table_number === String(T)).every((o) => o.status === "paid");
     return { methodShown, askShown, askText, printed: after - before, paid };
   }
 
-  out.push("[결제 → 현금 → 영수증? → 예]");
+  // 2026-09-30 사장님: "결제 후 고객의 요청으로 결제명세서를 출력하고자 할 때
+  // 결제완료 구역의 해당명세서 인쇄를 누르면 프린트되도록 요청. 결제된 명세서는
+  // 주방용이 불필요하고, 고객이 모두 요청하는 것이 아니므로 결제 후 프린트
+  // 여부를 묻는 절차 역시 불필요함."
+  out.push("[결제 → 현금 — 묻지 않고, 찍지 않는다]");
   await seat(tables[0].number);
-  let r = await payTable(tables[0].number, true);
+  const r = await payTable(tables[0].number);
   check("결제 방식 창이 먼저 뜬다", r.methodShown, "");
   check("결제가 된다", r.paid, "");
-  check("★★ 결제 방식을 고른 뒤 「영수증을 출력하시겠습니까?」를 묻는다", r.askShown && /영수증/.test(r.askText), r.askText);
-  check("★★ 「예」 → 영수증 한 장이 프린터로 간다", r.printed === 1, `${r.printed}`);
+  check("★★ 「영수증을 출력하시겠습니까?」를 묻지 않는다", !/영수증/.test(r.askText), r.askText);
+  check("★ 결제만으로는 종이가 안 나간다", r.printed === 0, `${r.printed}`);
 
-  out.push("\n[결제 → 현금 → 영수증? → 아니오]");
+  out.push("\n[결제 완료 칸의 카드 → 영수증 한 장]");
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  const paidOrder = store.orders.find((o) => o.table_number === String(tables[0].number) && o.status === "paid");
+  const card = page.locator(`.order-card[data-order-id="${paidOrder.id}"]`);
+  await card.first().scrollIntoViewIfNeeded();
+  const btn = card.locator("button", { hasText: "영수증" });
+  check("★ 결제된 카드에 「🧾 영수증」 버튼", (await btn.count()) === 1, `${await btn.count()}`);
+  const before = await page.evaluate(() => window.__jobs.length);
+  await btn.first().click();
+  await page.waitForTimeout(1500);
+  const jobs = await page.evaluate((b) => window.__jobs.slice(b), before);
+  check("★★ 누르면 한 장만 나간다 — 주방용 없이", jobs.length === 1, JSON.stringify(jobs));
+  check("오류 창이 안 뜬다", !(await page.locator("#appDialogBackdrop").isVisible()), "");
+
+  out.push("\n[결제 안 된 카드의 인쇄는 그대로 — 주방으로]");
   await seat(tables[1].number);
-  r = await payTable(tables[1].number, false);
-  check("묻는다", r.askShown, "");
-  check("★ 「아니오」 → 아무것도 안 나간다", r.printed === 0, `${r.printed}`);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  const open = store.orders.find((o) => o.table_number === String(tables[1].number) && o.status !== "paid");
+  const openCard = page.locator(`.order-card[data-order-id="${open.id}"]`);
+  check("결제 안 된 카드는 「인쇄」", (await openCard.locator("button", { hasText: "인쇄" }).count()) >= 1 && (await openCard.locator("button", { hasText: "영수증" }).count()) === 0, "");
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);

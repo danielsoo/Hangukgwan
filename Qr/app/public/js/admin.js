@@ -699,7 +699,7 @@
       printDeviceUnknown: "다른 기기",
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
-      receiptPrintConfirm: "영수증을 출력하시겠습니까?",
+      printReceiptBtn: "🧾 영수증",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -1581,7 +1581,7 @@
       printDeviceUnknown: "其他裝置",
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
-      receiptPrintConfirm: "要列印收據嗎？",
+      printReceiptBtn: "🧾 收據",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -5584,9 +5584,18 @@
       actions.appendChild(editBtn);
     }
     const printBtn = document.createElement("button");
-    printBtn.textContent = T("printBtn");
+    const paidCard = o.status === "paid";
+    printBtn.textContent = paidCard ? T("printReceiptBtn") : T("printBtn");
     printBtn.onclick = async (e) => {
       e.stopPropagation();
+      // 결제된 주문은 손님 영수증 한 장만 — 주방용은 필요 없다(2026-09-30).
+      if (paidCard) {
+        printBtn.disabled = true;
+        const printed = await printPaidOrderReceipt(o);
+        printBtn.disabled = false;
+        if (!printed.ok) await showAlert(`${T("receiptPrintFailed")}${printed.reason ? `\n${printed.reason}` : ""}`);
+        return;
+      }
       // A manual click is a real user gesture, so this can't be
       // popup-blocked the way the automatic 자동 인쇄 path can be — clicking
       // 인쇄 again is exactly the retry for a card showing 인쇄 실패.
@@ -8723,16 +8732,11 @@
               );
             }
           }
-          // 손님 영수증 — 결제 방식까지 고른 다음에 묻는다(2026-09-29 사장님:
-          // "그거까지 누르면 영수증을 출력하시겠습니까를 만드는거야").
-          // 이번에 결제한 품목만 찍는다. 결제가 실패했으면 묻지 않는다.
-          if (!results.some((r) => !r.ok) && (await showConfirm(T("receiptPrintConfirm")))) {
-            const labelParts = [];
-            if (discountType) labelParts.push(receiptDiscountLabelOf(discountType));
-            if (manualValue) labelParts.push(receiptDiscountLabelOf("manual"));
-            const printed = await printPaymentReceipt(tableNumber, selections, method, breakdown.total, labelParts.join(" + "));
-            if (!printed.ok && printed.reason) await showAlert(`${T("receiptPrintFailed")}\n${printed.reason}`);
-          }
+          // 손님 영수증은 여기서 묻지 않는다. 2026-09-30 사장님: "고객이 모두
+          // 요청하는 것이 아니므로 결제 후 프린트 여부를 묻는 절차 역시
+          // 불필요함." 달라고 하시면 「결제 완료」 칸의 그 주문 카드에서
+          // 「영수증」을 누른다(printPaidOrderReceipt). (09-29 에는 여기서
+          // 「영수증을 출력하시겠습니까?」를 물었다.)
           tableVipDiscountType = null; // 결제가 끝났으니 다음 결제를 위해 리셋
           tableManualDiscountValue = null;
           // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고
@@ -13501,7 +13505,7 @@
    * 「인쇄가 안 될 때 화면이 이유를 말해야 한다」).
    */
   const RECEIPT_METHOD_ZH = { cash: "現金", card: "信用卡", linepay: "LINE Pay", online: "線上付款", other: "其他" };
-  function buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel) {
+  function buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel, paidAt) {
     const lines = [];
     selections.forEach((x) => x.indexes.forEach((i) => {
       const it = x.order.items[i];
@@ -13521,7 +13525,8 @@
         party_children: first ? first.party_children : null,
         status: "paid",
         order_type: allTakeout ? "takeout" : anyTakeout ? "mixed" : "dine_in",
-        created_at: nowLocalString(),
+        // 결제 시각 — 나중에 다시 뽑아도 결제한 그 시각이 찍힌다.
+        created_at: paidAt || nowLocalString(),
         items: lines,
         total: gross,
       },
@@ -13535,14 +13540,14 @@
     const p = (n) => String(n).padStart(2, "0");
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
-  async function printPaymentReceipt(tableNumber, selections, method, discountTotal, discountLabel) {
+  async function printPaymentReceipt(tableNumber, selections, method, discountTotal, discountLabel, opts = {}) {
     if (typeof buildEscPosRasterTicket !== "function") return { ok: false, reason: moveSlipFailReason() };
     const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "韓國館";
-    const { order, discount } = buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel);
+    const { order, discount } = buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel, opts.paidAt);
     if (!order.items.length) return { ok: false, reason: null };
     let bytes;
     try {
-      bytes = buildEscPosRasterTicket(order, storeName, ticketFontSizes, { tableLabel: `桌號 ${tableNumber}${partyTag(order)}` }, {
+      bytes = buildEscPosRasterTicket(order, storeName, ticketFontSizes, { tableLabel: opts.tableLabel || `桌號 ${tableNumber}${partyTag(order)}` }, {
         receipt: { method: RECEIPT_METHOD_ZH[method] || method || "", paidAt: order.created_at },
         discount,
       });
@@ -13569,6 +13574,34 @@
       console.warn("영수증 인쇄 실패:", e);
     }
     return { ok: false, reason: moveSlipFailReason() };
+  }
+
+  /**
+   * 「결제 완료」 칸의 주문 카드에서 누르는 영수증 — 손님이 달라고 하실 때만.
+   *
+   * 2026-09-30 사장님: "결제 후 고객의 요청으로 결제명세서를 출력하고자 할 때
+   * 결제완료 구역의 해당명세서 인쇄를 누르면 프린트되도록 요청. 결제된
+   * 명세서는 주방용이 불필요하고." — 주방용·결제용 두 장이 아니라 收據 한 장.
+   * 주문에 남아 있는 결제 방식·할인·결제 시각으로 결제할 때와 같은 종이를 만든다.
+   */
+  async function printPaidOrderReceipt(o) {
+    const indexes = (o.items || []).map((_, i) => i);
+    const paidTimes = (o.items || []).map((it) => it.paid_at).filter(Boolean).sort();
+    const counter = isCounterOrder(o);
+    const tableLabel = counter
+      ? o.pickup_number && o.customer_name
+        ? `${o.pickup_number}號 · ${o.customer_name}`
+        : "外帶櫃檯"
+      : null;
+    const off = Number(o.discount_amount) || 0;
+    return printPaymentReceipt(
+      o.table_number,
+      [{ order: o, indexes }],
+      o.payment_method,
+      off,
+      off > 0 ? receiptDiscountLabelOf(o.discount_type) : "",
+      { paidAt: paidTimes[paidTimes.length - 1] || o.updated_at || null, tableLabel }
+    );
   }
 
   async function printNoticeTicket(job) {

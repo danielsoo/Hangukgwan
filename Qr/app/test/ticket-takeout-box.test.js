@@ -48,7 +48,8 @@ out.push("[빌지에 이모지가 안 남아 있다]");
   // 화면(주문 카드)의 📦 는 그대로 둔다 — 여기서 보는 것은 **빌지로 넘기는
   // 이름표** 둘뿐이다. 넓게 잡으면 화면 쪽까지 걸려 엉뚱하게 실패한다.
   const ticketLabels = admin.match(/const tableLabel = counter[\s\S]{0,300}?;\n/g) || [];
-  check("빌지용 이름표가 둘이다", ticketLabels.length === 2, `${ticketLabels.length}개`);
+  // 셋째는 결제 완료 카드의 손님 영수증(printPaidOrderReceipt, 2026-09-30).
+  check("빌지용 이름표가 셋이다(주방 빌지 둘 + 영수증)", ticketLabels.length === 3, `${ticketLabels.length}개`);
   check(
     "★ 빌지용 이름표에 📦 가 없다",
     ticketLabels.every((t) => !t.includes("\u{1F4E6}")),
