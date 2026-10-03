@@ -1,4 +1,4 @@
-// 결제 탭: 품목 고르기 → 결제 → 현금 → 「영수증을 출력하시겠습니까?」 → 한 장.
+// 결제 탭: 품목 고르기 → 결제 → 현금 → 「영수증을 출력하시겠습니까?」(3초 뒤 저절로 취소).
 //
 // 사장님(2026-09-29): "결제할 때 품목 선택해서 결제한 것들만 눌러서 결제
 // 누르고 결제 방식까지 나오잖아 현금 카드 라인 뭐 이런 거 그거까지 누르면
@@ -66,7 +66,7 @@ function check(name, cond, extra = "") {
         body: JSON.stringify({ zoneId: zones[0].id, x: 20 + Math.random() * 400, y: 40, width: 70, height: 70 }) });
     }, [T, food.id]);
   }
-  async function payTable(T) {
+  async function payTable(T, { press } = {}) {
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(800);
     const before = await page.evaluate(() => window.__jobs.length);
@@ -80,25 +80,50 @@ function check(name, cond, extra = "") {
     await page.waitForTimeout(400);
     const methodShown = await page.locator("#paymentMethodBackdrop").isVisible();
     await page.locator('#paymentMethodBackdrop [data-payment-method="cash"]').click();
-    await page.waitForTimeout(1500);
+    await page.locator("#appDialogBackdrop").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
     const askShown = await page.locator("#appDialogBackdrop").isVisible();
     const askText = askShown ? await page.locator("#appDialogMessage").innerText() : "";
+    const cancel1 = askShown ? await page.locator("#appDialogCancel").innerText() : "";
+    let cancel2 = "";
+    if (press === "ok") {
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(1500);
+    } else {
+      await page.waitForTimeout(1100);
+      cancel2 = await page.locator("#appDialogCancel").innerText();
+      await page.waitForTimeout(2900);
+    }
+    const askGone = !(await page.locator("#appDialogBackdrop").isVisible());
+    const cancelAfter = await page.locator("#appDialogCancel").innerText();
+    const detailClosed = !(await page.locator("#tableDetailBackdrop").isVisible());
     const after = await page.evaluate(() => window.__jobs.length);
     const paid = store.orders.filter((o) => o.table_number === String(T)).every((o) => o.status === "paid");
-    return { methodShown, askShown, askText, printed: after - before, paid };
+    return { methodShown, askShown, askText, cancel1, cancel2, askGone, cancelAfter, detailClosed, printed: after - before, paid };
   }
 
-  // 2026-09-30 사장님: "결제 후 고객의 요청으로 결제명세서를 출력하고자 할 때
-  // 결제완료 구역의 해당명세서 인쇄를 누르면 프린트되도록 요청. 결제된 명세서는
-  // 주방용이 불필요하고, 고객이 모두 요청하는 것이 아니므로 결제 후 프린트
-  // 여부를 묻는 절차 역시 불필요함."
-  out.push("[결제 → 현금 — 묻지 않고, 찍지 않는다]");
+  // 2026-10-03 사장님: "결제 누르고 결제 방법 누르고 영수증 출력하시겠습니까? 를
+  // 나오게 해주고 3초 동안 확인 안 누르면 자동 취소 되게 해줘 / 취소(3) -
+  // 취소(2) -취소(1) -> 취소" + "결제 완료 후 이 대기창이 3초 후 또는 즉시 닫힐 수
+  // 있도록". (09-30 에 묻는 창을 없앴던 것을 되돌린다 — 대신 저절로 닫힌다.)
+  out.push("[결제 → 현금 → 묻고, 3초 뒤 저절로 취소]");
   await seat(tables[0].number);
   const r = await payTable(tables[0].number);
   check("결제 방식 창이 먼저 뜬다", r.methodShown, "");
   check("결제가 된다", r.paid, "");
-  check("★★ 「영수증을 출력하시겠습니까?」를 묻지 않는다", !/영수증/.test(r.askText), r.askText);
-  check("★ 결제만으로는 종이가 안 나간다", r.printed === 0, `${r.printed}`);
+  check("★★ 「영수증을 출력하시겠습니까?」를 묻는다", /영수증/.test(r.askText), r.askText);
+  check("★ 취소 버튼이 「취소(3)」으로 시작한다", r.cancel1 === "취소(3)", r.cancel1);
+  check("★ 1초 뒤 「취소(2)」", r.cancel2 === "취소(2)", r.cancel2);
+  check("★★ 안 누르면 3초 뒤 창이 저절로 닫힌다", r.askGone, "");
+  check("닫힌 뒤 버튼 글자는 「취소」로 돌아온다", r.cancelAfter === "취소", r.cancelAfter);
+  check("★ 저절로 취소 → 종이가 안 나간다", r.printed === 0, `${r.printed}`);
+  check("★★ 다 낸 테이블 창은 닫힌다 — X 를 안 눌러도", r.detailClosed, "");
+
+  out.push("\n[결제 → 현금 → 확인 → 한 장]");
+  await seat(tables[2].number);
+  const r2 = await payTable(tables[2].number, { press: "ok" });
+  check("결제가 된다", r2.paid, "");
+  check("★★ 확인을 누르면 한 장", r2.printed === 1, `${r2.printed}`);
+  check("테이블 창이 닫힌다", r2.detailClosed, "");
 
   out.push("\n[결제 완료 칸의 카드 → 영수증 한 장]");
   await page.keyboard.press("Escape").catch(() => {});

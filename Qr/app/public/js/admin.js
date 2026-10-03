@@ -488,6 +488,41 @@
       $("#appDialogCancel").onclick = () => finish(false);
     });
   }
+  /**
+   * 「확인 / 취소(3)」 — 아무것도 안 누르면 seconds 초 뒤 저절로 「취소」.
+   *
+   * 2026-10-03 사장님: "결제 방법 누르고 영수증 출력하시겠습니까? 를 나오게 해주고
+   * 3초 동안 확인 안 누르면 자동 취소 되게 해줘. 취소(3) - 취소(2) - 취소(1) -> 취소."
+   * 대부분의 손님은 영수증을 안 받으므로, 직원이 아무것도 안 해도 다음으로 넘어간다.
+   */
+  function showConfirmCountdown(message, seconds = 3) {
+    return new Promise((resolve) => {
+      const cancelBtn = $("#appDialogCancel");
+      const label = T("appDialogCancel");
+      let left = seconds;
+      const paint = () => (cancelBtn.textContent = `${label}(${left})`);
+      $("#appDialogMessage").textContent = message;
+      cancelBtn.hidden = false;
+      $("#appDialogAlt").hidden = true;
+      $("#appDialogBackdrop").hidden = false;
+      paint();
+      const timer = setInterval(() => {
+        left -= 1;
+        if (left <= 0) finish(false);
+        else paint();
+      }, 1000);
+      function finish(result) {
+        clearInterval(timer);
+        $("#appDialogBackdrop").hidden = true;
+        $("#appDialogOk").onclick = null;
+        cancelBtn.onclick = null;
+        cancelBtn.textContent = label;
+        resolve(result);
+      }
+      $("#appDialogOk").onclick = () => finish(true);
+      cancelBtn.onclick = () => finish(false);
+    });
+  }
   function showAlert(message) {
     return new Promise((resolve) => {
       $("#appDialogMessage").textContent = message;
@@ -700,6 +735,7 @@
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
       printReceiptBtn: "🧾 영수증",
+      receiptPrintConfirm: "영수증을 출력하시겠습니까?",
       refundBtn: "↩ 반품·취소",
       refundTitle: "↩ 반품 · 취소",
       refundHint: "조리한 음식은 「취소」, 음료·라면 봉지처럼 돌려받을 수 있는 것은 「반품」으로 남아요. 돌려줄 금액은 실제로 받은 금액(할인 반영) 기준이에요.",
@@ -1626,6 +1662,7 @@
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
       printReceiptBtn: "🧾 收據",
+      receiptPrintConfirm: "要列印收據嗎？",
       refundBtn: "↩ 退貨·取消",
       refundTitle: "↩ 退貨 · 取消",
       refundHint: "已烹調的餐點記為「取消」，飲料、泡麵包等可退回的商品記為「退貨」。退款金額以實際收款（含折扣）為準。",
@@ -8980,11 +9017,19 @@
               );
             }
           }
-          // 손님 영수증은 여기서 묻지 않는다. 2026-09-30 사장님: "고객이 모두
-          // 요청하는 것이 아니므로 결제 후 프린트 여부를 묻는 절차 역시
-          // 불필요함." 달라고 하시면 「결제 완료」 칸의 그 주문 카드에서
-          // 「영수증」을 누른다(printPaidOrderReceipt). (09-29 에는 여기서
-          // 「영수증을 출력하시겠습니까?」를 물었다.)
+          // 손님 영수증 — 결제 방식까지 고른 다음에 묻는다. 3초 안에 「확인」을
+          // 안 누르면 저절로 「취소」(2026-10-03 사장님: "영수증 출력하시겠습니까?
+          // 를 나오게 해주고 3초 동안 확인 안 누르면 자동 취소 되게 해줘").
+          // 09-30 에 묻는 것을 뺐다가(대부분 안 받는다) 이 모양으로 되돌렸다 —
+          // 묻되 직원 손이 가지 않게. 결제 완료 카드의 「🧾 영수증」도 그대로다.
+          // 이번에 결제한 품목만 찍는다. 결제가 실패했으면 묻지 않는다.
+          if (!results.some((r) => !r.ok) && (await showConfirmCountdown(T("receiptPrintConfirm"), 3))) {
+            const labelParts = [];
+            if (discountType) labelParts.push(receiptDiscountLabelOf(discountType));
+            if (manualValue) labelParts.push(receiptDiscountLabelOf("manual"));
+            const printed = await printPaymentReceipt(tableNumber, selections, method, breakdown.total, labelParts.join(" + "));
+            if (!printed.ok && printed.reason) await showAlert(`${T("receiptPrintFailed")}\n${printed.reason}`);
+          }
           tableVipDiscountType = null; // 결제가 끝났으니 다음 결제를 위해 리셋
           tableManualDiscountValue = null;
           // 사장님 피드백(2026-09-06): "선택 결제 완료 버튼 누르고
@@ -9013,6 +9058,16 @@
           renderOrders();
           if (!$("#floorPlanWrap").hidden && !floorPlanDragging) renderFloorPlan();
           if (!$("#tab-payment").hidden) renderPaymentFloorPlan();
+          // 이 자리에 낼 돈이 하나도 안 남았으면 결제 창을 닫는다(2026-10-03 사장님:
+          // "결제 완료 후 이 대기창이 3초 후 또는 즉시 닫힐 수 있도록 수정 요망. 현재는
+          // 우측 상단의 닫힘을 눌러야 함"). 일부만 냈으면 남은 것을 이어서 받도록 둔다.
+          const stillOpen = orders.some(
+            (o) => String(o.table_number) === String(tableNumber) && o.status !== "paid" && o.status !== "cancelled"
+          );
+          if (!results.some((r) => !r.ok) && !stillOpen) {
+            $("#tableDetailClose").onclick(); // 닫기 버튼과 같은 정리(열린 자리 기억도 지운다)
+            return;
+          }
           openTableDetail(tableNumber, label, focusOrderId);
           resetTableDetailScroll();
         };

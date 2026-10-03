@@ -103,13 +103,22 @@ out.push("\n[종이]");
   }
 }
 
-out.push("\n[결제 흐름 — 묻지 않는다]");
-// 2026-09-30 사장님: "고객이 모두 요청하는 것이 아니므로 결제 후 프린트 여부를
-// 묻는 절차 역시 불필요함."
+out.push("\n[결제 흐름 — 묻되 3초 뒤 저절로 취소]");
+// 2026-10-03 사장님: "결제 방법 누르고 영수증 출력하시겠습니까? 를 나오게 해주고
+// 3초 동안 확인 안 누르면 자동 취소 되게 해줘. 취소(3) - 취소(2) - 취소(1) -> 취소."
 {
   const handler = admin.slice(admin.indexOf('.querySelectorAll(".pay-selected-items-btn")'), admin.indexOf("$(\"#tableDetailBackdrop\").hidden = false;", admin.indexOf('.querySelectorAll(".pay-selected-items-btn")')));
-  check("★★ 결제한 뒤 「영수증을 출력하시겠습니까?」를 묻지 않는다", !/receiptPrintConfirm/.test(admin), "");
-  check("★ 결제하면서 영수증을 찍지 않는다", !/printPaymentReceipt\(/.test(handler), "");
+  const iMethod = handler.indexOf("showPaymentMethodPopup(");
+  const iPay = handler.indexOf("payTableOrders(");
+  const iAsk = handler.indexOf('showConfirmCountdown(T("receiptPrintConfirm"), 3)');
+  check("★★ 결제 방식 → 결제 → 그다음에 묻는다(3초)", iMethod > 0 && iPay > iMethod && iAsk > iPay, `${iMethod} ${iPay} ${iAsk}`);
+  check("★ 결제가 실패했으면 묻지 않는다", /!results\.some\(\(r\) => !r\.ok\) && \(await showConfirmCountdown\(T\("receiptPrintConfirm"\), 3\)\)/.test(handler), "");
+  check("★ 이번에 고른 품목(selections)으로 찍는다", /printPaymentReceipt\(tableNumber, selections, method, breakdown\.total/.test(handler), "");
+  check("★ 낼 돈이 안 남았으면 결제 창을 닫는다", /if \(!results\.some\(\(r\) => !r\.ok\) && !stillOpen\) \{\s*\n\s*\$\("#tableDetailClose"\)\.onclick\(\);/.test(handler), "");
+  const cd = admin.slice(admin.indexOf("function showConfirmCountdown("), admin.indexOf("function showAlert("));
+  check("★ 취소 버튼에 남은 초 — 「취소(3)」", /cancelBtn\.textContent = `\$\{label\}\(\$\{left\}\)`/.test(cd), "");
+  check("★ 0 초가 되면 「취소」로 끝난다", /if \(left <= 0\) finish\(false\);/.test(cd), "");
+  check("끝나면 버튼 글자를 되돌린다", /cancelBtn\.textContent = label;/.test(cd), "");
 }
 
 out.push("\n[결제 완료 칸의 카드 — 영수증 한 장]");
@@ -123,7 +132,7 @@ out.push("\n[결제 완료 칸의 카드 — 영수증 한 장]");
   check("주문에 남은 결제 방식으로", /o\.payment_method/.test(fn), "");
   check("주문에 남은 할인으로", /o\.discount_amount/.test(fn) && /receiptDiscountLabelOf\(o\.discount_type\)/.test(fn), "");
   check("★ 결제한 그 시각을 찍는다(지금 시각이 아니라)", /paid_at/.test(fn) && /paidAt:/.test(fn), "");
-  for (const k of ["printReceiptBtn", "receiptPrintFailed"]) {
+  for (const k of ["printReceiptBtn", "receiptPrintFailed", "receiptPrintConfirm"]) {
     check(`${k} 가 두 언어에 다 있다`, admin.split(`${k}:`).length - 1 === 2, "");
   }
 }
