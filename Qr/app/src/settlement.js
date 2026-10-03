@@ -246,10 +246,15 @@ function halfOf(order, opts) {
  * 뺄 근거가 없다(아직 아무도 할인을 걸지 않았다).
  */
 const { lineTotalOf } = require("./discounts");
+const { applyRefunds } = require("./refunds");
 
 function netTotalOf(o) {
   const total = Number((o && o.total) || 0);
   const off = Number((o && o.discount_amount) || 0);
+  // 결제 뒤 반품·취소로 돌려준 금액(2026-10-03, src/refunds.js). 받았다가 돌려준
+  // 돈은 매출이 아니다.
+  const back = Number((o && o.refund_total) || 0);
+  if (back) return total - off - back;
   // 0 에서 자르지 않는다.
   //
   // 2026-09-16: 재량 할인은 이제 한 번의 결제에 한 덩어리로, 라운드
@@ -261,6 +266,33 @@ function netTotalOf(o) {
   // 테이블 전체로는 절대 음수가 안 된다 — 할인 자체를 테이블 총액에서
   // 자르기 때문이다(src/discounts.js computeTableDiscount).
   return total - off;
+}
+
+/** 결제 뒤 돌려준 것 — 취소(조리 음식)와 반품(음료·라면 봉지 등)을 나눠 센다. */
+function refundSummaryOf(paidOrders) {
+  let cancelAmt = 0, returnAmt = 0, cancelQty = 0, returnQty = 0, count = 0;
+  for (const o of paidOrders || []) {
+    for (const r of (o && o.refunds) || []) {
+      count++;
+      const lines = r.lines || [];
+      const sum = lines.reduce((a, l) => a + (Number(l.amount) || 0), 0);
+      for (const l of lines) {
+        if (l.kind === "return") { returnAmt += Number(l.amount) || 0; returnQty += Number(l.qty) || 0; }
+        else { cancelAmt += Number(l.amount) || 0; cancelQty += Number(l.qty) || 0; }
+      }
+      // 줄 합계와 기록 금액이 다르면(반올림·상한) 차이는 취소 쪽에 둔다 — 합계가 맞게.
+      const diff = (Number(r.amount) || 0) - sum;
+      if (diff) cancelAmt += diff;
+    }
+  }
+  return {
+    refund_total: cancelAmt + returnAmt,
+    refund_count: count,
+    refund_cancel_amount: cancelAmt,
+    refund_cancel_qty: cancelQty,
+    refund_return_amount: returnAmt,
+    refund_return_qty: returnQty,
+  };
 }
 
 function summarize(paid, half) {
@@ -287,10 +319,14 @@ function summarize(paid, half) {
 }
 
 function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
-  const rangeAll = (orders || []).filter((o) => {
-    const d = o.created_at.slice(0, 10);
-    return d >= startDate && d <= endDate;
-  });
+  const rangeAll = (orders || [])
+    .filter((o) => {
+      const d = o.created_at.slice(0, 10);
+      return d >= startDate && d <= endDate;
+    })
+    // 돌려준 수만큼 품목 수를 줄인 사본으로 센다 — 품목별·분류별·시간대 판매 수가
+    // 반품·취소한 것을 빼고 나온다(src/refunds.js applyRefunds).
+    .map(applyRefunds);
 
   // 「오전만 보기」 / 「오후만 보기」 (2026-09-10 사장님: "오전, 오후 정산을
   // 클릭해서 해당 내용을 볼 수 있으면 좋겠어... Shift 별로 클릭하면 해당
@@ -447,8 +483,11 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
       byMethod.set(method, (byMethod.get(method) || 0) + lineAmount(it));
     }
     const gross = [...byMethod.values()].reduce((a, b) => a + b, 0);
-    // 실제 받은 금액. 할인이 없으면 gross 와 같다.
-    const net = o.total != null ? netTotalOf(o) : gross;
+    // 실제 받은 금액(돌려주기 전). 할인이 없으면 gross 와 같다. 돌려준 금액은 아래에서
+    // **돌려준 그 결제수단**에서 뺀다 — 현금으로 돌려줬으면 현금 칸이 준다.
+    const refunds = Array.isArray(o.refunds) ? o.refunds : [];
+    const net = o.total != null ? netTotalOf(o) + refunds.reduce((a, r) => a + (Number(r.amount) || 0), 0) : gross;
+    if (!byMethod.size && refunds.length) byMethod.set(o.payment_method || "unspecified", 0);
     const methods = [...byMethod.entries()];
     let assigned = 0;
     methods.forEach(([method, amount], idx) => {
@@ -464,6 +503,12 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
       addKey(entry.order_ids, o);
       paymentMethodMap.set(method, entry);
     });
+    for (const r of refunds) {
+      const method = r.method || o.payment_method || "unspecified";
+      const entry = paymentMethodMap.get(method) || { method, revenue: 0, gross: 0, order_ids: new Set() };
+      entry.revenue -= Number(r.amount) || 0;
+      paymentMethodMap.set(method, entry);
+    }
   }
   const paymentMethodBreakdown = [...paymentMethodMap.values()]
     .map((e) => ({ method: e.method, revenue: e.revenue, gross: e.gross, order_count: e.order_ids.size }))
@@ -846,6 +891,8 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     avg_per_order: avgPerOrder,
     avg_per_guest: avgPerGuest,
     cancelled_amount: cancelledAmount,
+    // 결제 뒤 반품·취소로 돌려준 것(2026-10-03, src/refunds.js). 매출에서는 이미 빠졌다.
+    ...refundSummaryOf(paidOrders),
     problem_amount: problemAmount,
     table_breakdown: tableBreakdown,
     // 메뉴판에 있는 것 전부 + 각각 몇 개 팔렸나 (위 menuBreakdown 주석).

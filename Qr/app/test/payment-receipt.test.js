@@ -119,7 +119,7 @@ out.push("\n[결제 완료 칸의 카드 — 영수증 한 장]");
   check("★★ 결제된 카드의 인쇄는 영수증", /if \(paidCard\) \{[\s\S]*printPaidOrderReceipt\(o\)/.test(card), "");
   check("★ 주방용을 찍기 전에 돌아간다", card.indexOf("return;") > 0 && card.indexOf("return;") < card.indexOf("printKitchenTicket(o)"), "");
   check("★ 못 찍으면 화면에 말한다", /receiptPrintFailed/.test(card), "");
-  const fn = admin.slice(admin.indexOf("async function printPaidOrderReceipt(o)"), admin.indexOf("async function printNoticeTicket("));
+  const fn = admin.slice(admin.indexOf("async function printPaidOrderReceipt("), admin.indexOf("async function printNoticeTicket("));
   check("주문에 남은 결제 방식으로", /o\.payment_method/.test(fn), "");
   check("주문에 남은 할인으로", /o\.discount_amount/.test(fn) && /receiptDiscountLabelOf\(o\.discount_type\)/.test(fn), "");
   check("★ 결제한 그 시각을 찍는다(지금 시각이 아니라)", /paid_at/.test(fn) && /paidAt:/.test(fn), "");

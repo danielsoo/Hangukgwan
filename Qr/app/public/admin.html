@@ -1519,6 +1519,26 @@
   </div>
 </div>
 
+<!-- 결제된 것의 반품·취소 (2026-10-03). 음식은 「취소」, 음료·라면 봉지 등은 「반품」. -->
+<div id="refundBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal refund-modal">
+    <h3 data-i18n="refundTitle">↩ 반품 · 취소</h3>
+    <p class="refund-hint" data-i18n="refundHint">조리한 음식은 「취소」, 음료·라면 봉지처럼 돌려받을 수 있는 것은 「반품」으로 남아요. 돌려줄 금액은 실제로 받은 금액(할인 반영) 기준이에요.</p>
+    <p class="refund-table" id="refundTable"></p>
+    <div id="refundLines" class="refund-lines"></div>
+    <div class="refund-row">
+      <label for="refundMethod" data-i18n="refundMethodLabel">돌려줄 결제 방식</label>
+      <select id="refundMethod"></select>
+    </div>
+    <input type="text" id="refundReason" maxlength="100" data-i18n-placeholder="refundReasonPlaceholder" placeholder="사유 (선택) — 예: 손님 요청, 잘못 나감" />
+    <p class="refund-total" id="refundTotal"></p>
+    <div class="modal-actions">
+      <button class="danger-btn" id="refundCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="refundOk" disabled></button>
+    </div>
+  </div>
+</div>
+
 <div id="orderDetailBackdrop" class="modal-backdrop" hidden>
   <div class="modal order-detail-modal">
     <button class="modal-close" id="orderDetailClose">✕</button>

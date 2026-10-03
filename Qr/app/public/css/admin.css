@@ -2645,3 +2645,26 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-shift-bar i { display: block; height: 100%; background: #c8a24b; }
 .stl-shift-bar.is-before i { opacity: 0.45; }
 .stl-movers-count b.is-shift { color: #8a6d1a; }
+
+/* 결제된 것의 반품·취소(2026-10-03). */
+.order-refund-btn { color: #b5232c; }
+.order-card-total .order-card-refunded { color: #b5232c; }
+.order-refunded-tag { font-size: 12px; font-weight: 700; color: #b5232c; border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; }
+.refund-modal { max-width: 520px; width: calc(100vw - 32px); }
+.refund-hint { font-size: 14px; color: var(--muted); margin: 4px 0 8px; line-height: 1.5; }
+.refund-table { font-weight: 700; margin: 0 0 8px; }
+.refund-lines { max-height: 46vh; overflow-y: auto; border-top: 1px solid var(--line); }
+.refund-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.refund-line-name { min-width: 0; font-size: 16px; font-weight: 700; }
+.refund-line-name small { display: block; font-weight: 400; font-size: 13px; color: var(--muted); }
+.refund-kind { font-size: 12px; font-weight: 700; border-radius: 4px; padding: 1px 6px; margin-left: 4px; }
+.refund-kind.is-cancel { background: #fde8e8; color: #b5232c; }
+.refund-kind.is-return { background: #e6f2ea; color: #1a6b38; }
+.refund-step { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.refund-step button { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 20px; cursor: pointer; }
+.refund-step button:disabled { opacity: 0.35; cursor: default; }
+.refund-step strong { min-width: 22px; text-align: center; font-size: 18px; }
+.refund-row { display: flex; align-items: center; gap: 10px; margin: 12px 0 8px; }
+.refund-row select { flex: 1; }
+#refundReason { width: 100%; }
+.refund-total { font-size: 18px; font-weight: 800; text-align: right; margin: 10px 0 0; }

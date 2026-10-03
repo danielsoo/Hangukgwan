@@ -1284,6 +1284,97 @@ router.patch("/:id/items", requireAdmin, async (req, res) => {
   res.json(order);
 });
 
+// ── 결제된 것의 반품·취소 (2026-10-03) ─────────────────────────────────
+//
+// 사장님: "결제된 거 반품, 취소 같은 기능을 넣어줘. 음식이나 조리 같은 건
+// 취소고 음료수 라면 봉지 등 반품할 수 있는 건 반품할 수 있게 해줘."
+//
+// 결제된 주문은 고쳐 쓰지 않는다(장부다). 돌려준 기록을 덧붙인다 — 규칙은
+// src/refunds.js. 권한은 「주문 취소」와 같다(사장님, 또는 그 스위치가 켜진 직원).
+// 금액은 서버가 계산한다 — 받은 것보다 더 돌려줄 수 없다.
+const refundRules = require("../refunds");
+const returnableOf = (it) =>
+  refundRules.isReturnableItem({ ...it, category_key: categoryKeyOf(it) }, (x) => {
+    const c = categoryOfKey(x.category_key);
+    return c ? `${c.name_ko || ""} ${c.name_zh || ""}` : "";
+  });
+router.post("/:id/refund", requireAdmin, async (req, res) => {
+  if (req.session.role !== "owner") {
+    const allowed = !!(store.settings.staff_permissions && store.settings.staff_permissions.orderCancel);
+    if (!allowed) return res.status(403).json({ error: "permission_denied" });
+  }
+  const id = parseInt(req.params.id, 10);
+  const order = await operationalOrderById(store, id);
+  if (!order) return res.status(404).json({ error: "not_found" });
+  // 결제가 끝난 주문만. 아직 받을 돈이 남은 주문은 품목 수정으로 고친다.
+  if (order.status !== "paid") return res.status(400).json({ error: "order_not_paid" });
+
+  const body = req.body || {};
+  const asked = Array.isArray(body.lines) ? body.lines : [];
+  const lines = [];
+  const seen = new Set();
+  for (const l of asked) {
+    const index = parseInt(l && l.index, 10);
+    const qty = parseInt(l && l.qty, 10);
+    if (!Number.isInteger(index) || seen.has(index)) return res.status(400).json({ error: "invalid_line" });
+    seen.add(index);
+    if (!(qty > 0)) continue;
+    const it = (order.items || [])[index];
+    if (!it) return res.status(400).json({ error: "invalid_line" });
+    if (qty > refundRules.refundableQty(order, it)) return res.status(400).json({ error: "too_many", index });
+    const kind = returnableOf(it) ? "return" : "cancel";
+    lines.push({
+      index,
+      item_id: it.item_id,
+      name_ko: it.name_ko || null,
+      name_zh: it.name_zh || null,
+      qty,
+      kind,
+      amount: refundRules.refundAmountFor(order, index, qty, isDiscountExcludedItem),
+    });
+  }
+  if (!lines.length) return res.status(400).json({ error: "nothing_to_refund" });
+
+  // 받은 것보다 더 돌려줄 수는 없다(할인·반올림이 겹쳐도).
+  const received = netTotalOfOrder(order);
+  let amount = lines.reduce((a, l) => a + l.amount, 0);
+  if (amount > received) amount = Math.max(0, received);
+
+  const firstPaid = (order.items || []).find((x) => x.payment_method);
+  const method = PAYMENT_METHODS.includes(body.method)
+    ? body.method
+    : (firstPaid && firstPaid.payment_method) || order.payment_method || "cash";
+  const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 100) : "";
+  // 미리 보기 — 화면이 금액을 따로 계산하지 않고 서버 계산을 그대로 보여준다.
+  if (body.preview) return res.json({ preview: { method, amount, lines } });
+
+  for (const l of lines) {
+    const it = order.items[l.index];
+    it.refunded_qty = (Number(it.refunded_qty) || 0) + l.qty;
+  }
+  const record = {
+    id: `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    at: nowLocal(),
+    by: req.session.role === "owner" ? "owner" : "staff",
+    method,
+    reason: reason || null,
+    amount,
+    lines,
+  };
+  order.refunds = [...(Array.isArray(order.refunds) ? order.refunds : []), record];
+  order.refund_total = (Number(order.refund_total) || 0) + amount;
+  order.updated_at = record.at;
+
+  await saveOrder(order);
+  rememberOrder(order);
+  await broadcastOrdersChanged(req, [order.id]);
+  res.json({ order, refund: record });
+});
+// 받은 금액(돌려준 것을 빼고) — src/settlement.js netTotalOf 와 같은 셈.
+function netTotalOfOrder(o) {
+  return require("../settlement").netTotalOf(o);
+}
+
 // 두 품목 목록의 차이. 같은 줄인지는 「주방이 같은 것으로 볼 것인가」로
 // 가른다 — 메뉴가 같아도 고기 선택이나 맵기가 다르면 다른 요리다.
 function orderLineKey(it) {

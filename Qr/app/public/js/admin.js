@@ -700,6 +700,25 @@
       printDeviceTakeoverConfirm: "지금은 {name}에서 빌지를 뽑고 있어요.\n인쇄를 이 기기로 옮길까요?\n(옮기면 그쪽 자동 인쇄는 꺼집니다)",
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
       printReceiptBtn: "🧾 영수증",
+      refundBtn: "↩ 반품·취소",
+      refundTitle: "↩ 반품 · 취소",
+      refundHint: "조리한 음식은 「취소」, 음료·라면 봉지처럼 돌려받을 수 있는 것은 「반품」으로 남아요. 돌려줄 금액은 실제로 받은 금액(할인 반영) 기준이에요.",
+      refundKindCancel: "취소",
+      refundKindReturn: "반품",
+      refundLeft: "결제 {n}개",
+      refundMethodLabel: "돌려줄 결제 방식",
+      refundReasonPlaceholder: "사유 (선택) — 예: 손님 요청, 잘못 나감",
+      refundTotal: "돌려줄 금액 NT${amount}",
+      refundOkBtn: "NT${amount} 돌려주기",
+      refundOkIdle: "돌려줄 품목을 고르세요",
+      refundConfirm: "NT${amount} 을(를) {method}(으)로 돌려줄까요?\n결산 매출에서 빠져요.",
+      refundDone: "✔ NT${amount} 을(를) {method}(으)로 돌려준 것으로 기록했어요.",
+      refundFailed: "처리하지 못했어요. 다시 해 주세요.",
+      refundCardNote: "↩ 돌려줌 −NT${amount}",
+      refundDetailTag: "↩ {n}개 돌려줌",
+      settlementRefundTitle: "↩ 결제 후 돌려줌(매출에서 뺌)",
+      settlementRefundCancel: "취소 {n}개 −{amount}",
+      settlementRefundReturn: "반품 {n}개 −{amount}",
       tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
@@ -1607,6 +1626,25 @@
       printDeviceTakeoverConfirm: "目前是由{name}印單。\n要把列印改成這台裝置嗎？\n（改過來之後，那台的自動列印會關閉）",
       printDevicesList: "🖨️ 自動列印中：{list}",
       printReceiptBtn: "🧾 收據",
+      refundBtn: "↩ 退貨·取消",
+      refundTitle: "↩ 退貨 · 取消",
+      refundHint: "已烹調的餐點記為「取消」，飲料、泡麵包等可退回的商品記為「退貨」。退款金額以實際收款（含折扣）為準。",
+      refundKindCancel: "取消",
+      refundKindReturn: "退貨",
+      refundLeft: "已付 {n} 份",
+      refundMethodLabel: "退款方式",
+      refundReasonPlaceholder: "原因（選填）— 例：客人要求、出錯餐",
+      refundTotal: "退款金額 NT${amount}",
+      refundOkBtn: "退款 NT${amount}",
+      refundOkIdle: "請選擇要退的品項",
+      refundConfirm: "要以 {method} 退款 NT${amount} 嗎？\n將從結算營收中扣除。",
+      refundDone: "✔ 已記錄以 {method} 退款 NT${amount}。",
+      refundFailed: "處理失敗，請再試一次。",
+      refundCardNote: "↩ 已退 −NT${amount}",
+      refundDetailTag: "↩ 已退 {n} 份",
+      settlementRefundTitle: "↩ 付款後退款（已從營收扣除）",
+      settlementRefundCancel: "取消 {n} 份 −{amount}",
+      settlementRefundReturn: "退貨 {n} 份 −{amount}",
       tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
@@ -5560,11 +5598,12 @@
     // 돈을 그 아래 작게. 사장님이 그 자리에서 검산할 수 있어야 한다
     // (위 orderPaidAmount 주석).
     const cardOff = paidOrderDiscount(o);
+    const cardBack = Number(o.refund_total) || 0;
     const cardTotalHtml =
-      cardOff > 0
-        ? `<div class="order-card-total">NT$${money(orderPaidAmount(o))}<span class="order-card-total-was">${escapeHtml(
-            fmtCardDiscountNote(o.total, cardOff)
-          )}</span></div>`
+      cardOff > 0 || cardBack > 0
+        ? `<div class="order-card-total">NT$${money(orderPaidAmount(o))}${
+            cardOff > 0 ? `<span class="order-card-total-was">${escapeHtml(fmtCardDiscountNote(o.total, cardOff))}</span>` : ""
+          }${cardBack > 0 ? `<span class="order-card-total-was order-card-refunded">${escapeHtml(T("refundCardNote").replace("{amount}", money(cardBack)))}</span>` : ""}</div>`
         : `<div class="order-card-total">NT$${money(o.total)}</div>`;
     card.innerHTML = `
       <div class="order-card-top">
@@ -5656,6 +5695,17 @@
       renderOrders();
     };
     actions.appendChild(printBtn);
+    // 결제된 것의 반품·취소(2026-10-03) — 「주문 취소」 권한과 같다.
+    if (paidCard && canCancelOrder() && (o.items || []).some((it) => (Number(it.qty) || 0) > (Number(it.refunded_qty) || 0))) {
+      const refundBtn = document.createElement("button");
+      refundBtn.className = "order-refund-btn";
+      refundBtn.textContent = T("refundBtn");
+      refundBtn.onclick = (e) => {
+        e.stopPropagation();
+        openRefund(o);
+      };
+      actions.appendChild(refundBtn);
+    }
     const previewBtn = document.createElement("button");
     previewBtn.textContent = T("previewBtn");
     previewBtn.onclick = (e) => {
@@ -6595,13 +6645,141 @@
     };
   }
 
+  /**
+   * 결제된 것의 반품·취소 창 (2026-10-03).
+   *
+   * 사장님: "결제된 거 반품, 취소 같은 기능을 넣어줘. 음식이나 조리 같은 건
+   * 취소고 음료수 라면 봉지 등 반품할 수 있는 건 반품할 수 있게 해줘."
+   *
+   * 품목마다 「취소/반품」과 돌려줄 금액은 **서버가 정한다**(src/refunds.js) —
+   * 수를 고를 때마다 서버에 미리 계산(preview)만 받아 그대로 보여준다. 화면에서
+   * 따로 계산하면 할인 비율·반올림이 어긋나 「화면 금액 ≠ 실제 돌려준 금액」이 된다.
+   */
+  const REFUND_RETURNABLE_KEYS = ["drink", "other"];
+  function refundKindGuess(it) {
+    const cat = (categories || []).find((c) => c.key === it.category_key);
+    const nm = cat ? `${cat.name_ko || ""}${cat.name_zh || ""}` : "";
+    return REFUND_RETURNABLE_KEYS.includes(it.category_key) || /음료|飲料|주류|酒類|기타|其他/.test(nm) ? "return" : "cancel";
+  }
+  function openRefund(o) {
+    const back = $("#refundBackdrop");
+    const want = new Map(); // index -> qty
+    const placeTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}${partyTag(o)}`;
+    $("#refundTable").textContent = `${placeTag} · NT$${money(orderPaidAmount(o))}`;
+    const methods = ["cash", "card", "linepay", "other"];
+    const firstPaid = (o.items || []).find((x) => x.payment_method);
+    const defMethod = (firstPaid && firstPaid.payment_method) || o.payment_method || "cash";
+    $("#refundMethod").innerHTML = methods
+      .map((m) => `<option value="${m}"${m === defMethod ? " selected" : ""}>${escapeHtml(T("paymentMethod" + m.charAt(0).toUpperCase() + m.slice(1)))}</option>`)
+      .join("");
+    $("#refundReason").value = "";
+    let preview = null;
+    let seq = 0;
+    const left = (it) => Math.max(0, (Number(it.qty) || 0) - (Number(it.refunded_qty) || 0));
+    const paint = () => {
+      $("#refundLines").innerHTML = (o.items || [])
+        .map((it, i) => {
+          if (!left(it)) return "";
+          const n = want.get(i) || 0;
+          const pl = preview && preview.lines.find((l) => l.index === i);
+          const kind = pl ? pl.kind : refundKindGuess(it);
+          return `<div class="refund-line" data-index="${i}">
+            <div class="refund-line-name">${escapeHtml(itemName(it))}${it.option_choice ? ` (${escapeHtml(optionLabel(it.option_choice))})` : ""}
+              <span class="refund-kind is-${kind}">${escapeHtml(T(kind === "return" ? "refundKindReturn" : "refundKindCancel"))}</span>
+              <small>${escapeHtml(T("refundLeft").replace("{n}", left(it)))}${pl ? ` · −NT$${money(pl.amount)}` : ""}</small>
+            </div>
+            <div class="refund-step">
+              <button type="button" data-step="-1" ${n <= 0 ? "disabled" : ""}>−</button>
+              <strong>${n}</strong>
+              <button type="button" data-step="1" ${n >= left(it) ? "disabled" : ""}>+</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      $("#refundLines").querySelectorAll(".refund-line").forEach((row) => {
+        const i = parseInt(row.dataset.index, 10);
+        row.querySelectorAll("[data-step]").forEach((b) => {
+          b.onclick = () => {
+            const it = o.items[i];
+            const n = Math.max(0, Math.min(left(it), (want.get(i) || 0) + parseInt(b.dataset.step, 10)));
+            want.set(i, n);
+            refresh();
+          };
+        });
+      });
+      const amt = preview ? preview.amount : 0;
+      $("#refundTotal").textContent = preview ? T("refundTotal").replace("{amount}", money(amt)) : "";
+      $("#refundOk").disabled = !preview || !(amt >= 0) || ![...want.values()].some((n) => n > 0);
+      $("#refundOk").textContent = preview ? T("refundOkBtn").replace("{amount}", money(amt)) : T("refundOkIdle");
+    };
+    const body = () => ({
+      lines: [...want.entries()].filter(([, n]) => n > 0).map(([index, qty]) => ({ index, qty })),
+      method: $("#refundMethod").value,
+      reason: $("#refundReason").value,
+    });
+    const refresh = async () => {
+      const my = ++seq;
+      const b = body();
+      if (!b.lines.length) {
+        preview = null;
+        paint();
+        return;
+      }
+      paint();
+      try {
+        const res = await fetch(`/api/orders/${o.id}/refund`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...b, preview: true }),
+        });
+        const d = await res.json();
+        if (my !== seq) return;
+        preview = res.ok ? d.preview : null;
+      } catch (e) {
+        if (my === seq) preview = null;
+      }
+      paint();
+    };
+    $("#refundMethod").onchange = () => paint();
+    $("#refundCancel").onclick = () => (back.hidden = true);
+    $("#refundOk").onclick = async () => {
+      if (!preview) return;
+      const methodLabel = $("#refundMethod").selectedOptions[0].textContent;
+      if (!(await showConfirm(T("refundConfirm").replace("{amount}", money(preview.amount)).replace("{method}", methodLabel)))) return;
+      $("#refundOk").disabled = true;
+      let ok = false;
+      let d = null;
+      try {
+        const res = await fetch(`/api/orders/${o.id}/refund`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body()),
+        });
+        d = await res.json().catch(() => null);
+        ok = res.ok;
+      } catch (e) {}
+      if (!ok || !d) {
+        await showAlert(T("refundFailed"));
+        $("#refundOk").disabled = false;
+        return;
+      }
+      back.hidden = true;
+      if (!applyOrderUpdate(d.order)) await loadOrders();
+      await showAlert(T("refundDone").replace("{amount}", money(d.refund.amount)).replace("{method}", methodLabel));
+    };
+    paint();
+    back.hidden = false;
+  }
+
   function openOrderDetail(o) {
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("ko-KR");
     const itemsHtml = o.items
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
+            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${
+              Number(it.refunded_qty) > 0 ? ` <span class="order-refunded-tag">${escapeHtml(T("refundDetailTag").replace("{n}", it.refunded_qty))}</span>` : ""
+            }${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${money(lineTotalOf(it))}</span>
           </div>`
       )
@@ -9062,7 +9240,8 @@
    */
   function orderPaidAmount(o) {
     const total = Number((o && o.total) || 0);
-    const off = Number((o && o.discount_amount) || 0);
+    // 결제 뒤 반품·취소로 돌려준 금액도 뺀다(2026-10-03, 서버 netTotalOf 와 같다).
+    const off = Number((o && o.discount_amount) || 0) + Number((o && o.refund_total) || 0);
     // 0 에서 자르지 않는다 — 서버(src/settlement.js netTotalOf)와 같은
     // 이유다. 재량 할인은 한 결제에 한 덩어리로 라운드 하나에 통째로
     // 적히므로, 그 라운드보다 할인이 크면 이 줄만 음수로 보인다. 그게
@@ -13656,7 +13835,19 @@
    * 명세서는 주방용이 불필요하고." — 주방용·결제용 두 장이 아니라 收據 한 장.
    * 주문에 남아 있는 결제 방식·할인·결제 시각으로 결제할 때와 같은 종이를 만든다.
    */
-  async function printPaidOrderReceipt(o) {
+  async function printPaidOrderReceipt(o0) {
+    // 돌려준 것(2026-10-03)은 영수증에서 뺀다 — 손님이 실제로 낸 것만 적는다.
+    // 할인 한 줄은 「남은 품목 합계 − 실제 받은 돈」으로 맞춘다.
+    const o = { ...o0, items: (o0.items || []).map((it) => {
+      const r = Number(it.refunded_qty) || 0;
+      if (!r) return it;
+      const qty = (Number(it.qty) || 0) - r;
+      return { ...it, qty, option_price: qty > 0 && it.qty ? ((Number(it.option_price) || 0) * qty) / it.qty : 0, selected_addons: qty > 0 ? it.selected_addons : [] };
+    }).filter((it) => (Number(it.qty) || 0) > 0) };
+    if (Number(o0.refund_total) > 0) {
+      const remainingGross = o.items.reduce((a, it) => a + lineTotalOf(it), 0);
+      o.discount_amount = Math.max(0, remainingGross - orderPaidAmount(o0));
+    }
     const indexes = (o.items || []).map((_, i) => i);
     const paidTimes = (o.items || []).map((it) => it.paid_at).filter(Boolean).sort();
     const counter = isCounterOrder(o);
@@ -15104,6 +15295,13 @@
     if (data.cancelled_order_count > 0) {
       alerts.push(`<div class="stl-alert info">${T("settlementCancelledCount")} ${data.cancelled_order_count}${T("settlementCountSuffix")} · ${nt(data.cancelled_amount)}</div>`);
     }
+    // 결제 뒤 돌려준 것(2026-10-03) — 매출에서는 이미 빠졌다. 취소(음식)와 반품(음료 등)을 따로.
+    if (Number(data.refund_total) > 0) {
+      const parts = [];
+      if (data.refund_cancel_amount) parts.push(T("settlementRefundCancel").replace("{n}", data.refund_cancel_qty || 0).replace("{amount}", nt(data.refund_cancel_amount)));
+      if (data.refund_return_amount) parts.push(T("settlementRefundReturn").replace("{n}", data.refund_return_qty || 0).replace("{amount}", nt(data.refund_return_amount)));
+      alerts.push(`<div class="stl-alert info stl-refund-alert">${escapeHtml(T("settlementRefundTitle"))} ${parts.join(" · ")}</div>`);
+    }
     // 부분결제로 미리 받은 돈 — 매출에는 아직 안 잡혀 있다.
     //
     // 2026-09-14 사장님: 19번 테이블이 740 중 250 만 냈는데 결산 어디에도
@@ -16463,6 +16661,8 @@
     rows.push(["할인 전 매출", data.gross_revenue ?? ""]);
     rows.push(["할인해준 금액", data.discount_total ?? 0]);
     rows.push(["취소 금액", data.cancelled_amount ?? 0]);
+    rows.push(["결제 후 취소(음식) 돌려준 금액", data.refund_cancel_amount ?? 0]);
+    rows.push(["결제 후 반품(음료 등) 돌려준 금액", data.refund_return_amount ?? 0]);
     rows.push(["미결제 금액", data.problem_amount ?? 0]);
     rows.push(["손님 수", data.guest_count ?? 0]);
     rows.push(["  어른", data.adult_count ?? 0]);
