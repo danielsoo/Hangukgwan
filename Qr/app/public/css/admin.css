@@ -2799,7 +2799,6 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-rules summary, .payroll-help summary { cursor: pointer; font-weight: 600; }
 .payroll-rules-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 10px; }
 .payroll-rules-form input { height: 38px; width: 80px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: var(--pr-card); color: var(--ink); }
-.payroll-rules-form input#payrollWorkHours { width: 220px; }
 .payroll-result .pr-line.pr-deduct span:last-child { color: #b4532a; }
 /* 표(최소 760px)와 오른쪽 칸이 같이 들어가지 않으면 결과를 표 아래로 내린다. */
 @media (max-width: 1180px) {

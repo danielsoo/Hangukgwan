@@ -14,10 +14,12 @@
 //   · 칸: 오전 출근·퇴근, 오후 출근·퇴근, 연장(加班) 출근·퇴근.
 //
 // ── 정한 것 (사장님 답, 2026-10-03)
-//   · 근무 시간대: 처음엔 가게 영업시간(11–14 · 17–21)을 읽었으나, 같은 날 사장님이
-//     직원 근무 시간을 따로 주셨다 — "아침 09:00 - 14:00 / 저녁 16:30 - 21:00". 그래서
-//     급여 「근무 규칙」(payroll_settings 의 work_hours)이 근무 시간이다. 손님용
-//     영업시간 문구와는 따로 둔다(그건 손님에게 보이는 문장이다).
+//   · 근무 시간 = 가게 영업시간(설정 > 매장 정보 「영업시간」, store_hours) + 준비 시간.
+//     처음엔 영업시간 그대로(11–14 · 17–21), 사장님이 실제 근무를 주셨고("아침 09:00 -
+//     14:00 / 저녁 16:30 - 21:00"), 그 시간이 영업시간을 따라 움직이길 바라셨다("시간을
+//     고정하는 게 아니라 우리가 운영시간 정하는 곳이 있잖아? 그거에 따라"). 그래서 오전
+//     출근은 영업 시작 120분 전, 오후 출근은 30분 전, 퇴근은 영업 끝(급여 「근무 규칙」에서
+//     분을 고친다). 영업시간 문구를 고치면 급여 근무 시간도 같이 바뀐다.
 //   · 초과 시간: 그 날 영업시간의 끝(오전 구간 끝 · 오후 구간 끝)을 25분 넘기면 0.5시간,
 //     그 뒤 30분마다 0.5. **확정이 아니다** — "사장이 한 번 더 확인하는 걸로".
 //     그래서 날마다 「제안」만 하고, 사장님이 확인(또는 고침)해야 확정이다.
@@ -34,9 +36,11 @@ const CARDS_COLLECTION = "payroll_cards";
 // 2026년(민국 115년) 대만 최저임금. 경고에만 쓴다.
 const MIN_WAGE = { monthly: 29500, hourly: 196 };
 
-// 직원 근무 시간 — 가게 영업시간(손님용 11–14 · 17–21)과 다르다. 2026-10-03 사장님:
-// "아침 09:00 - 14:00 / 저녁 16:30 - 21:00". 급여 「근무 규칙」에서 고친다.
-const DEFAULT_WORK_HOURS = "09:00-14:00, 16:30-21:00";
+// 직원 근무 시간 = 가게 영업시간 + 준비 시간. 2026-10-03 사장님: "아침 09:00 - 14:00 /
+// 저녁 16:30 - 21:00" → "시간을 고정하는 게 아니라 우리가 운영시간 정하는 곳이 있잖아?
+// 그거에 따라 움직일 수 있게". 영업시간(11–14 · 17–21)에서 오전은 120분, 오후는 30분
+// 일찍 출근 → 09:00 · 16:30. 영업시간을 고치면 근무 시간도 따라 움직인다(workRanges).
+// 영업시간을 못 읽을 때만 이 구간을 쓴다.
 const FALLBACK_RANGES = [{ start: "09:00", end: "14:00" }, { start: "16:30", end: "21:00" }];
 
 const DEFAULT_RULES = {
@@ -45,7 +49,9 @@ const DEFAULT_RULES = {
   borderline_min: 10, // 기준 ±10분이면 「확인 필요」로 칠한다
   late_unit_min: 30, // 지각은 이만큼마다 0.5시간 차감(30분 미만은 세지 않는다)
   default_hourly: 220, // 직원 시급을 비우면 이 시급(2026 사장님: "1시간 시급 220")
-  work_hours: DEFAULT_WORK_HOURS,
+  prep_am_min: 120, // 오전 출근 = 영업 시작 − 120분(11:00 → 09:00)
+  prep_pm_min: 30, // 오후 출근 = 영업 시작 − 30분(17:00 → 16:30)
+  close_min: 0, // 퇴근 = 영업 끝 + 0분
 };
 
 const SLOTS = ["am_in", "am_out", "pm_in", "pm_out", "ot_in", "ot_out"];
@@ -69,9 +75,30 @@ function rulesOf(raw) {
   }
   const h = Number(raw && raw.default_hourly);
   if (raw && raw.default_hourly != null && raw.default_hourly !== "" && Number.isFinite(h) && h >= 0 && h < 100000) r.default_hourly = Math.round(h * 100) / 100;
-  const w = String((raw && raw.work_hours) || "").trim().slice(0, 100);
-  if (w) r.work_hours = w;
+  for (const k of ["prep_am_min", "prep_pm_min", "close_min"]) {
+    const v = raw && raw[k];
+    const n = Number(v);
+    if (v != null && v !== "" && Number.isFinite(n) && n >= 0 && n <= 240) r[k] = Math.round(n);
+  }
   return r;
+}
+
+function hm(min) {
+  const m = ((min % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+}
+/**
+ * 영업시간 구간 → 근무 구간. 첫 구간(오전)은 prep_am, 나머지(오후)는 prep_pm 만큼 일찍
+ * 시작하고, 모든 구간이 close 만큼 늦게 끝난다. 영업시간을 못 읽으면 FALLBACK.
+ */
+function workRanges(businessRanges, rawRules) {
+  const rules = rulesOf(rawRules);
+  const rs = (Array.isArray(businessRanges) ? businessRanges : []).filter((r) => r && toMin(r.start) != null && toMin(r.end) != null);
+  if (!rs.length) return FALLBACK_RANGES.map((r) => ({ ...r }));
+  return rs.map((r, i) => ({
+    start: hm(toMin(r.start) - (i === 0 ? rules.prep_am_min : rules.prep_pm_min)),
+    end: hm(toMin(r.end) + rules.close_min),
+  }));
 }
 
 /** 정해진 퇴근을 over 분 넘겼을 때 제안하는 초과 시간(0.5 단위). */
@@ -339,6 +366,6 @@ function cleanBonus(b) {
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 module.exports = {
-  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, DEFAULT_WORK_HOURS, FALLBACK_RANGES, SLOTS, MONTH_RE,
+  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, FALLBACK_RANGES, workRanges, SLOTS, MONTH_RE,
   toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff, cleanBonus,
 };

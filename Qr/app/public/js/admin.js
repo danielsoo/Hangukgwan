@@ -1481,7 +1481,7 @@
       tabVip: "회원(VIP)",
       tabAccounts: "계정",
       tabPayroll: "💰 급여",
-      payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
+      payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 설정 > 영업시간에서 준비 시간만큼 앞당겨 세요(아래 「근무 규칙」). 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollAddStaff: "+ 직원 추가",
       payrollStaffName: "이름",
@@ -1518,13 +1518,14 @@
       payrollDayShort: "일",
       payrollSaveCard: "카드 저장",
       payrollRulesTitle: "근무 규칙 — 근무 시간 · 기본 시급 · 지각 · 초과",
-      payrollWorkHours: "근무 시간 (오전, 오후)",
+      payrollPrepAm: "오전 출근 = 영업 시작 몇 분 전",
+      payrollPrepPm: "오후 출근 = 영업 시작 몇 분 전",
+      payrollCloseMin: "퇴근 = 영업 끝 몇 분 뒤",
       payrollDefaultHourly: "가게 기본 시급 (직원 시급을 비우면)",
       payrollLateUnit: "지각 — 몇 분마다 0.5시간 차감",
       payrollThreshold: "근무 끝을 몇 분 넘기면 초과 0.5시간",
-      payrollHoursLine: "근무 시간 {ranges} (하루 {h}시간) · 기본 시급 NT${rate}. 지각은 시작 시각부터 {late}분마다 0.5시간, 조퇴는 비운 분만큼 급여에서 빠져요. 초과는 끝 시각부터. 바꾸려면 아래 「근무 규칙」.",
-      payrollHoursUnreadable: "⚠ 근무 시간(「{text}」)을 읽지 못했어요. 아래 「근무 규칙」에 「09:00-14:00, 16:30-21:00」처럼 적어 주세요.",
-      payrollBadWorkHours: "근무 시간을 「09:00-14:00, 16:30-21:00」처럼 적어 주세요.",
+      payrollHoursLine: "근무 시간 {ranges} (하루 {h}시간) — 영업시간 {biz} 기준 · 기본 시급 NT${rate}. 지각은 출근 시각부터 {late}분마다 0.5시간, 조퇴는 비운 분만큼 급여에서 빠져요. 초과는 끝 시각부터. 영업시간을 바꾸면 따라 움직여요(설정 > 영업시간).",
+      payrollHoursUnreadable: "⚠ 설정 > 영업시간 칸(「{text}」)에서 시각을 읽지 못해 근무 시간을 {ranges} 로 셌어요. 「11:00-14:00, 17:00-21:00」처럼 적어 주세요.",
       payrollStep: "그 뒤 몇 분마다 0.5시간",
       payrollSaveRules: "규칙 저장",
       payrollLoadFailed: "급여 정보를 불러오지 못했어요.",
@@ -2509,7 +2510,7 @@
       tabVip: "會員(VIP)",
       tabAccounts: "帳號",
       tabPayroll: "💰 薪資",
-      payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依下方「工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
+      payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依 設定 > 營業時間，提早準備時間計算（下方「工作規則」）。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollAddStaff: "+ 員工",
       payrollStaffName: "姓名",
@@ -2546,13 +2547,14 @@
       payrollDayShort: "日",
       payrollSaveCard: "儲存考勤卡",
       payrollRulesTitle: "工作規則 — 工作時間 · 基本時薪 · 遲到 · 加班",
-      payrollWorkHours: "工作時間（上午、下午）",
+      payrollPrepAm: "上午上班 = 營業開始前幾分鐘",
+      payrollPrepPm: "下午上班 = 營業開始前幾分鐘",
+      payrollCloseMin: "下班 = 營業結束後幾分鐘",
       payrollDefaultHourly: "店家基本時薪（員工時薪空白時）",
       payrollLateUnit: "遲到 — 每幾分鐘扣 0.5 小時",
       payrollThreshold: "超過下班幾分鐘算加班 0.5 小時",
-      payrollHoursLine: "工作時間 {ranges}（每天 {h} 小時）· 基本時薪 NT${rate}。遲到從上班時間起每 {late} 分鐘扣 0.5 小時，早退依離開分鐘扣薪。加班從下班時間起算。修改請到下方「工作規則」。",
-      payrollHoursUnreadable: "⚠ 無法讀出工作時間（「{text}」）。請在下方「工作規則」寫成「09:00-14:00, 16:30-21:00」。",
-      payrollBadWorkHours: "請把工作時間寫成「09:00-14:00, 16:30-21:00」。",
+      payrollHoursLine: "工作時間 {ranges}（每天 {h} 小時）— 依營業時間 {biz} · 基本時薪 NT${rate}。遲到從上班時間起每 {late} 分鐘扣 0.5 小時，早退依離開分鐘扣薪。加班從下班時間起算。營業時間改了會跟著變（設定 > 營業時間）。",
+      payrollHoursUnreadable: "⚠ 無法從 設定 > 營業時間（「{text}」）讀出時間，工作時間暫以 {ranges} 計算。請寫成「11:00-14:00, 17:00-21:00」。",
       payrollStep: "之後每幾分鐘加 0.5 小時",
       payrollSaveRules: "儲存規則",
       payrollLoadFailed: "無法載入薪資資料。",
@@ -13156,7 +13158,9 @@
       const ru = rules.rules || {};
       payroll.rules = ru;
       payrollRenderHours(rules.work_hours);
-      if ($("#payrollWorkHours")) $("#payrollWorkHours").value = ru.work_hours || "";
+      if ($("#payrollPrepAm")) $("#payrollPrepAm").value = ru.prep_am_min ?? 120;
+      if ($("#payrollPrepPm")) $("#payrollPrepPm").value = ru.prep_pm_min ?? 30;
+      if ($("#payrollCloseMin")) $("#payrollCloseMin").value = ru.close_min ?? 0;
       if ($("#payrollDefaultHourly")) $("#payrollDefaultHourly").value = ru.default_hourly ?? "";
       if ($("#payrollLateUnit")) $("#payrollLateUnit").value = ru.late_unit_min || 30;
       // 시급을 비운 직원은 가게 기본 시급 — 빈칸에 그 값을 흐리게 보여준다.
@@ -13175,9 +13179,10 @@
   function payrollRenderHours(bh) {
     const el = $("#payrollHours");
     if (!el) return;
+    const fmt = (rs) => (rs || []).map((r) => `${r.start}–${r.end}`).join(" · ");
     if (!bh || !bh.readable) {
       el.className = "payroll-hours is-bad";
-      el.textContent = T("payrollHoursUnreadable").replace("{text}", (bh && bh.text) || "");
+      el.textContent = T("payrollHoursUnreadable").replace("{text}", (bh && bh.text) || "").replace("{ranges}", fmt(bh && bh.ranges));
       return;
     }
     const hours = bh.ranges.reduce((a, r) => {
@@ -13190,7 +13195,8 @@
     el.className = "payroll-hours";
     const ru = payroll.rules || {};
     el.textContent = T("payrollHoursLine")
-      .replace("{ranges}", bh.ranges.map((r) => `${r.start}–${r.end}`).join(" · "))
+      .replace("{ranges}", fmt(bh.ranges))
+      .replace("{biz}", fmt(bh.business))
       .replace("{h}", hours)
       .replace("{rate}", money(ru.default_hourly ?? 220))
       .replace("{late}", ru.late_unit_min || 30);
@@ -13697,10 +13703,11 @@
         ot_step_min: Number($("#payrollStep").value),
         late_unit_min: Number($("#payrollLateUnit").value),
         default_hourly: $("#payrollDefaultHourly").value === "" ? 0 : Number($("#payrollDefaultHourly").value),
-        work_hours: $("#payrollWorkHours").value,
+        prep_am_min: Number($("#payrollPrepAm").value),
+        prep_pm_min: Number($("#payrollPrepPm").value),
+        close_min: Number($("#payrollCloseMin").value),
       };
       const res = await fetch("/api/payroll/rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      if (res.status === 400) return showAlert(T("payrollBadWorkHours"));
       if (!res.ok) return showAlert(T("payrollSaveFailed"));
       // 위 「근무 시간 …」 줄·시급 빈칸 안내도 새 규칙으로.
       const st = await (await fetch("/api/payroll/status")).json();

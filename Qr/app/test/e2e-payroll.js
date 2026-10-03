@@ -49,9 +49,10 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(600);
   {
     const hrs = await page.locator("#payrollHours").innerText();
-    // 2026-10-03 사장님: "아침 09:00 - 14:00 / 저녁 16:30 - 21:00 … 시급 220"
-    check("★★ 근무 시간 09:00–14:00 · 16:30–21:00 (하루 9.5시간) · 기본 시급 220 을 보여준다", /근무 시간 09:00–14:00 · 16:30–21:00/.test(hrs) && /하루 9\.5시간/.test(hrs) && /NT\$220/.test(hrs), hrs);
-    check("★ 근무 규칙 칸에 그 값", (await page.inputValue("#payrollWorkHours")) === "09:00-14:00, 16:30-21:00" && (await page.inputValue("#payrollDefaultHourly")) === "220" && (await page.inputValue("#payrollLateUnit")) === "30", "");
+    // 2026-10-03 사장님: "아침 09:00 - 14:00 / 저녁 16:30 - 21:00 … 시급 220" → "시간을 고정하는 게
+    // 아니라 우리가 운영시간 정하는 곳이 있잖아? 그거에 따라 움직일 수 있게"
+    check("★★ 근무 시간 09:00–14:00 · 16:30–21:00 (하루 9.5시간) — 영업시간 11–14 · 17–21 기준 · 기본 시급 220", /근무 시간 09:00–14:00 · 16:30–21:00/.test(hrs) && /하루 9\.5시간/.test(hrs) && /영업시간 11:00–14:00 · 17:00–21:00 기준/.test(hrs) && /NT\$220/.test(hrs), hrs);
+    check("★ 근무 규칙 칸 — 준비 120 · 30분, 끝 0분, 시급 220, 지각 30분", (await page.inputValue("#payrollPrepAm")) === "120" && (await page.inputValue("#payrollPrepPm")) === "30" && (await page.inputValue("#payrollCloseMin")) === "0" && (await page.inputValue("#payrollDefaultHourly")) === "220" && (await page.inputValue("#payrollLateUnit")) === "30", "");
     check("급여 화면에 따로 퇴근 시각 칸이 없다", (await page.locator("#payrollAmEnd, #payrollPmEnd").count()) === 0, "");
   }
   {

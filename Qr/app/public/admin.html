@@ -269,7 +269,7 @@
         </div>
       </div>
       <div class="pr-info">
-        <!-- 근무 시간대 = 가게 영업시간(설정 > 영업시간). 2026-10-03 사장님: "이미 있는 근무
+        <!-- 근무 시간 = 가게 영업시간(설정 > 영업시간) + 준비 시간. 2026-10-03 사장님: "이미 있는 근무
              시간대가 있잖아 우리 영업 시간". 여기서 따로 적지 않는다. -->
         <p id="payrollHours" class="payroll-hours"></p>
         <div id="payrollSummary" class="payroll-summary"></div>
@@ -328,7 +328,9 @@
       <details class="payroll-rules">
         <summary data-i18n="payrollRulesTitle">근무 규칙 — 근무 시간 · 기본 시급 · 지각 · 초과</summary>
         <div class="payroll-rules-form">
-          <label><span data-i18n="payrollWorkHours">근무 시간 (오전, 오후)</span> <input type="text" id="payrollWorkHours" placeholder="09:00-14:00, 16:30-21:00" /></label>
+          <label><span data-i18n="payrollPrepAm">오전 출근 = 영업 시작 몇 분 전</span> <input type="number" id="payrollPrepAm" min="0" max="240" /></label>
+          <label><span data-i18n="payrollPrepPm">오후 출근 = 영업 시작 몇 분 전</span> <input type="number" id="payrollPrepPm" min="0" max="240" /></label>
+          <label><span data-i18n="payrollCloseMin">퇴근 = 영업 끝 몇 분 뒤</span> <input type="number" id="payrollCloseMin" min="0" max="240" /></label>
           <label><span data-i18n="payrollDefaultHourly">가게 기본 시급 (직원 시급을 비우면)</span> <input type="number" id="payrollDefaultHourly" min="0" step="1" inputmode="numeric" /></label>
           <label><span data-i18n="payrollLateUnit">지각 — 몇 분마다 0.5시간 차감</span> <input type="number" id="payrollLateUnit" min="1" max="120" /></label>
           <label><span data-i18n="payrollThreshold">몇 분 넘기면 0.5시간</span> <input type="number" id="payrollThreshold" min="1" max="120" /></label>
@@ -338,7 +340,7 @@
       </details>
       <details class="payroll-help">
         <summary data-i18n="payrollHelpTitle">ⓘ 이렇게 써요</summary>
-        <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.</p>
+        <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 설정 > 영업시간에서 준비 시간만큼 앞당겨 세요(아래 「근무 규칙」). 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.</p>
       </details>
     </section>
 
