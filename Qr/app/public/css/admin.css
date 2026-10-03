@@ -2671,3 +2671,40 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .refund-row select { flex: 1; }
 #refundReason { width: 100%; }
 .refund-total { font-size: 18px; font-weight: 800; text-align: right; margin: 10px 0 0; }
+
+/* 직원 급여(2026-10-03) — 출근 카드 한 표. */
+.payroll-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.payroll-top input[type="month"], .payroll-staff-form input, .payroll-staff-form select, .payroll-rules-form input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; font-family: inherit; background: transparent; color: inherit; }
+.payroll-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.payroll-chips button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font-size: 14px; }
+.payroll-chips button.active { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 700; }
+.payroll-chips button.is-inactive { opacity: 0.5; }
+.payroll-chips small { margin-left: 4px; opacity: 0.8; }
+.payroll-summary { font-size: 14px; margin-bottom: 10px; }
+.payroll-staff-form, .payroll-actions, .payroll-rules-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
+.payroll-staff-form input[type="number"] { width: 110px; }
+.payroll-status { font-size: 14px; color: var(--muted); }
+.payroll-status.is-dirty { color: #b5232c; font-weight: 700; }
+.payroll-grid-wrap { overflow-x: auto; max-width: 100%; }
+.payroll-grid { border-collapse: collapse; font-size: 14px; min-width: 760px; }
+.payroll-grid th, .payroll-grid td { border: 1px solid var(--line); padding: 2px 4px; text-align: center; }
+.payroll-grid th { font-weight: 600; background: rgba(127,127,127,0.08); }
+.payroll-grid td.pg-day { font-weight: 700; white-space: nowrap; }
+.payroll-grid td.pg-day small { font-weight: 400; color: var(--muted); margin-left: 3px; }
+.payroll-grid tr.is-weekend td.pg-day small { color: #b5232c; }
+.payroll-grid input.pg-t { width: 62px; padding: 4px 2px; border: 1px solid transparent; border-radius: 4px; text-align: center; font-size: 15px; font-family: inherit; background: transparent; color: inherit; font-variant-numeric: tabular-nums; }
+.payroll-grid input.pg-t:focus { border-color: var(--navy); outline: none; }
+.payroll-grid input.pg-t.is-bad { border-color: #b5232c; }
+.payroll-grid tr.is-star td { background: rgba(214, 48, 49, 0.07); }
+.payroll-grid tr.is-check td.pg-ot { background: rgba(240, 180, 0, 0.22); }
+.payroll-grid td.pg-ot { white-space: nowrap; min-width: 150px; }
+.payroll-grid td.pg-ot b { display: inline-block; min-width: 30px; font-size: 15px; }
+.payroll-grid td.pg-ot button { padding: 1px 7px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.payroll-grid td.pg-ot button.pg-ok.is-on { background: #1f8a4c; color: #fff; border-color: #1f8a4c; }
+.payroll-grid td.pg-ot small { display: block; font-size: 12px; color: var(--muted); }
+.payroll-result { margin-top: 12px; font-size: 15px; max-width: 560px; }
+.payroll-result .pr-line { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.payroll-result .pr-total { font-weight: 800; font-size: 18px; border-bottom: none; padding-top: 6px; }
+.payroll-result .pr-warn { color: #b5232c; font-weight: 700; margin: 4px 0; }
+.payroll-result .pr-days { font-weight: 700; margin-bottom: 4px; }
+.payroll-rules { margin-top: 18px; }

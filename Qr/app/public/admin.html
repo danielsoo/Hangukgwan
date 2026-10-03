@@ -63,6 +63,7 @@
       <button data-tab="reservations" data-i18n="tabReservations">예약</button>
       <button data-tab="vip" class="owner-only" data-i18n="tabVip">회원(VIP)</button>
       <button data-tab="accounts" class="owner-only" data-i18n="tabAccounts">계정</button>
+      <button data-tab="payroll" class="owner-only" data-i18n="tabPayroll">💰 급여</button>
       <button data-tab="settlement" data-i18n="tabSettlement">결산</button>
       <button data-tab="settings" data-i18n="tabSettings">설정</button>
     </nav>
@@ -245,6 +246,51 @@
         <button id="accountsRefreshBtn" data-i18n="accountsRefreshBtn">새로고침</button>
       </div>
       <div id="accountsList" class="accounts-list"></div>
+    </section>
+
+
+    <!-- PAYROLL (급여) TAB — owner-only. 출근 카드(考勤卡)로 한 달 급여(src/payroll.js).
+         2026-10-03 사장님: "직원들 월급 계산을 하고 싶은데 시급제, 월급제 … 별이 없는
+         건 주5일까지만 찍고 별부터는 주5일이 지난 것만 넣어." -->
+    <section id="tab-payroll" class="tab-panel owner-only" hidden>
+      <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.</p>
+      <div class="payroll-top">
+        <label><span data-i18n="payrollMonth">월</span> <input type="month" id="payrollMonth" /></label>
+        <div id="payrollStaffChips" class="payroll-chips"></div>
+        <input type="text" id="payrollNewName" maxlength="30" data-i18n-placeholder="payrollNewStaffName" placeholder="직원 이름" hidden />
+        <button type="button" class="btn small" id="payrollAddStaff" data-i18n="payrollAddStaff">+ 직원</button>
+      </div>
+      <div id="payrollSummary" class="payroll-summary"></div>
+      <div id="payrollEditor" hidden>
+        <div class="payroll-staff-form">
+          <input type="text" id="payrollStaffName" data-i18n-placeholder="payrollStaffName" placeholder="이름" maxlength="30" />
+          <select id="payrollPayType">
+            <option value="hourly" data-i18n="payrollHourly">시급제</option>
+            <option value="monthly" data-i18n="payrollMonthly">월급제</option>
+          </select>
+          <label class="payroll-salary-wrap"><span data-i18n="payrollMonthlySalary">월급</span> <input type="number" id="payrollMonthlySalary" min="0" step="100" /></label>
+          <label><span data-i18n="payrollHourlyRate">시급</span> <input type="number" id="payrollHourlyRate" min="0" step="1" /></label>
+          <button type="button" class="btn small" id="payrollSaveStaff" data-i18n="payrollSaveStaff">직원 정보 저장</button>
+          <label class="payroll-inactive"><input type="checkbox" id="payrollStaffInactive" /> <span data-i18n="payrollInactive">그만둔 직원</span></label>
+        </div>
+        <div class="payroll-actions">
+          <button type="button" class="btn small" id="payrollConfirmAll" data-i18n="payrollConfirmAll">✓ 초과 시간 모두 확인</button>
+          <button type="button" class="btn primary" id="payrollSaveCard" data-i18n="payrollSaveCard">카드 저장</button>
+          <span id="payrollStatus" class="payroll-status"></span>
+        </div>
+        <div class="payroll-grid-wrap"><table id="payrollGrid" class="payroll-grid"></table></div>
+        <div id="payrollResult" class="payroll-result"></div>
+      </div>
+      <details class="payroll-rules">
+        <summary data-i18n="payrollRulesTitle">초과 시간 규칙</summary>
+        <div class="payroll-rules-form">
+          <label><span data-i18n="payrollAmEnd">오전 퇴근</span> <input type="time" id="payrollAmEnd" /></label>
+          <label><span data-i18n="payrollPmEnd">오후 퇴근</span> <input type="time" id="payrollPmEnd" /></label>
+          <label><span data-i18n="payrollThreshold">몇 분 넘기면 0.5시간</span> <input type="number" id="payrollThreshold" min="1" max="120" /></label>
+          <label><span data-i18n="payrollStep">그 뒤 몇 분마다 0.5시간</span> <input type="number" id="payrollStep" min="1" max="120" /></label>
+          <button type="button" class="btn small" id="payrollSaveRules" data-i18n="payrollSaveRules">규칙 저장</button>
+        </div>
+      </details>
     </section>
 
     <!-- SETTLEMENT (결산) TAB — 매출을 보여준다.

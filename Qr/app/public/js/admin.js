@@ -1480,6 +1480,60 @@
       paymentSavedMsg: "저장되었습니다",
       tabVip: "회원(VIP)",
       tabAccounts: "계정",
+      tabPayroll: "💰 급여",
+      payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.",
+      payrollMonth: "월",
+      payrollAddStaff: "+ 직원",
+      payrollStaffName: "이름",
+      payrollHourly: "시급제",
+      payrollMonthly: "월급제",
+      payrollMonthlySalary: "월급",
+      payrollHourlyRate: "시급",
+      payrollSaveStaff: "직원 정보 저장",
+      payrollInactive: "그만둔 직원",
+      payrollConfirmAll: "✓ 초과 시간 모두 확인",
+      payrollSaveCard: "카드 저장",
+      payrollRulesTitle: "초과 시간 규칙",
+      payrollAmEnd: "오전 퇴근",
+      payrollPmEnd: "오후 퇴근",
+      payrollThreshold: "몇 분 넘기면 0.5시간",
+      payrollStep: "그 뒤 몇 분마다 0.5시간",
+      payrollSaveRules: "규칙 저장",
+      payrollLoadFailed: "급여 정보를 불러오지 못했어요.",
+      payrollMonthTotal: "이 달 카드 {n}명 · 합계 NT${total}",
+      payrollNoCards: "이 달 넣은 카드가 아직 없어요. 직원을 누르고 카드를 넣으세요.",
+      payrollNoStaff: "직원이 없어요. 「+ 직원」으로 먼저 추가하세요.",
+      payrollDiscard: "저장하지 않은 카드가 있어요. 버리고 넘어갈까요?",
+      payrollWeekdays: "일,월,화,수,목,금,토",
+      payrollDay: "날짜",
+      payrollStarHint: "★ 카드(주 5일을 넘겨 일한 날)",
+      payrollAmIn: "오전 출근",
+      payrollAmOut: "오전 퇴근",
+      payrollPmIn: "오후 출근",
+      payrollPmOut: "오후 퇴근",
+      payrollOtIn: "연장 출근",
+      payrollOtOut: "연장 퇴근",
+      payrollOt: "초과(시간)",
+      payrollAmShort: "오전",
+      payrollPmShort: "오후",
+      payrollMinShort: "분",
+      payrollSuggested: "제안",
+      payrollConfirmOne: "확인",
+      payrollLineRegular: "근무",
+      payrollLineSalary: "월급",
+      payrollLineStar: "★ 카드 날",
+      payrollLineOvertime: "초과",
+      payrollTotal: "합계",
+      payrollWarnMinHourly: "시급이 최저임금(NT${min})보다 낮아요.",
+      payrollWarnMinMonthly: "월급이 최저임금(NT${min})보다 낮아요.",
+      payrollWarnNoRate: "시급을 적어야 계산돼요.",
+      payrollWarnUnconfirmed: "초과 시간을 확인하지 않은 날이 {n}일 있어요(노란 칸).",
+      payrollDaysLine: "출근 {a} + ★{b}일 · 근무 {h}시간 · 초과 {ot}시간",
+      payrollUnsaved: "● 저장 안 됨",
+      payrollSaved: "저장했어요.",
+      payrollSaveFailed: "저장하지 못했어요.",
+      payrollNewStaffName: "직원 이름",
+      payrollBadTime: "빨간 칸의 시각을 고쳐 주세요(예: 09:05).",
       accountsTabHint:
         "홈페이지에서 가입한 계정 목록이에요. 손님으로 가입한 사람을 직원이나 사장으로 바꾸면, 그 사람이 홈페이지에 로그인했을 때 \"관리자 페이지\" 버튼이 생기고 관리자 화면에 들어올 수 있어요. 등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.",
       accountSearchPlaceholder: "이름 또는 이메일로 검색",
@@ -2411,6 +2465,60 @@
       paymentSavedMsg: "已儲存",
       tabVip: "會員(VIP)",
       tabAccounts: "帳號",
+      tabPayroll: "💰 薪資",
+      payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。加班時數只是建議 — 要確認（✓）或修改才算確定。",
+      payrollMonth: "月份",
+      payrollAddStaff: "+ 員工",
+      payrollStaffName: "姓名",
+      payrollHourly: "時薪制",
+      payrollMonthly: "月薪制",
+      payrollMonthlySalary: "月薪",
+      payrollHourlyRate: "時薪",
+      payrollSaveStaff: "儲存員工資料",
+      payrollInactive: "已離職",
+      payrollConfirmAll: "✓ 全部加班確認",
+      payrollSaveCard: "儲存考勤卡",
+      payrollRulesTitle: "加班計算規則",
+      payrollAmEnd: "上午下班",
+      payrollPmEnd: "下午下班",
+      payrollThreshold: "超過幾分鐘算 0.5 小時",
+      payrollStep: "之後每幾分鐘加 0.5 小時",
+      payrollSaveRules: "儲存規則",
+      payrollLoadFailed: "無法載入薪資資料。",
+      payrollMonthTotal: "本月考勤卡 {n} 人 · 合計 NT${total}",
+      payrollNoCards: "本月還沒有輸入考勤卡。請點員工後輸入。",
+      payrollNoStaff: "還沒有員工。請先按「+ 員工」新增。",
+      payrollDiscard: "有尚未儲存的考勤卡，要放棄嗎？",
+      payrollWeekdays: "日,一,二,三,四,五,六",
+      payrollDay: "日期",
+      payrollStarHint: "★ 卡（超過每週 5 天的出勤日）",
+      payrollAmIn: "上午上班",
+      payrollAmOut: "上午下班",
+      payrollPmIn: "下午上班",
+      payrollPmOut: "下午下班",
+      payrollOtIn: "加班上班",
+      payrollOtOut: "加班下班",
+      payrollOt: "加班(小時)",
+      payrollAmShort: "上午",
+      payrollPmShort: "下午",
+      payrollMinShort: "分",
+      payrollSuggested: "建議",
+      payrollConfirmOne: "確認",
+      payrollLineRegular: "出勤",
+      payrollLineSalary: "月薪",
+      payrollLineStar: "★ 卡出勤",
+      payrollLineOvertime: "加班",
+      payrollTotal: "合計",
+      payrollWarnMinHourly: "時薪低於基本工資（NT${min}）。",
+      payrollWarnMinMonthly: "月薪低於基本工資（NT${min}）。",
+      payrollWarnNoRate: "需要填寫時薪才能計算。",
+      payrollWarnUnconfirmed: "有 {n} 天的加班時數尚未確認（黃色格）。",
+      payrollDaysLine: "出勤 {a} + ★{b} 天 · 工時 {h} 小時 · 加班 {ot} 小時",
+      payrollUnsaved: "● 尚未儲存",
+      payrollSaved: "已儲存。",
+      payrollSaveFailed: "儲存失敗。",
+      payrollNewStaffName: "員工姓名",
+      payrollBadTime: "請修正紅框的時間（例：09:05）。",
       accountsTabHint:
         "這裡是從官網註冊的帳號。把顧客改成員工或負責人後，那個人在官網登入時就會看到「管理後台」按鈕，並且可以進入管理畫面。降級後權限也會立刻收回，不用等他重新登入。",
       accountSearchPlaceholder: "以姓名或信箱搜尋",
@@ -3680,7 +3788,7 @@
   // 정산 추이처럼 전 데이터를 읽어오는 건 직원은 못 보게 해줘"). 날짜를
   // 못 박는 일은 서버가 한다(GET /api/settlements) — 화면에서 날짜 칸을
   // 감추는 것만으로는 막은 것이 아니다.
-  const OWNER_ONLY_TABS = new Set(["vip", "accounts"]);
+  const OWNER_ONLY_TABS = new Set(["vip", "accounts", "payroll"]);
 
   // 주소의 #탭이름 으로 탭을 못 박을 수 있다.
   //
@@ -3710,6 +3818,7 @@
       if (btn.dataset.tab === "reservations") loadReservations();
       if (btn.dataset.tab === "vip") loadVipCards();
       if (btn.dataset.tab === "accounts") loadAccounts();
+      if (btn.dataset.tab === "payroll") loadPayroll();
       // 설정 > 인쇄의 「프로필별 터치 수」 — 들어올 때마다 새로 센다(보내지 않은 것도 먼저 보낸다).
       if (btn.dataset.tab === "settings") flushPadTouches().then(reportPadSeen).then(() => Promise.all([loadPadTouches(), loadPadDevices()]));
       // 결제 탭(item 22) — 배치도(zones)는 "테이블 / QR 코드" 탭에서만
@@ -12920,6 +13029,329 @@
   // (src/routes/users.js) — 그렇게 되면 등급을 되돌려줄 사람이 아무도
   // 없어지기 때문이다.
   let accountsCache = [];
+
+  // ---------- 직원 급여 (2026-10-03, src/payroll.js) ----------
+  //
+  // 사장님: "직원들 월급 계산을 하고 싶은데 시급제, 월급제 이런 게 있고 초과수당이면
+  // 그걸 계산해서 … 별이 없는 건 주5일까지만 찍고 별부터는 주5일이 지난 것만 넣어."
+  //
+  // 카드 두 장(별 없는 카드 + ★ 카드)을 한 표로 넣는다 — 날짜가 행, 오전·오후·연장
+  // 출퇴근이 열. 계산은 서버 한 곳(POST /api/payroll/preview)이 한다. 초과 시간은
+  // 「25분 넘기면 0.5」로 **제안만** 하고, 사장님이 ✓ 하거나 −/+ 로 고쳐야 확정이다
+  // ("확정짓지 말고 사장이 한 번 더 확인하는 걸로").
+  const PAYROLL_SLOTS = ["am_in", "am_out", "pm_in", "pm_out", "ot_in", "ot_out"];
+  const payroll = { month: null, staff: [], current: null, days: {}, result: null, dirty: false, seq: 0 };
+  const payrollThisMonth = () => {
+    const d = new Date(Date.now() + 8 * 3600000);
+    return d.toISOString().slice(0, 7);
+  };
+  /** 「0911」「9:11」「9.11」 → 「09:11」. 못 읽으면 null, 빈칸은 "". */
+  function payrollNormTime(v) {
+    const s = String(v || "").trim();
+    if (!s) return "";
+    let m = /^(\d{1,2})[:.\s](\d{2})$/.exec(s) || /^(\d{1,2})(\d{2})$/.exec(s);
+    if (!m) return null;
+    const h = Number(m[1]);
+    const mi = Number(m[2]);
+    if (h > 23 || mi > 59) return null;
+    return `${String(h).padStart(2, "0")}:${String(mi).padStart(2, "0")}`;
+  }
+  async function loadPayroll() {
+    const monthEl = $("#payrollMonth");
+    if (!monthEl) return;
+    if (!monthEl.value) monthEl.value = payrollThisMonth();
+    payroll.month = monthEl.value;
+    try {
+      const [st, rules] = await Promise.all([
+        fetch("/api/payroll/staff").then((r) => r.json()),
+        fetch("/api/payroll/status").then((r) => r.json()),
+      ]);
+      payroll.staff = st.staff || [];
+      const ru = rules.rules || {};
+      if ($("#payrollAmEnd")) $("#payrollAmEnd").value = ru.am_end || "14:00";
+      if ($("#payrollPmEnd")) $("#payrollPmEnd").value = ru.pm_end || "21:00";
+      if ($("#payrollThreshold")) $("#payrollThreshold").value = ru.ot_threshold_min || 25;
+      if ($("#payrollStep")) $("#payrollStep").value = ru.ot_step_min || 30;
+    } catch (e) {
+      $("#payrollSummary").textContent = T("payrollLoadFailed");
+      return;
+    }
+    await loadPayrollSummary();
+    if (payroll.current && payroll.staff.some((s) => s.id === payroll.current.id)) await openPayrollCard(payroll.current.id);
+  }
+  async function loadPayrollSummary() {
+    let sum = { rows: [], total: 0 };
+    try {
+      sum = await (await fetch(`/api/payroll/summary?month=${payroll.month}`)).json();
+    } catch (e) {}
+    const totals = new Map((sum.rows || []).map((r) => [r.staff.id, r]));
+    $("#payrollStaffChips").innerHTML = payroll.staff
+      .map((s) => {
+        const r = totals.get(s.id);
+        return `<button type="button" data-payroll-staff="${escapeHtml(s.id)}" class="${payroll.current && payroll.current.id === s.id ? "active" : ""}${s.active ? "" : " is-inactive"}">${escapeHtml(s.name)}${r && r.has_card ? `<small>NT$${money(r.total)}${r.unconfirmed_days ? " ⚠" : ""}</small>` : ""}</button>`;
+      })
+      .join("");
+    $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => (b.onclick = () => openPayrollCard(b.dataset.payrollStaff)));
+    const withCard = (sum.rows || []).filter((r) => r.has_card);
+    $("#payrollSummary").innerHTML = payroll.staff.length
+      ? withCard.length
+        ? escapeHtml(T("payrollMonthTotal").replace("{n}", withCard.length).replace("{total}", money(sum.total || 0)))
+        : escapeHtml(T("payrollNoCards"))
+      : escapeHtml(T("payrollNoStaff"));
+  }
+  async function openPayrollCard(staffId) {
+    if (payroll.dirty && payroll.current && payroll.current.id !== staffId && !(await showConfirm(T("payrollDiscard")))) return;
+    const res = await fetch(`/api/payroll/card?staff=${encodeURIComponent(staffId)}&month=${payroll.month}`);
+    if (!res.ok) return;
+    const d = await res.json();
+    payroll.current = d.staff;
+    payroll.days = JSON.parse(JSON.stringify(d.card.days || {}));
+    payroll.result = d.result;
+    payroll.dirty = false;
+    $("#payrollEditor").hidden = false;
+    $("#payrollStaffName").value = d.staff.name;
+    $("#payrollPayType").value = d.staff.pay_type;
+    $("#payrollMonthlySalary").value = d.staff.monthly_salary ?? "";
+    $("#payrollHourlyRate").value = d.staff.hourly_rate ?? "";
+    $("#payrollStaffInactive").checked = !d.staff.active;
+    payrollSyncPayType();
+    $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => b.classList.toggle("active", b.dataset.payrollStaff === staffId));
+    renderPayrollGrid();
+    renderPayrollResult();
+  }
+  function payrollSyncPayType() {
+    const monthly = $("#payrollPayType").value === "monthly";
+    $(".payroll-salary-wrap").hidden = !monthly;
+  }
+  function renderPayrollGrid() {
+    const [yy, mm] = payroll.month.split("-").map(Number);
+    const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+    const wd = T("payrollWeekdays").split(",");
+    const head = `<tr><th>${escapeHtml(T("payrollDay"))}</th><th title="${escapeHtml(T("payrollStarHint"))}">★</th>
+      <th>${escapeHtml(T("payrollAmIn"))}</th><th>${escapeHtml(T("payrollAmOut"))}</th>
+      <th>${escapeHtml(T("payrollPmIn"))}</th><th>${escapeHtml(T("payrollPmOut"))}</th>
+      <th>${escapeHtml(T("payrollOtIn"))}</th><th>${escapeHtml(T("payrollOtOut"))}</th>
+      <th>${escapeHtml(T("payrollOt"))}</th></tr>`;
+    const rows = [];
+    for (let i = 1; i <= dim; i++) {
+      const d = payroll.days[String(i)] || {};
+      const dow = new Date(Date.UTC(yy, mm - 1, i)).getUTCDay();
+      rows.push(`<tr data-day="${i}" class="${d.star ? "is-star" : ""}${dow === 0 || dow === 6 ? " is-weekend" : ""}">
+        <td class="pg-day">${i}<small>${escapeHtml(wd[dow] || "")}</small></td>
+        <td><input type="checkbox" class="pg-star" ${d.star ? "checked" : ""} /></td>
+        ${PAYROLL_SLOTS.map((s) => `<td><input class="pg-t" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="--:--" value="${escapeHtml(d[s] || "")}" /></td>`).join("")}
+        <td class="pg-ot"></td>
+      </tr>`);
+    }
+    const grid = $("#payrollGrid");
+    grid.innerHTML = `<thead>${head}</thead><tbody>${rows.join("")}</tbody>`;
+    grid.querySelectorAll("input.pg-t").forEach((inp) => {
+      inp.onchange = () => {
+        const v = payrollNormTime(inp.value);
+        inp.classList.toggle("is-bad", v === null);
+        if (v === null) return;
+        inp.value = v;
+        const day = inp.closest("tr").dataset.day;
+        const d = (payroll.days[day] = payroll.days[day] || {});
+        if (v) d[inp.dataset.slot] = v;
+        else delete d[inp.dataset.slot];
+        // 시각이 바뀌면 그날 초과 시간은 다시 제안부터 — 확인도 다시 받는다.
+        delete d.ot_hours;
+        delete d.ot_confirmed;
+        payrollChanged();
+      };
+    });
+    grid.querySelectorAll("input.pg-star").forEach((cb) => {
+      cb.onchange = () => {
+        const tr = cb.closest("tr");
+        const d = (payroll.days[tr.dataset.day] = payroll.days[tr.dataset.day] || {});
+        if (cb.checked) d.star = true;
+        else delete d.star;
+        tr.classList.toggle("is-star", cb.checked);
+        payrollChanged();
+      };
+    });
+    renderPayrollOtCells();
+  }
+  function renderPayrollOtCells() {
+    const rows = (payroll.result && payroll.result.rows) || [];
+    $$("#payrollGrid tbody tr").forEach((tr) => {
+      const r = rows.find((x) => String(x.day) === tr.dataset.day);
+      const cell = tr.querySelector(".pg-ot");
+      if (!r || !r.worked) {
+        cell.innerHTML = "";
+        tr.classList.remove("is-check");
+        return;
+      }
+      const needs = (r.suggested_ot > 0 || r.ot_hours > 0 || r.borderline) && !r.ot_confirmed;
+      tr.classList.toggle("is-check", needs);
+      const why = (r.notes || [])
+        .map((n) => `${T(n.slot === "am" ? "payrollAmShort" : "payrollPmShort")} +${n.over_min}${T("payrollMinShort")}`)
+        .concat(r.extra_hours ? [`${T("payrollOtIn")} ${r.extra_hours}h`] : [])
+        .join(" · ");
+      const suggestedNote = r.ot_hours !== r.suggested_ot ? ` (${T("payrollSuggested")} ${r.suggested_ot})` : "";
+      cell.innerHTML = `<button type="button" class="pg-minus">−</button> <b>${r.ot_hours}</b> <button type="button" class="pg-plus">+</button>
+        <button type="button" class="pg-ok${r.ot_confirmed ? " is-on" : ""}" title="${escapeHtml(T("payrollConfirmOne"))}">✓</button>
+        ${why || suggestedNote ? `<small>${escapeHtml(why + suggestedNote)}</small>` : ""}`;
+      const d = () => (payroll.days[tr.dataset.day] = payroll.days[tr.dataset.day] || {});
+      const step = (delta) => {
+        const cur = d().ot_hours != null ? Number(d().ot_hours) : r.ot_hours;
+        d().ot_hours = Math.max(0, Math.round((cur + delta) * 2) / 2);
+        d().ot_confirmed = true; // 손으로 고쳤으면 본 것이다
+        payrollChanged();
+      };
+      cell.querySelector(".pg-minus").onclick = () => step(-0.5);
+      cell.querySelector(".pg-plus").onclick = () => step(0.5);
+      cell.querySelector(".pg-ok").onclick = () => {
+        if (d().ot_confirmed) delete d().ot_confirmed;
+        else d().ot_confirmed = true;
+        payrollChanged();
+      };
+    });
+  }
+  function renderPayrollResult() {
+    const r = payroll.result;
+    const box = $("#payrollResult");
+    if (!r || !box) return;
+    const lineName = { regular: T("payrollLineRegular"), salary: T("payrollLineSalary"), star: T("payrollLineStar"), overtime: T("payrollLineOvertime") };
+    const warn = (r.warnings || []).map((w) =>
+      w.key === "below_min_hourly"
+        ? T("payrollWarnMinHourly").replace("{min}", w.min)
+        : w.key === "below_min_monthly"
+          ? T("payrollWarnMinMonthly").replace("{min}", money(w.min))
+          : T("payrollWarnNoRate")
+    );
+    if (r.unconfirmed_days) warn.unshift(T("payrollWarnUnconfirmed").replace("{n}", r.unconfirmed_days));
+    box.innerHTML = `
+      <div class="pr-days">${escapeHtml(T("payrollDaysLine").replace("{a}", r.normal_days).replace("{b}", r.star_days).replace("{h}", r.normal_hours + r.star_hours).replace("{ot}", r.ot_hours))}</div>
+      ${warn.map((w) => `<div class="pr-warn">⚠ ${escapeHtml(w)}</div>`).join("")}
+      ${(r.lines || [])
+        .map(
+          (l) => `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
+        )
+        .join("")}
+      <div class="pr-line pr-total"><span>${escapeHtml(T("payrollTotal"))}</span><span>NT$${money(r.total)}</span></div>`;
+  }
+  function payrollSetStatus() {
+    const el = $("#payrollStatus");
+    if (!el) return;
+    el.textContent = payroll.dirty ? T("payrollUnsaved") : "";
+    el.classList.toggle("is-dirty", payroll.dirty);
+  }
+  let payrollPreviewTimer = null;
+  function payrollChanged() {
+    payroll.dirty = true;
+    payrollSetStatus();
+    clearTimeout(payrollPreviewTimer);
+    payrollPreviewTimer = setTimeout(payrollPreview, 250);
+  }
+  async function payrollPreview() {
+    if (!payroll.current) return;
+    const seq = ++payroll.seq;
+    const res = await fetch("/api/payroll/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days }),
+    });
+    if (!res.ok || seq !== payroll.seq) return;
+    payroll.result = (await res.json()).result;
+    renderPayrollOtCells();
+    renderPayrollResult();
+  }
+  if ($("#payrollMonth"))
+    $("#payrollMonth").onchange = async () => {
+      if (payroll.dirty && !(await showConfirm(T("payrollDiscard")))) {
+        $("#payrollMonth").value = payroll.month;
+        return;
+      }
+      payroll.dirty = false;
+      payrollSetStatus();
+      loadPayroll();
+    };
+  if ($("#payrollPayType")) $("#payrollPayType").onchange = payrollSyncPayType;
+  if ($("#payrollNewName"))
+    $("#payrollNewName").onkeydown = (e) => {
+      if (e.key === "Enter") $("#payrollAddStaff").click();
+    };
+  if ($("#payrollAddStaff"))
+    $("#payrollAddStaff").onclick = async () => {
+      // 이름 칸을 먼저 연다 — 앱(WebView)에서는 window.prompt 가 안 뜰 수 있다.
+      const nameEl = $("#payrollNewName");
+      if (nameEl.hidden) {
+        nameEl.hidden = false;
+        nameEl.focus();
+        return;
+      }
+      const name = nameEl.value.trim();
+      if (!name) return nameEl.focus();
+      nameEl.value = "";
+      nameEl.hidden = true;
+      const res = await fetch("/api/payroll/staff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, pay_type: "hourly" }) });
+      if (!res.ok) return;
+      const { staff } = await res.json();
+      payroll.staff.push(staff);
+      await loadPayrollSummary();
+      await openPayrollCard(staff.id);
+    };
+  if ($("#payrollSaveStaff"))
+    $("#payrollSaveStaff").onclick = async () => {
+      if (!payroll.current) return;
+      const body = {
+        name: $("#payrollStaffName").value,
+        pay_type: $("#payrollPayType").value,
+        monthly_salary: $("#payrollMonthlySalary").value === "" ? null : Number($("#payrollMonthlySalary").value),
+        hourly_rate: $("#payrollHourlyRate").value === "" ? null : Number($("#payrollHourlyRate").value),
+        active: !$("#payrollStaffInactive").checked,
+      };
+      const res = await fetch(`/api/payroll/staff/${encodeURIComponent(payroll.current.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) return showAlert(T("payrollSaveFailed"));
+      const { staff } = await res.json();
+      payroll.current = staff;
+      payroll.staff = payroll.staff.map((s) => (s.id === staff.id ? staff : s));
+      await loadPayrollSummary();
+      payrollPreview();
+    };
+  if ($("#payrollConfirmAll"))
+    $("#payrollConfirmAll").onclick = () => {
+      for (const r of (payroll.result && payroll.result.rows) || []) {
+        if (!r.worked) continue;
+        const d = (payroll.days[String(r.day)] = payroll.days[String(r.day)] || {});
+        d.ot_confirmed = true;
+      }
+      payrollChanged();
+    };
+  if ($("#payrollSaveCard"))
+    $("#payrollSaveCard").onclick = async () => {
+      if (!payroll.current) return;
+      if ($("#payrollGrid .pg-t.is-bad")) return showAlert(T("payrollBadTime"));
+      const res = await fetch("/api/payroll/card", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days }),
+      });
+      if (!res.ok) return showAlert(T("payrollSaveFailed"));
+      const d = await res.json();
+      payroll.days = d.card.days;
+      payroll.result = d.result;
+      payroll.dirty = false;
+      payrollSetStatus();
+      $("#payrollStatus").textContent = T("payrollSaved");
+      renderPayrollOtCells();
+      renderPayrollResult();
+      loadPayrollSummary();
+    };
+  if ($("#payrollSaveRules"))
+    $("#payrollSaveRules").onclick = async () => {
+      const body = {
+        am_end: $("#payrollAmEnd").value,
+        pm_end: $("#payrollPmEnd").value,
+        ot_threshold_min: Number($("#payrollThreshold").value),
+        ot_step_min: Number($("#payrollStep").value),
+      };
+      const res = await fetch("/api/payroll/rules", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) return showAlert(T("payrollSaveFailed"));
+      payrollPreview();
+    };
 
   async function loadAccounts() {
     const wrap = $("#accountsList");

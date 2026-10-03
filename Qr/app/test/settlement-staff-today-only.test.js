@@ -159,7 +159,9 @@ const order = (date, total) => ({
   const js = fs.readFileSync(path.join(__dirname, "..", "public", "js", "admin.js"), "utf8");
   const tabBtn = html.match(/<button[^>]*data-tab="settlement"[^>]*>/);
   check("결산 탭 버튼이 owner-only 가 아님", tabBtn && !/owner-only/.test(tabBtn[0]), tabBtn && tabBtn[0]);
-  check("OWNER_ONLY_TABS 에 settlement 없음", /OWNER_ONLY_TABS = new Set\(\["vip", "accounts"\]\)/.test(js));
+  // 글자 그대로가 아니라 「settlement 가 없다」를 잰다 — 사장님 전용 탭은 늘어난다(급여, 2026-10-03).
+  const ownerTabs = (/OWNER_ONLY_TABS = new Set\((\[[^\]]*\])\)/.exec(js) || [])[1] || "";
+  check("OWNER_ONLY_TABS 에 settlement 없음", !!ownerTabs && !/"settlement"/.test(ownerTabs) && /"vip"/.test(ownerTabs), ownerTabs);
   check("날짜 고르는 칸은 owner-only", /class="settlement-date-label owner-only"/.test(html));
   check("지난 정산 기록 사이드바는 owner-only", /class="settlement-nav owner-only"/.test(html));
   check("정산 추이 카드는 owner-only", /settlement-history-card owner-only/.test(html));
