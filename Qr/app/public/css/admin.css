@@ -2683,6 +2683,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .pr-btn:hover { border-color: #cfc6b6; background: #fbf8f2; }
 .pr-btn:active { transform: translateY(1px); }
 .pr-btn-ghost { background: transparent; }
+.pr-btn-danger { color: var(--pr-red); }
+.pr-btn-danger:hover { background: rgba(181, 35, 44, 0.06); border-color: rgba(181, 35, 44, 0.3); }
 .pr-btn-accent { background: #eef4fb; border-color: #c8dbef; color: var(--pr-blue); }
 .pr-btn-accent:hover { background: #e2edf9; border-color: #a9c7e6; }
 .pr-btn-primary { background: var(--navy); border-color: var(--navy); color: #fff; height: 46px; font-size: 16px; }

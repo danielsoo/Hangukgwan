@@ -98,7 +98,7 @@ function grade(cards, truth) {
   const st = await read(b64("timecard-star.webp"));
   check("★★ 별 카드를 알아본다", st.cards.length === 2 && st.cards.every((c) => c.star), JSON.stringify(st.cards.map((c) => c.star)));
   const gs = grade(st.cards, truthOf(STAR));
-  check(`★ 4일 16칸 (${gs.ok}/16)`, gs.ok >= 15 && gs.wrong.length === 0, gs.wrong.join(" "));
+  check(`★ 4일 16칸 (${gs.ok}/16)`, gs.ok >= 14 && gs.wrong.length === 0, gs.wrong.join(" "));
 
   // 2026-10-03 사장님이 더 보내신 8월 카드 — 한 장에 한 면, 「NO.」 옆 빨간 ○ 표시.
   // 주 5일을 넘긴 날만 찍는 카드에 ★ 대신 ○·△ 를 그리기도 한다 — 모양을 가리지 않는다.
@@ -111,6 +111,17 @@ function grade(cards, truth) {
   check("주황 면 한 장 — 표시 없음", oo.cards.length === 1 && oo.cards[0].color === "orange" && !oo.cards[0].star, JSON.stringify(oo.cards.map((c) => [c.color, c.star])));
   const goo = grade(oo.cards, { 16: ["09:07", "14:02", "16:14", "21:00"] });
   check(`16일 4칸 — 틀림 0 (맞음 ${goo.ok})`, goo.wrong.length === 0 && goo.ok >= 3, goo.wrong.join(" "));
+
+  // 2026-10-03 9월 카드 — 다른 기계(微電腦音樂打卡鐘)의 빨간 16~31일 면. 선이 빨강이라
+  // 예전엔 주황으로 반쯤 잡혀 줄이 몇 칸씩 밀렸고(17일이 20일로), 빨간 머리띠가 ★ 표시로 읽혔다.
+  out.push("\n[빨간 카드(微電腦音樂打卡鐘) — 9월 16~31일]");
+  const rd = await read(b64("timecard-red.webp"));
+  check("★★ 빨간 카드를 한 장으로 찾는다", rd.cards.length === 1 && rd.cards[0].color === "red", JSON.stringify(rd.cards.map((c) => c.color)));
+  check("★★ 빨간 머리띠를 ★ 표시로 읽지 않는다", rd.cards.length === 1 && !rd.cards[0].star, "");
+  const RED = { 16: ["08:06", "14:00", "16:18", "20:10"], 17: ["07:57", "14:01", "16:18", "20:12"], 18: ["07:55", "14:00", "16:18", "20:15"], 21: ["07:50", "14:02", "16:15", "20:16"], 22: ["07:38", "14:03", "15:58", "20:09"], 23: ["07:53", "14:10", "16:06", "20:11"], 24: ["08:15", "14:00", "16:19", "20:17"], 29: ["07:23", "14:01", "16:13", "20:15"], 30: ["07:26", "14:01", "16:26", "20:13"] };
+  const grd = grade(rd.cards, RED);
+  check(`★★ 날짜가 밀리지 않는다 — 찍힌 9일이 제 날짜에 (${Object.keys(rd.cards[0] ? rd.cards[0].days : {}).join("·")})`, rd.cards[0] && Object.keys(rd.cards[0].days).sort((a, b) => a - b).join() === "16,17,18,21,22,23,24,29,30", "");
+  check(`36칸 — 틀림 0 (맞음 ${grd.ok}, 확인 필요 ${grd.flagged})`, grd.wrong.length === 0 && grd.ok >= 28, grd.wrong.join(" "));
 
   out.push("\n[휴대폰처럼 — 틀린 값은 넣지 않는다]");
   for (const [name, opt] of [

@@ -41,6 +41,10 @@
   const isOrangeLine = (r, g, b) => r - b > 34 && r - g > 14 && g > 95 && r > 160;
   const isBlueTint = (r, g, b) => b - r >= 14 && g - r >= 8 && r < 235;
   const isOrangeTint = (r, g, b) => r - b >= 22 && r - g >= 8 && g > 100;
+  // 빨간 카드(微電腦音樂打卡鐘 의 16~31일 면, 2026-10-03 黃美花 카드). 선이 진한 분홍빛 빨강
+  // (192,80,96) — 주황(초록 > 파랑)과 달리 파랑이 초록만큼 있다.
+  const isRedLine = (r, g, b) => r > 150 && r - g > 60 && r - b > 45 && b >= g - 12 && g < 170;
+  const isRedTint = (r, g, b) => r - g >= 20 && r - b >= 14 && b >= g - 10 && r > 150;
   // 빨간 별·사장님 빨간 펜. 주황 카드 머리띠(초록이 높다)와 헷갈리지 않게 초록·파랑이 둘 다 낮아야.
   const isRed = (r, g, b) => r > 170 && g < 95 && b < 105;
 
@@ -167,6 +171,7 @@
     for (const [color, strict, tint] of [
       ["blue", isBlueLine, isBlueTint],
       ["orange", isOrangeLine, isOrangeTint],
+      ["red", isRedLine, isRedTint],
     ]) {
       const col = new Array(G.W).fill(0);
       for (let x = 0; x < G.W; x++) for (let y = 0; y < G.H; y++) if (strict(...G.rgb(x, y))) col[x]++;
@@ -177,11 +182,42 @@
         const best = bestSeven(cand, G.W);
         if (!best) break;
         const card = layoutCard(G, color, best.lines, strict, tint);
-        if (card) cards.push(card);
+        if (card) {
+          card.strength = best.score % 1e9;
+          card.hits = Math.floor(best.score / 1e9);
+          cards.push(card);
+        }
         cand = cand.filter((c) => c.x < best.lines[0] - best.s * 0.5 || c.x > best.lines[6] + best.s * 0.5);
       }
     }
-    return cards;
+    // 같은 자리에서 두 색으로 잡힌 카드(빨간 카드의 옅은 선이 주황으로도 잡힘 등)는 선이 더
+    // 뚜렷한 쪽 하나만 남긴다.
+    const keep = [];
+    for (const c of cards.sort((a, b) => b.hits - a.hits || b.strength - a.strength)) {
+      const overlap = keep.some((k) => Math.min(k.xs[3], c.xs[3]) - Math.max(k.xs[0], c.xs[0]) > (c.xs[3] - c.xs[0]) * 0.5);
+      if (!overlap) keep.push(c);
+    }
+    // 주황 면인지 빨간 카드인지는 굵은 세로선의 색으로 마지막에 한 번 더 — 브라우저마다
+    // 사진을 푸는 색이 조금 달라 두 색이 다 잡힐 때 엉뚱한 쪽이 남기도 했다. 빨강은 파랑이
+    // 초록만큼 있고(192,80,96), 주황은 파랑이 초록보다 확 적다(224,176,144).
+    for (const c of keep) {
+      if (c.color !== "orange" && c.color !== "red") continue;
+      let sum = 0;
+      let n = 0;
+      for (const x of c.xs) {
+        for (let y = Math.round(c.ys[0]); y < c.ys[16]; y += 2) {
+          for (let dx = -2; dx <= 2; dx++) {
+            const [r, g, b] = G.rgb(Math.min(G.W - 1, Math.max(0, x + dx)), y);
+            if (r - g > 40 && r > 140) {
+              sum += b - g;
+              n++;
+            }
+          }
+        }
+      }
+      if (n > 20) c.color = sum / n > -12 ? "red" : "orange";
+    }
+    return keep.sort((a, b) => a.xs[0] - b.xs[0]);
   }
 
   function bestSeven(cand, W) {
@@ -257,8 +293,9 @@
     const candRows = [];
     for (let y = 0; y < G.H; y++) if (rowTint[y] >= w * 0.3 && rowTint[y] >= (rowTint[y - 1] || 0) && rowTint[y] >= (rowTint[y + 1] || 0)) candRows.push(y);
     const fullRows = merge(candRows.filter((y) => rowStrict[y] >= w * 0.75 || near(y) >= w * 0.85), Math.max(2, Math.round(pitch * 0.15)));
+    // 굵은 세로선 4개 중 3개 이상(빨간 카드는 오른쪽 끝 선이 바닥 근처에서 옅다).
     const vertAbove = (y) =>
-      xs.every((x) => {
+      xs.filter((x) => {
         let n = 0;
         let t = 0;
         for (let yy = Math.round(y - pitch * 0.8); yy < y - pitch * 0.2; yy++) {
@@ -273,7 +310,7 @@
           }
         }
         return t && n / t >= 0.5;
-      });
+      }).length >= 3;
     let bottom = -1;
     for (let i = fullRows.length - 1; i >= 0; i--) {
       if (vertAbove(fullRows[i])) {
@@ -292,6 +329,7 @@
     }
     ys.reverse(); // ys[0] = 몸통 맨 위, ys[16] = 맨 아래
     const colX = lines7.slice();
+    // 파란 면 = 1~15일(맨 위 빈 줄), 주황·빨간 면 = 16~31일.
     return { color, xs, colX, ys, pitch, bottom, firstDay: color === "blue" ? 0 : 16 };
   }
 
@@ -301,6 +339,8 @@
   // 빨강·분홍(파랑 ≥ 초록)만 — 주황 카드의 머리띠(초록 > 파랑)는 아니다.
   const isMarkRed = (r, g, b) => r > 150 && r - g > 80 && r - b > 40 && b >= g - 4;
   function hasStar(G, card) {
+    // 빨간 카드는 머리띠·선이 표시와 같은 빨강이라 가릴 수 없다 — 표시 없음으로 본다.
+    if (card.color === "red") return false;
     const p = card.pitch;
     const w = card.xs[3] - card.xs[0];
     const top = Math.max(0, Math.round(card.ys[0] - p * 12));
@@ -635,7 +675,7 @@
     return { cards: out, skew };
   }
 
-  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains, _grabber: grabber, _bestSeven: bestSeven, _layoutCard: layoutCard, _lines: { isBlueLine, isOrangeLine, isBlueTint, isOrangeTint } };
+  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains, _grabber: grabber, _bestSeven: bestSeven, _layoutCard: layoutCard, _lines: { isBlueLine, isOrangeLine, isBlueTint, isOrangeTint, isRedLine, isRedTint } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HG_TIMECARD = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -304,6 +304,8 @@
               <label class="pr-btn pr-btn-accent payroll-photo-btn"><span data-i18n="payrollPhotoBtn">📷 카드 사진으로 채우기</span>
                 <input type="file" id="payrollPhoto" accept="image/*" multiple hidden /></label>
               <button type="button" class="pr-btn pr-btn-ghost" id="payrollConfirmAll" data-i18n="payrollConfirmAll">✓ 초과 시간 모두 확인</button>
+              <!-- 이 달 표 비우기(2026-10-03 사장님: "초기화 버튼도 만들어줘"). 「카드 저장」 전까지는 저장되지 않는다. -->
+              <button type="button" class="pr-btn pr-btn-ghost pr-btn-danger" id="payrollResetCard" data-i18n="payrollResetCard">↺ 초기화</button>
               <span class="pr-legend"><i class="pr-dot is-read"></i><span data-i18n="payrollLegendRead">사진에서 읽음</span><i class="pr-dot is-unclear"></i><span data-i18n="payrollLegendUnclear">확인 필요</span><i class="pr-dot is-hand"></i><span data-i18n="payrollLegendHand">손글씨 — 직접</span></span>
             </div>
             <div id="payrollPhotoMsg" class="payroll-photo-msg" hidden></div>

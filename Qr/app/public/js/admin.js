@@ -1511,6 +1511,8 @@
       payrollPhotoUnclear: "확실하지 않음 — 카드와 맞춰 보세요",
       payrollPhotoNoCard: "사진 {i}에서 카드 표를 찾지 못했어요 — 카드를 반듯하게, 화면에 꽉 차게 다시 찍어 주세요(스캔이면 가장 좋아요).",
       payrollPhotoBad: "사진 {i}을 열지 못했어요.",
+      payrollPhotoClash: "⚠ 같은 날짜({days})에 사진마다 다른 시각이 찍혀 있어요 — 다른 직원의 카드가 섞이지 않았는지 보세요. 섞였으면 「↺ 초기화」 뒤 그 직원 카드만 다시 올려 주세요.",
+      payrollPhotoWho: "카드에 적힌 이름·달은 읽지 않아요 — 지금 「{name} · {month}」에 넣었어요. 맞는지 확인하세요.",
       payrollDayShort: "일",
       payrollSaveCard: "카드 저장",
       payrollRulesTitle: "초과 시간 규칙",
@@ -1549,6 +1551,8 @@
       payrollChipHours: "근무 {n}시간",
       payrollChipOt: "초과 {n}시간",
       payrollLegendRead: "사진에서 읽음",
+      payrollResetCard: "↺ 초기화",
+      payrollResetConfirm: "{name} · {month} 표를 모두 비울까요? (시각·★·초과 시간. 보너스는 그대로) 「카드 저장」을 눌러야 저장돼요.",
       payrollLegendUnclear: "확인 필요",
       payrollLegendHand: "손글씨 — 직접",
       payrollHelpTitle: "ⓘ 이렇게 써요",
@@ -2524,6 +2528,8 @@
       payrollPhotoUnclear: "不確定 — 請對照考勤卡",
       payrollPhotoNoCard: "照片 {i} 找不到考勤卡表格 — 請把考勤卡拍正、佔滿畫面再拍一次（掃描最好）。",
       payrollPhotoBad: "無法開啟照片 {i}。",
+      payrollPhotoClash: "⚠ 同一天（{days}）在不同照片上有不同的時間 — 請確認沒有混入其他員工的考勤卡。如有混入，請按「↺ 清空」後只上傳該員工的卡。",
+      payrollPhotoWho: "不會讀取卡上的姓名與月份 — 目前填入「{name} · {month}」，請確認是否正確。",
       payrollDayShort: "日",
       payrollSaveCard: "儲存考勤卡",
       payrollRulesTitle: "加班計算規則",
@@ -2562,6 +2568,8 @@
       payrollChipHours: "工時 {n} 小時",
       payrollChipOt: "加班 {n} 小時",
       payrollLegendRead: "照片讀取",
+      payrollResetCard: "↺ 清空",
+      payrollResetConfirm: "要清空 {name} · {month} 的表格嗎？（時間·★·加班。獎金不變）按「儲存考勤卡」才會儲存。",
       payrollLegendUnclear: "需確認",
       payrollLegendHand: "手寫 — 請填",
       payrollHelpTitle: "ⓘ 使用說明",
@@ -13426,7 +13434,7 @@
     pm_out: T("payrollPmOut"), ot_in: T("payrollOtIn"), ot_out: T("payrollOtOut"),
   });
   /** 읽은 카드 면 하나를 표에 얹는다. 돌려주는 값: 채운 날 수. */
-  function payrollApplyCard(card) {
+  function payrollApplyCard(card, batch) {
     const [yy, mm] = payroll.month.split("-").map(Number);
     const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
     const touched = new Set();
@@ -13435,6 +13443,10 @@
       const d = (payroll.days[day] = payroll.days[day] || {});
       for (const sl of PAYROLL_SLOTS) {
         if (!row[sl]) continue;
+        // 같은 번에 올린 다른 사진이 같은 날·같은 칸에 다른 시각을 넣었다 — 다른 사람 카드가
+        // 섞였을 수 있다(2026-10-03: 黃美花·黃美華 카드를 한 직원에 함께 올림).
+        if (batch && batch[`${day}|${sl}`] && batch[`${day}|${sl}`] !== row[sl]) batch.clash.add(Number(day));
+        if (batch) batch[`${day}|${sl}`] = row[sl];
         d[sl] = row[sl];
         payroll.read[`${day}|${sl}`] = true;
         delete payroll.hand[`${day}|${sl}`];
@@ -13471,6 +13483,7 @@
       }
       const msgs = [];
       let filled = 0;
+      const batch = { clash: new Set() };
       for (let k = 0; k < files.length; k++) {
         payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", k + 1).replace("{n}", files.length)]);
         // 화면이 「읽는 중」을 그릴 틈을 준다 — 읽기는 한두 초 화면을 붙잡는다.
@@ -13486,7 +13499,7 @@
           continue;
         }
         for (const card of cards) {
-          const n = payrollApplyCard(card);
+          const n = payrollApplyCard(card, batch);
           filled += n + card.handwritten.length;
           msgs.push(
             T("payrollPhotoOne")
@@ -13507,7 +13520,11 @@
           .join(", ");
         msgs.push(T("payrollPhotoHand").replace("{n}", handKeys.length).replace("{list}", list));
       }
+      if (batch.clash.size) {
+        msgs.push(T("payrollPhotoClash").replace("{days}", [...batch.clash].sort((a, b) => a - b).map((d) => `${d}${T("payrollDayShort")}`).join(", ")));
+      }
       if (filled) {
+        msgs.push(T("payrollPhotoWho").replace("{name}", payroll.current.name).replace("{month}", payroll.month));
         msgs.push(T("payrollPhotoCheck"));
         renderPayrollGrid();
         payrollChanged();
@@ -13592,6 +13609,21 @@
         const d = (payroll.days[String(r.day)] = payroll.days[String(r.day)] || {});
         d.ot_confirmed = true;
       }
+      payrollChanged();
+    };
+  // ↺ 초기화 — 이 달 표(시각·★·초과)와 사진 표시를 비운다. 보너스는 그대로.
+  // 2026-10-03 사장님: "초기화 버튼도 만들어줘" — 사진을 잘못 넣었을 때 처음부터 다시.
+  // 바로 저장하지 않는다: 「카드 저장」을 눌러야 서버에서도 지워진다(잘못 눌러도 새로고침하면 그대로).
+  if ($("#payrollResetCard"))
+    $("#payrollResetCard").onclick = async () => {
+      if (!payroll.current) return;
+      if (!(await showConfirm(T("payrollResetConfirm").replace("{name}", payroll.current.name).replace("{month}", payroll.month)))) return;
+      payroll.days = {};
+      payroll.unclear = {};
+      payroll.read = {};
+      payroll.hand = {};
+      $("#payrollPhotoMsg").hidden = true;
+      renderPayrollGrid();
       payrollChanged();
     };
   if ($("#payrollSaveCard"))

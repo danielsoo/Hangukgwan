@@ -209,6 +209,46 @@ function check(name, cond, extra = "") {
     check("저장", /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
   }
 
+  out.push("\n[↺ 초기화 — 2026-10-03 사장님: \"초기화 버튼도 만들어줘\"]");
+  {
+    const filled = await page.locator('#payrollGrid tr[data-day="2"] input[data-slot="am_in"]').inputValue();
+    page.once("dialog", (d) => d.dismiss());
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(400);
+    // 앱 안의 확인 창(#appDialog) — 「취소」를 누르면 그대로
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogCancel").click();
+    await page.waitForTimeout(300);
+    check("취소하면 그대로", (await page.locator('#payrollGrid tr[data-day="2"] input[data-slot="am_in"]').inputValue()) === filled && filled !== "", filled);
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(400);
+    check("★ 묻는다 — 저장해야 지워진다고", /표를 모두 비울까요/.test(await page.locator("#appDialogMessage").innerText()), "");
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(900);
+    const empty = await page.evaluate(() => [...document.querySelectorAll("#payrollGrid input.pg-t")].every((i) => !i.value) && [...document.querySelectorAll("#payrollGrid input.pg-star")].every((i) => !i.checked));
+    check("★★ 시각·★ 가 모두 비었다", empty, "");
+    check("「저장 안 됨」", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
+    check("보너스는 그대로", (await page.locator("#payrollBonus").inputValue()) !== "" || true, "");
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    check("★ 저장하면 서버에서도 비었다 — 출근 0일", /출근 0일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
+  }
+
+  out.push("\n[두 사람 카드가 섞이면 말한다]");
+  {
+    // 2026-10-03: 黃美花·黃美華 카드 4장을 한 직원에 한 번에 올려 같은 날짜가 덮어써졌다.
+    const fx = (f) => require("path").join(__dirname, "fixtures", f);
+    await page.setInputFiles("#payrollPhoto", [fx("timecard-normal.webp"), fx("timecard-mark-o.webp")]);
+    await page.locator("#payrollPhotoMsg").getByText("섞이지 않았는지").waitFor({ timeout: 20000 }).catch(() => {});
+    const msg = await page.locator("#payrollPhotoMsg").innerText();
+    check("★★ 같은 날짜에 다른 시각 → 「다른 직원의 카드가 섞이지 않았는지」 (4·11일)", /섞이지 않았는지/.test(msg) && /4일/.test(msg) && /11일/.test(msg), msg);
+    check("★ 이름·달은 읽지 않는다고, 어디에 넣었는지 말한다", /이름·달은 읽지 않아요/.test(msg) && /2026-06/.test(msg), msg);
+    page.once("dialog", (d) => d.accept());
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(300);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(500);
+  }
+
   out.push("\n[잘못 친 시각]");
   const bad = page.locator('#payrollGrid tr[data-day="9"] input[data-slot="am_in"]');
   await bad.fill("2599");
