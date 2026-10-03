@@ -281,6 +281,33 @@
              시간대가 있잖아 우리 영업 시간". 여기서 따로 적지 않는다. -->
         <p id="payrollHours" class="payroll-hours"></p>
         <div id="payrollSummary" class="payroll-summary"></div>
+        <!-- 한눈에 보기 — 이 달 직원 전체를 결산처럼(2026-10-03 사장님: "지금 보이는 직원들이랑 결산처럼
+             그래프, 한 번에 볼 수 있게 되었으면 좋겠는데"). 결산의 큰 숫자·막대·그래프 모양을 그대로 쓴다.
+             줄을 누르면 그 직원 카드가 아래에 열린다. -->
+        <div id="payrollOverview" class="payroll-overview" hidden>
+          <div class="stl-hero">
+            <div class="stl-hero-main">
+              <div class="stl-hero-label" id="prOvLabel">이 달 인건비</div>
+              <div class="stl-hero-value" id="prOvTotal">NT$0</div>
+              <div class="stl-hero-sub" id="prOvSub"></div>
+            </div>
+            <div class="stl-hero-side" id="prOvStats"></div>
+          </div>
+          <div class="settlement-charts-grid">
+            <div class="settlement-wide-card">
+              <h3 data-i18n="payrollOvByStaff">직원별 지급액</h3>
+              <div class="stl-bars pr-ov-bars" id="prOvBars"></div>
+            </div>
+            <div class="settlement-wide-card">
+              <h3 data-i18n="payrollOvTrend">최근 6개월 인건비</h3>
+              <div class="settlement-chart-wrap"><canvas id="payrollTrendChart"></canvas></div>
+            </div>
+          </div>
+          <div class="settlement-wide-card">
+            <h3 data-i18n="payrollOvTable">직원별 한눈에</h3>
+            <div class="pr-ov-table-wrap"><table class="pr-ov-table" id="prOvTable"></table></div>
+          </div>
+        </div>
       </div>
       <div id="payrollEditor" hidden>
         <div class="payroll-body">

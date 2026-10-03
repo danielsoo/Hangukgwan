@@ -1487,6 +1487,39 @@
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
+      payrollOvLabel: "{month} 인건비",
+      payrollOvSub: "카드 넣은 직원 {n}명 · 아래 줄을 누르면 그 직원 카드가 열려요",
+      payrollOvByStaff: "직원별 지급액",
+      payrollOvTrend: "최근 6개월 인건비",
+      payrollOvTable: "직원별 한눈에",
+      payrollOvHours: "근무 시간",
+      payrollOvOt: "초과",
+      payrollOvDeduct: "지각·조퇴 차감",
+      payrollOvBonus: "보너스",
+      payrollOvHoliday: "공휴일 근무",
+      payrollOvUnconfirmed: "확인 안 한 날",
+      payrollOvNoCard: "카드 없음",
+      payrollOvNone: "이 달 넣은 카드가 아직 없어요.",
+      payrollOvColStaff: "직원",
+      payrollOvColType: "방식",
+      payrollOvColDays: "출근(일)",
+      payrollOvColHours: "근무(h)",
+      payrollOvColOt: "초과(h)",
+      payrollOvColLate: "지각",
+      payrollOvColEarly: "조퇴",
+      payrollOvColHoliday: "공휴일",
+      payrollOvColBonus: "보너스",
+      payrollOvColDeduct: "차감",
+      payrollOvColTotal: "지급액",
+      payrollOvColCheck: "확인",
+      payrollOvTotalRow: "합계",
+      payrollOvHourly: "시급",
+      payrollOvMonthly: "월급",
+      payrollOvTimes: "{n}번",
+      payrollOvDaysUnit: "일",
+      payrollOvHoursUnit: "시간",
+      payrollOvPeople: "{n}명",
+      payrollOvTrendTip: "{n}명 · {h}시간",
       payrollAddStaff: "+ 직원 추가",
       payrollStaffName: "이름",
       payrollHourly: "시급제",
@@ -2526,6 +2559,39 @@
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依下方「工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
+      payrollOvLabel: "{month} 人事費",
+      payrollOvSub: "已放卡片的員工 {n} 位 · 點下方列可開啟該員工的卡",
+      payrollOvByStaff: "各員工薪資",
+      payrollOvTrend: "近 6 個月人事費",
+      payrollOvTable: "員工一覽",
+      payrollOvHours: "工時",
+      payrollOvOt: "加班",
+      payrollOvDeduct: "遲到·早退扣款",
+      payrollOvBonus: "獎金",
+      payrollOvHoliday: "國定假日出勤",
+      payrollOvUnconfirmed: "未確認天數",
+      payrollOvNoCard: "沒有卡",
+      payrollOvNone: "本月還沒有放卡片。",
+      payrollOvColStaff: "員工",
+      payrollOvColType: "方式",
+      payrollOvColDays: "出勤(天)",
+      payrollOvColHours: "工時(h)",
+      payrollOvColOt: "加班(h)",
+      payrollOvColLate: "遲到",
+      payrollOvColEarly: "早退",
+      payrollOvColHoliday: "國定",
+      payrollOvColBonus: "獎金",
+      payrollOvColDeduct: "扣款",
+      payrollOvColTotal: "薪資",
+      payrollOvColCheck: "確認",
+      payrollOvTotalRow: "合計",
+      payrollOvHourly: "時薪",
+      payrollOvMonthly: "月薪",
+      payrollOvTimes: "{n} 次",
+      payrollOvDaysUnit: "天",
+      payrollOvHoursUnit: "小時",
+      payrollOvPeople: "{n} 位",
+      payrollOvTrendTip: "{n} 位 · {h} 小時",
       payrollAddStaff: "+ 員工",
       payrollStaffName: "姓名",
       payrollHourly: "時薪制",
@@ -13240,11 +13306,131 @@
       .join("");
     $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => (b.onclick = () => openPayrollCard(b.dataset.payrollStaff)));
     const withCard = (sum.rows || []).filter((r) => r.has_card);
-    $("#payrollSummary").innerHTML = payroll.staff.length
-      ? withCard.length
-        ? escapeHtml(T("payrollMonthTotal").replace("{n}", withCard.length).replace("{total}", money(sum.total || 0)))
-        : escapeHtml(T("payrollNoCards"))
-      : escapeHtml(T("payrollNoStaff"));
+    renderPayrollOverview(sum);
+    loadPayrollTrend();
+    // 직원이 있으면 「한눈에 보기」가 합계를 말한다 — 위 한 줄은 직원이 없을 때만.
+    $("#payrollSummary").innerHTML = payroll.staff.length ? (withCard.length ? "" : escapeHtml(T("payrollNoCards"))) : escapeHtml(T("payrollNoStaff"));
+  }
+  // 「한눈에 보기」 — 이 달 직원 전체(2026-10-03 사장님: "지금 보이는 직원들이랑 결산처럼 그래프, 한
+  // 번에 볼 수 있게"). 결산의 큰 숫자·막대 모양을 그대로 쓴다. 금액은 카드를 넣은 직원만 더한다.
+  const payrollMonthName = (m) => {
+    const [y, mo] = String(m).split("-").map(Number);
+    return T("payrollMonthFmt").replace("{y}", y).replace("{m}", mo);
+  };
+  const payrollNum = (v) => (Math.round(Number(v || 0) * 100) / 100).toString();
+  function renderPayrollOverview(sum) {
+    const box = $("#payrollOverview");
+    if (!box) return;
+    const rows = (sum.rows || []).slice();
+    box.hidden = !payroll.staff.length;
+    if (!payroll.staff.length) return;
+    const withCard = rows.filter((r) => r.has_card);
+    const add = (k) => withCard.reduce((a, r) => a + Number(r[k] || 0), 0);
+    const total = add("total");
+    $("#prOvLabel").textContent = T("payrollOvLabel").replace("{month}", payrollMonthName(payroll.month));
+    $("#prOvTotal").textContent = `NT$${money(total)}`;
+    $("#prOvSub").textContent = T("payrollOvSub").replace("{n}", withCard.length);
+    const stat = (label, value) => `<div class="stl-stat"><span class="stl-stat-label">${escapeHtml(label)}</span><span class="stl-stat-value">${escapeHtml(value)}</span></div>`;
+    const deduct = add("deduct");
+    $("#prOvStats").innerHTML = [
+      stat(T("payrollOvHours"), `${payrollNum(add("hours"))}${T("payrollOvHoursUnit")}`),
+      stat(T("payrollOvOt"), `${payrollNum(add("ot_hours"))}${T("payrollOvHoursUnit")}`),
+      stat(T("payrollOvDeduct"), deduct ? `−NT$${money(deduct)}` : "NT$0"),
+      stat(T("payrollOvBonus"), `NT$${money(add("bonus"))}`),
+      stat(T("payrollOvHoliday"), `${add("holiday_days")}${T("payrollOvDaysUnit")}`),
+      stat(T("payrollOvUnconfirmed"), `${add("unconfirmed_days")}${T("payrollOvDaysUnit")}`),
+    ].join("");
+    // 막대 — 많이 받는 순. 카드 없는 직원은 맨 아래에 「카드 없음」.
+    const sorted = rows.sort((a, b) => Number(b.has_card) - Number(a.has_card) || (b.has_card ? b.total : 0) - (a.has_card ? a.total : 0) || a.staff.name.localeCompare(b.staff.name));
+    const max = Math.max(1, ...withCard.map((r) => r.total));
+    $("#prOvBars").innerHTML = sorted.length
+      ? sorted
+          .map((r) => {
+            const amt = r.has_card ? r.total : 0;
+            const width = r.has_card ? Math.max(0, (amt / max) * 100) : 0;
+            const pct = total ? Math.round((amt / total) * 100) : 0;
+            const days = payrollNum(Number(r.normal_days || 0) + Number(r.star_days || 0));
+            return `<div class="stl-bar-row${r.has_card ? "" : " is-nocard"}" data-payroll-ov="${escapeHtml(r.staff.id)}" title="${escapeHtml(`${r.staff.name} · NT$${money(amt)} · ${days}${T("payrollOvDaysUnit")} · ${payrollNum(r.hours)}${T("payrollOvHoursUnit")}`)}">
+              <span class="stl-bar-name">${escapeHtml(r.staff.name)}<span class="stl-bar-count">${r.has_card ? `${days}${T("payrollOvDaysUnit")}` : escapeHtml(T("payrollOvNoCard"))}</span></span>
+              <span class="stl-bar-track">${width > 0 ? `<span class="stl-bar-fill" style="width:${width}%"></span>` : ""}</span>
+              <span class="stl-bar-amount">NT$${money(amt)}</span>
+              <span class="stl-bar-share">${r.has_card ? `${pct}%` : ""}</span>
+            </div>`;
+          })
+          .join("")
+      : `<div class="stl-bars-empty">${escapeHtml(T("payrollOvNone"))}</div>`;
+    // 표 — 한 줄에 한 직원, 아래 합계.
+    const head = ["Staff", "Type", "Days", "Hours", "Ot", "Late", "Early", "Holiday", "Bonus", "Deduct", "Total", "Check"].map((k) => `<th>${escapeHtml(T(`payrollOvCol${k}`))}</th>`).join("");
+    const cell = (r) => {
+      if (!r.has_card)
+        return `<tr class="is-nocard" data-payroll-ov="${escapeHtml(r.staff.id)}"><td>${escapeHtml(r.staff.name)}</td><td>${escapeHtml(T(r.pay_type === "monthly" ? "payrollOvMonthly" : "payrollOvHourly"))}</td><td colspan="10" class="pr-ov-nocard">${escapeHtml(T("payrollOvNoCard"))}</td></tr>`;
+      const days = payrollNum(Number(r.normal_days || 0) + Number(r.star_days || 0));
+      return `<tr data-payroll-ov="${escapeHtml(r.staff.id)}">
+        <td>${escapeHtml(r.staff.name)}</td>
+        <td>${escapeHtml(T(r.pay_type === "monthly" ? "payrollOvMonthly" : "payrollOvHourly"))}</td>
+        <td>${days}${r.star_days ? ` <small>(★${payrollNum(r.star_days)})</small>` : ""}</td>
+        <td>${payrollNum(r.hours)}</td>
+        <td>${payrollNum(r.ot_hours)}</td>
+        <td>${r.late_count ? escapeHtml(T("payrollOvTimes").replace("{n}", r.late_count)) : "—"}</td>
+        <td>${r.early_count ? escapeHtml(T("payrollOvTimes").replace("{n}", r.early_count)) : "—"}</td>
+        <td>${r.holiday_days ? `${r.holiday_days}${escapeHtml(T("payrollOvDaysUnit"))}` : "—"}</td>
+        <td>${r.bonus ? `NT$${money(r.bonus)}` : "—"}</td>
+        <td>${r.deduct ? `<span class="pr-ov-minus">−NT$${money(r.deduct)}</span>` : "—"}</td>
+        <td class="is-total">NT$${money(r.total)}</td>
+        <td>${r.unconfirmed_days ? `<span class="pr-ov-warn">⚠ ${r.unconfirmed_days}${escapeHtml(T("payrollOvDaysUnit"))}</span>` : "✓"}</td>
+      </tr>`;
+    };
+    const foot = withCard.length
+      ? `<tfoot><tr><td>${escapeHtml(T("payrollOvTotalRow"))}</td><td>${escapeHtml(T("payrollOvPeople").replace("{n}", withCard.length))}</td>
+          <td>${payrollNum(add("normal_days") + add("star_days"))}</td><td>${payrollNum(add("hours"))}</td><td>${payrollNum(add("ot_hours"))}</td>
+          <td>${add("late_count") || "—"}</td><td>${add("early_count") || "—"}</td><td>${add("holiday_days") || "—"}</td>
+          <td>NT$${money(add("bonus"))}</td><td>${deduct ? `−NT$${money(deduct)}` : "—"}</td><td class="is-total">NT$${money(total)}</td><td>${add("unconfirmed_days") ? `⚠ ${add("unconfirmed_days")}` : "✓"}</td></tr></tfoot>`
+      : "";
+    $("#prOvTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${sorted.map(cell).join("")}</tbody>${foot}`;
+    box.querySelectorAll("[data-payroll-ov]").forEach((el) => {
+      el.onclick = async () => {
+        await openPayrollCard(el.dataset.payrollOv);
+        const ed = $("#payrollEditor");
+        if (ed && !ed.hidden && ed.scrollIntoView) ed.scrollIntoView({ behavior: "smooth", block: "start" });
+      };
+    });
+  }
+  let payrollTrendChart = null;
+  async function loadPayrollTrend() {
+    const canvas = $("#payrollTrendChart");
+    if (!canvas || !payroll.staff.length) return;
+    let months = [];
+    try {
+      months = (await (await fetch(`/api/payroll/trend?month=${payroll.month}&n=6`)).json()).months || [];
+    } catch (e) {
+      return;
+    }
+    payroll.trend = months;
+    if (!chartReady(canvas)) return;
+    if (payrollTrendChart) payrollTrendChart.destroy();
+    payrollTrendChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: months.map((m) => payrollMonthName(m.month)),
+        datasets: [{ label: T("payrollOvTrend"), data: months.map((m) => m.total), backgroundColor: "#16213e", borderRadius: 4, maxBarThickness: 48 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const m = months[ctx.dataIndex] || {};
+                return [`NT$${money(m.total)}`, T("payrollOvTrendTip").replace("{n}", m.staff || 0).replace("{h}", payrollNum(m.hours))];
+              },
+            },
+          },
+        },
+        scales: { y: { beginAtZero: true, ticks: { callback: (v) => `NT$${money(v)}` } } },
+      },
+    });
   }
   async function openPayrollCard(staffId) {
     if (payroll.dirty && payroll.current && payroll.current.id !== staffId && !(await showConfirm(T("payrollDiscard")))) return;

@@ -131,12 +131,8 @@ router.put("/card", async (req, res) => {
 });
 
 // 이 달 직원 전체 — 누구에게 얼마, 확인 안 한 날이 몇 날.
-router.get("/summary", async (req, res) => {
-  const { month } = req.query;
-  if (!monthOk(month)) return res.status(400).json({ error: "bad_month" });
-  const rules = await loadRules();
-  const holidays = await loadHolidays();
-  const staff = await (await col(P.STAFF_COLLECTION)).find({}).toArray();
+// 한 달 직원 전체 — 누구에게 얼마, 몇 시간, 확인 안 한 날이 몇 날. 「한눈에 보기」와 칩이 쓴다.
+async function summaryFor(month, rules, holidays, staff) {
   const cards = await (await col(P.CARDS_COLLECTION)).find({ month }).toArray();
   const byStaff = new Map(cards.map((c) => [c.staff_id, c]));
   const rows = staff
@@ -144,9 +140,43 @@ router.get("/summary", async (req, res) => {
     .map((s) => {
       const c = byStaff.get(String(s._id));
       const r = compute({ month, days: (c && c.days) || {}, ...P.cleanBonus(c) }, s, rules, holidays);
-      return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, late_count: r.late_count, early_count: r.early_count, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
+      const line = (k) => (r.lines || []).filter((l) => l.key === k).reduce((a, l) => a + l.amount, 0);
+      return {
+        staff: staffOut(s), has_card: !!c, pay_type: r.pay_type,
+        normal_days: r.normal_days, star_days: r.star_days, hours: r.normal_hours + r.star_hours, ot_hours: r.ot_hours,
+        late_count: r.late_count, late_hours: r.late_hours, early_count: r.early_count, early_min: r.early_min,
+        holiday_days: r.holiday_days, bonus: r.bonus, deduct: -line("deduct"), total: r.total,
+        unconfirmed_days: r.unconfirmed_days, warnings: r.warnings,
+      };
     });
-  res.json({ month, rows, total: rows.reduce((a, r) => a + r.total, 0) });
+  return { month, rows, total: rows.reduce((a, r) => a + r.total, 0) };
+}
+router.get("/summary", async (req, res) => {
+  const { month } = req.query;
+  if (!monthOk(month)) return res.status(400).json({ error: "bad_month" });
+  const staff = await (await col(P.STAFF_COLLECTION)).find({}).toArray();
+  res.json(await summaryFor(month, await loadRules(), await loadHolidays(), staff));
+});
+
+// 최근 몇 달 인건비 — 「한눈에 보기」 막대 그래프(2026-10-03 사장님: "결산처럼 그래프, 한 번에 볼
+// 수 있게"). 카드를 넣은 직원만 센다 — 카드 없는 달까지 월급제 월급을 세면 빈 달이 꽉 차 보인다.
+router.get("/trend", async (req, res) => {
+  const { month } = req.query;
+  if (!monthOk(month)) return res.status(400).json({ error: "bad_month" });
+  const n = Math.min(12, Math.max(1, Number(req.query.n) || 6));
+  const rules = await loadRules();
+  const holidays = await loadHolidays();
+  const staff = await (await col(P.STAFF_COLLECTION)).find({}).toArray();
+  const [y, m] = month.split("-").map(Number);
+  const months = [];
+  for (let k = n - 1; k >= 0; k--) {
+    const d = new Date(Date.UTC(y, m - 1 - k, 1));
+    const mm = d.toISOString().slice(0, 7);
+    const sum = await summaryFor(mm, rules, holidays, staff);
+    const withCard = sum.rows.filter((r) => r.has_card);
+    months.push({ month: mm, total: withCard.reduce((a, r) => a + r.total, 0), staff: withCard.length, hours: withCard.reduce((a, r) => a + r.hours, 0) });
+  }
+  res.json({ months });
 });
 
 // 국가 공휴일 목록·지정·해제. 월을 주면 그 달 것만.

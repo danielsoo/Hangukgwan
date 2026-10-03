@@ -2831,3 +2831,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .payroll-bonus .pr-money input { width: 100%; }
 }
 .payroll-rates > label[hidden] { display: none; }
+
+/* 급여 「한눈에 보기」(2026-10-03) — 결산의 큰 숫자·막대·그래프를 그대로 빌려 쓴다. */
+.payroll-overview { margin: 6px 0 18px; }
+.payroll-overview .stl-hero, .payroll-overview .settlement-charts-grid, .payroll-overview .settlement-wide-card { max-width: none; }
+.payroll-overview .settlement-charts-grid { margin-bottom: 16px; }
+.pr-ov-bars .stl-bar-row { cursor: pointer; }
+.pr-ov-bars .stl-bar-row:hover .stl-bar-name { text-decoration: underline; }
+.pr-ov-bars .is-nocard .stl-bar-name { color: var(--muted); }
+.pr-ov-table-wrap { overflow-x: auto; }
+.pr-ov-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.pr-ov-table th { text-align: right; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.pr-ov-table td { text-align: right; padding: 9px 10px; border-bottom: 1px solid #f0ebe2; white-space: nowrap; }
+.pr-ov-table th:first-child, .pr-ov-table td:first-child { text-align: left; }
+.pr-ov-table tbody tr { cursor: pointer; }
+.pr-ov-table tbody tr:hover td { background: #faf6ef; }
+.pr-ov-table td.is-total { font-weight: 800; }
+.pr-ov-table td .pr-ov-warn { color: #b26a00; font-weight: 700; }
+.pr-ov-table td .pr-ov-minus { color: #b4532a; }
+.pr-ov-table tr.is-nocard td { color: var(--muted); }
+.pr-ov-table td.pr-ov-nocard { text-align: left; }
+.pr-ov-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); border-bottom: 0; }

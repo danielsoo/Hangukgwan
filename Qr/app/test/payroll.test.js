@@ -287,6 +287,15 @@ out.push("\n[서버 — 사장님만]");
   check("시급 고치기", res.body.staff.hourly_rate === 210 && res.body.staff.name === "劉芷芸", JSON.stringify(res.body));
   res = await boss.put("/api/payroll/rules").send({ ot_threshold_min: 20 });
   check("초과 기준 바꾸기", res.body.rules.ot_threshold_min === 20 && !("am_end" in res.body.rules), JSON.stringify(res.body));
+  // 「한눈에 보기」(2026-10-03 사장님: "결산처럼 그래프, 한 번에 볼 수 있게") — 요약 줄과 최근 몇 달.
+  res = await boss.get("/api/payroll/summary?month=2026-06");
+  const row = res.body.rows.find((r) => r.staff.id === id);
+  check("★ 요약 줄에 근무 시간·조퇴·차감·지급액", row && row.hours === 237.5 && row.early_count === 4 && row.deduct > 0 && row.total > 0 && "holiday_days" in row && "bonus" in row, JSON.stringify(row));
+  res = await boss.get("/api/payroll/trend?month=2026-07&n=3");
+  const tm = res.body.months || [];
+  check("★★ 최근 3달 — 5·6·7월, 카드 넣은 6월만 금액", tm.map((m) => m.month).join() === "2026-05,2026-06,2026-07" && tm[0].total === 0 && tm[1].total === row.total && tm[1].staff === 1 && tm[2].total === 0, JSON.stringify(tm));
+  res = await boss.get("/api/payroll/trend?month=2026-13");
+  check("이상한 달 400", res.status === 400, "");
   res = await boss.get("/api/payroll/card?staff=nope&month=2026-06");
   check("없는 직원 404", res.status === 404, "");
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-13`);

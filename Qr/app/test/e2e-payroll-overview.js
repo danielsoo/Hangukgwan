@@ -1,0 +1,110 @@
+// 급여 「한눈에 보기」 — 이 달 직원 전체를 결산처럼(큰 숫자 · 직원별 막대 · 6개월 그래프 · 표).
+//
+// 2026-10-03 사장님: "지금 보이는 직원들이랑 결산처럼 그래프, 한 번에 볼 수 있게 되었으면 좋겠는데"
+const fake = require("./fake-mongo");
+require.cache[require.resolve("mongodb")] = {
+  id: require.resolve("mongodb"), filename: require.resolve("mongodb"),
+  loaded: true, exports: fake, paths: [],
+};
+process.env.MONGODB_URI = "mongodb://fake/test";
+process.env.NODE_ENV = "test";
+process.env.SESSION_SECRET = "e2e-payroll-overview";
+process.env.ADMIN_PASSWORD = "ownerpass123";
+
+const { launchBrowser } = require("./browser");
+const app = require("../server");
+
+let pass = 0;
+let fail = 0;
+const out = [];
+function check(name, cond, extra = "") {
+  if (cond) { pass++; out.push(`  ok   ${name}`); }
+  else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
+}
+
+(async () => {
+  const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const browser = await launchBrowser();
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const page = await ctx.newPage();
+  page.on("dialog", (d) => d.accept());
+  await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
+  const api = page.request;
+  await api.post(`${base}/api/auth/login`, { data: { password: "ownerpass123" } });
+  // 직원 셋: A 시급 200, B 시급 비움(가게 기본 220), C 카드 없음.
+  const mk = async (name, hourly) => (await (await api.post(`${base}/api/payroll/staff`, { data: { name, pay_type: "hourly", hourly_rate: hourly } })).json()).staff.id;
+  const a = await mk("가나다", 200);
+  const b = await mk("라마바", "");
+  await mk("사아자", 150);
+  const full = { am_in: "09:00", am_out: "14:00", pm_in: "16:30", pm_out: "21:00" };
+  // A 9월: 하루 다(9.5h) + 오전만(5h) = 14.5h × 200 = 2,900
+  await api.put(`${base}/api/payroll/card`, { data: { staff_id: a, month: "2026-09", days: { 1: full, 2: { am_in: "09:00", am_out: "14:00" } } } });
+  // B 9월: 09:40 출근(지각 0.5h) 하루 — 9.5h × 220 − 0.5h × 220 = 1,980, 보너스 500 → 2,480
+  await api.put(`${base}/api/payroll/card`, { data: { staff_id: b, month: "2026-09", days: { 3: { ...full, am_in: "09:40" } }, bonus: 500 } });
+  // A 8월: 하루 9.5h × 200 = 1,900
+  await api.put(`${base}/api/payroll/card`, { data: { staff_id: a, month: "2026-08", days: { 5: full } } });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(800);
+  await page.locator('.admin-tabs button[data-tab="payroll"]').click();
+  await page.waitForTimeout(500);
+  await page.fill("#payrollMonth", "2026-09");
+  await page.dispatchEvent("#payrollMonth", "change");
+  await page.waitForTimeout(1500);
+
+  if (process.env.SHOT) await page.locator("#payrollOverview").screenshot({ path: process.env.SHOT });
+  out.push("[큰 숫자]");
+  check("★★ 「2026년 9월 인건비」 NT$5,380 (2,900 + 2,480) — 카드 넣은 직원만", (await page.locator("#prOvLabel").innerText()).includes("2026년 9월 인건비") && (await page.locator("#prOvTotal").innerText()) === "NT$5,380", await page.locator("#prOvTotal").innerText());
+  const stats = await page.locator("#prOvStats").innerText();
+  check("★ 근무 24시간 · 지각·조퇴 차감 −NT$110 · 보너스 NT$500", /근무 시간\s*24시간/.test(stats) && /지각·조퇴 차감\s*−NT\$110/.test(stats) && /보너스\s*NT\$500/.test(stats), stats);
+  check("카드 넣은 직원 2명", /2명/.test(await page.locator("#prOvSub").innerText()), "");
+
+  out.push("\n[직원별 막대]");
+  const names = await page.$$eval("#prOvBars .stl-bar-row .stl-bar-name", (els) => els.map((e) => e.firstChild.textContent.trim()));
+  check("★★ 많이 받는 순 — 가나다 · 라마바, 카드 없는 사아자는 맨 아래", names.join() === "가나다,라마바,사아자", names.join());
+  const bars = await page.locator("#prOvBars").innerText();
+  check("★ 금액·비율 — NT$2,900 54% · NT$2,480 46% · 「카드 없음」", /NT\$2,900\s*54%/.test(bars) && /NT\$2,480\s*46%/.test(bars) && /카드 없음/.test(bars), bars);
+  const w = await page.$$eval("#prOvBars .stl-bar-fill", (els) => els.map((e) => parseFloat(e.style.width)));
+  check("막대 길이 — 제일 많은 사람 100%, 다음은 그 비율", w.length === 2 && w[0] === 100 && Math.abs(w[1] - (2480 / 2900) * 100) < 0.1, JSON.stringify(w));
+
+  out.push("\n[표]");
+  const rowA = await page.locator('#prOvTable tbody tr[data-payroll-ov="' + a + '"]').innerText();
+  check("★★ 가나다 — 출근 1.5일 · 14.5h · NT$2,900 · ✓", /1\.5/.test(rowA) && /14\.5/.test(rowA) && /NT\$2,900/.test(rowA), rowA);
+  const rowB = await page.locator('#prOvTable tbody tr[data-payroll-ov="' + b + '"]').innerText();
+  check("★ 라마바 — 지각 1번 · 보너스 NT$500 · 차감 −NT$110", /1번/.test(rowB) && /NT\$500/.test(rowB) && /−NT\$110/.test(rowB) && /NT\$2,480/.test(rowB), rowB);
+  const foot = await page.locator("#prOvTable tfoot").innerText();
+  check("★ 합계 줄 — 2명 · 24h · NT$5,380", /2명/.test(foot) && /24/.test(foot) && /NT\$5,380/.test(foot), foot);
+
+  out.push("\n[최근 6개월 그래프]");
+  const chart = await page.evaluate(() => {
+    const c = window.Chart && window.Chart.getChart && window.Chart.getChart(document.querySelector("#payrollTrendChart"));
+    return c ? { labels: c.data.labels, data: c.data.datasets[0].data } : null;
+  });
+  check("★★ 4월 ~ 9월, 8월 1,900 · 9월 5,380", chart && chart.labels.length === 6 && chart.labels[5] === "2026년 9월" && chart.labels[0] === "2026년 4월" && chart.data[4] === 1900 && chart.data[5] === 5380, JSON.stringify(chart));
+
+  out.push("\n[누르면 그 직원 카드]");
+  await page.locator('#prOvBars [data-payroll-ov="' + b + '"]').click();
+  await page.waitForTimeout(900);
+  check("★★ 막대를 누르면 라마바 카드가 열린다", (await page.inputValue("#payrollStaffName")) === "라마바" && !(await page.locator("#payrollEditor").evaluate((el) => el.hidden)), "");
+  await page.locator('#prOvTable tbody tr[data-payroll-ov="' + a + '"]').click();
+  await page.waitForTimeout(900);
+  check("★ 표의 줄을 누르면 가나다 카드", (await page.inputValue("#payrollStaffName")) === "가나다", "");
+
+  out.push("\n[달을 바꾸면 따라온다]");
+  await page.click("#payrollPrevMonth");
+  await page.waitForTimeout(1500);
+  check("★ 8월 — NT$1,900, 1명", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()), await page.locator("#prOvTotal").innerText());
+
+  out.push("\n[휴대폰 폭]");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(500);
+  const sw = await page.evaluate(() => document.documentElement.scrollWidth);
+  check("가로로 넘치지 않는다(표는 그 안에서만 밀린다)", sw <= 392, String(sw));
+
+  await browser.close();
+  server.close();
+  console.log(out.join("\n"));
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });
