@@ -1483,7 +1483,7 @@
       tabPayroll: "💰 급여",
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 가게 영업시간으로 세고, 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.",
       payrollMonth: "월",
-      payrollAddStaff: "+ 직원",
+      payrollAddStaff: "+ 직원 추가",
       payrollStaffName: "이름",
       payrollHourly: "시급제",
       payrollMonthly: "월급제",
@@ -1491,7 +1491,7 @@
       payrollHourlyRate: "기본 시급",
       payrollOtRate: "초과 근무 시급",
       payrollStarRate: "★ 날 시급",
-      payrollSameAsHourly: "기본 시급과 같음",
+      payrollSameAsHourly: "기본과 같음",
       payrollRatesHintHourly: "시급제: 근무 시간 × 기본 시급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 빈칸은 기본 시급을 따른다.",
       payrollRatesHintMonthly: "월급제: 월급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 기본 시급을 비우면 월급 ÷ 240.",
       payrollBonus: "🎁 이 달 보너스",
@@ -1543,7 +1543,15 @@
       payrollLineSalary: "월급",
       payrollLineStar: "★ 카드 날",
       payrollLineOvertime: "초과",
-      payrollTotal: "합계",
+      payrollTotal: "이 달 지급액",
+      payrollChipDays: "출근 {n}일",
+      payrollChipStar: "★ {n}일",
+      payrollChipHours: "근무 {n}시간",
+      payrollChipOt: "초과 {n}시간",
+      payrollLegendRead: "사진에서 읽음",
+      payrollLegendUnclear: "확인 필요",
+      payrollLegendHand: "손글씨 — 직접",
+      payrollHelpTitle: "ⓘ 이렇게 써요",
       payrollWarnMinHourly: "시급이 최저임금(NT${min})보다 낮아요.",
       payrollWarnMinMonthly: "월급이 최저임금(NT${min})보다 낮아요.",
       payrollWarnNoRate: "시급을 적어야 계산돼요.",
@@ -2496,7 +2504,7 @@
       payrollHourlyRate: "基本時薪",
       payrollOtRate: "加班時薪",
       payrollStarRate: "★ 日時薪",
-      payrollSameAsHourly: "同基本時薪",
+      payrollSameAsHourly: "同基本",
       payrollRatesHintHourly: "時薪制：工時 × 基本時薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。空白則依基本時薪。",
       payrollRatesHintMonthly: "月薪制：月薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。基本時薪空白時為月薪 ÷ 240。",
       payrollBonus: "🎁 本月獎金",
@@ -2548,7 +2556,15 @@
       payrollLineSalary: "月薪",
       payrollLineStar: "★ 卡出勤",
       payrollLineOvertime: "加班",
-      payrollTotal: "合計",
+      payrollTotal: "本月應付",
+      payrollChipDays: "出勤 {n} 天",
+      payrollChipStar: "★ {n} 天",
+      payrollChipHours: "工時 {n} 小時",
+      payrollChipOt: "加班 {n} 小時",
+      payrollLegendRead: "照片讀取",
+      payrollLegendUnclear: "需確認",
+      payrollLegendHand: "手寫 — 請填",
+      payrollHelpTitle: "ⓘ 使用說明",
       payrollWarnMinHourly: "時薪低於基本工資（NT${min}）。",
       payrollWarnMinMonthly: "月薪低於基本工資（NT${min}）。",
       payrollWarnNoRate: "需要填寫時薪才能計算。",
@@ -13189,6 +13205,10 @@
   }
   function payrollSyncPayType() {
     const monthly = $("#payrollPayType").value === "monthly";
+    $$(".pr-seg [data-pay-type]").forEach((b) => {
+      b.classList.toggle("active", b.dataset.payType === $("#payrollPayType").value);
+      b.setAttribute("aria-checked", b.classList.contains("active") ? "true" : "false");
+    });
     // 무엇에 무엇이 쓰이는지 한 줄로.
     if ($("#payrollRatesHint")) $("#payrollRatesHint").textContent = T(monthly ? "payrollRatesHintMonthly" : "payrollRatesHintHourly");
     $(".payroll-salary-wrap").hidden = !monthly;
@@ -13303,15 +13323,22 @@
           : T("payrollWarnNoRate")
     );
     if (r.unconfirmed_days) warn.unshift(T("payrollWarnUnconfirmed").replace("{n}", r.unconfirmed_days));
+    // 위에 크게 이 달 지급액, 그 밑에 날·시간 알약, 경고, 내역 줄.
+    const chips = [
+      T("payrollChipDays").replace("{n}", r.normal_days),
+      r.star_days ? T("payrollChipStar").replace("{n}", r.star_days) : null,
+      T("payrollChipHours").replace("{n}", r.normal_hours + r.star_hours),
+      r.ot_hours ? T("payrollChipOt").replace("{n}", r.ot_hours) : null,
+    ].filter(Boolean);
     box.innerHTML = `
-      <div class="pr-days">${escapeHtml(T("payrollDaysLine").replace("{a}", r.normal_days).replace("{b}", r.star_days).replace("{h}", r.normal_hours + r.star_hours).replace("{ot}", r.ot_hours))}</div>
+      <div class="pr-line pr-total"><span>${escapeHtml(T("payrollTotal"))}</span><span>NT$${money(r.total)}</span></div>
+      <div class="pr-days">${chips.map((c) => `<span>${escapeHtml(c)}</span>`).join("")}</div>
       ${warn.map((w) => `<div class="pr-warn">⚠ ${escapeHtml(w)}</div>`).join("")}
       ${(r.lines || [])
         .map(
           (l) => `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}${l.note ? ` · ${escapeHtml(l.note)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
         )
-        .join("")}
-      <div class="pr-line pr-total"><span>${escapeHtml(T("payrollTotal"))}</span><span>NT$${money(r.total)}</span></div>`;
+        .join("")}`;
   }
   function payrollSetStatus() {
     const el = $("#payrollStatus");
@@ -13497,7 +13524,23 @@
       payrollSetStatus();
       loadPayroll();
     };
-  if ($("#payrollPayType")) $("#payrollPayType").onchange = payrollSyncPayType;
+  // 급여 방식 — 두 칸 스위치(시급제 | 월급제). 값은 숨은 칸(#payrollPayType)에.
+  $$(".pr-seg [data-pay-type]").forEach((b) => {
+    b.onclick = () => {
+      $("#payrollPayType").value = b.dataset.payType;
+      payrollSyncPayType();
+    };
+  });
+  // 달 ‹ › — 한 달씩.
+  const payrollShiftMonth = (delta) => {
+    const el = $("#payrollMonth");
+    const [y, m] = (el.value || payrollThisMonth()).split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + delta, 1));
+    el.value = d.toISOString().slice(0, 7);
+    el.dispatchEvent(new Event("change"));
+  };
+  if ($("#payrollPrevMonth")) $("#payrollPrevMonth").onclick = () => payrollShiftMonth(-1);
+  if ($("#payrollNextMonth")) $("#payrollNextMonth").onclick = () => payrollShiftMonth(1);
   if ($("#payrollNewName"))
     $("#payrollNewName").onkeydown = (e) => {
       if (e.key === "Enter") $("#payrollAddStaff").click();
