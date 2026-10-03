@@ -44,6 +44,8 @@ function grade(cards, truth) {
       }
     }
   }
+  // 값 없이 노랗게만 칠한 칸(못 읽음)도 「확인 필요」다 — 화면이 빈 노란 칸으로 보여준다.
+  for (const c of cards) for (const u of c.unclear) if (!(c.days[u.day] || {})[u.slot] && truth[u.day]) flagged++;
   for (const t of Object.values(truth)) total += t.length;
   return { ok, flagged, wrong, total, hand };
 }
@@ -97,6 +99,18 @@ function grade(cards, truth) {
   check("★★ 별 카드를 알아본다", st.cards.length === 2 && st.cards.every((c) => c.star), JSON.stringify(st.cards.map((c) => c.star)));
   const gs = grade(st.cards, truthOf(STAR));
   check(`★ 4일 16칸 (${gs.ok}/16)`, gs.ok >= 15 && gs.wrong.length === 0, gs.wrong.join(" "));
+
+  // 2026-10-03 사장님이 더 보내신 8월 카드 — 한 장에 한 면, 「NO.」 옆 빨간 ○ 표시.
+  // 주 5일을 넘긴 날만 찍는 카드에 ★ 대신 ○·△ 를 그리기도 한다 — 모양을 가리지 않는다.
+  out.push("\n[8월 카드 — 빨간 ○ 표시, 한 면짜리]");
+  const mo = await read(b64("timecard-mark-o.webp"));
+  check("★★ 빨간 ○ 도 추가 카드 표시로 알아본다", mo.cards.length === 1 && mo.cards[0].star === true, JSON.stringify(mo.cards.map((c) => c.star)));
+  const gmo = grade(mo.cards, { 4: ["09:07", "14:04", "16:10", "21:07"], 11: ["09:12", "14:02", "16:11", "21:17"] });
+  check(`4·11일 8칸 — 틀림 0 (맞음 ${gmo.ok}, 확인 필요 ${gmo.flagged})`, gmo.wrong.length === 0 && gmo.ok + gmo.flagged === 8 && gmo.ok >= 5, gmo.wrong.join(" "));
+  const oo = await read(b64("timecard-orange-one.webp"));
+  check("주황 면 한 장 — 표시 없음", oo.cards.length === 1 && oo.cards[0].color === "orange" && !oo.cards[0].star, JSON.stringify(oo.cards.map((c) => [c.color, c.star])));
+  const goo = grade(oo.cards, { 16: ["09:07", "14:02", "16:14", "21:00"] });
+  check(`16일 4칸 — 틀림 0 (맞음 ${goo.ok})`, goo.wrong.length === 0 && goo.ok >= 3, goo.wrong.join(" "));
 
   out.push("\n[휴대폰처럼 — 틀린 값은 넣지 않는다]");
   for (const [name, opt] of [

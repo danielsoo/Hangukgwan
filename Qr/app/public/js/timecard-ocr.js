@@ -82,7 +82,9 @@
     if (pts.length < 200) return 0;
     let best = 0;
     let bestScore = -1;
-    for (let deg = -6; deg <= 6.001; deg += 0.25) {
+    // 0.25° 로 훑고, 가장 좋은 곳 둘레를 0.05° 로 한 번 더(카드 높이 2000px 에서 0.25° 는 9px —
+    // 가는 선이 두 줄로 갈라져 몸통 끝 선을 놓친다).
+    const tryDeg = (deg) => {
       const t = Math.tan((deg * Math.PI) / 180);
       // 칸 폭 = 표본 간격. 1px 칸이면 0° 에서만 표본이 짝수 칸에 몰려 점수가 부풀었다.
       const bins = new Float64Array(Math.ceil((W + H) / step) + 2);
@@ -96,8 +98,11 @@
         bestScore = sc;
         best = deg;
       }
-    }
-    return best;
+    };
+    for (let deg = -6; deg <= 6.001; deg += 0.25) tryDeg(deg);
+    const coarse = best;
+    for (let deg = coarse - 0.25; deg <= coarse + 0.2501; deg += 0.05) tryDeg(Math.round(deg * 100) / 100);
+    return Math.round(best * 100) / 100;
   }
 
   function grabber(img, gains = [1, 1, 1], deg = 0) {
@@ -235,10 +240,23 @@
     const pitch = diffs[Math.floor(diffs.length / 2)];
     // 몸통 맨 아래 굵은 선 — 폭을 거의 다 채우고, **몸통의 세로선이 그 선까지 내려와
     // 있는** 맨 아래 선. 그 밑의 서명 칸(長·覆核·管理) 선은 세로선 자리가 달라 걸러진다.
-    const fullRows = merge(
-      rowStrict.map((v, y) => (v >= w * 0.75 ? y : -1)).filter((y) => y >= 0),
-      Math.max(2, Math.round(pitch * 0.15))
-    );
+    // 남은 기울기로 선이 한두 줄에 걸쳐 갈라져도 잡히게, 위아래 2줄 안에 선 색이 있으면 센다.
+    const near = (y) => {
+      let n = 0;
+      for (let x = x0; x < x1; x++) {
+        for (let dy = -2; dy <= 2; dy++) {
+          const yy = y + dy;
+          if (yy >= 0 && yy < G.H && tint(...G.rgb(x, yy))) {
+            n++;
+            break;
+          }
+        }
+      }
+      return n;
+    };
+    const candRows = [];
+    for (let y = 0; y < G.H; y++) if (rowTint[y] >= w * 0.3 && rowTint[y] >= (rowTint[y - 1] || 0) && rowTint[y] >= (rowTint[y + 1] || 0)) candRows.push(y);
+    const fullRows = merge(candRows.filter((y) => rowStrict[y] >= w * 0.75 || near(y) >= w * 0.85), Math.max(2, Math.round(pitch * 0.15)));
     const vertAbove = (y) =>
       xs.every((x) => {
         let n = 0;
@@ -277,15 +295,21 @@
     return { color, xs, colX, ys, pitch, bottom, firstDay: color === "blue" ? 0 : 16 };
   }
 
-  // ---- 별(★) — 카드 위쪽 빨간 별 ----
+  // ---- 추가 카드 표시 — 「NO.」 옆 빨간 표시(★ · ○ · △) ----
+  // 2026-10-03 사장님 카드들: 주 5일을 넘긴 날만 찍는 카드에 빨간 펜으로 ★ 를 그리기도
+  // 하고 ○·△ 를 그리기도 한다. 모양은 가리지 않고 「그 자리에 빨간 표시가 있나」만 본다.
+  // 빨강·분홍(파랑 ≥ 초록)만 — 주황 카드의 머리띠(초록 > 파랑)는 아니다.
+  const isMarkRed = (r, g, b) => r > 150 && r - g > 80 && r - b > 40 && b >= g - 4;
   function hasStar(G, card) {
-    const top = Math.max(0, card.ys[0] - Math.round(card.pitch * 14));
-    const bot = Math.max(0, card.ys[0] - Math.round(card.pitch * 9));
-    const left = Math.max(0, card.xs[0] - Math.round((card.xs[3] - card.xs[0]) * 0.15));
-    const right = card.xs[0] + Math.round((card.xs[3] - card.xs[0]) * 0.5);
+    const p = card.pitch;
+    const w = card.xs[3] - card.xs[0];
+    const top = Math.max(0, Math.round(card.ys[0] - p * 12));
+    const bot = Math.max(0, Math.round(card.ys[0] - p * 7));
+    const left = Math.max(0, Math.round(card.xs[0] - w * 0.15));
+    const right = Math.min(G.W, Math.round(card.xs[0] + w * 0.5));
     let n = 0;
-    for (let y = top; y < bot; y++) for (let x = left; x < right; x++) if (isRed(...G.rgb(x, y))) n++;
-    return n > card.pitch * card.pitch * 0.4;
+    for (let y = top; y < bot; y++) for (let x = left; x < right; x++) if (isMarkRed(...G.rgb(x, y))) n++;
+    return n > p * p * 0.2;
   }
 
   // ---- 한 칸 읽기 ----
@@ -413,7 +437,7 @@
     const hh = Number(txt.slice(0, 2));
     const mm = Number(txt.slice(3));
     const valid = hh <= 23 && mm <= 59;
-    return { time: valid ? txt : null, conf, handwritten, unclear: !valid || conf < 0.5, empty: false, glyphs: digits.map((d) => d.vec), dbg, digits: digits.map((d) => d.d + ":" + d.score.toFixed(2)) };
+    return { time: valid ? txt : null, conf, handwritten, unclear: !valid || conf < 0.6, empty: false, glyphs: digits.map((d) => d.vec), dbg, digits: digits.map((d) => d.d + ":" + d.score.toFixed(2)) };
   }
 
   // 글자 하나를 GW×GH 회색 격자로.
@@ -488,6 +512,20 @@
     // 모두 점수 0.5 아래거나 2등과 0.06 안쪽이었다 → 그런 칸은 「확실치 않음」.
     let d = best.d;
     let score = margin < 0.06 ? Math.min(best.score, 0.4) : best.score;
+    // 두 번째 의견 — 숫자마다 「평균 모양」(견본 목록의 첫 칸)과도 맞춰 본다. 가장 가까운
+    // 한 견본이 우연히 비슷한 것일 때(2026-10-03 「09:07」 의 0 이 2 로) 평균은 다른 답을 낸다.
+    // 둘이 어긋나면 「확실치 않음」.
+    let meanBest = null;
+    let meanScore = -2;
+    for (const [dd, list] of Object.entries(templates)) {
+      if (!list.length) continue;
+      const sc = corr(vec, list[0]);
+      if (sc > meanScore) {
+        meanScore = sc;
+        meanBest = dd;
+      }
+    }
+    if (meanBest !== null && meanBest !== d) score = Math.min(score, 0.4);
     // 0 과 8 은 흐린 사진에서 헷갈린다 — 8 만 가운데 가로획이 있다. 그 획으로 한 번 더
     // 본다(0: 대개 0.45 아래, 8: 0.6 위). 둘이 어긋나거나 애매하면 「확실치 않음」.
     if (d === "0" || d === "8") {
@@ -580,12 +618,24 @@
           } else if (cell.unclear) res.unclear.push({ day, slot });
         }
       }
+      // 하루 안의 순서 — 오전 출근 < 오전 퇴근 < 오후 출근 < 오후 퇴근 < 연장(자정 넘김 제외).
+      // 숫자 하나를 잘못 읽으면(13:57 → 18:57) 순서가 깨진다. 깨진 칸은 「확실치 않음」.
+      const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3));
+      for (const [day, row] of Object.entries(res.days)) {
+        const seq = SLOTS.filter((sl) => row[sl]).map((sl) => ({ sl, m: toM(row[sl]) }));
+        for (let k = 0; k < seq.length; k++) {
+          const prev = seq[k - 1];
+          const next = seq[k + 1];
+          const bad = (prev && seq[k].m < prev.m && !(seq[k].sl === "ot_out" && seq[k].m < 6 * 60)) || (next && next.m < seq[k].m && !(next.sl === "ot_out" && next.m < 6 * 60));
+          if (bad && !res.unclear.some((u) => String(u.day) === day && u.slot === seq[k].sl)) res.unclear.push({ day: Number(day), slot: seq[k].sl });
+        }
+      }
       out.push(res);
     }
     return { cards: out, skew };
   }
 
-  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains };
+  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains, _grabber: grabber, _bestSeven: bestSeven, _layoutCard: layoutCard, _lines: { isBlueLine, isOrangeLine, isBlueTint, isOrangeTint } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HG_TIMECARD = api;
 })(typeof window !== "undefined" ? window : globalThis);
