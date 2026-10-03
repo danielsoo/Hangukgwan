@@ -157,9 +157,12 @@ out.push("\n[화면에 그리는 쪽]");
     /group\.every\(\(o\) => o\.status === "cancelled"\)/.test(render),
     "한 라운드만 취소된 것을 묶음째 취소로 칠하면 받은 돈이 안 받은 것처럼 보인다"
   );
+  // 2026-10-03 사장님: "여러번 주문했어도 한 번에 인쇄할 수 있게 해줘." —
+  // 묶음 머리의 버튼은 묶음 전체를 한 장으로 뽑는다(mergeOrdersForTicket).
   check(
-    "★ 묶음 머리에는 인쇄 버튼을 안 단다 — 어느 라운드인지 알 수 없다",
-    /rounds === 1[\s\S]{0,200}data-stl-print/.test(render),
+    "★★ 묶음 머리에는 「한 번에 인쇄」 — 묶음 전체를 한 장으로",
+    /rounds === 1[\s\S]{0,400}data-stl-print-group[\s\S]{0,300}data-stl-preview-group/.test(render) &&
+      /mergeOrdersForTicket\(groupByFirstId/.test(render),
     ""
   );
   check("★ 펼치면 라운드마다 제 버튼이 있다", /stl-order-round-head[\s\S]{0,300}data-stl-print/.test(render), "");
@@ -170,8 +173,32 @@ out.push("\n[화면에 그리는 쪽]");
   check("★ 할인도 더해서 뺀다 — 실제로 받은 돈이어야 한다", /discount_amount/.test(total), "");
 }
 
+out.push("\n[여러 번 시킨 것을 한 장으로 — mergeOrdersForTicket]");
+{
+  const src = fnSource(admin, "mergeOrdersForTicket");
+  check("mergeOrdersForTicket 가 있다", !!src);
+  const merge = new Function(`${src}; return mergeOrdersForTicket;`)();
+  const it = (n, p) => ({ name_zh: n, qty: 1, unit_price: p });
+  const g = [
+    { id: 1, table_number: "20", status: "paid", order_type: "dine_in", created_at: "2026-10-03 20:10:00", party_size: 2, total: 300, discount_amount: 0, items: [it("A", 100), it("B", 200)] },
+    { id: 2, table_number: "20", status: "cancelled", order_type: "dine_in", total: 999, items: [it("X", 999)] },
+    { id: 3, table_number: "20", status: "paid", order_type: "takeout", created_at: "2026-10-03 20:30:00", party_size: 2, total: 420, discount_amount: 42, discount_type: "vip", refund_total: 50, items: [it("C", 420)] },
+  ];
+  const m = merge(g);
+  check("★★ 라운드 품목을 시킨 순서대로 다 담는다", m.items.map((x) => x.name_zh).join("") === "ABC", m.items.map((x) => x.name_zh).join(""));
+  check("★★ 취소된 라운드는 뺀다 — 안 받은 돈이 종이에 안 찍힌다", m.total === 720, String(m.total));
+  check("★ 할인·돌려준 금액은 더한다", m.discount_amount === 42 && m.refund_total === 50 && m.discount_type === "vip", JSON.stringify(m));
+  check("★ 다 냈으면 paid — 받은 돈(할인 뒤)으로 찍힌다", m.status === "paid", m.status);
+  check("매장·포장이 섞이면 mixed", m.order_type === "mixed", m.order_type);
+  check("★ 인원은 더하지 않는다 — 한 번 앉은 손님", m.party_size === 2, String(m.party_size));
+  check("자리·시각은 첫 라운드", m.table_number === "20" && m.created_at === "2026-10-03 20:10:00", "");
+  check("원래 주문은 안 건드린다", g[0].items.length === 2 && g[0].total === 300, "");
+  check("한 건만 살아 있으면 그 주문 그대로", merge([g[0], g[1]]) === g[0], "");
+  check("다 취소면 null", merge([g[1]]) === null, "");
+}
+
 out.push("\n[문구와 모양]");
-for (const key of ["settlementOrdersRounds", "settlementOrdersRoundNo", "settlementOrdersCountRounds"]) {
+for (const key of ["settlementOrdersPrintAll", "settlementOrdersRounds", "settlementOrdersRoundNo", "settlementOrdersCountRounds"]) {
   const hits = admin.split(`${key}:`).length - 1;
   check(`${key} 가 두 언어에 다 있다`, hits === 2, `${hits}군데`);
 }

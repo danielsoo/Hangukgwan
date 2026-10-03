@@ -1004,6 +1004,7 @@
       settlementOrdersPickupSuffix: "번",
       settlementOrdersRounds: "{n}번에 나눠 주문",
       settlementOrdersRoundNo: "{n}번째 주문",
+      settlementOrdersPrintAll: "🖨️ 한 번에 인쇄",
       settlementOrdersCountRounds: " · 주문 {n}번",
       settlementOrdersOpenGroups: " · 아직 결제 안 끝남 {n}",
       settlementOrdersCancelledGroups: " · 취소 {n}",
@@ -1931,6 +1932,7 @@
       settlementOrdersPickupSuffix: "號",
       settlementOrdersRounds: "分 {n} 次點餐",
       settlementOrdersRoundNo: "第 {n} 次點餐",
+      settlementOrdersPrintAll: "🖨️ 合併列印",
       settlementOrdersCountRounds: " · 共 {n} 筆點餐",
       settlementOrdersOpenGroups: " · 尚未結清 {n}",
       settlementOrdersCancelledGroups: " · 取消 {n}",
@@ -16474,12 +16476,14 @@
               <span class="stl-order-total">${settlementGroupTotalHtml(group)}</span>
               <span class="stl-order-actions">
                 ${
-                  // 묶음에는 머리의 인쇄·미리보기를 달지 않는다 — 어느 라운드를
-                  // 뽑는 것인지 알 수 없다. 펼치면 라운드마다 제 버튼이 있다.
+                  // 여러 번 나눠 시킨 묶음은 머리의 버튼이 **묶음 전체를 한 장으로**
+                  // 뽑는다(2026-10-03 사장님: "여러번 주문했어도 한 번에 인쇄할 수
+                  // 있게 해줘"). 라운드 하나만 뽑으려면 펼쳐서 그 라운드의 버튼.
                   rounds === 1
                     ? `<button type="button" class="stl-order-btn" data-stl-print="${first.id}">${T("printBtn")}</button>
                        <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>`
-                    : ""
+                    : `<button type="button" class="stl-order-btn" data-stl-print-group="${first.id}">${T("settlementOrdersPrintAll")}</button>
+                       <button type="button" class="stl-order-btn" data-stl-preview-group="${first.id}">${T("previewBtn")}</button>`
                 }
               </span>
               <span class="stl-order-caret">${open ? "▴" : "▾"}</span>
@@ -16553,6 +16557,27 @@
         }
       };
     });
+    const groupByFirstId = new Map(groups.map((g) => [g[0].id, g]));
+    listEl.querySelectorAll("[data-stl-print-group]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const merged = mergeOrdersForTicket(groupByFirstId.get(parseInt(btn.dataset.stlPrintGroup, 10)));
+        if (!merged) return;
+        btn.disabled = true;
+        try {
+          await printKitchenTicket(merged);
+        } finally {
+          btn.disabled = false;
+        }
+      };
+    });
+    listEl.querySelectorAll("[data-stl-preview-group]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const merged = mergeOrdersForTicket(groupByFirstId.get(parseInt(btn.dataset.stlPreviewGroup, 10)));
+        if (merged) previewKitchenTicket(merged);
+      };
+    });
     listEl.querySelectorAll("[data-stl-preview]").forEach((btn) => {
       btn.onclick = (e) => {
         e.stopPropagation();
@@ -16560,6 +16585,37 @@
         if (o) previewKitchenTicket(o);
       };
     });
+  }
+
+  /**
+   * 한 자리에서 여러 번 나눠 시킨 주문을 빌지 한 장으로 — 결산 지난 주문의 묶음.
+   *
+   * 2026-10-03 사장님: "여러번 주문했어도 한 번에 인쇄할 수 있게 해줘."
+   *
+   * 라운드마다 품목을 시킨 순서대로 이어 붙이고, 금액·할인·돌려준 금액은 더한다.
+   * 취소된 라운드는 뺀다 — 받지 않은 돈이 종이에 찍히면 안 된다. 인쇄·미리보기는
+   * 한 건짜리와 **같은 함수**(printKitchenTicket / previewKitchenTicket)를 탄다.
+   */
+  function mergeOrdersForTicket(group) {
+    const live = (group || []).filter((o) => o && o.status !== "cancelled");
+    if (!live.length) return null;
+    if (live.length === 1) return live[0];
+    const first = live[0];
+    const sum = (k) => live.reduce((a, o) => a + Number(o[k] || 0), 0);
+    const types = [...new Set(live.map((o) => o.order_type).filter(Boolean))];
+    const discountType = (live.find((o) => Number(o.discount_amount) > 0) || {}).discount_type || null;
+    return {
+      ...first,
+      items: live.flatMap((o) => o.items || []),
+      total: sum("total"),
+      discount_amount: sum("discount_amount"),
+      discount_type: discountType,
+      refund_total: sum("refund_total"),
+      // 다 낸 묶음이어야 「받은 돈」(할인 뒤)으로 찍힌다(paidOrderDiscount).
+      status: live.every((o) => o.status === "paid") ? "paid" : first.status,
+      order_type: types.length === 1 ? types[0] : "mixed",
+      // 인원은 한 번 앉은 손님 — 라운드마다 같은 값이 적혀 있다. 더하지 않는다.
+    };
   }
 
   /**
