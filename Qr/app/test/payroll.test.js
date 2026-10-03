@@ -109,19 +109,20 @@ out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 그 달 보너�
   const fd = P.cleanDays(fixed, "2026-06"); // 별 없는 날 199.5h · ★ 날 38h · 초과 4h · 조퇴 10분 + ★ 날 2분
   const h = P.computeMonth({ month: "2026-06", days: fd, bonus: 2000, bonus_note: "명절" }, { pay_type: "hourly", hourly_rate: 200, ot_rate: 300, star_rate: 250 });
   const line = (r, k) => r.lines.find((l) => l.key === k) || {};
-  check("★★ 시급제: 기본 199.5h × 200", line(h, "regular").amount === 39900 && line(h, "regular").hours === 199.5, JSON.stringify(line(h, "regular")));
-  check("★★ ★ 날은 ★ 날 시급 — 38h × 250", line(h, "star").amount === 9500 && line(h, "star").rate === 250, JSON.stringify(line(h, "star")));
-  check("★★ 조퇴 차감은 그 날 시급으로 — 10분 × 200 + ★ 날 2분 × 250 = 42", line(h, "deduct").amount === -42, JSON.stringify(line(h, "deduct")));
+  // ★ 날도 같은 시급 — 2026-10-03 사장님: "우린 주5일 넘어도 다른 시급으로 주지 않아 다 똑같은
+  // 시급으로 고정으로 줘". 예전에 적어 둔 star_rate(250)가 있어도 안 쓴다.
+  check("★★ 시급제: ★ 날까지 한 줄 — (199.5 + 38)h × 200", line(h, "regular").amount === 47500 && line(h, "regular").hours === 237.5 && !line(h, "star").amount, JSON.stringify(h.lines));
+  check("★★ 조퇴 차감도 같은 시급 — 12분 × 200 = 40", line(h, "deduct").amount === -40, JSON.stringify(line(h, "deduct")));
   check("★★ 초과는 초과 시급 — 4h × 300", line(h, "overtime").amount === 1200 && line(h, "overtime").rate === 300, JSON.stringify(line(h, "overtime")));
   check("★★ 보너스 2,000 (메모 「명절」)", line(h, "bonus").amount === 2000 && line(h, "bonus").note === "명절", JSON.stringify(line(h, "bonus")));
-  check("합계 = 39,900 + 9,500 + 1,200 + 2,000 − 42", h.total === 52558, String(h.total));
+  check("합계 = 47,500 + 1,200 + 2,000 − 40", h.total === 50660, String(h.total));
   const m = P.computeMonth({ month: "2026-06", days: fd, bonus: 3000 }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150, ot_rate: 220 });
   check("★★ 월급제: 월급 + ★ 날(시급 비움 → 기본 150) + 초과(220) + 보너스", m.total === 36000 + 38 * 150 + 4 * 220 + 3000 - 30 && line(m, "star").rate === 150 && line(m, "overtime").rate === 220, JSON.stringify(m.lines));
   const plain = P.computeMonth({ month: "2026-06", days: fd }, { pay_type: "hourly", hourly_rate: 200 });
-  check("초과·★ 시급을 비우면 기본 시급과 같다", plain.ot_rate === 200 && plain.star_rate === 200 && !line(plain, "bonus").amount, "");
+  check("초과 시급을 비우면 기본 시급과 같다", plain.ot_rate === 200 && !line(plain, "bonus").amount, "");
   check("보너스 정리 — 음수·글자는 0, 메모는 60자", P.cleanBonus({ bonus: -5 }).bonus === 0 && P.cleanBonus({ bonus: "abc" }).bonus === 0 && P.cleanBonus({ bonus: 1500.4, bonus_note: "x".repeat(80) }).bonus_note.length === 60, "");
   const st = P.cleanStaff({ name: "A", pay_type: "monthly", monthly_salary: 30000, hourly_rate: 160, ot_rate: 240, star_rate: "" });
-  check("직원 정보에 초과 시급·★ 시급", st.ot_rate === 240 && st.star_rate === null, JSON.stringify(st));
+  check("직원 정보에 초과 시급 — ★ 날 시급은 없다", st.ot_rate === 240 && !("star_rate" in st), JSON.stringify(st));
 }
 
 out.push("\n[근무 시간을 다르게 적으면 그대로 따른다 — 11–14 · 17–21]");
@@ -198,8 +199,8 @@ out.push("\n[휴무 날은 지각·조퇴 없음 / 국가 공휴일 ×1.3 · ×1
   const line = (k, extra = () => true) => r.lines.find((l) => l.key === k && extra(l)) || {};
   check("★★ 시급제 — 평소 9일 9.5h × 220", line("regular").hours === 9.5 && line("regular").amount === 2090, JSON.stringify(line("regular")));
   check("★★ 10일 공휴일 ×1.7 — 9.5h × 220 × 1.7 = 3,553", line("holiday", (l) => l.mult === 1.7).amount === 3553, JSON.stringify(r.lines));
-  check("★★ 11일 ★ 날이면서 공휴일 ×1.3 — ★ 시급으로 9.5h × 250 × 1.3 = 3,088", line("holiday", (l) => l.mult === 1.3 && l.star).amount === 3088 && !line("star").amount, JSON.stringify(r.lines));
-  check("합계 2,090 + 3,553 + 3,088", r.total === 2090 + 3553 + 3088 && r.holiday_days === 2, String(r.total));
+  check("★★ 11일 ★ 날이면서 공휴일 ×1.3 — 같은 시급 9.5h × 220 × 1.3 = 2,717", line("holiday", (l) => l.mult === 1.3).amount === 2717 && !line("star").amount, JSON.stringify(r.lines));
+  check("합계 2,090 + 3,553 + 2,717", r.total === 2090 + 3553 + 2717 && r.holiday_days === 2, String(r.total));
   check("출근 일수는 그대로 3일(★ 1)", r.normal_days === 2 && r.star_days === 1, "");
   const m = P.computeMonth({ month: "2026-10", days: { 10: full } }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150 }, null, () => W, W, info);
   check("★ 월급제 — 월급에 공휴일 유급이 들어 있으니 일한 시간 × 시급 × 배율을 얹는다", m.total === 36000 + Math.round(9.5 * 150 * 1.7), String(m.total));
@@ -230,12 +231,13 @@ out.push("\n[서버 — 사장님만]");
   res = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed });
   check("★ 저장", res.status === 200 && res.body.result.total === 48260, "");
   res = await boss.put(`/api/payroll/staff/${id}`).send({ ot_rate: 300, star_rate: 250 });
-  check("★ 직원별 초과 시급·★ 날 시급 저장", res.body.staff.ot_rate === 300 && res.body.staff.star_rate === 250 && res.body.staff.hourly_rate === 200, JSON.stringify(res.body));
+  check("★ 직원별 초과 시급 저장", res.body.staff.ot_rate === 300 && res.body.staff.hourly_rate === 200, JSON.stringify(res.body));
   res = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed, bonus: 2000, bonus_note: "명절" });
   check("★ 보너스를 카드와 같이 저장", res.body.card.bonus === 2000 && res.body.card.bonus_note === "명절", JSON.stringify(res.body.card && res.body.card.bonus));
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
   // 별 없는 날 199.5h×200 + ★ 날 38h×250 + 초과 4h×300 + 보너스 2,000 − 조퇴(10분×200 + 2분×250 = 42)
-  check("★★ 다시 열면 보너스·시급이 그대로 들어간 합계", res.body.card.bonus === 2000 && res.body.result.total === 199.5 * 200 + 38 * 250 + 4 * 300 + 2000 - 42, String(res.body.result.total));
+  // (199.5 + 38)h × 200 + 초과 4h × 300 + 보너스 2,000 − 조퇴 12분(40) — ★ 날도 같은 시급
+  check("★★ 다시 열면 보너스·시급이 그대로 들어간 합계", res.body.card.bonus === 2000 && res.body.result.total === 237.5 * 200 + 4 * 300 + 2000 - 40, String(res.body.result.total));
   await boss.put(`/api/payroll/staff/${id}`).send({ ot_rate: null, star_rate: null });
   await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed });
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);

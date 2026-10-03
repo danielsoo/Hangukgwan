@@ -55,7 +55,7 @@ function compute(card, staff, rules, holidays = {}) {
 }
 const staffOut = (s) => ({
   id: String(s._id), name: s.name, pay_type: s.pay_type, hourly_rate: s.hourly_rate, monthly_salary: s.monthly_salary,
-  ot_rate: s.ot_rate ?? null, star_rate: s.star_rate ?? null, active: s.active !== false,
+  ot_rate: s.ot_rate ?? null, active: s.active !== false,
 });
 
 router.get("/status", async (req, res) => {

@@ -157,7 +157,7 @@ function check(name, cond, extra = "") {
     check("★ 표의 2일에 「공휴일 ×1.7」 — 일본 국기(🎌)를 쓰지 않는다", /공휴일 ×1\.7/.test(await page.locator('#payrollGrid tr[data-day="2"] .pg-day').innerText()) && (await page.locator('#payrollGrid tr[data-day="2"]').evaluate((tr) => tr.classList.contains("is-holiday"))) && !/🎌/.test(await page.locator("#tab-payroll").innerText()), "");
     const rh = await page.locator("#payrollResult").innerText();
     // 2일 9.5h × 200 × 1.7 = 3,230 / 7일 9.5h × 200 / ★ 6일 9.5h × 200 / 초과 1h × 200
-    check("★★ 「국가 공휴일 ×1.7 · 9.5h × NT$200 × 1.7 NT$3,230」, 지급액 NT$7,230", /국가 공휴일 ×1\.7 · 9\.5h × NT\$200 × 1\.7\s*NT\$3,230/.test(rh) && /이 달 지급액\s*NT\$7,230/.test(rh) && /근무 · 9\.5h × NT\$200/.test(rh), rh);
+    check("★★ 「국가 공휴일 ×1.7 · 9.5h × NT$200 × 1.7 NT$3,230」, 지급액 NT$7,230", /국가 공휴일 ×1\.7 · 9\.5h × NT\$200 × 1\.7\s*NT\$3,230/.test(rh) && /이 달 지급액\s*NT\$7,230/.test(rh) && /근무 · 19h × NT\$200/.test(rh), rh);
     await page.locator('#payrollHolidayList [data-hol-del="2026-06-02"]').click();
     await page.click("#appDialogOk");
     await page.waitForTimeout(1200);
@@ -168,22 +168,22 @@ function check(name, cond, extra = "") {
   {
     // 2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간 얼마 줄거고 이런 걸 다
     // 개개별로 정할 수 있게 해줘 그리고 보너스 칸도 만들어주고"
-    check("기본·초과·★ 시급 칸이 있다", (await page.locator("#payrollHourlyRate").isVisible()) && (await page.locator("#payrollOtRate").isVisible()) && (await page.locator("#payrollStarRate").isVisible()), "");
+    // ★ 날 시급 칸은 없다 — 2026-10-03 사장님: "우린 주5일 넘어도 다른 시급으로 주지 않아"
+    check("기본·초과 시급 칸이 있고 ★ 날 시급 칸은 없다", (await page.locator("#payrollHourlyRate").isVisible()) && (await page.locator("#payrollOtRate").isVisible()) && (await page.locator("#payrollStarRate").count()) === 0, "");
     check("빈칸은 「기본과 같음」", (await page.locator("#payrollOtRate").getAttribute("placeholder")) === "기본과 같음", "");
     check("시급제일 때는 월급 칸이 숨는다", !(await page.locator("#payrollMonthlySalary").isVisible()), "");
-    check("시급제 안내 한 줄", /시급제: 근무 시간 × 기본 시급/.test(await page.locator("#payrollRatesHint").innerText()), "");
+    check("시급제 안내 한 줄", /시급제: 근무 시간\(★ 날 포함\) × 기본 시급/.test(await page.locator("#payrollRatesHint").innerText()), "");
     await page.fill("#payrollOtRate", "300");
-    await page.fill("#payrollStarRate", "250");
     await page.click("#payrollSaveStaff");
     await page.waitForTimeout(900);
     const r1 = await page.locator("#payrollResult").innerText();
-    // 하루 9.5h: 별 없는 날 2일 19h × 200, ★ 날 9.5h × 250, 초과 1h × 300
-    check("★★ ★ 날은 ★ 날 시급(250), 초과는 초과 시급(300)", /★ 카드 날 · 9\.5h × NT\$250/.test(r1) && /초과 · 1h × NT\$300/.test(r1) && /근무 · 19h × NT\$200/.test(r1), r1);
+    // 하루 9.5h: 별 없는 날 2일 + ★ 날 1일 = 28.5h × 200(같은 시급, 한 줄), 초과 1h × 300
+    check("★★ ★ 날도 같은 시급 — 「근무 · 28.5h × NT$200」 한 줄, 초과는 초과 시급(300)", /근무 · 28\.5h × NT\$200/.test(r1) && !/★ 카드 날/.test(r1) && /초과 · 1h × NT\$300/.test(r1), r1);
     await page.fill("#payrollBonus", "2000");
     await page.fill("#payrollBonusNote", "명절");
     await page.waitForTimeout(900);
     const r2 = await page.locator("#payrollResult").innerText();
-    check("★★ 보너스 줄 「보너스 · 명절 NT$2,000」, 합계에 들어간다", /보너스 · 명절\s*NT\$2,000/.test(r2) && /이 달 지급액\s*NT\$8,475/.test(r2), r2);
+    check("★★ 보너스 줄 「보너스 · 명절 NT$2,000」, 합계에 들어간다", /보너스 · 명절\s*NT\$2,000/.test(r2) && /이 달 지급액\s*NT\$8,000/.test(r2), r2);
     check("보너스를 고치면 「저장 안 됨」", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
     await page.click("#payrollSaveCard");
     await page.waitForTimeout(900);
@@ -194,7 +194,7 @@ function check(name, cond, extra = "") {
     await page.click("#payrollSaveStaff");
     await page.waitForTimeout(900);
     const r3 = await page.locator("#payrollResult").innerText();
-    check("★★ 월급제: 월급 36,000 + ★ 날 2,375(9.5h × 250) + 초과 300 + 보너스 2,000", /월급\s*NT\$36,000/.test(r3) && /이 달 지급액\s*NT\$40,675/.test(r3), r3);
+    check("★★ 월급제: 월급 36,000 + ★ 날 1,900(9.5h × 같은 시급 200) + 초과 300 + 보너스 2,000", /월급\s*NT\$36,000/.test(r3) && /★ 카드 날 · 9\.5h × NT\$200/.test(r3) && /이 달 지급액\s*NT\$40,200/.test(r3), r3);
     // 다시 열어도 보너스가 남아 있다
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(600);
@@ -268,6 +268,27 @@ function check(name, cond, extra = "") {
     await page.click("#payrollSaveCard");
     await page.waitForTimeout(900);
     check("★ 저장하면 서버에서도 비었다 — 출근 0일", /출근 0일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
+  }
+
+  out.push("\n[별 없는 카드 + ★ 카드를 한 번에 — 순서 거꾸로 넣어도]");
+  {
+    // 2026-10-03 사장님: "별표로 되어있는 건 날짜가 같더라도 주 5일 이상인 것들만 모아 놓은 거라서
+    // 그거 표 2개를 넣어도 혼동없이 제대로 입력되지?" — 카드는 자기가 찍힌 날만 건드린다.
+    const fx = (f) => require("path").join(__dirname, "fixtures", f);
+    await page.setInputFiles("#payrollPhoto", [fx("timecard-star.webp"), fx("timecard-normal.webp")]);
+    await page.locator("#payrollPhotoMsg").getByText("사진 2").first().waitFor({ timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    const msg = await page.locator("#payrollPhotoMsg").innerText();
+    const res = await page.locator("#payrollResult").innerText();
+    check("★★ ★ 카드 먼저, 별 없는 카드 나중에 한 번에 → 「출근 21일」 「★ 4일」", /출근 21일[\s\S]*★ 4일/.test(res), res);
+    const starOn = await page.evaluate(() => [...document.querySelectorAll("#payrollGrid tr")].filter((tr) => tr.querySelector("input.pg-star:checked")).map((tr) => tr.dataset.day).join());
+    check("★★ ★ 는 ★ 카드 날(6·12·19·25)에만", starOn === "6,12,19,25", starOn);
+    check("★ 두 장이 같은 날을 덮지 않는다 — 섞였다는 경고 없음", !/섞이지 않았는지/.test(msg), msg);
+    page.once("dialog", (d) => d.accept());
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(300);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(500);
   }
 
   out.push("\n[두 사람 카드가 섞이면 말한다]");

@@ -1490,16 +1490,14 @@
       payrollMonthlySalary: "월급",
       payrollHourlyRate: "기본 시급",
       payrollOtRate: "초과 근무 시급",
-      payrollStarRate: "★ 날 시급",
       payrollSameAsHourly: "기본과 같음",
-      payrollRatesHintHourly: "시급제: 근무 시간 × 기본 시급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 빈칸은 기본 시급을 따른다. 기본 시급을 비우면 가게 기본 시급(근무 규칙). 지각·조퇴는 빠진다.",
-      payrollRatesHintMonthly: "월급제: 월급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 기본 시급을 비우면 월급 ÷ 240. 지각·조퇴는 그 시급으로 빠진다.",
+      payrollRatesHintHourly: "시급제: 근무 시간(★ 날 포함) × 기본 시급 + 초과 시간 × 초과 근무 시급. ★ 날도 같은 시급. 초과 시급을 비우면 기본 시급. 기본 시급을 비우면 가게 기본 시급(근무 규칙). 지각·조퇴는 빠진다.",
+      payrollRatesHintMonthly: "월급제: 월급 + ★ 날 시간 × 기본 시급 + 초과 시간 × 초과 근무 시급. 기본 시급을 비우면 월급 ÷ 240. 지각·조퇴는 그 시급으로 빠진다.",
       payrollBonus: "🎁 이 달 보너스",
       payrollBonusNote: "메모 (예: 명절 보너스)",
       payrollLineBonus: "보너스",
       payrollLineDeduct: "지각·조퇴 차감",
       payrollLineHoliday: "국가 공휴일 ×{m}",
-      payrollLineHolidayStar: "★ 국가 공휴일 ×{m}",
       payrollHolidaysTitle: "📅 국가 공휴일",
       payrollHolidayNone: "이 달 없음",
       payrollHolidayNotePh: "이유 (예: 태풍)",
@@ -2529,16 +2527,14 @@
       payrollMonthlySalary: "月薪",
       payrollHourlyRate: "基本時薪",
       payrollOtRate: "加班時薪",
-      payrollStarRate: "★ 日時薪",
       payrollSameAsHourly: "同基本",
-      payrollRatesHintHourly: "時薪制：工時 × 基本時薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。空白則依基本時薪。基本時薪空白時用店家基本時薪（工作規則）。遲到·早退會扣除。",
-      payrollRatesHintMonthly: "月薪制：月薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。基本時薪空白時為月薪 ÷ 240。遲到·早退依此時薪扣除。",
+      payrollRatesHintHourly: "時薪制：工時（含 ★ 日）× 基本時薪 + 加班時數 × 加班時薪。★ 日同樣時薪。加班時薪空白則依基本時薪。基本時薪空白時用店家基本時薪（工作規則）。遲到·早退會扣除。",
+      payrollRatesHintMonthly: "月薪制：月薪 + ★ 日工時 × 基本時薪 + 加班時數 × 加班時薪。基本時薪空白時為月薪 ÷ 240。遲到·早退依此時薪扣除。",
       payrollBonus: "🎁 本月獎金",
       payrollBonusNote: "備註（例：節日獎金）",
       payrollLineBonus: "獎金",
       payrollLineDeduct: "遲到·早退扣款",
       payrollLineHoliday: "國定假日 ×{m}",
-      payrollLineHolidayStar: "★ 國定假日 ×{m}",
       payrollHolidaysTitle: "📅 國定假日",
       payrollHolidayNone: "本月沒有",
       payrollHolidayNotePh: "原因（例：颱風）",
@@ -13257,7 +13253,6 @@
     $("#payrollMonthlySalary").value = d.staff.monthly_salary ?? "";
     $("#payrollHourlyRate").value = d.staff.hourly_rate ?? "";
     $("#payrollOtRate").value = d.staff.ot_rate ?? "";
-    $("#payrollStarRate").value = d.staff.star_rate ?? "";
     $("#payrollStaffInactive").checked = !d.staff.active;
     payroll.bonus = { bonus: d.card.bonus || 0, bonus_note: d.card.bonus_note || "" };
     $("#payrollBonus").value = d.card.bonus || "";
@@ -13478,7 +13473,7 @@
         .map(
           (l) =>
             l.key === "holiday"
-              ? `<div class="pr-line pr-holiday"><span>${escapeHtml(T(l.star ? "payrollLineHolidayStar" : "payrollLineHoliday").replace("{m}", l.mult))} · ${l.hours}h × NT$${money(l.rate)} × ${l.mult}</span><span>NT$${money(l.amount)}</span></div>`
+              ? `<div class="pr-line pr-holiday"><span>${escapeHtml(T("payrollLineHoliday").replace("{m}", l.mult))} · ${l.hours}h × NT$${money(l.rate)} × ${l.mult}</span><span>NT$${money(l.amount)}</span></div>`
               : l.key === "deduct"
               ? `<div class="pr-line pr-deduct"><span>${escapeHtml(lineName.deduct)} · ${escapeHtml(T("payrollDeductDetail").replace("{late}", l.late_hours).replace("{early}", l.early_min))}</span><span>−NT$${money(-l.amount)}</span></div>`
               : `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}${l.note ? ` · ${escapeHtml(l.note)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
@@ -13728,7 +13723,6 @@
         monthly_salary: $("#payrollMonthlySalary").value === "" ? null : Number($("#payrollMonthlySalary").value),
         hourly_rate: $("#payrollHourlyRate").value === "" ? null : Number($("#payrollHourlyRate").value),
         ot_rate: $("#payrollOtRate").value === "" ? null : Number($("#payrollOtRate").value),
-        star_rate: $("#payrollStarRate").value === "" ? null : Number($("#payrollStarRate").value),
         active: !$("#payrollStaffInactive").checked,
       };
       const res = await fetch(`/api/payroll/staff/${encodeURIComponent(payroll.current.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

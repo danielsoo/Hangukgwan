@@ -249,40 +249,39 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null,
   // 직원마다 따로 정하는 값(2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간
   // 얼마 줄거고 이런 걸 다 개개별로 정할 수 있게"). 비워 두면 기본 시급과 같다.
   const otRate = Number(s.ot_rate) > 0 ? Number(s.ot_rate) : hourly;
-  const starRate = Number(s.star_rate) > 0 ? Number(s.star_rate) : hourly;
+  // ★ 날도 같은 시급 — 2026-10-03 사장님: "우린 주5일 넘어도 다른 시급으로 주지 않아 다 똑같은
+  // 시급으로 고정으로 줘". 그래서 ★ 날 시급 칸은 없다(예전에 적어 둔 star_rate 도 안 쓴다).
   const lines = [];
   // 국가 공휴일(2026-10-03 사장님: "대만 국가지정 공휴일은 급여가 별도로 책정이 돼. 1.3배 또는
   // 1.7배로 고를 수 있게"). 그 날 일한 기본 시간은 시급 × 배율로 따로 한 줄. 시급제는 평소 줄에서
   // 그 시간을 빼서 옮기고, 월급제는 월급에 공휴일 유급이 들어 있으므로 일한 시간만큼 얹는다.
   const hol = Object.values(holidayHours).sort((a, b) => a.mult - b.mult);
-  const holNormal = hol.reduce((a, h) => a + h.normal, 0);
+  const holHours = hol.reduce((a, h) => a + h.normal + h.star, 0);
   const holStar = hol.reduce((a, h) => a + h.star, 0);
   if (type === "hourly") {
-    const h = normalHours - holNormal;
+    // 시급제는 ★ 날도 한 줄 — 시급이 같으니 「근무」에 같이 센다.
+    const h = normalHours + starHours - holHours;
     lines.push({ key: "regular", hours: h, rate: hourly, amount: h * hourly });
   } else {
     lines.push({ key: "salary", amount: salary });
+    // 월급제: ★ 날(주 5일을 넘긴 날)은 월급에 들어 있지 않다 — 같은 시급으로 얹는다.
+    const starPlain = starHours - holStar;
+    if (starPlain) lines.push({ key: "star", hours: starPlain, rate: hourly, amount: starPlain * hourly });
   }
-  // ★ 날(주 5일을 넘긴 날)은 시급제·월급제 모두 따로 — 월급에 들어 있지 않다.
-  const starPlain = starHours - holStar;
-  if (starPlain) lines.push({ key: "star", hours: starPlain, rate: starRate, amount: starPlain * starRate });
-  for (const h of hol) {
-    if (h.normal) lines.push({ key: "holiday", mult: h.mult, hours: h.normal, rate: hourly, days: h.days, amount: h.normal * hourly * h.mult });
-    if (h.star) lines.push({ key: "holiday", star: true, mult: h.mult, hours: h.star, rate: starRate, days: h.days, amount: h.star * starRate * h.mult });
-  }
+  for (const h of hol) lines.push({ key: "holiday", mult: h.mult, hours: h.normal + h.star, rate: hourly, days: h.days, amount: (h.normal + h.star) * hourly * h.mult });
   if (otHours) lines.push({ key: "overtime", hours: otHours, rate: otRate, amount: otHours * otRate });
   // 그 달 보너스 — 카드(그 달 문서)에 적는다.
   const bonus = Math.max(0, Number(card && card.bonus) || 0);
   if (bonus) lines.push({ key: "bonus", amount: bonus, note: (card && card.bonus_note) || "" });
-  // 지각·조퇴 차감 — 그 날의 시급으로(★ 날은 ★ 시급).
-  const deduct = deductNormal * hourly + deductStar * starRate;
+  // 지각·조퇴 차감 — 시급으로.
+  const deduct = (deductNormal + deductStar) * hourly;
   if (deduct > 0) lines.push({ key: "deduct", late_hours: lateHours, early_min: earlyMin, rate: hourly, amount: -deduct });
   for (const l of lines) l.amount = Math.round(l.amount);
   const total = Math.max(0, lines.reduce((a, l) => a + l.amount, 0));
   const warnings = [];
   if (type === "hourly" && hourly > 0 && hourly < MIN_WAGE.hourly) warnings.push({ key: "below_min_hourly", min: MIN_WAGE.hourly });
   if (type === "monthly" && salary > 0 && salary < MIN_WAGE.monthly) warnings.push({ key: "below_min_monthly", min: MIN_WAGE.monthly });
-  if ((type === "hourly" && !hourly) || (otHours && !otRate) || (starHours && !starRate)) warnings.push({ key: "no_rate" });
+  if ((type === "hourly" && !hourly) || (otHours && !otRate)) warnings.push({ key: "no_rate" });
   return {
     month,
     rules,
@@ -290,7 +289,6 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null,
     pay_type: type,
     hourly_rate: hourly,
     ot_rate: otRate,
-    star_rate: starRate,
     bonus,
     normal_days: normalDays,
     star_days: starDays,
@@ -349,7 +347,6 @@ function cleanStaff(b) {
     hourly_rate: num(b.hourly_rate),
     monthly_salary: num(b.monthly_salary),
     ot_rate: num(b.ot_rate), // 초과 시급(비우면 기본 시급)
-    star_rate: num(b.star_rate), // ★ 날 시급(비우면 기본 시급)
     active: b.active !== false,
   };
 }
