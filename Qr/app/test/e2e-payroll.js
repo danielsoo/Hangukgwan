@@ -117,49 +117,39 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(900);
   check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /합계\s*NT\$4,400/.test(await page.locator("#payrollResult").innerText()), "");
 
-  out.push("\n[📷 카드 사진으로 채우기 — 2026-10-03]");
+  out.push("\n[📷 카드 사진으로 채우기 — AI 없이, 이 브라우저에서]");
   {
-    // 진짜 Claude 대신 가짜 — ★ 카드(6월)를 읽었다고 답한다.
-    const V = require("../src/payrollVision");
-    const answer = {
-      name: "劉芷芸", roc_year: 115, month: 6, star: true,
-      days: [
-        { day: 12, am_in: "09:04", am_out: "14:00", pm_in: "16:11", pm_out: "21:08", ot_in: null, ot_out: null },
-        { day: 19, am_in: "09:00", am_out: "14:07", pm_in: "16:07", pm_out: "21:06", ot_in: null, ot_out: null },
-      ],
-      unclear: [{ day: 19, slot: "pm_out", note: "smudged" }],
-    };
-    let calls = 0;
-    V.setClientForTest({ beta: { messages: { create: async () => { calls++; return { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(answer) }] }; } } } });
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForTimeout(600);
-    await page.locator('.admin-tabs button[data-tab="payroll"]').click();
-    await page.fill("#payrollMonth", "2026-06");
-    await page.dispatchEvent("#payrollMonth", "change");
-    await page.waitForTimeout(700);
-    await page.locator("#payrollStaffChips button").first().click();
-    await page.waitForTimeout(800);
+    // 2026-10-03 사장님: "손글씨로 인식이 되면 직접 채워 넣어야 한다는 걸 표시해줘."
+    // 사장님이 보내신 6월 카드(이름 칸 지움)를 그대로 올린다.
+    const requests = [];
+    page.on("request", (r) => { if (r.method() === "POST") requests.push(r.url()); });
     check("「📷 카드 사진으로 채우기」 버튼", /카드 사진/.test(await page.locator(".payroll-photo-btn").innerText()), "");
-    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    await page.setInputFiles("#payrollPhoto", { name: "card.png", mimeType: "image/png", buffer: png });
-    await page.waitForTimeout(1500);
+    await page.setInputFiles("#payrollPhoto", require("path").join(__dirname, "fixtures", "timecard-normal.webp"));
+    await page.locator("#payrollPhotoMsg").getByText("직접 채워 넣어").waitFor({ timeout: 20000 }).catch(() => {});
     const msg = await page.locator("#payrollPhotoMsg").innerText();
-    check("★★ 「★ 카드에서 2일을 읽었어요」", /★ 카드에서 2일을 읽었어요/.test(msg), msg);
-    check("★★ 12일이 표에 들어가고 ★ 가 켜진다", (await page.locator('#payrollGrid tr[data-day="12"] input[data-slot="pm_out"]').inputValue()) === "21:08" && (await page.locator('#payrollGrid tr[data-day="12"] input.pg-star').isChecked()), "");
-    check("★ 읽은 칸은 파란 글씨", await page.locator('#payrollGrid tr[data-day="12"] input[data-slot="am_in"]').evaluate((el) => el.classList.contains("is-read")), "");
-    check("★ 확실치 않은 칸(19일 오후 퇴근)은 노란 칸", await page.locator('#payrollGrid tr[data-day="19"] input[data-slot="pm_out"]').evaluate((el) => el.classList.contains("is-unclear")), "");
-    check("★★ 저장 전 — 「저장 안 됨」(사진만으로 저장하지 않는다)", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
-    check("결과에 ★ 날이 늘었다(1 → 3)", /★3일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
-    // 다른 달 카드는 채우지 않고 말한다.
-    answer.month = 7;
-    await page.setInputFiles("#payrollPhoto", { name: "card.png", mimeType: "image/png", buffer: png });
-    await page.waitForTimeout(1500);
-    check("★ 다른 달 카드는 채우지 않고 이유를 말한다", /2026-07 카드예요/.test(await page.locator("#payrollPhotoMsg").innerText()), await page.locator("#payrollPhotoMsg").innerText());
-    check("모델을 두 번 불렀다", calls === 2, String(calls));
+    check("★★ 두 면을 읽었다고 말한다", /1~15일 면에서 10일/.test(msg) && /16~31일 면에서 11일/.test(msg), msg);
+    check("★★ 손글씨 칸 2개 — 어디인지 적는다", /손글씨라 읽지 않은 칸 2개/.test(msg) && /3일 오전 퇴근/.test(msg) && /30일 오후 출근/.test(msg), msg);
+    const hand3 = page.locator('#payrollGrid tr[data-day="3"] input[data-slot="am_out"]');
+    check("★★ 손글씨 칸은 빨간 칸 + 「✍」, 값은 비어 있다", (await hand3.evaluate((el) => el.classList.contains("is-hand") && el.placeholder === "✍")) && (await hand3.inputValue()) === "", "");
+    check("빨간 칸에 마우스를 올리면 「직접 채워 넣어 주세요」", /직접 채워 넣어/.test(await hand3.getAttribute("title")), "");
+    check("★ 읽은 칸은 파란 글씨 — 2일 09:11", (await page.locator('#payrollGrid tr[data-day="2"] input[data-slot="am_in"]').inputValue()) === "09:11" && (await page.locator('#payrollGrid tr[data-day="2"] input[data-slot="am_in"]').evaluate((el) => el.classList.contains("is-read"))), "");
+    check("28일 23:12 도 읽는다", (await page.locator('#payrollGrid tr[data-day="28"] input[data-slot="pm_out"]').inputValue()) === "23:12", "");
+    check("★★ 사진은 서버로 가지 않는다(POST 는 계산 미리보기뿐)", requests.every((u) => /\/api\/payroll\/preview$/.test(u)), requests.join(" "));
+    check("저장 전 — 「저장 안 됨」", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
+    // 사장님이 카드를 보고 손글씨 칸을 채우면 빨간 칸이 풀린다.
+    await hand3.fill("1405");
+    await hand3.press("Tab");
+    await page.waitForTimeout(300);
+    check("★ 채우면 빨간 칸이 풀린다", (await hand3.inputValue()) === "14:05" && !(await hand3.evaluate((el) => el.classList.contains("is-hand"))), "");
+    // ★ 카드
+    await page.setInputFiles("#payrollPhoto", require("path").join(__dirname, "fixtures", "timecard-star.webp"));
+    await page.locator("#payrollPhotoMsg").getByText("★ 카드").first().waitFor({ timeout: 20000 }).catch(() => {});
+    check("★★ ★ 카드를 올리면 그 날들에 ★ 가 켜진다", await page.locator('#payrollGrid tr[data-day="19"] input.pg-star').isChecked(), await page.locator("#payrollPhotoMsg").innerText());
+    await page.waitForTimeout(800);
+    check("★★ 결과 「출근 21 + ★4일」", /출근 21 \+ ★4일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
     await page.click("#payrollSaveCard");
     await page.waitForTimeout(900);
-    check("저장하면 저장된다", /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
-    V.setClientForTest(null);
+    check("저장", /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
   }
 
   out.push("\n[잘못 친 시각]");

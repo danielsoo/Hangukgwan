@@ -2716,3 +2716,6 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-photo-msg div + div { margin-top: 3px; }
 .payroll-grid input.pg-t.is-unclear { border-color: #e0a800; background: rgba(240, 180, 0, 0.18); }
 .payroll-grid input.pg-t.is-read { color: #1f6fb5; }
+/* 손글씨 칸 — 읽지 않았다. 직접 채워 넣어야 한다. */
+.payroll-grid input.pg-t.is-hand { border: 2px solid #b5232c; background: rgba(181, 35, 44, 0.12); }
+.payroll-grid input.pg-t.is-hand::placeholder { color: #b5232c; opacity: 1; }

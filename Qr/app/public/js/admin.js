@@ -1494,22 +1494,16 @@
       payrollConfirmAll: "✓ 초과 시간 모두 확인",
       payrollPhotoBtn: "📷 카드 사진으로 채우기",
       payrollPhotoReading: "사진 읽는 중… ({i}/{n})",
-      payrollPhotoOne: "사진 {i}: {star}카드에서 {n}일을 읽었어요.",
-      payrollPhotoCheck: "파란 글씨가 사진에서 읽은 칸, 노란 칸은 확실하지 않은 칸이에요. 카드와 맞춰 보고 「카드 저장」을 누르세요.",
-      payrollPhotoOtherMonth: "이 사진은 {got} 카드예요(지금 {want}). 위에서 달을 바꾸고 다시 올려 주세요.",
-      payrollPhotoOtherName: "사진의 이름은 「{got}」이에요(지금 {want}). 맞는 직원인지 확인하세요.",
-      payrollPhotoFailed: "사진 {i}을 읽지 못했어요 — {why}",
-      payrollPhotoUnclear: "확실하지 않음",
-      payrollPhotoNoKey: "사진 읽기를 쓰려면 Vercel 환경변수 ANTHROPIC_API_KEY 가 있어야 해요. 그 전까지는 표에 직접 넣어 주세요.",
-      payrollPhotoErr_no_vision_key: "사진 읽기 키(ANTHROPIC_API_KEY)가 없어요",
-      payrollPhotoErr_vision_key_rejected: "사진 읽기 키가 맞지 않아요",
-      payrollPhotoErr_vision_busy: "잠시 뒤에 다시 해 주세요(요청이 많아요)",
-      payrollPhotoErr_bad_image: "사진 파일이 아니에요",
-      payrollPhotoErr_vision_unreadable: "카드 표를 찾지 못했어요 — 카드가 화면에 꽉 차게 다시 찍어 주세요",
-      payrollPhotoErr_vision_refused: "읽기를 거절당했어요",
-      payrollPhotoErr_vision_bad_request: "요청이 잘못됐어요",
-      payrollPhotoErr_vision_failed: "읽는 곳에서 오류가 났어요",
-      payrollPhotoErr_vision_unreachable: "읽는 곳에 연결하지 못했어요",
+      payrollPhotoOne: "사진 {i}: {star}카드 {side}에서 {n}일을 읽었어요.",
+      payrollPhotoSideBlue: "1~15일 면",
+      payrollPhotoSideOrange: "16~31일 면",
+      payrollPhotoCheck: "파란 글씨는 사진에서 읽은 칸, 노란 칸은 확실하지 않거나 못 읽은 칸(비어 있으면 직접 넣기)이에요. 카드와 맞춰 보고 「카드 저장」을 누르세요.",
+      payrollPhotoHand: "✍ 손글씨라 읽지 않은 칸 {n}개 — 빨간 칸({list})에 직접 채워 넣어 주세요.",
+      payrollPhotoHandCell: "손글씨 — 카드를 보고 직접 채워 넣어 주세요",
+      payrollPhotoUnclear: "확실하지 않음 — 카드와 맞춰 보세요",
+      payrollPhotoNoCard: "사진 {i}에서 카드 표를 찾지 못했어요 — 카드를 반듯하게, 화면에 꽉 차게 다시 찍어 주세요(스캔이면 가장 좋아요).",
+      payrollPhotoBad: "사진 {i}을 열지 못했어요.",
+      payrollDayShort: "일",
       payrollSaveCard: "카드 저장",
       payrollRulesTitle: "초과 시간 규칙",
       payrollThreshold: "영업시간 끝을 몇 분 넘기면 0.5시간",
@@ -2497,22 +2491,16 @@
       payrollConfirmAll: "✓ 全部加班確認",
       payrollPhotoBtn: "📷 用考勤卡照片填入",
       payrollPhotoReading: "讀取照片中…（{i}/{n}）",
-      payrollPhotoOne: "照片 {i}：從{star}考勤卡讀到 {n} 天。",
-      payrollPhotoCheck: "藍字是從照片讀到的格子，黃色格是不確定的格子。請對照考勤卡後按「儲存考勤卡」。",
-      payrollPhotoOtherMonth: "這張照片是 {got} 的考勤卡（目前是 {want}）。請先在上方切換月份再上傳。",
-      payrollPhotoOtherName: "照片上的姓名是「{got}」（目前是 {want}）。請確認是否為同一位員工。",
-      payrollPhotoFailed: "無法讀取照片 {i} — {why}",
-      payrollPhotoUnclear: "不確定",
-      payrollPhotoNoKey: "要使用照片讀取，需要在 Vercel 環境變數設定 ANTHROPIC_API_KEY。在那之前請直接填表。",
-      payrollPhotoErr_no_vision_key: "沒有照片讀取金鑰（ANTHROPIC_API_KEY）",
-      payrollPhotoErr_vision_key_rejected: "照片讀取金鑰不正確",
-      payrollPhotoErr_vision_busy: "請稍後再試（請求太多）",
-      payrollPhotoErr_bad_image: "不是照片檔",
-      payrollPhotoErr_vision_unreadable: "找不到考勤卡表格 — 請讓考勤卡佔滿畫面重新拍攝",
-      payrollPhotoErr_vision_refused: "讀取被拒絕",
-      payrollPhotoErr_vision_bad_request: "請求有誤",
-      payrollPhotoErr_vision_failed: "讀取服務發生錯誤",
-      payrollPhotoErr_vision_unreachable: "無法連線到讀取服務",
+      payrollPhotoOne: "照片 {i}：從{star}考勤卡 {side} 讀到 {n} 天。",
+      payrollPhotoSideBlue: "1~15 日面",
+      payrollPhotoSideOrange: "16~31 日面",
+      payrollPhotoCheck: "藍字是從照片讀到的格子，黃色格是不確定或讀不到的格子（空白請直接填入）。請對照考勤卡後按「儲存考勤卡」。",
+      payrollPhotoHand: "✍ 有 {n} 格是手寫，沒有讀取 — 請在紅色格（{list}）直接填入。",
+      payrollPhotoHandCell: "手寫 — 請對照考勤卡直接填入",
+      payrollPhotoUnclear: "不確定 — 請對照考勤卡",
+      payrollPhotoNoCard: "照片 {i} 找不到考勤卡表格 — 請把考勤卡拍正、佔滿畫面再拍一次（掃描最好）。",
+      payrollPhotoBad: "無法開啟照片 {i}。",
+      payrollDayShort: "日",
       payrollSaveCard: "儲存考勤卡",
       payrollRulesTitle: "加班計算規則",
       payrollThreshold: "超過營業結束幾分鐘算 0.5 小時",
@@ -13076,7 +13064,7 @@
   // 「25분 넘기면 0.5」로 **제안만** 하고, 사장님이 ✓ 하거나 −/+ 로 고쳐야 확정이다
   // ("확정짓지 말고 사장이 한 번 더 확인하는 걸로").
   const PAYROLL_SLOTS = ["am_in", "am_out", "pm_in", "pm_out", "ot_in", "ot_out"];
-  const payroll = { month: null, staff: [], current: null, days: {}, result: null, dirty: false, seq: 0, vision: false, unclear: {}, read: {} };
+  const payroll = { month: null, staff: [], current: null, days: {}, result: null, dirty: false, seq: 0, unclear: {}, read: {}, hand: {} };
   const payrollThisMonth = () => {
     const d = new Date(Date.now() + 8 * 3600000);
     return d.toISOString().slice(0, 7);
@@ -13105,7 +13093,6 @@
       payroll.staff = st.staff || [];
       const ru = rules.rules || {};
       payrollRenderHours(rules.business_hours);
-      payroll.vision = !!rules.vision;
       if ($("#payrollThreshold")) $("#payrollThreshold").value = ru.ot_threshold_min || 25;
       if ($("#payrollStep")) $("#payrollStep").value = ru.ot_step_min || 30;
     } catch (e) {
@@ -13164,6 +13151,7 @@
     payroll.days = JSON.parse(JSON.stringify(d.card.days || {}));
     payroll.unclear = {};
     payroll.read = {};
+    payroll.hand = {};
     $("#payrollPhotoMsg").hidden = true;
     payroll.result = d.result;
     payroll.dirty = false;
@@ -13201,8 +13189,10 @@
         ${PAYROLL_SLOTS.map((s) => {
           const key = `${i}|${s}`;
           const unclear = payroll.unclear[key];
-          const cls = `pg-t${unclear ? " is-unclear" : ""}${payroll.read[key] ? " is-read" : ""}`;
-          return `<td><input class="${cls}" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="--:--" value="${escapeHtml(d[s] || "")}"${unclear ? ` title="${escapeHtml(unclear)}"` : ""} /></td>`;
+          const hand = payroll.hand[key];
+          const cls = `pg-t${hand ? " is-hand" : unclear ? " is-unclear" : ""}${payroll.read[key] ? " is-read" : ""}`;
+          const tip = hand ? T("payrollPhotoHandCell") : unclear ? T("payrollPhotoUnclear") : "";
+          return `<td><input class="${cls}" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="${hand ? "✍" : "--:--"}" value="${escapeHtml(d[s] || "")}"${tip ? ` title="${escapeHtml(tip)}"` : ""} /></td>`;
         }).join("")}
         <td class="pg-ot"></td>
       </tr>`);
@@ -13217,7 +13207,9 @@
         inp.value = v;
         const day = inp.closest("tr").dataset.day;
         delete payroll.unclear[`${day}|${inp.dataset.slot}`];
-        inp.classList.remove("is-unclear");
+        delete payroll.hand[`${day}|${inp.dataset.slot}`];
+        inp.classList.remove("is-unclear", "is-hand");
+        inp.placeholder = "--:--";
         const d = (payroll.days[day] = payroll.days[day] || {});
         if (v) d[inp.dataset.slot] = v;
         else delete d[inp.dataset.slot];
@@ -13324,26 +13316,45 @@
     renderPayrollOtCells();
     renderPayrollResult();
   }
-  // ---- 카드 사진으로 채우기 (src/payrollVision.js) ----
-  // 사진은 서버가 Claude 에 보내 표로 읽어 온다. 읽은 값은 표에 **채우기만** 하고
-  // 저장은 사장님이 본 뒤 「카드 저장」. 확실치 않은 칸은 노랗게, 읽은 칸은 파랗게.
-  function payrollShrinkPhoto(file) {
+  // ---- 카드 사진으로 채우기 (public/js/timecard-ocr.js) ----
+  // 2026-10-03 사장님: "사진 렌더해서 인식하는 걸 꼭 에이아이가 있어야 하냐고" → AI 없이
+  // 이 브라우저 안에서 읽는다. 사진은 기기 밖으로 나가지 않는다. 기계가 찍은 점 숫자만
+  // 읽고, 손글씨 칸은 읽지 않고 빨갛게 — "손글씨로 인식이 되면 직접 채워 넣어야 한다는 걸
+  // 표시해줘." 읽은 값은 표에 채우기만 하고 저장은 사장님이 본 뒤 「카드 저장」.
+  let timecardOcrLoading = null;
+  function loadTimecardOcr() {
+    if (window.HG_TIMECARD && window.HG_TIMECARD_TEMPLATES) return Promise.resolve();
+    if (timecardOcrLoading) return timecardOcrLoading;
+    const add = (src) =>
+      new Promise((resolve, reject) => {
+        const el = document.createElement("script");
+        el.src = src;
+        el.onload = resolve;
+        el.onerror = reject;
+        document.head.appendChild(el);
+      });
+    // 무거운 견본(60KB)은 급여 화면에서 사진을 처음 올릴 때만 받는다.
+    timecardOcrLoading = add("/js/timecard-templates.js").then(() => add("/js/timecard-ocr.js"));
+    return timecardOcrLoading;
+  }
+  /** 사진 → 긴 변 2000px 이하의 ImageData. 읽는 속도와 정확도의 타협. */
+  function payrollPhotoPixels(file) {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const max = 2200;
-        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
         const c = document.createElement("canvas");
         c.width = Math.round(img.naturalWidth * k);
         c.height = Math.round(img.naturalHeight * k);
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const ctx = c.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, c.width, c.height);
         URL.revokeObjectURL(url);
-        c.toBlob((b) => resolve(b || file), "image/jpeg", 0.88);
+        resolve(ctx.getImageData(0, 0, c.width, c.height));
       };
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        resolve(file);
+        resolve(null);
       };
       img.src = url;
     });
@@ -13354,79 +13365,98 @@
     el.classList.toggle("is-bad", !!bad);
     el.innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join("");
   }
-  /** 읽은 카드 한 장을 표에 얹는다. 돌려주는 값: 채운 날 수(달이 다르면 -1). */
-  function payrollApplyCard(card, msgs) {
-    const want = payroll.month;
-    if (card.year && card.month) {
-      const got = `${card.year}-${String(card.month).padStart(2, "0")}`;
-      if (got !== want) {
-        msgs.push(T("payrollPhotoOtherMonth").replace("{got}", got).replace("{want}", want));
-        return -1;
-      }
-    }
-    if (card.name && payroll.current && card.name.replace(/\s/g, "") !== payroll.current.name.replace(/\s/g, "")) {
-      msgs.push(T("payrollPhotoOtherName").replace("{got}", card.name).replace("{want}", payroll.current.name));
-    }
-    const [yy, mm] = want.split("-").map(Number);
+  const PAYROLL_SLOT_LABEL = () => ({
+    am_in: T("payrollAmIn"), am_out: T("payrollAmOut"), pm_in: T("payrollPmIn"),
+    pm_out: T("payrollPmOut"), ot_in: T("payrollOtIn"), ot_out: T("payrollOtOut"),
+  });
+  /** 읽은 카드 면 하나를 표에 얹는다. 돌려주는 값: 채운 날 수. */
+  function payrollApplyCard(card) {
+    const [yy, mm] = payroll.month.split("-").map(Number);
     const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
-    let n = 0;
+    const touched = new Set();
     for (const [day, row] of Object.entries(card.days || {})) {
       if (Number(day) > dim) continue;
       const d = (payroll.days[day] = payroll.days[day] || {});
       for (const sl of PAYROLL_SLOTS) {
-        if (row[sl]) {
-          d[sl] = row[sl];
-          payroll.read[`${day}|${sl}`] = true;
-        }
+        if (!row[sl]) continue;
+        d[sl] = row[sl];
+        payroll.read[`${day}|${sl}`] = true;
+        delete payroll.hand[`${day}|${sl}`];
       }
+      touched.add(day);
+    }
+    for (const u of card.unclear || []) payroll.unclear[`${u.day}|${u.slot}`] = true;
+    // 손글씨 칸 — 값은 넣지 않는다. 사장님이 카드를 보고 직접.
+    for (const h of card.handwritten || []) {
+      if (h.day > dim) continue;
+      payroll.hand[`${h.day}|${h.slot}`] = true;
+      touched.add(String(h.day));
+    }
+    for (const day of touched) {
+      const d = (payroll.days[day] = payroll.days[day] || {});
       if (card.star) d.star = true;
       else delete d.star;
       // 시각이 새로 들어왔으니 초과 시간은 다시 제안부터.
       delete d.ot_hours;
       delete d.ot_confirmed;
-      n++;
     }
-    for (const u of card.unclear || []) {
-      for (const sl of u.slot ? [u.slot] : PAYROLL_SLOTS) payroll.unclear[`${u.day}|${sl}`] = u.note || T("payrollPhotoUnclear");
-    }
-    return n;
+    return Object.keys(card.days || {}).filter((d) => Number(d) <= dim).length;
   }
   if ($("#payrollPhoto"))
     $("#payrollPhoto").onchange = async (e) => {
       const files = [...(e.target.files || [])];
       e.target.value = "";
       if (!files.length || !payroll.current) return;
-      if (!payroll.vision) return payrollPhotoMsg([T("payrollPhotoNoKey")], true);
+      payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", 1).replace("{n}", files.length)]);
+      try {
+        await loadTimecardOcr();
+      } catch (err) {
+        return payrollPhotoMsg([T("payrollLoadFailed")], true);
+      }
       const msgs = [];
       let filled = 0;
-      let failed = 0;
       for (let k = 0; k < files.length; k++) {
         payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", k + 1).replace("{n}", files.length)]);
-        const fd = new FormData();
-        fd.append("photo", await payrollShrinkPhoto(files[k]), "card.jpg");
-        let r = null;
-        try {
-          r = await (await fetch("/api/payroll/read-card", { method: "POST", body: fd })).json();
-        } catch (err) {
-          r = { ok: false, error: "vision_unreachable" };
-        }
-        if (!r || !r.ok) {
-          failed++;
-          msgs.push(T("payrollPhotoFailed").replace("{i}", k + 1).replace("{why}", T(`payrollPhotoErr_${(r && r.error) || "vision_failed"}`) || (r && r.error) || ""));
+        // 화면이 「읽는 중」을 그릴 틈을 준다 — 읽기는 한두 초 화면을 붙잡는다.
+        await new Promise((r) => setTimeout(r, 30));
+        const pixels = await payrollPhotoPixels(files[k]);
+        if (!pixels) {
+          msgs.push(T("payrollPhotoBad").replace("{i}", k + 1));
           continue;
         }
-        const n = payrollApplyCard(r.card, msgs);
-        if (n > 0) {
-          filled += n;
-          msgs.push(T("payrollPhotoOne").replace("{i}", k + 1).replace("{star}", r.card.star ? "★ " : "").replace("{n}", n));
+        const { cards } = window.HG_TIMECARD.readTimecards(pixels);
+        if (!cards.length) {
+          msgs.push(T("payrollPhotoNoCard").replace("{i}", k + 1));
+          continue;
         }
+        for (const card of cards) {
+          const n = payrollApplyCard(card);
+          filled += n + card.handwritten.length;
+          msgs.push(
+            T("payrollPhotoOne")
+              .replace("{i}", k + 1)
+              .replace("{star}", card.star ? "★ " : "")
+              .replace("{side}", T(card.color === "blue" ? "payrollPhotoSideBlue" : "payrollPhotoSideOrange"))
+              .replace("{n}", n)
+          );
+        }
+      }
+      const handKeys = Object.keys(payroll.hand);
+      if (handKeys.length) {
+        const label = PAYROLL_SLOT_LABEL();
+        const list = handKeys
+          .map((k) => k.split("|"))
+          .sort((a, b) => Number(a[0]) - Number(b[0]))
+          .map(([day, sl]) => `${day}${T("payrollDayShort")} ${label[sl]}`)
+          .join(", ");
+        msgs.push(T("payrollPhotoHand").replace("{n}", handKeys.length).replace("{list}", list));
       }
       if (filled) {
         msgs.push(T("payrollPhotoCheck"));
         renderPayrollGrid();
         payrollChanged();
       }
-      payrollPhotoMsg(msgs, !filled && (failed || msgs.length));
+      payrollPhotoMsg(msgs, !filled);
     };
   if ($("#payrollMonth"))
     $("#payrollMonth").onchange = async () => {
