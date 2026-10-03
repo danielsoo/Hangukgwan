@@ -2775,6 +2775,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-grid td.pg-ot button.pg-ok { margin-left: 4px; color: #9a9088; }
 .payroll-grid td.pg-ot button.pg-ok.is-on { background: var(--pr-green); color: #fff; border-color: var(--pr-green); }
 .payroll-grid td.pg-ot small { display: block; margin-top: 2px; font-size: 11px; color: #8a8078; }
+.payroll-grid td.pg-le { white-space: nowrap; font-size: 12px; color: #b4532a; min-width: 90px; }
 
 /* 오른쪽: 이 달 지급액 · 보너스 · 저장. 넓으면 표 오른쪽에 붙어 스크롤을 따라온다. */
 .payroll-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 18px 24px; align-items: start; }

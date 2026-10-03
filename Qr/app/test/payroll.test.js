@@ -136,6 +136,37 @@ out.push("\n[근무 시간대 = 가게 영업시간 — 2026-10-03]");
   check("영업시간이 한 구간이면 하루 그 길이, 마지막 퇴근만 견준다", one.regular_hours === 10 && one.suggested_ot === 0.5 && one.notes.length === 1, JSON.stringify(one));
 }
 
+out.push("\n[출근 일수 — 오전 0.5 · 오후 0.5, 반올림 없음 / 지각·조퇴 — 2026-10-03]");
+// 사장님: "하루에 오전 오후 있으니까 하나에 0.5 씩 해서 일수 채워줘. 반 올림하지 말고
+// / 그리고 지각 조퇴도 넣어줘." 黃美華 9월 카드(파란 면 5·6·12일, 주황 면 19·25·26·27일) —
+// 12일은 오전만 찍었다. 화면에 「출근 7일」로 떴던 것.
+{
+  const BH = [{ start: "11:00", end: "14:00" }, { start: "17:00", end: "21:00" }];
+  const sep = P.cleanDays({
+    5: { am_in: "09:01", am_out: "14:05", pm_in: "16:19", pm_out: "21:16" },
+    6: { am_in: "09:08", am_out: "14:07", pm_in: "16:15", pm_out: "21:16" },
+    12: { am_in: "09:15", am_out: "14:05" },
+    19: { am_in: "09:19", am_out: "14:01", pm_in: "16:23", pm_out: "21:02" },
+    25: { am_in: "09:10", am_out: "14:02", pm_in: "16:23", pm_out: "21:10" },
+    26: { am_in: "09:16", am_out: "14:05", pm_in: "16:22", pm_out: "21:05" },
+    27: { am_in: "09:20", am_out: "14:14", pm_in: "16:18", pm_out: "21:13" },
+  }, "2026-09");
+  const h = P.computeMonth({ month: "2026-09", days: sep }, staff, null, () => BH, BH);
+  check("★★ 黃美華 9월 출근 6.5일(12일은 오전만 = 0.5) — 7 로 올리지 않는다", h.normal_days === 6.5, String(h.normal_days));
+  check("오후만 찍은 날도 0.5", P.dayOf({ pm_in: "16:30", pm_out: "21:00" }, P.DEFAULT_RULES, BH).day_units === 0.5, "");
+  check("연장 칸만 있는 날은 0일(시간은 초과로 들어간다)", P.dayOf({ ot_in: "22:00", ot_out: "23:00" }, P.DEFAULT_RULES, BH).day_units === 0, "");
+  check("★ 날 반나절도 0.5", P.computeMonth({ month: "2026-09", days: { 3: { am_in: "10:50", am_out: "14:00", star: true } } }, staff, null, () => BH, BH).star_days === 0.5, "");
+  check("★★ 黃美華 9월 — 영업시간 전에 왔고 끝난 뒤에 갔다: 지각·조퇴 0", h.late_count === 0 && h.early_count === 0, `${h.late_count}/${h.early_count}`);
+  const le = P.computeMonth({ month: "2026-09", days: { 8: { am_in: "11:07", am_out: "13:50", pm_in: "17:02", pm_out: "20:40" } } }, staff, null, () => BH, BH);
+  const d8 = le.rows.find((x) => x.day === 8);
+  check("★★ 지각 11:07 → 오전 7분, 17:02 → 오후 2분", JSON.stringify(d8.late) === JSON.stringify([{ slot: "am", min: 7 }, { slot: "pm", min: 2 }]), JSON.stringify(d8.late));
+  check("★★ 조퇴 13:50 → 오전 10분, 20:40 → 오후 20분", JSON.stringify(d8.early) === JSON.stringify([{ slot: "am", min: 10 }, { slot: "pm", min: 20 }]), JSON.stringify(d8.early));
+  check("★ 달 합계 — 지각 2번 9분 · 조퇴 2번 30분", le.late_count === 2 && le.late_min === 9 && le.early_count === 2 && le.early_min === 30, JSON.stringify([le.late_count, le.late_min, le.early_count, le.early_min]));
+  check("지각·조퇴는 돈을 깎지 않는다(일한 블록은 그대로 7시간)", le.normal_hours === 7 && le.total === 1400, String(le.total));
+  check("정각 11:00 출근 · 14:00 퇴근은 지각·조퇴 아님", P.dayOf({ am_in: "11:00", am_out: "14:00" }, P.DEFAULT_RULES, BH).late.length === 0 && P.dayOf({ am_in: "11:00", am_out: "14:00" }, P.DEFAULT_RULES, BH).early.length === 0, "");
+  check("퇴근만 없으면 조퇴로 세지 않는다", P.dayOf({ am_in: "10:55" }, P.DEFAULT_RULES, BH).early.length === 0, "");
+}
+
 out.push("\n[서버 — 사장님만]");
 (async () => {
   const request = require("supertest");

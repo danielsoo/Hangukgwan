@@ -128,11 +128,34 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
     over("am_out", b.am.end, "am");
     over("pm_out", b.pm.end, "pm");
   }
+  // 지각·조퇴 — 영업시간 구간 시작보다 늦게 찍은 출근, 끝보다 일찍 찍은 퇴근(2026-10-03
+  // 사장님: "지각 조퇴도 넣어줘"). 카드 「遲到早退次數」 칸과 같은 것. 돈은 깎지 않고 센다.
+  const late = [];
+  const early = [];
+  const lateEarly = (inKey, outKey, r, label) => {
+    if (!r) return;
+    const i = toMin(d[inKey]);
+    const o = toMin(d[outKey]);
+    if (i != null && i > toMin(r.start)) late.push({ slot: label, min: i - toMin(r.start) });
+    if (o != null && toMin(r.end) - o > 0 && toMin(r.end) - o < 12 * 60) early.push({ slot: label, min: toMin(r.end) - o });
+  };
+  if (b.single) {
+    lateEarly("am_in", cleanTime(d.pm_out) ? "pm_out" : "am_out", b.single, "am");
+  } else {
+    lateEarly("am_in", "am_out", b.am, "am");
+    lateEarly("pm_in", "pm_out", b.pm, "pm");
+  }
   const extra = extraBlockHours(d.ot_in, d.ot_out);
   suggested += extra;
   const set = d.ot_hours != null && Number.isFinite(Number(d.ot_hours));
+  // 출근 일수 — 오전 0.5 · 오후 0.5(2026-10-03 사장님: "하나에 0.5 씩 해서 일수 채워줘.
+  // 반올림하지 말고"). 영업시간이 한 구간이면 그 하루가 1.
+  const dayUnits = b.single ? (am || pm ? 1 : 0) : (am ? 0.5 : 0) + (pm ? 0.5 : 0);
   return {
     worked: am || pm || ot,
+    day_units: dayUnits,
+    late,
+    early,
     star: !!d.star,
     blocks: b.single ? [b.single] : [b.am, b.pm],
     regular_hours: regular,
@@ -167,6 +190,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   const days = (card && card.days) || {};
   const rows = [];
   let normalDays = 0, starDays = 0, normalHours = 0, starHours = 0, otHours = 0, unconfirmed = 0, borderlines = 0;
+  let lateCount = 0, lateMin = 0, earlyCount = 0, earlyMin = 0;
   for (let i = 1; i <= n; i++) {
     const date = month ? `${month}-${String(i).padStart(2, "0")}` : null;
     let ranges = hoursFor && date ? hoursFor(date) : null;
@@ -174,7 +198,9 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     const d = dayOf(days[i] || days[String(i)], rules, ranges);
     rows.push({ day: i, ...d });
     if (!d.worked) continue;
-    if (d.star) { starDays++; starHours += d.regular_hours; } else { normalDays++; normalHours += d.regular_hours; }
+    if (d.star) { starDays += d.day_units; starHours += d.regular_hours; } else { normalDays += d.day_units; normalHours += d.regular_hours; }
+    for (const x of d.late) { lateCount++; lateMin += x.min; }
+    for (const x of d.early) { earlyCount++; earlyMin += x.min; }
     otHours += d.ot_hours;
     if ((d.suggested_ot > 0 || d.ot_hours > 0 || d.borderline) && !d.ot_confirmed) unconfirmed++;
     if (d.borderline && !d.ot_confirmed) borderlines++;
@@ -219,6 +245,10 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     normal_hours: normalHours,
     star_hours: starHours,
     ot_hours: otHours,
+    late_count: lateCount,
+    late_min: lateMin,
+    early_count: earlyCount,
+    early_min: earlyMin,
     unconfirmed_days: unconfirmed,
     borderline_days: borderlines,
     lines,

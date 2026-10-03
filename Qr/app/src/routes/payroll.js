@@ -125,7 +125,7 @@ router.get("/summary", async (req, res) => {
     .map((s) => {
       const c = byStaff.get(String(s._id));
       const r = compute({ month, days: (c && c.days) || {}, ...P.cleanBonus(c) }, s, rules);
-      return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
+      return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, late_count: r.late_count, early_count: r.early_count, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
     });
   res.json({ month, rows, total: rows.reduce((a, r) => a + r.total, 0) });
 });

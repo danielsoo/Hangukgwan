@@ -99,6 +99,20 @@ function check(name, cond, extra = "") {
   check("★★ 확인 안 한 날이 있다고 말한다", /확인하지 않은 날이 1일/.test(res1), res1);
   check("저장 안 됨 표시", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
 
+  out.push("\n[반나절은 0.5일, 지각·조퇴 — 2026-10-03]");
+  // 사장님: "하나에 0.5 씩 해서 일수 채워줘. 반 올림하지 말고 / 그리고 지각 조퇴도 넣어줘."
+  await put(9, ["1107", "1350"]);
+  await page.waitForTimeout(900);
+  const resHalf = await page.locator("#payrollResult").innerText();
+  check("★★ 오전만 찍은 날 → 「출근 2.5일」(3 으로 올리지 않는다)", /출근 2\.5일/.test(resHalf), resHalf);
+  check("★★ 「지각 1번 · 7분」 「조퇴 1번 · 10분」 알약", /지각 1번 · 7분/.test(resHalf) && /조퇴 1번 · 10분/.test(resHalf), resHalf);
+  const le9 = await page.locator('#payrollGrid tr[data-day="9"] .pg-le').innerText();
+  check("★ 그 날 줄에 「지각 오전 7분 · 조퇴 오전 10분」", le9.trim() === "지각 오전 7분 · 조퇴 오전 10분", le9);
+  check("영업시간 전에 온 날은 지각 칸이 비어 있다", (await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText()).trim() === "", "");
+  await put(9, ["", ""]);
+  await page.waitForTimeout(900);
+  check("지운 뒤 다시 「출근 2일」", /출근 2일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
+
   out.push("\n[사장님이 고친다 — 7일은 0.5 + 0.5 = 1]");
   await page.locator('#payrollGrid tr[data-day="7"] .pg-plus').click();
   await page.waitForTimeout(800);

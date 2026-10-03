@@ -1550,6 +1550,11 @@
       payrollChipStar: "★ {n}일",
       payrollChipHours: "근무 {n}시간",
       payrollChipOt: "초과 {n}시간",
+      payrollLateEarly: "지각·조퇴",
+      payrollLate: "지각",
+      payrollEarly: "조퇴",
+      payrollChipLate: "지각 {n}번 · {m}분",
+      payrollChipEarly: "조퇴 {n}번 · {m}분",
       payrollLegendRead: "사진에서 읽음",
       payrollResetCard: "↺ 초기화",
       payrollResetConfirm: "{name} · {month} 표를 모두 비울까요? (시각·★·초과 시간. 보너스는 그대로) 「카드 저장」을 눌러야 저장돼요.",
@@ -2567,6 +2572,11 @@
       payrollChipStar: "★ {n} 天",
       payrollChipHours: "工時 {n} 小時",
       payrollChipOt: "加班 {n} 小時",
+      payrollLateEarly: "遲到·早退",
+      payrollLate: "遲到",
+      payrollEarly: "早退",
+      payrollChipLate: "遲到 {n} 次 · {m} 分",
+      payrollChipEarly: "早退 {n} 次 · {m} 分",
       payrollLegendRead: "照片讀取",
       payrollResetCard: "↺ 清空",
       payrollResetConfirm: "要清空 {name} · {month} 的表格嗎？（時間·★·加班。獎金不變）按「儲存考勤卡」才會儲存。",
@@ -13229,7 +13239,7 @@
       <th>${escapeHtml(T("payrollAmIn"))}</th><th>${escapeHtml(T("payrollAmOut"))}</th>
       <th>${escapeHtml(T("payrollPmIn"))}</th><th>${escapeHtml(T("payrollPmOut"))}</th>
       <th>${escapeHtml(T("payrollOtIn"))}</th><th>${escapeHtml(T("payrollOtOut"))}</th>
-      <th>${escapeHtml(T("payrollOt"))}</th></tr>`;
+      <th>${escapeHtml(T("payrollOt"))}</th><th>${escapeHtml(T("payrollLateEarly"))}</th></tr>`;
     const rows = [];
     for (let i = 1; i <= dim; i++) {
       const d = payroll.days[String(i)] || {};
@@ -13246,6 +13256,7 @@
           return `<td><input class="${cls}" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="${hand ? "✍" : "--:--"}" value="${escapeHtml(d[s] || "")}"${tip ? ` title="${escapeHtml(tip)}"` : ""} /></td>`;
         }).join("")}
         <td class="pg-ot"></td>
+        <td class="pg-le"></td>
       </tr>`);
     }
     const grid = $("#payrollGrid");
@@ -13287,6 +13298,10 @@
     $$("#payrollGrid tbody tr").forEach((tr) => {
       const r = rows.find((x) => String(x.day) === tr.dataset.day);
       const cell = tr.querySelector(".pg-ot");
+      // 지각·조퇴 — 그 날 어느 구간에 몇 분.
+      const le = tr.querySelector(".pg-le");
+      const leText = (k, list) => (list || []).map((x) => `${T(k)} ${T(x.slot === "am" ? "payrollAmShort" : "payrollPmShort")} ${x.min}${T("payrollMinShort")}`);
+      le.textContent = r && r.worked ? leText("payrollLate", r.late).concat(leText("payrollEarly", r.early)).join(" · ") : "";
       if (!r || !r.worked) {
         cell.innerHTML = "";
         tr.classList.remove("is-check");
@@ -13337,6 +13352,8 @@
       r.star_days ? T("payrollChipStar").replace("{n}", r.star_days) : null,
       T("payrollChipHours").replace("{n}", r.normal_hours + r.star_hours),
       r.ot_hours ? T("payrollChipOt").replace("{n}", r.ot_hours) : null,
+      r.late_count ? T("payrollChipLate").replace("{n}", r.late_count).replace("{m}", r.late_min) : null,
+      r.early_count ? T("payrollChipEarly").replace("{n}", r.early_count).replace("{m}", r.early_min) : null,
     ].filter(Boolean);
     box.innerHTML = `
       <div class="pr-line pr-total"><span>${escapeHtml(T("payrollTotal"))}</span><span>NT$${money(r.total)}</span></div>
