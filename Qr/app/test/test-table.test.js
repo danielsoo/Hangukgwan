@@ -82,9 +82,14 @@ function check(name, cond, extra = "") {
   // 영업시간을 **완전히 닫아 놓고** 시작한다. 장사 끝난 뒤 조용할 때
   // 이것저것 해보려고 만든 자리인데 그때 잠기면 쓸 수가 없다.
   const { save } = require("../src/db");
+  // 닫힌 1분은 지금에서 12시간 떨어진 때로 — 예전엔 03:00–03:01 로 고정해 두어서, 마침
+  // 타이베이 03:00 에 돌린 시험이 「열려 있음」으로 잘못 실패했다(2026-10-04 03:00).
+  const hm = (min) => `${String(Math.floor(min / 60) % 24).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+  const nowHm = require("../src/time").nowLocal().slice(11, 16);
+  const shut = (Number(nowHm.slice(0, 2)) * 60 + Number(nowHm.slice(3, 5)) + 12 * 60) % 1440;
   store.settings.order_hours = {
     enabled: 1,
-    ranges: [{ start: "03:00", end: "03:01" }],
+    ranges: [{ start: hm(shut), end: hm(shut + 1) }],
     closed_days: [],
   };
   await save();
