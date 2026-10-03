@@ -1,6 +1,6 @@
 // 직원 급여 — 사장님만(src/payroll.js 머리말).
 const express = require("express");
-const { getDb, connectDB, store } = require("../db");
+const { getDb, connectDB } = require("../db");
 const openHours = require("../openHours");
 const { requireOwner } = require("../auth");
 const { nowLocal } = require("../time");
@@ -22,20 +22,18 @@ async function loadRules() {
 async function loadStaff(id) {
   return (await col(P.STAFF_COLLECTION)).findOne({ _id: String(id) });
 }
-// 근무 시간대 = 가게 영업시간 — 설정의 「영업시간」 칸(store_hours, 손님에게도
-// 보이는 「11:00-14:00, 17:00-21:00」). 2026-10-03 사장님: "이미 있는 근무 시간대가
-// 있잖아 우리 영업 시간". QR 주문을 막는 시간(order_hours, 13:30·20:30 — 마감 30분
-// 전)은 쓰지 않는다: 그건 영업시간이 아니라 주문 마감이다.
-function businessHours() {
-  const text = (store.settings && store.settings.store_hours) || "";
+// 근무 시간 — 급여 「근무 규칙」의 work_hours(2026-10-03 사장님: "아침 09:00 - 14:00 /
+// 저녁 16:30 - 21:00"). 손님에게 보이는 가게 영업시간(store_hours)과는 따로다.
+function workHours(rules) {
+  const text = rules.work_hours || P.DEFAULT_WORK_HOURS;
   const ranges = openHours.parseHoursText(text);
   return { ranges, text, readable: ranges.length > 0 };
 }
 function compute(card, staff, rules) {
-  const bh = businessHours();
+  const wh = workHours(rules);
   return {
-    ...P.computeMonth(card, staff, rules, () => bh.ranges, bh.ranges),
-    business_hours: bh.readable ? bh.ranges : null,
+    ...P.computeMonth(card, staff, rules, () => wh.ranges, wh.ranges),
+    work_hours: wh.readable ? wh.ranges : null,
   };
 }
 const staffOut = (s) => ({
@@ -44,11 +42,14 @@ const staffOut = (s) => ({
 });
 
 router.get("/status", async (req, res) => {
-  res.json({ min_wage: P.MIN_WAGE, rules: await loadRules(), business_hours: businessHours() });
+  const rules = await loadRules();
+  res.json({ min_wage: P.MIN_WAGE, rules, work_hours: workHours(rules) });
 });
 
 router.put("/rules", async (req, res) => {
-  const r = P.rulesOf(req.body || {});
+  // 보낸 칸만 바꾼다 — 나머지는 저장돼 있던 값.
+  const r = P.rulesOf({ ...(await loadRules()), ...(req.body || {}) });
+  if (!openHours.parseHoursText(r.work_hours).length) return res.status(400).json({ error: "bad_work_hours" });
   await (await col("payroll_settings")).updateOne({ _id: RULES_ID }, { $set: r }, { upsert: true });
   res.json({ rules: r });
 });

@@ -49,8 +49,9 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(600);
   {
     const hrs = await page.locator("#payrollHours").innerText();
-    // 2026-10-03 사장님: "이미 있는 근무 시간대가 있잖아 우리 영업 시간"
-    check("★★ 근무 시간대 = 가게 영업시간이라고 보여준다", /영업시간 11:00–14:00 · 17:00–21:00/.test(hrs) && /하루 7시간/.test(hrs), hrs);
+    // 2026-10-03 사장님: "아침 09:00 - 14:00 / 저녁 16:30 - 21:00 … 시급 220"
+    check("★★ 근무 시간 09:00–14:00 · 16:30–21:00 (하루 9.5시간) · 기본 시급 220 을 보여준다", /근무 시간 09:00–14:00 · 16:30–21:00/.test(hrs) && /하루 9\.5시간/.test(hrs) && /NT\$220/.test(hrs), hrs);
+    check("★ 근무 규칙 칸에 그 값", (await page.inputValue("#payrollWorkHours")) === "09:00-14:00, 16:30-21:00" && (await page.inputValue("#payrollDefaultHourly")) === "220" && (await page.inputValue("#payrollLateUnit")) === "30", "");
     check("급여 화면에 따로 퇴근 시각 칸이 없다", (await page.locator("#payrollAmEnd, #payrollPmEnd").count()) === 0, "");
   }
   {
@@ -101,14 +102,16 @@ function check(name, cond, extra = "") {
 
   out.push("\n[반나절은 0.5일, 지각·조퇴 — 2026-10-03]");
   // 사장님: "하나에 0.5 씩 해서 일수 채워줘. 반 올림하지 말고 / 그리고 지각 조퇴도 넣어줘."
-  await put(9, ["1107", "1350"]);
+  await put(9, ["0940", "1350"]);
   await page.waitForTimeout(900);
   const resHalf = await page.locator("#payrollResult").innerText();
   check("★★ 오전만 찍은 날 → 「출근 2.5일」(3 으로 올리지 않는다)", /출근 2\.5일/.test(resHalf), resHalf);
-  check("★★ 「지각 1번 · 7분」 「조퇴 1번 · 10분」 알약", /지각 1번 · 7분/.test(resHalf) && /조퇴 1번 · 10분/.test(resHalf), resHalf);
+  check("★★ 「지각 1번 · 40분 (차감 0.5시간)」 「조퇴 1번 · 10분」 알약", /지각 1번 · 40분 \(차감 0\.5시간\)/.test(resHalf) && /조퇴 1번 · 10분/.test(resHalf), resHalf);
+  // 2026-10-03 사장님: "지각, 조퇴시 급여에서 차감" — 0.5h × 200 + 10분 × 200/60 = 133
+  check("★★ 차감 줄 「지각·조퇴 차감 · 지각 0.5h + 조퇴 10분 −NT$133」", /지각·조퇴 차감 · 지각 0\.5h \+ 조퇴 10분\s*−NT\$133/.test(resHalf), resHalf);
   const le9 = await page.locator('#payrollGrid tr[data-day="9"] .pg-le').innerText();
-  check("★ 그 날 줄에 「지각 오전 7분 · 조퇴 오전 10분」", le9.trim() === "지각 오전 7분 · 조퇴 오전 10분", le9);
-  check("영업시간 전에 온 날은 지각 칸이 비어 있다", (await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText()).trim() === "", "");
+  check("★ 그 날 줄에 「지각 오전 40분 (−0.5h) · 조퇴 오전 10분」", le9.trim() === "지각 오전 40분 (−0.5h) · 조퇴 오전 10분", le9);
+  check("09:11 출근은 30분 안 — 지각 칸이 비어 있다", (await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText()).trim() === "", await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText());
   await put(9, ["", ""]);
   await page.waitForTimeout(900);
   check("지운 뒤 다시 「출근 2일」", /출근 2일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
@@ -120,9 +123,8 @@ function check(name, cond, extra = "") {
   check("★ + 를 누르면 1, 제안 0.5 도 같이 보인다", /^−\s*1\s*\+/.test(ot7b.trim()) && /제안 0\.5/.test(ot7b), ot7b);
   check("★ 고치면 확인된 것 — 노란 칸이 사라진다", !(await page.locator('#payrollGrid tr[data-day="7"]').evaluate((tr) => tr.classList.contains("is-check"))), "");
   const res2 = await page.locator("#payrollResult").innerText();
-  // 근무 시간대 = 가게 영업시간(11:00-14:00, 17:00-21:00) → 하루 7시간.
-  // 3일 × 7시간 + 초과 1시간 = 22시간 × 200
-  check("★★ 이 달 지급액 NT$4,400 (영업시간 기준 22시간 × 200)", /이 달 지급액\s*NT\$4,400/.test(res2), res2);
+  // 근무 시간 09–14 · 16:30–21 → 하루 9.5시간. 3일 × 9.5 + 초과 1시간 = 29.5시간 × 200
+  check("★★ 이 달 지급액 NT$5,900 (29.5시간 × 200)", /이 달 지급액\s*NT\$5,900/.test(res2), res2);
   check("확인 경고가 사라진다", !/확인하지 않은/.test(res2), res2);
 
   out.push("\n[저장 → 다시 열기]");
@@ -136,10 +138,10 @@ function check(name, cond, extra = "") {
   await page.fill("#payrollMonth", "2026-06");
   await page.dispatchEvent("#payrollMonth", "change");
   await page.waitForTimeout(800);
-  check("★ 직원 칩에 이 달 금액", /NT\$4,400/.test(await page.locator("#payrollStaffChips").innerText()), await page.locator("#payrollStaffChips").innerText());
+  check("★ 직원 칩에 이 달 금액", /NT\$5,900/.test(await page.locator("#payrollStaffChips").innerText()), await page.locator("#payrollStaffChips").innerText());
   await page.locator("#payrollStaffChips button").first().click();
   await page.waitForTimeout(900);
-  check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /이 달 지급액\s*NT\$4,400/.test(await page.locator("#payrollResult").innerText()), "");
+  check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /이 달 지급액\s*NT\$5,900/.test(await page.locator("#payrollResult").innerText()), "");
 
   out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 이 달 보너스]");
   {
@@ -154,13 +156,13 @@ function check(name, cond, extra = "") {
     await page.click("#payrollSaveStaff");
     await page.waitForTimeout(900);
     const r1 = await page.locator("#payrollResult").innerText();
-    // 영업시간 기준 하루 7h: 별 없는 날 2일 14h × 200, ★ 날 7h × 250, 초과 1h × 300
-    check("★★ ★ 날은 ★ 날 시급(250), 초과는 초과 시급(300)", /★ 카드 날 · 7h × NT\$250/.test(r1) && /초과 · 1h × NT\$300/.test(r1) && /근무 · 14h × NT\$200/.test(r1), r1);
+    // 하루 9.5h: 별 없는 날 2일 19h × 200, ★ 날 9.5h × 250, 초과 1h × 300
+    check("★★ ★ 날은 ★ 날 시급(250), 초과는 초과 시급(300)", /★ 카드 날 · 9\.5h × NT\$250/.test(r1) && /초과 · 1h × NT\$300/.test(r1) && /근무 · 19h × NT\$200/.test(r1), r1);
     await page.fill("#payrollBonus", "2000");
     await page.fill("#payrollBonusNote", "명절");
     await page.waitForTimeout(900);
     const r2 = await page.locator("#payrollResult").innerText();
-    check("★★ 보너스 줄 「보너스 · 명절 NT$2,000」, 합계에 들어간다", /보너스 · 명절\s*NT\$2,000/.test(r2) && /이 달 지급액\s*NT\$6,850/.test(r2), r2);
+    check("★★ 보너스 줄 「보너스 · 명절 NT$2,000」, 합계에 들어간다", /보너스 · 명절\s*NT\$2,000/.test(r2) && /이 달 지급액\s*NT\$8,475/.test(r2), r2);
     check("보너스를 고치면 「저장 안 됨」", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
     await page.click("#payrollSaveCard");
     await page.waitForTimeout(900);
@@ -171,7 +173,7 @@ function check(name, cond, extra = "") {
     await page.click("#payrollSaveStaff");
     await page.waitForTimeout(900);
     const r3 = await page.locator("#payrollResult").innerText();
-    check("★★ 월급제: 월급 36,000 + ★ 날 1,750 + 초과 300 + 보너스 2,000", /월급\s*NT\$36,000/.test(r3) && /이 달 지급액\s*NT\$40,050/.test(r3), r3);
+    check("★★ 월급제: 월급 36,000 + ★ 날 2,375(9.5h × 250) + 초과 300 + 보너스 2,000", /월급\s*NT\$36,000/.test(r3) && /이 달 지급액\s*NT\$40,675/.test(r3), r3);
     // 다시 열어도 보너스가 남아 있다
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForTimeout(600);

@@ -14,11 +14,10 @@
 //   · 칸: 오전 출근·퇴근, 오후 출근·퇴근, 연장(加班) 출근·퇴근.
 //
 // ── 정한 것 (사장님 답, 2026-10-03)
-//   · 근무 시간대는 **가게 영업시간**이다(2026-10-03 사장님: "이미 있는 근무
-//     시간대가 있잖아 우리 영업 시간"). 설정 > 영업시간(settings.order_hours —
-//     QR 주문을 막는 그 시간)을 날짜마다 읽는다: 그 날짜 규칙 > 요일 휴무 >
-//     요일별 시간 > 기본. 첫 구간이 오전, 마지막 구간이 오후다. 급여 화면에
-//     따로 시각을 두지 않는다 — 두 군데 적으면 언젠가 어긋난다.
+//   · 근무 시간대: 처음엔 가게 영업시간(11–14 · 17–21)을 읽었으나, 같은 날 사장님이
+//     직원 근무 시간을 따로 주셨다 — "아침 09:00 - 14:00 / 저녁 16:30 - 21:00". 그래서
+//     급여 「근무 규칙」(payroll_settings 의 work_hours)이 근무 시간이다. 손님용
+//     영업시간 문구와는 따로 둔다(그건 손님에게 보이는 문장이다).
 //   · 초과 시간: 그 날 영업시간의 끝(오전 구간 끝 · 오후 구간 끝)을 25분 넘기면 0.5시간,
 //     그 뒤 30분마다 0.5. **확정이 아니다** — "사장이 한 번 더 확인하는 걸로".
 //     그래서 날마다 「제안」만 하고, 사장님이 확인(또는 고침)해야 확정이다.
@@ -35,13 +34,18 @@ const CARDS_COLLECTION = "payroll_cards";
 // 2026년(민국 115년) 대만 최저임금. 경고에만 쓴다.
 const MIN_WAGE = { monthly: 29500, hourly: 196 };
 
-// 영업시간을 못 받았을 때(시험 등)만 쓰는 구간.
-const FALLBACK_RANGES = [{ start: "09:00", end: "14:00" }, { start: "16:00", end: "21:00" }];
+// 직원 근무 시간 — 가게 영업시간(손님용 11–14 · 17–21)과 다르다. 2026-10-03 사장님:
+// "아침 09:00 - 14:00 / 저녁 16:30 - 21:00". 급여 「근무 규칙」에서 고친다.
+const DEFAULT_WORK_HOURS = "09:00-14:00, 16:30-21:00";
+const FALLBACK_RANGES = [{ start: "09:00", end: "14:00" }, { start: "16:30", end: "21:00" }];
 
 const DEFAULT_RULES = {
   ot_threshold_min: 25, // 이만큼 넘기면 0.5시간
   ot_step_min: 30, // 그 뒤 이만큼마다 0.5시간 더
   borderline_min: 10, // 기준 ±10분이면 「확인 필요」로 칠한다
+  late_unit_min: 30, // 지각은 이만큼마다 0.5시간 차감(30분 미만은 세지 않는다)
+  default_hourly: 220, // 직원 시급을 비우면 이 시급(2026 사장님: "1시간 시급 220")
+  work_hours: DEFAULT_WORK_HOURS,
 };
 
 const SLOTS = ["am_in", "am_out", "pm_in", "pm_out", "ot_in", "ot_out"];
@@ -59,10 +63,14 @@ const r2 = (v) => Math.round(v * 100) / 100;
 
 function rulesOf(raw) {
   const r = { ...DEFAULT_RULES };
-  for (const k of ["ot_threshold_min", "ot_step_min", "borderline_min"]) {
+  for (const k of ["ot_threshold_min", "ot_step_min", "borderline_min", "late_unit_min"]) {
     const n = Number(raw && raw[k]);
     if (Number.isFinite(n) && n > 0 && n <= 120) r[k] = Math.round(n);
   }
+  const h = Number(raw && raw.default_hourly);
+  if (raw && raw.default_hourly != null && raw.default_hourly !== "" && Number.isFinite(h) && h >= 0 && h < 100000) r.default_hourly = Math.round(h * 100) / 100;
+  const w = String((raw && raw.work_hours) || "").trim().slice(0, 100);
+  if (w) r.work_hours = w;
   return r;
 }
 
@@ -136,8 +144,19 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
     if (!r) return;
     const i = toMin(d[inKey]);
     const o = toMin(d[outKey]);
-    if (i != null && i > toMin(r.start)) late.push({ slot: label, min: i - toMin(r.start) });
-    if (o != null && toMin(r.end) - o > 0 && toMin(r.end) - o < 12 * 60) early.push({ slot: label, min: toMin(r.end) - o });
+    // 2026-10-03 사장님: "지각은 30분 단위로 카운트 시작해서 0.5 단위로 / 조퇴는 근무시간
+    // 중 자리를 비운 시간 단위로 … 지각, 조퇴시 급여에서 차감".
+    //  · 지각: 30분 늦으면 0.5시간, 60분이면 1시간 … (30분 미만은 지각이 아니다)
+    //  · 조퇴: 비운 분 그대로(13:50 퇴근 → 10분)
+    // 「30분 단위로 카운트 시작」 — 30분이 안 되게 늦은 것은 지각으로 세지 않는다.
+    if (i != null && i - toMin(r.start) >= rules.late_unit_min) {
+      const min = i - toMin(r.start);
+      late.push({ slot: label, min, hours: Math.floor(min / rules.late_unit_min) * 0.5 });
+    }
+    if (o != null && toMin(r.end) - o > 0 && toMin(r.end) - o < 12 * 60) {
+      const min = toMin(r.end) - o;
+      early.push({ slot: label, min, hours: min / 60 });
+    }
   };
   if (b.single) {
     lateEarly("am_in", cleanTime(d.pm_out) ? "pm_out" : "am_out", b.single, "am");
@@ -156,6 +175,7 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
     day_units: dayUnits,
     late,
     early,
+    deduct_hours: late.reduce((a, x) => a + x.hours, 0) + early.reduce((a, x) => a + x.hours, 0),
     star: !!d.star,
     blocks: b.single ? [b.single] : [b.am, b.pm],
     regular_hours: regular,
@@ -190,7 +210,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   const days = (card && card.days) || {};
   const rows = [];
   let normalDays = 0, starDays = 0, normalHours = 0, starHours = 0, otHours = 0, unconfirmed = 0, borderlines = 0;
-  let lateCount = 0, lateMin = 0, earlyCount = 0, earlyMin = 0;
+  let lateCount = 0, lateMin = 0, lateHours = 0, earlyCount = 0, earlyMin = 0, deductStar = 0, deductNormal = 0;
   for (let i = 1; i <= n; i++) {
     const date = month ? `${month}-${String(i).padStart(2, "0")}` : null;
     let ranges = hoursFor && date ? hoursFor(date) : null;
@@ -199,8 +219,10 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     rows.push({ day: i, ...d });
     if (!d.worked) continue;
     if (d.star) { starDays += d.day_units; starHours += d.regular_hours; } else { normalDays += d.day_units; normalHours += d.regular_hours; }
-    for (const x of d.late) { lateCount++; lateMin += x.min; }
+    for (const x of d.late) { lateCount++; lateMin += x.min; lateHours += x.hours; }
     for (const x of d.early) { earlyCount++; earlyMin += x.min; }
+    if (d.star) deductStar += d.deduct_hours;
+    else deductNormal += d.deduct_hours;
     otHours += d.ot_hours;
     if ((d.suggested_ot > 0 || d.ot_hours > 0 || d.borderline) && !d.ot_confirmed) unconfirmed++;
     if (d.borderline && !d.ot_confirmed) borderlines++;
@@ -208,7 +230,8 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   const s = staff || {};
   const type = s.pay_type === "monthly" ? "monthly" : "hourly";
   const salary = Math.max(0, Number(s.monthly_salary) || 0);
-  const hourly = Number(s.hourly_rate) > 0 ? Number(s.hourly_rate) : type === "monthly" && salary ? r2(salary / 240) : 0;
+  // 시급을 비우면: 월급제는 월급 ÷ 240, 시급제는 가게 기본 시급(근무 규칙, 2026: 220).
+  const hourly = Number(s.hourly_rate) > 0 ? Number(s.hourly_rate) : type === "monthly" && salary ? r2(salary / 240) : rules.default_hourly || 0;
   // 직원마다 따로 정하는 값(2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간
   // 얼마 줄거고 이런 걸 다 개개별로 정할 수 있게"). 비워 두면 기본 시급과 같다.
   const otRate = Number(s.ot_rate) > 0 ? Number(s.ot_rate) : hourly;
@@ -225,8 +248,11 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   // 그 달 보너스 — 카드(그 달 문서)에 적는다.
   const bonus = Math.max(0, Number(card && card.bonus) || 0);
   if (bonus) lines.push({ key: "bonus", amount: bonus, note: (card && card.bonus_note) || "" });
+  // 지각·조퇴 차감 — 그 날의 시급으로(★ 날은 ★ 시급).
+  const deduct = deductNormal * hourly + deductStar * starRate;
+  if (deduct > 0) lines.push({ key: "deduct", late_hours: lateHours, early_min: earlyMin, rate: hourly, amount: -deduct });
   for (const l of lines) l.amount = Math.round(l.amount);
-  const total = lines.reduce((a, l) => a + l.amount, 0);
+  const total = Math.max(0, lines.reduce((a, l) => a + l.amount, 0));
   const warnings = [];
   if (type === "hourly" && hourly > 0 && hourly < MIN_WAGE.hourly) warnings.push({ key: "below_min_hourly", min: MIN_WAGE.hourly });
   if (type === "monthly" && salary > 0 && salary < MIN_WAGE.monthly) warnings.push({ key: "below_min_monthly", min: MIN_WAGE.monthly });
@@ -247,6 +273,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     ot_hours: otHours,
     late_count: lateCount,
     late_min: lateMin,
+    late_hours: lateHours,
     early_count: earlyCount,
     early_min: earlyMin,
     unconfirmed_days: unconfirmed,
@@ -312,6 +339,6 @@ function cleanBonus(b) {
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 module.exports = {
-  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, FALLBACK_RANGES, SLOTS, MONTH_RE,
+  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, DEFAULT_WORK_HOURS, FALLBACK_RANGES, SLOTS, MONTH_RE,
   toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff, cleanBonus,
 };
