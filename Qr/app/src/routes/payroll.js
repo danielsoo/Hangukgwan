@@ -144,7 +144,7 @@ async function summaryFor(month, rules, holidays, staff) {
       return {
         staff: staffOut(s), has_card: !!c, pay_type: r.pay_type,
         normal_days: r.normal_days, star_days: r.star_days, hours: r.normal_hours + r.star_hours, ot_hours: r.ot_hours,
-        late_count: r.late_count, late_hours: r.late_hours, early_count: r.early_count, early_min: r.early_min,
+        late_count: r.late_count, late_min: r.late_min, late_hours: r.late_hours, early_count: r.early_count, early_min: r.early_min,
         holiday_days: r.holiday_days, bonus: r.bonus, deduct: -line("deduct"), total: r.total,
         unconfirmed_days: r.unconfirmed_days, warnings: r.warnings,
       };

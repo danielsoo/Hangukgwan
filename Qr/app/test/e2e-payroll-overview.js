@@ -37,11 +37,14 @@ function check(name, cond, extra = "") {
   const a = await mk("가나다", 200);
   const b = await mk("라마바", "");
   await mk("사아자", 150);
+  const d = await mk("차카타", 150);
   const full = { am_in: "09:00", am_out: "14:00", pm_in: "16:30", pm_out: "21:00" };
   // A 9월: 하루 다(9.5h) + 오전만(5h) = 14.5h × 200 = 2,900
   await api.put(`${base}/api/payroll/card`, { data: { staff_id: a, month: "2026-09", days: { 1: full, 2: { am_in: "09:00", am_out: "14:00" } } } });
   // B 9월: 09:40 출근(지각 0.5h) 하루 — 9.5h × 220 − 0.5h × 220 = 1,980, 보너스 500 → 2,480
   await api.put(`${base}/api/payroll/card`, { data: { staff_id: b, month: "2026-09", days: { 3: { ...full, am_in: "09:40" } }, bonus: 500 } });
+  // D 9월: 10:05 출근(지각 65분 → 1h) · 13:30 퇴근(조퇴 30분) — 5h × 150 − 1.5h × 150 = 525
+  await api.put(`${base}/api/payroll/card`, { data: { staff_id: d, month: "2026-09", days: { 4: { am_in: "10:05", am_out: "13:30" } } } });
   // A 8월: 하루 9.5h × 200 = 1,900
   await api.put(`${base}/api/payroll/card`, { data: { staff_id: a, month: "2026-08", days: { 5: full } } });
 
@@ -55,18 +58,35 @@ function check(name, cond, extra = "") {
 
   if (process.env.SHOT) await page.locator("#payrollOverview").screenshot({ path: process.env.SHOT });
   out.push("[큰 숫자]");
-  check("★★ 「2026년 9월 인건비」 NT$5,380 (2,900 + 2,480) — 카드 넣은 직원만", (await page.locator("#prOvLabel").innerText()).includes("2026년 9월 인건비") && (await page.locator("#prOvTotal").innerText()) === "NT$5,380", await page.locator("#prOvTotal").innerText());
+  check("★★ 「2026년 9월 인건비」 NT$5,905 (2,900 + 2,480 + 525) — 카드 넣은 직원만", (await page.locator("#prOvLabel").innerText()).includes("2026년 9월 인건비") && (await page.locator("#prOvTotal").innerText()) === "NT$5,905", await page.locator("#prOvTotal").innerText());
   const stats = await page.locator("#prOvStats").innerText();
-  check("★ 근무 24시간 · 지각·조퇴 차감 −NT$110 · 보너스 NT$500", /근무 시간\s*24시간/.test(stats) && /지각·조퇴 차감\s*−NT\$110/.test(stats) && /보너스\s*NT\$500/.test(stats), stats);
-  check("카드 넣은 직원 2명", /2명/.test(await page.locator("#prOvSub").innerText()), "");
+  check("★ 근무 29시간 · 지각·조퇴 차감 −NT$335 · 보너스 NT$500", /근무 시간\s*29시간/.test(stats) && /지각·조퇴 차감\s*−NT\$335/.test(stats) && /보너스\s*NT\$500/.test(stats), stats);
+  check("카드 넣은 직원 3명", /3명/.test(await page.locator("#prOvSub").innerText()), "");
 
   out.push("\n[직원별 막대]");
   const names = await page.$$eval("#prOvBars .stl-bar-row .stl-bar-name", (els) => els.map((e) => e.firstChild.textContent.trim()));
-  check("★★ 많이 받는 순 — 가나다 · 라마바, 카드 없는 사아자는 맨 아래", names.join() === "가나다,라마바,사아자", names.join());
+  check("★★ 많이 받는 순 — 가나다 · 라마바 · 차카타, 카드 없는 사아자는 맨 아래", names.join() === "가나다,라마바,차카타,사아자", names.join());
   const bars = await page.locator("#prOvBars").innerText();
-  check("★ 금액·비율 — NT$2,900 54% · NT$2,480 46% · 「카드 없음」", /NT\$2,900\s*54%/.test(bars) && /NT\$2,480\s*46%/.test(bars) && /카드 없음/.test(bars), bars);
+  check("★ 금액·비율 — NT$2,900 49% · NT$2,480 42% · NT$525 9% · 「카드 없음」", /NT\$2,900\s*49%/.test(bars) && /NT\$2,480\s*42%/.test(bars) && /NT\$525\s*9%/.test(bars) && /카드 없음/.test(bars), bars);
   const w = await page.$$eval("#prOvBars .stl-bar-fill", (els) => els.map((e) => parseFloat(e.style.width)));
-  check("막대 길이 — 제일 많은 사람 100%, 다음은 그 비율", w.length === 2 && w[0] === 100 && Math.abs(w[1] - (2480 / 2900) * 100) < 0.1, JSON.stringify(w));
+  check("막대 길이 — 제일 많은 사람 100%, 다음은 그 비율", w.length === 3 && w[0] === 100 && Math.abs(w[1] - (2480 / 2900) * 100) < 0.1, JSON.stringify(w));
+
+  out.push("\n[근무 시간 기여도 — 누가 많이 일했나]");
+  // 2026-10-03 사장님: "직원별 시간 기여도도 있으면 좋겠고 그래야 누가 열심히 일한지도 볼 수 있으니까"
+  // 일한 시간 = 근무 + 초과 − 지각·조퇴: 가나다 14.5 · 라마바 9.5 − 0.5 = 9 · 차카타 5 − 1 − 0.5 = 3.5 → 합 27
+  const hb = await page.locator("#prOvHoursBars").innerText();
+  const hNames = await page.$$eval("#prOvHoursBars .stl-bar-name", (els) => els.map((e) => e.firstChild.textContent.trim()));
+  check("★★ 많이 일한 순 — 가나다 14.5시간 54% · 라마바 9시간 33% · 차카타 3.5시간 13%", hNames.join() === "가나다,라마바,차카타" && /14\.5시간\s*54%/.test(hb) && /9시간\s*33%/.test(hb) && /3\.5시간\s*13%/.test(hb), hb);
+  check("★ 카드 없는 직원은 시간 기여도에 안 나온다", !/사아자/.test(hb), hb);
+
+  out.push("\n[지각·조퇴 — 누가 많이]");
+  // 2026-10-03 사장님: "지각이나 그런 것도 누가 제일 많이 했고 볼 수 있으면 좋을 것 같고"
+  const lb = await page.locator("#prOvLateBars").innerText();
+  const lNames = await page.$$eval("#prOvLateBars .stl-bar-name", (els) => els.map((e) => e.firstChild.textContent.trim()));
+  check("★★ 많은 순 — 차카타(지각 1 · 조퇴 1 = 2번, 95분) · 라마바(지각 1, 40분)", lNames.join() === "차카타,라마바" && /지각 1 · 조퇴 1[\s\S]*2번\s*95분/.test(lb) && /1번\s*40분/.test(lb), lb);
+  check("★ 한 번도 없는 가나다는 안 적는다", !/가나다/.test(lb), lb);
+  const tip = await page.locator('#prOvLateBars [data-payroll-ov="' + d + '"]').getAttribute("title");
+  check("손을 대면 「지각 1번(65분) · 조퇴 1번(30분) · 차감 NT$225」", /지각 1번\(65분\)/.test(tip) && /조퇴 1번\(30분\)/.test(tip) && /NT\$225/.test(tip), tip);
 
   out.push("\n[표]");
   const rowA = await page.locator('#prOvTable tbody tr[data-payroll-ov="' + a + '"]').innerText();
@@ -74,14 +94,14 @@ function check(name, cond, extra = "") {
   const rowB = await page.locator('#prOvTable tbody tr[data-payroll-ov="' + b + '"]').innerText();
   check("★ 라마바 — 지각 1번 · 보너스 NT$500 · 차감 −NT$110", /1번/.test(rowB) && /NT\$500/.test(rowB) && /−NT\$110/.test(rowB) && /NT\$2,480/.test(rowB), rowB);
   const foot = await page.locator("#prOvTable tfoot").innerText();
-  check("★ 합계 줄 — 2명 · 24h · NT$5,380", /2명/.test(foot) && /24/.test(foot) && /NT\$5,380/.test(foot), foot);
+  check("★ 합계 줄 — 3명 · 29h · NT$5,905", /3명/.test(foot) && /29/.test(foot) && /NT\$5,905/.test(foot), foot);
 
   out.push("\n[최근 6개월 그래프]");
   const chart = await page.evaluate(() => {
     const c = window.Chart && window.Chart.getChart && window.Chart.getChart(document.querySelector("#payrollTrendChart"));
     return c ? { labels: c.data.labels, data: c.data.datasets[0].data } : null;
   });
-  check("★★ 4월 ~ 9월, 8월 1,900 · 9월 5,380", chart && chart.labels.length === 6 && chart.labels[5] === "2026년 9월" && chart.labels[0] === "2026년 4월" && chart.data[4] === 1900 && chart.data[5] === 5380, JSON.stringify(chart));
+  check("★★ 4월 ~ 9월, 8월 1,900 · 9월 5,905", chart && chart.labels.length === 6 && chart.labels[5] === "2026년 9월" && chart.labels[0] === "2026년 4월" && chart.data[4] === 1900 && chart.data[5] === 5905, JSON.stringify(chart));
 
   out.push("\n[누르면 그 직원 카드]");
   await page.locator('#prOvBars [data-payroll-ov="' + b + '"]').click();
@@ -94,7 +114,7 @@ function check(name, cond, extra = "") {
   out.push("\n[달을 바꾸면 따라온다]");
   await page.click("#payrollPrevMonth");
   await page.waitForTimeout(1500);
-  check("★ 8월 — NT$1,900, 1명", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()), await page.locator("#prOvTotal").innerText());
+  check("★ 8월 — NT$1,900, 1명, 지각·조퇴 없음", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()) && /지각·조퇴가 없어요/.test(await page.locator("#prOvLateBars").innerText()), await page.locator("#prOvTotal").innerText());
 
   out.push("\n[휴대폰 폭]");
   await page.setViewportSize({ width: 390, height: 844 });

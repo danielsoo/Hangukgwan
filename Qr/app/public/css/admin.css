@@ -2852,3 +2852,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .pr-ov-table tr.is-nocard td { color: var(--muted); }
 .pr-ov-table td.pr-ov-nocard { text-align: left; }
 .pr-ov-table tfoot td { font-weight: 800; border-top: 2px solid var(--line); border-bottom: 0; }
+.payroll-overview .pr-ov-note { margin: 12px 0 0; font-size: 13px; }
+/* 지각·조퇴 막대는 차감 색 — 돈이 빠지는 쪽이라 지급액 막대(남색)와 갈라 읽힌다. */
+.pr-ov-late .stl-bar-fill { background: #b4532a; }
+.pr-ov-late { grid-template-columns: minmax(88px, 220px) 1fr minmax(96px, max-content) minmax(44px, max-content); }

@@ -1491,6 +1491,15 @@
       payrollOvSub: "카드 넣은 직원 {n}명 · 아래 줄을 누르면 그 직원 카드가 열려요",
       payrollOvByStaff: "직원별 지급액",
       payrollOvTrend: "최근 6개월 인건비",
+      payrollOvHoursShare: "직원별 근무 시간 기여도",
+      payrollOvLateTitle: "지각·조퇴 — 누가 많이",
+      payrollOvLateNote: "지각은 30분 넘게 늦은 것만 세요(근무 규칙). 막대는 횟수, 오른쪽은 늦거나 일찍 간 분을 더한 것.",
+      payrollOvLateNone: "이 달 지각·조퇴가 없어요.",
+      payrollOvLateCount: "지각 {l} · 조퇴 {e}",
+      payrollOvLateTip: "{name} · 지각 {l}번({lm}분) · 조퇴 {e}번({em}분) · 차감 NT${d}",
+      payrollOvMinUnit: "분",
+      payrollOvHoursNote: "일한 시간 = 근무 + 초과 − 지각·조퇴. %는 이 달 모든 직원이 일한 시간 중 몫이에요.",
+      payrollOvHoursTip: "{name} · 일한 시간 {h}시간 (근무 {base} + 초과 {ot} − 지각·조퇴 {minus})",
       payrollOvTable: "직원별 한눈에",
       payrollOvHours: "근무 시간",
       payrollOvOt: "초과",
@@ -2563,6 +2572,15 @@
       payrollOvSub: "已放卡片的員工 {n} 位 · 點下方列可開啟該員工的卡",
       payrollOvByStaff: "各員工薪資",
       payrollOvTrend: "近 6 個月人事費",
+      payrollOvHoursShare: "各員工工時貢獻",
+      payrollOvLateTitle: "遲到·早退 — 誰最多",
+      payrollOvLateNote: "遲到只算超過 30 分鐘的（工作規則）。長條是次數，右邊是遲到或早退分鐘的合計。",
+      payrollOvLateNone: "本月沒有遲到·早退。",
+      payrollOvLateCount: "遲到 {l} · 早退 {e}",
+      payrollOvLateTip: "{name} · 遲到 {l} 次（{lm} 分）· 早退 {e} 次（{em} 分）· 扣款 NT${d}",
+      payrollOvMinUnit: "分",
+      payrollOvHoursNote: "實際工時 = 出勤 + 加班 − 遲到·早退。% 是本月所有員工工時中的占比。",
+      payrollOvHoursTip: "{name} · 實際工時 {h} 小時（出勤 {base} + 加班 {ot} − 遲到·早退 {minus}）",
       payrollOvTable: "員工一覽",
       payrollOvHours: "工時",
       payrollOvOt: "加班",
@@ -13359,6 +13377,55 @@
           })
           .join("")
       : `<div class="stl-bars-empty">${escapeHtml(T("payrollOvNone"))}</div>`;
+    // 시간 기여도 — 실제로 일한 시간 = 근무 블록 + 초과 − 지각·조퇴(2026-10-03 사장님: "직원별 시간
+    // 기여도도 있으면 좋겠고 그래야 누가 열심히 일한지도 볼 수 있으니까"). 돈이 아니라 시간이라
+    // 시급이 다른 직원끼리도 견줄 수 있다. 많이 일한 순.
+    const worked = (r) => Math.max(0, Number(r.hours || 0) + Number(r.ot_hours || 0) - Number(r.late_hours || 0) - Number(r.early_min || 0) / 60);
+    const hoursRows = withCard.map((r) => ({ r, h: Math.round(worked(r) * 100) / 100 })).sort((x, y) => y.h - x.h || x.r.staff.name.localeCompare(y.r.staff.name));
+    const hoursTotal = hoursRows.reduce((a, x) => a + x.h, 0);
+    const hoursMax = Math.max(1, ...hoursRows.map((x) => x.h));
+    $("#prOvHoursBars").innerHTML = hoursRows.length
+      ? hoursRows
+          .map(({ r, h }) => {
+            const pct = hoursTotal ? Math.round((h / hoursTotal) * 100) : 0;
+            const minus = Math.round((Number(r.late_hours || 0) + Number(r.early_min || 0) / 60) * 100) / 100;
+            const tip = T("payrollOvHoursTip").replace("{name}", r.staff.name).replace("{h}", payrollNum(h)).replace("{base}", payrollNum(r.hours)).replace("{ot}", payrollNum(r.ot_hours)).replace("{minus}", payrollNum(minus));
+            const days = payrollNum(Number(r.normal_days || 0) + Number(r.star_days || 0));
+            return `<div class="stl-bar-row" data-payroll-ov="${escapeHtml(r.staff.id)}" title="${escapeHtml(tip)}">
+              <span class="stl-bar-name">${escapeHtml(r.staff.name)}<span class="stl-bar-count">${days}${T("payrollOvDaysUnit")}</span></span>
+              <span class="stl-bar-track">${h > 0 ? `<span class="stl-bar-fill" style="width:${(h / hoursMax) * 100}%"></span>` : ""}</span>
+              <span class="stl-bar-amount">${payrollNum(h)}${T("payrollOvHoursUnit")}</span>
+              <span class="stl-bar-share">${pct}%</span>
+            </div>`;
+          })
+          .join("")
+      : `<div class="stl-bars-empty">${escapeHtml(T("payrollOvNone"))}</div>`;
+    // 지각·조퇴 — 누가 많이(2026-10-03 사장님: "지각이나 그런 것도 누가 제일 많이 했고 볼 수 있으면").
+    // 횟수 많은 순, 같으면 분이 많은 순. 한 번도 없는 직원은 안 적는다.
+    const lateRows = withCard
+      .map((r) => ({ r, n: Number(r.late_count || 0) + Number(r.early_count || 0), min: Number(r.late_min || 0) + Number(r.early_min || 0) }))
+      .filter((x) => x.n > 0)
+      .sort((x, y) => y.n - x.n || y.min - x.min || x.r.staff.name.localeCompare(y.r.staff.name));
+    const lateMax = Math.max(1, ...lateRows.map((x) => x.n));
+    $("#prOvLateBars").innerHTML = lateRows.length
+      ? lateRows
+          .map(({ r, n, min }) => {
+            const tip = T("payrollOvLateTip")
+              .replace("{name}", r.staff.name)
+              .replace("{l}", r.late_count || 0)
+              .replace("{lm}", r.late_min || 0)
+              .replace("{e}", r.early_count || 0)
+              .replace("{em}", r.early_min || 0)
+              .replace("{d}", money(r.deduct || 0));
+            return `<div class="stl-bar-row" data-payroll-ov="${escapeHtml(r.staff.id)}" title="${escapeHtml(tip)}">
+              <span class="stl-bar-name">${escapeHtml(r.staff.name)}<span class="stl-bar-count">${escapeHtml(T("payrollOvLateCount").replace("{l}", r.late_count || 0).replace("{e}", r.early_count || 0))}</span></span>
+              <span class="stl-bar-track"><span class="stl-bar-fill" style="width:${(n / lateMax) * 100}%"></span></span>
+              <span class="stl-bar-amount">${escapeHtml(T("payrollOvTimes").replace("{n}", n))}</span>
+              <span class="stl-bar-share">${min}${T("payrollOvMinUnit")}</span>
+            </div>`;
+          })
+          .join("")
+      : `<div class="stl-bars-empty">${escapeHtml(T(withCard.length ? "payrollOvLateNone" : "payrollOvNone"))}</div>`;
     // 표 — 한 줄에 한 직원, 아래 합계.
     const head = ["Staff", "Type", "Days", "Hours", "Ot", "Late", "Early", "Holiday", "Bonus", "Deduct", "Total", "Check"].map((k) => `<th>${escapeHtml(T(`payrollOvCol${k}`))}</th>`).join("");
     const cell = (r) => {

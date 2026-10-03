@@ -298,6 +298,19 @@
               <h3 data-i18n="payrollOvByStaff">직원별 지급액</h3>
               <div class="stl-bars pr-ov-bars" id="prOvBars"></div>
             </div>
+            <!-- 시간 기여도(2026-10-03 사장님: "직원별 시간 기여도도 있으면 좋겠고 그래야 누가 열심히
+                 일한지도 볼 수 있으니까"). 실제로 일한 시간 = 근무 블록 + 초과 − 지각·조퇴. -->
+            <div class="settlement-wide-card">
+              <h3 data-i18n="payrollOvHoursShare">직원별 근무 시간 기여도</h3>
+              <div class="stl-bars pr-ov-bars" id="prOvHoursBars"></div>
+              <p class="settings-hint pr-ov-note" data-i18n="payrollOvHoursNote">일한 시간 = 근무 + 초과 − 지각·조퇴. %는 이 달 모든 직원이 일한 시간 중 몫이에요.</p>
+            </div>
+            <!-- 지각·조퇴 순위(2026-10-03 사장님: "지각이나 그런 것도 누가 제일 많이 했고 볼 수 있으면"). -->
+            <div class="settlement-wide-card">
+              <h3 data-i18n="payrollOvLateTitle">지각·조퇴 — 누가 많이</h3>
+              <div class="stl-bars pr-ov-bars pr-ov-late" id="prOvLateBars"></div>
+              <p class="settings-hint pr-ov-note" data-i18n="payrollOvLateNote">지각은 30분 넘게 늦은 것만 세요(근무 규칙). 막대는 횟수, 오른쪽은 늦거나 일찍 간 분을 더한 것.</p>
+            </div>
             <div class="settlement-wide-card">
               <h3 data-i18n="payrollOvTrend">최근 6개월 인건비</h3>
               <div class="settlement-chart-wrap"><canvas id="payrollTrendChart"></canvas></div>
