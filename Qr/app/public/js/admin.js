@@ -688,7 +688,9 @@
   // whatever the owner has switched on below. Populated from /api/auth/me
   // after login — the server enforces the same boundaries independently
   // (see requirePermission in src/auth.js), this is just for the UI.
-  let currentRole = "owner";
+  // 서버가 답하기 전에는 「직원」— 사장님 칸(급여·마감 알림·결제·진단)은 답을 받은 뒤에 열린다.
+  // 2026-10-03 사장님: "직원들은 급여 페이지 보이면 절대 안되고 링크로 타도 안돼".
+  let currentRole = "staff";
   let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, orderEdit: true, reservationManage: true };
   const canMenuEdit = () => currentRole === "owner" || staffPermissions.menuEdit;
   const canTableEdit = () => currentRole === "owner" || staffPermissions.tableEdit;
@@ -1207,7 +1209,8 @@
       settingsCatNotifySub: "마감 LINE 알림",
       settingsCatPayment: "결제",
       settingsCatPaymentSub: "온라인 결제 (ECPay)",
-      settingsCatVipSub: "구글 로그인 설정",
+      settingsCatVipSub: "카드 판매 · 구글 로그인",
+      vipSaleReadonly: "보기만 할 수 있어요 — 바꾸려면 사장님께.",
       settingsCatPrint: "인쇄",
       settingsCatPrintSub: "주방 프린터 · 빌지 글자",
       testBannerMine: "테스터 모드 — 이 기기에서 만드는 것은 종료할 때 전부 사라집니다",
@@ -2245,7 +2248,8 @@
       settingsCatNotifySub: "打烊 LINE 通知",
       settingsCatPayment: "付款",
       settingsCatPaymentSub: "線上付款 (ECPay)",
-      settingsCatVipSub: "Google 登入設定",
+      settingsCatVipSub: "卡片販售 · Google 登入",
+      vipSaleReadonly: "只能查看 — 要修改請找老闆。",
       settingsCatPrint: "列印",
       settingsCatPrintSub: "廚房印表機 · 出單字級",
       testBannerMine: "測試模式 — 這台裝置建立的資料，結束時會全部刪除",
@@ -3663,7 +3667,7 @@
       showLogin();
       return;
     }
-    currentRole = data.role || "owner";
+    currentRole = data.role === "owner" ? "owner" : "staff";
     staffPermissions = data.permissions || staffPermissions;
     // 다음에 이 기기가 열릴 때는 기다림 없이 바로 대시보드로 뜬다.
     rememberSignedIn(data.expiresAt);
@@ -3726,6 +3730,10 @@
     document.body.classList.toggle("perm-no-orderCancel", !canCancelOrder());
     document.body.classList.toggle("perm-no-orderEdit", !canEditOrder());
     document.body.classList.toggle("perm-no-reservationManage", !canManageReservations());
+    // VIP 카드 판매가·할인율 — 누구나 보지만 설정 수정 권한이 있어야 고친다.
+    ["#vipSalePriceInput", "#vipSaleDiscountInput"].forEach((sel) => {
+      if ($(sel)) $(sel).readOnly = !canSettingsEdit();
+    });
     // Staff can never see an owner-only settings category (알림/결제/인쇄)
     // — if one of those was left selected, bounce back to 화면.
     if (currentRole !== "owner") {

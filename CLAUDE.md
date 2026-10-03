@@ -348,6 +348,22 @@ git checkout -- Qr/app/package-lock.json
   - 시험: `test/e2e-timecard-ocr.js`(사장님 카드, 이름 칸 지운 `test/fixtures/timecard-*.webp`
     — 원본·기울임·축소·누런 빛에서 틀림 0), `e2e-payroll.js`(화면 흐름).
 
+## 직원에게 안 보이는 것 (2026-10-03)
+
+사장님: "직원들은 급여 페이지 보이면 절대 안되고 링크로 타도 안돼 설정에서 마감 알림 이거 전체
+보이면 안되고 결제 페이지도 안되고 vip 카드 판매 가격, 할인 퍼센트 말고는 보이면 안되고 진단 속도도 안돼"
+
+- 사장님만: 💰 급여 탭, 설정의 알림(마감 LINE)·결제(ECPay)·인쇄·진단·속도, 회원(VIP)의 구글
+  로그인(Firebase) 칸. 화면은 `owner-only`(`.role-staff .owner-only` 숨김), 서버는 `requireOwner`.
+- **화면은 「직원」으로 시작한다**(`<body class="role-staff">`, `currentRole = "staff"`). 서버(`/api/auth/me`)가
+  사장님이라고 답한 뒤에야 사장님 칸이 열린다. 예전엔 사장님으로 시작해서, 로그인 기억이 있는 패드는
+  답이 오기 전 잠깐 급여 탭이 보이고 `#payroll` 로 열 수 있었다.
+- 설정 > 회원(VIP) 은 직원에게도 보이되 「VIP 카드 판매」(판매가·할인율)만. 설정 수정 권한이 없으면
+  보기만(칸 잠김, 저장 버튼 대신 「보기만」).
+- `PUT /api/settings` 는 `firebase_web_config` 를 사장님 세션일 때만 바꾼다 — 화면만 숨기면 설정 수정
+  권한이 있는 직원이 그 길로 바꿀 수 있었다.
+- 시험: `test/e2e-staff-hidden.js` — 주소로 열기, 서버 답 전, 서버 길 직접, 설정 찾기까지.
+
 ## store 문서를 통째로 쓰지 않는다
 
 `save()` 는 store 문서 **전체**를 지금 이 인스턴스가 들고 있는 값으로

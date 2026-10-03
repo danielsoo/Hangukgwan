@@ -128,6 +128,10 @@ router.put("/", canEditSettings, async (req, res) => {
   for (const key of PUBLIC_KEYS) {
     if (key === "store_cover_photo" || key === "store_logo") continue; // set only via the photo upload routes
     if (key === "soldout_release_time") continue; // 형식을 확인해서 아래에서 따로 넣는다
+    // 구글 로그인(Firebase) 설정은 사장님만 — 직원 화면엔 그 칸이 없다(2026-10-03 사장님: "vip 카드
+    // 판매 가격, 할인 퍼센트 말고는 보이면 안되고"). 화면만 숨기면 「설정 수정」 권한이 있는
+    // 직원이 이 길로 바꿀 수 있었다.
+    if (key === "firebase_web_config" && !(req.session && req.session.role === "owner")) continue;
     // 참/거짓은 참/거짓으로 둔다. 예전에는 여기서 전부 String() 으로
     // 감쌌는데, 다른 칸이 전부 글자라 그게 자연스러워 보였다. 그 바람에
     // 체크박스의 false 가 글자 "false" 가 됐고, 읽는 쪽의 `!== false` 가

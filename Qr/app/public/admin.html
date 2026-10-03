@@ -14,7 +14,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500&text=%E9%9F%93%E5%9C%8B%E9%A4%A8&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 </head>
-<body>
+<!-- 처음엔 「직원」으로 그린다 — 서버가 사장님이라고 답한 뒤에야 사장님 칸을 연다
+     (2026-10-03 사장님: "직원들은 급여 페이지 보이면 절대 안되고 링크로 타도 안돼").
+     예전엔 사장님으로 시작해서, 로그인 기억이 있는 패드는 답이 오기 전 잠깐 급여 탭이 열렸다. -->
+<body class="role-staff">
 
 <!-- LOGIN -->
 <script>
@@ -797,7 +800,7 @@
           <button data-category="account" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatAccount">계정</span><span class="nav-sub" data-i18n="settingsCatAccountSub">비밀번호 · 직원 권한</span></button>
           <button data-category="notify" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatNotify">알림</span><span class="nav-sub" data-i18n="settingsCatNotifySub">마감 LINE 알림</span></button>
           <button data-category="payment" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPayment">결제</span><span class="nav-sub" data-i18n="settingsCatPaymentSub">온라인 결제 (ECPay)</span></button>
-          <button data-category="vip" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatVip">회원(VIP)</span><span class="nav-sub" data-i18n="settingsCatVipSub">구글 로그인 설정</span></button>
+          <button data-category="vip" class="settings-nav-btn"><span class="nav-name" data-i18n="settingsCatVip">회원(VIP)</span><span class="nav-sub" data-i18n="settingsCatVipSub">구글 로그인 설정</span></button>
           <button data-category="print" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatPrint">인쇄</span><span class="nav-sub" data-i18n="settingsCatPrintSub">주방 프린터 · 빌지 글자</span></button>
           <button data-category="diag" class="settings-nav-btn owner-only"><span class="nav-name" data-i18n="settingsCatDiag">진단 · 속도</span><span class="nav-sub" data-i18n="settingsCatDiagSub">느린 곳 찾기 · 기록 내려받기</span></button>
         </nav>
@@ -1195,8 +1198,10 @@
         </div>
         </div>
 
-        <div id="settings-cat-vip" class="settings-category owner-only" hidden>
-        <div class="settings-card">
+        <!-- 직원에게는 「VIP 카드 판매」(판매가·할인율)만 보인다 — 구글 로그인(Firebase) 칸은 사장님만
+             (2026-10-03 사장님: "vip 카드 판매 가격, 할인 퍼센트 말고는 보이면 안되고"). -->
+        <div id="settings-cat-vip" class="settings-category" hidden>
+        <div class="settings-card owner-only">
           <h3 data-i18n="vipSettingsTitle">회원(VIP) 구글 로그인 설정 (Firebase)</h3>
           <p class="settings-hint" data-i18n="vipSettingsHint">
             손님이 주문 페이지에서 구글로 로그인해 VIP 카드를 등록하려면 Firebase 프로젝트가 필요해요.
@@ -1216,7 +1221,7 @@
         <!-- 카드 판매 — 사장님(2026-09-10): "vip카드 구매도 현금으로만
              구매가능. 버튼필요 - VIP卡販售 /300원." 값을 여기서 고칠 수
              있게 한 건 사장님이 고른 쪽이다. 읽는 규칙은 src/vip.js 한 곳. -->
-        <div class="settings-card">
+        <div class="settings-card vip-sale-card">
           <h3 data-i18n="vipSaleTitle">VIP 카드 판매 (VIP卡販售)</h3>
           <p class="settings-hint" data-i18n="vipSaleHint">
             결제 화면 맨 아래에 「VIP卡販售」 버튼이 생겨요. 직원이 그 버튼을 누르면 여기서 정한 금액이
@@ -1231,7 +1236,8 @@
           <p class="settings-hint" data-i18n="vipSaleDiscountHint">
             카드마다 다르게 주고 싶으면, 등록된 뒤 회원(VIP) 탭에서 그 카드만 고치면 돼요.
           </p>
-          <button id="saveVipSaleBtn" data-i18n="saveBtn">저장</button>
+          <p class="settings-hint vip-sale-readonly" data-i18n="vipSaleReadonly">보기만 할 수 있어요 — 바꾸려면 사장님께.</p>
+          <button id="saveVipSaleBtn" class="need-settingsEdit" data-i18n="saveBtn">저장</button>
           <div class="save-msg" id="vipSaleMsg" hidden></div>
         </div>
         </div>

@@ -763,6 +763,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .perm-no-menuEdit .need-menuEdit { display: none !important; }
 .perm-no-tableEdit .need-tableEdit { display: none !important; }
 .perm-no-settingsEdit .need-settingsEdit { display: none !important; }
+/* VIP 카드 판매가·할인율은 직원 누구나 본다 — 설정 수정 권한이 없으면 보기만(2026-10-03). */
+.vip-sale-readonly { display: none; }
+.perm-no-settingsEdit .vip-sale-readonly { display: block; }
 .perm-no-orderCancel .need-orderCancel { display: none !important; }
 .perm-no-reservationManage .need-reservationManage { display: none !important; }
 .perm-toggle-row { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; }
