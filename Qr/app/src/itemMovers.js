@@ -26,11 +26,33 @@ const UP_RATIO = 1.5; // 평소의 1.5배 이상
 const DOWN_RATIO = 0.5; // 평소의 절반 이하
 const NEW_HIT_MIN = 8; // 평소 거의 없던 메뉴가 한 주에 이만큼 → 새로 뜬 메뉴
 const LIMIT = 12;
+// 기간을 고를 수 있다(2026-10-03 사장님: "7일만 보는데 그 전 7일을 모르는 거잖아.
+// 평균 값을 해서 보이게 하는 게 좋을 것 같기도 하고 아니면 날짜를 지정할 수 있게").
+// 최근 기간 N일을 **같은 길이 N일씩 그 전 4번**의 평균과 견준다. 그래서 7일이면
+// 예전과 똑같이 「최근 7일 vs 그 전 4주」다. 바로 전 N일(4번 중 마지막)도 따로 준다.
+const BASE_PERIODS = 4;
+const MAX_DAYS = 60;
 
 function addDays(dateStr, n) {
   const d = new Date(`${dateStr}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 견줄 기간들. end(최근 기간의 마지막 날)는 어제를 넘지 못한다 — 오늘은 장사 중이다.
+ * 돌려주는 periods 는 기준 4번 + 최근 1번, 각각 [시작, 끝].
+ */
+function moversWindow({ today, end = null, days = RECENT_DAYS } = {}) {
+  const yesterday = addDays(today, -1);
+  const e = /^\d{4}-\d{2}-\d{2}$/.test(String(end || "")) && end < yesterday ? end : yesterday;
+  const n = Math.max(1, Math.min(MAX_DAYS, Math.floor(Number(days)) || RECENT_DAYS));
+  const recentStart = addDays(e, -(n - 1));
+  const baseEnd = addDays(recentStart, -1);
+  const baseStart = addDays(baseEnd, -(BASE_PERIODS * n - 1));
+  const periods = [];
+  for (let k = 0; k <= BASE_PERIODS; k++) periods.push([addDays(baseStart, k * n), addDays(baseStart, k * n + n - 1)]);
+  return { days: n, end: e, recentStart, baseEnd, baseStart, periods };
 }
 
 /**
@@ -40,19 +62,17 @@ function addDays(dateStr, n) {
  */
 function computeItemMovers(
   orders,
-  { today, firstDay = null, menuItems = [], isSoldOut = () => false, recentGuests = 0, baseGuests = 0, weekGuests = null } = {}
+  { today, end: endIn = null, days = RECENT_DAYS, firstDay = null, menuItems = [], isSoldOut = () => false, recentGuests = 0, baseGuests = 0, weekGuests = null } = {}
 ) {
-  const end = addDays(today, -1);
-  const recentStart = addDays(end, -(RECENT_DAYS - 1));
-  const baseEnd = addDays(recentStart, -1);
-  const baseStart = addDays(baseEnd, -(BASE_DAYS - 1));
+  const win = moversWindow({ today, end: endIn, days });
+  const { end, recentStart, baseEnd, baseStart } = win;
   const from = firstDay && firstDay > baseStart ? firstDay : baseStart;
   // 기준 기간 중 실제로 셀 수 있는 날 수(서비스 시작 뒤).
   let baseDays = 0;
   for (let d = from; d <= baseEnd; d = addDays(d, 1)) baseDays++;
 
-  // 5주 흐름(작은 선) — 기준 4주 + 최근 1주, 7일씩.
-  const weekStarts = [0, 1, 2, 3, 4].map((k) => addDays(baseStart, k * 7));
+  // 5번 흐름(작은 선) — 기준 4번 + 최근 1번, N일씩.
+  const weekStarts = win.periods.map((p) => p[0]);
   const weekOf = (d) => {
     for (let k = 4; k >= 0; k--) if (d >= weekStarts[k]) return k;
     return -1;
@@ -85,11 +105,15 @@ function computeItemMovers(
     base_start: from,
     base_end: baseEnd,
     base_days: baseDays,
+    days: win.days,
+    periods: win.periods,
     recent_guests: recentGuests,
     base_guests: baseGuests,
+    // 바로 전 N일(기준 4번 중 마지막) 손님 수 — 「그 전 7일은?」에 답한다.
+    prev_guests: Array.isArray(weekGuests) ? weekGuests[BASE_PERIODS - 1] || 0 : null,
   };
-  // 기준이 한 주도 안 되거나 손님 수를 모르면 견줄 것이 없다 — 억지로 말하지 않는다.
-  if (baseDays < 7 || !(recentGuests > 0) || !(baseGuests > 0)) return { ...window, insufficient: true, up: [], down: [] };
+  // 기준이 한 주(짧게 보면 그 기간)도 안 되거나 손님 수를 모르면 견줄 것이 없다 — 억지로 말하지 않는다.
+  if (baseDays < Math.min(7, win.days) || !(recentGuests > 0) || !(baseGuests > 0)) return { ...window, insufficient: true, up: [], down: [] };
 
   const menuById = new Map((menuItems || []).map((m) => [String(m.id), m]));
   const up = [];
@@ -117,6 +141,12 @@ function computeItemMovers(
       weeks_per100: Array.isArray(weekGuests)
         ? row.weeks.map((q, k) => (weekGuests[k] > 0 ? r1((q / weekGuests[k]) * 100) : null))
         : null,
+      // 바로 전 N일 — 판 수와 손님 100명당.
+      prev: row.weeks[BASE_PERIODS - 1],
+      prev_per100:
+        Array.isArray(weekGuests) && weekGuests[BASE_PERIODS - 1] > 0
+          ? r1((row.weeks[BASE_PERIODS - 1] / weekGuests[BASE_PERIODS - 1]) * 100)
+          : null,
       sold_out: m ? !!isSoldOut(m) : false,
     };
     if (expected < 1 && recent >= NEW_HIT_MIN) up.push({ ...out, kind: "new" });
@@ -146,11 +176,8 @@ function computeItemMovers(
  */
 const SHIFT_MIN_QTY = 6;
 const SHIFT_MIN_DELTA = 0.25;
-function computeTimeShift(orders, { today, firstDay = null, halfOf, guests = {}, menuItems = [] } = {}) {
-  const end = addDays(today, -1);
-  const recentStart = addDays(end, -(RECENT_DAYS - 1));
-  const baseEnd = addDays(recentStart, -1);
-  const baseStart = addDays(baseEnd, -(BASE_DAYS - 1));
+function computeTimeShift(orders, { today, end: endIn = null, days = RECENT_DAYS, firstDay = null, halfOf, guests = {}, menuItems = [] } = {}) {
+  const { end, recentStart, baseStart } = moversWindow({ today, end: endIn, days });
   const from = firstDay && firstDay > baseStart ? firstDay : baseStart;
   const g = { recentAm: 0, recentPm: 0, baseAm: 0, basePm: 0, ...guests };
   if (!halfOf || !(g.recentAm > 0 && g.recentPm > 0 && g.baseAm > 0 && g.basePm > 0)) return [];
@@ -210,4 +237,4 @@ function weekRanges(today) {
   return [0, 1, 2, 3, 4].map((k) => [addDays(baseStart, k * 7), addDays(baseStart, k * 7 + 6)]);
 }
 
-module.exports = { computeItemMovers, computeTimeShift, weekRanges, RECENT_DAYS, BASE_DAYS, MIN_DIFF, addDays };
+module.exports = { computeItemMovers, computeTimeShift, weekRanges, moversWindow, RECENT_DAYS, BASE_DAYS, BASE_PERIODS, MAX_DAYS, MIN_DIFF, addDays };

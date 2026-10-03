@@ -12,7 +12,7 @@ process.env.NODE_ENV = "test";
 process.env.SESSION_SECRET = "item-movers";
 process.env.ADMIN_PASSWORD = "ownerpass123";
 
-const { computeItemMovers, computeTimeShift, addDays } = require("../src/itemMovers");
+const { computeItemMovers, computeTimeShift, moversWindow, addDays } = require("../src/itemMovers");
 
 let pass = 0;
 let fail = 0;
@@ -158,6 +158,30 @@ out.push("\n[시간대가 바뀐 메뉴]");
   check("★ 시간대 손님 수를 모르면 말하지 않는다", computeTimeShift(orders, { today: TODAY, halfOf }).length === 0, "");
 }
 
+out.push("\n[기간 고르기 — 2026-10-03]");
+// 사장님: "7일만 보는데 그 전 7일을 모르는 거잖아. 평균 값을 해서 보이게 하는 게
+// 좋을 것 같기도 하고 아니면 날짜를 지정할 수 있게 해주던가."
+{
+  const w7 = moversWindow({ today: TODAY });
+  check("기본은 예전 그대로 — 어제까지 7일 vs 그 전 4주", w7.recentStart === RECENT_START && w7.end === END && w7.baseStart === BASE_START && w7.baseEnd === BASE_END, JSON.stringify(w7));
+  const w14 = moversWindow({ today: TODAY, days: 14 });
+  check("★ 14일이면 기준도 14일씩 4번(56일)", w14.recentStart === "2026-09-16" && w14.baseStart === addDays("2026-09-16", -56) && w14.periods.length === 5 && w14.periods[3][1] === "2026-09-15", JSON.stringify(w14));
+  const wc = moversWindow({ today: TODAY, end: "2026-09-14", days: 3 });
+  check("★ 날짜 지정 — 끝날과 길이 그대로", wc.end === "2026-09-14" && wc.recentStart === "2026-09-12" && wc.periods[3][0] === "2026-09-09", JSON.stringify(wc));
+  check("★ 끝날이 오늘이면 어제로(장사 중인 날은 안 센다)", moversWindow({ today: TODAY, end: TODAY }).end === END, "");
+  check("길이는 60일까지", moversWindow({ today: TODAY, days: 999 }).days === 60, "");
+
+  // 14일로 볼 때: 바로 전 14일에 하루 1개 → 최근 14일 하루 4개. 그 전 셋은 하루 1개.
+  const o = [];
+  sell(o, 1, "닭갈비", w14.baseStart, w14.baseEnd, 1);
+  sell(o, 1, "닭갈비", w14.recentStart, END, 4);
+  const r = computeItemMovers(o, { today: TODAY, days: 14, recentGuests: 280, baseGuests: 1120, weekGuests: [280, 280, 280, 280, 280] });
+  const m = r.up.find((x) => x.name_ko === "닭갈비");
+  check("★★ 14일로 재면 14일 판 수", m && m.recent === 56 && r.days === 14, JSON.stringify(m));
+  check("★★ 바로 전 14일 — 판 수와 손님 100명당", m && m.prev === 14 && m.prev_per100 === 5 && r.prev_guests === 280, JSON.stringify(m));
+  check("평소는 4번 평균(손님 100명당)", m && m.base_per100 === 5 && m.recent_per100 === 20, JSON.stringify(m));
+}
+
 out.push("\n[서버]");
 (async () => {
   const request = require("supertest");
@@ -170,12 +194,17 @@ out.push("\n[서버]");
   r = await boss.get("/api/settlements/item-movers");
   check("사장님은 본다", r.status === 200 && Array.isArray(r.body.up) && Array.isArray(r.body.down), JSON.stringify(r.body));
   check("하루 전체에는 시간대가 바뀐 메뉴가 같이 온다", Array.isArray(r.body.time_shift) && r.body.shift === "all", JSON.stringify(r.body));
+  check("기본 7일", r.body.days === 7 && Array.isArray(r.body.periods) && r.body.periods.length === 5, JSON.stringify(r.body.days));
+  r = await boss.get("/api/settlements/item-movers?days=14");
+  check("★ ?days=14", r.status === 200 && r.body.days === 14, JSON.stringify(r.body.days));
+  r = await boss.get("/api/settlements/item-movers?from=2026-09-01&to=2026-09-10");
+  check("★ ?from&to — 그 날짜로", r.status === 200 && r.body.days === 10 && r.body.recent_start === "2026-09-01" && r.body.recent_end === "2026-09-10", JSON.stringify([r.body.days, r.body.recent_start, r.body.recent_end]));
   r = await boss.get("/api/settlements/item-movers?shift=am");
   check("점심만 볼 수 있다", r.status === 200 && r.body.shift === "am" && !("time_shift" in r.body), JSON.stringify(r.body));
   const fs = require("fs");
   const adminJs = fs.readFileSync(require("path").join(__dirname, "../public/js/admin.js"), "utf8");
   check("★ 판매 비중에 「기타」로 묶지 않는다", !/settlementPieOther"\)\} \(\$\{rest\.length\}\)/.test(adminJs) && /const slices = sorted\.map/.test(adminJs), "");
-  for (const k of ["moversTitle", "moversNote", "moversNew", "moversStopped", "moversSoldOut", "moversShiftAm", "timeShiftTitle", "timeShiftRow", "timeShiftToLunch", "timeShiftNone"]) {
+  for (const k of ["moversTitle", "moversNote", "moversNew", "moversStopped", "moversSoldOut", "moversShiftAm", "timeShiftTitle", "timeShiftRow", "timeShiftToLunch", "timeShiftNone", "moversDays7", "moversDays14", "moversDays30", "moversDaysCustom", "moversApply", "moversBadRange"]) {
     check(`i18n ${k} 두 언어`, adminJs.split(`${k}:`).length - 1 === 2, "");
   }
   console.log(out.join("\n"));

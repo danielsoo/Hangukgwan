@@ -15,7 +15,7 @@ const { nowLocal } = require("../time");
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
 const { sendLineMessage, formatShiftSummary, formatCloseHeldNotice } = require("../line");
 const testMode = require("../testMode");
-const { computeItemMovers, computeTimeShift, weekRanges, RECENT_DAYS, BASE_DAYS } = require("../itemMovers");
+const { computeItemMovers, computeTimeShift, moversWindow, RECENT_DAYS } = require("../itemMovers");
 const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
@@ -348,8 +348,18 @@ router.get("/item-trend", requireOwner, async (req, res) => {
 // 꾸준히 체크하면서 보여줬으면." 계산은 src/itemMovers.js.
 router.get("/item-movers", requireOwner, async (req, res) => {
   const today = taipeiDateString();
-  const end = addDays(today, -1);
-  const baseStart = addDays(end, -(RECENT_DAYS + BASE_DAYS - 1));
+  // 기간 — ?days=14 또는 ?from=2026-09-01&to=2026-09-14(2026-10-03 사장님: "날짜를
+  // 지정할 수 있게"). 아무것도 없으면 예전처럼 어제까지 7일.
+  const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ""));
+  let days = parseInt(req.query.days, 10) || RECENT_DAYS;
+  let endQ = null;
+  if (isDate(req.query.from) && isDate(req.query.to) && req.query.from <= req.query.to) {
+    endQ = req.query.to;
+    days = dayCount(req.query.from, req.query.to);
+  }
+  const win = moversWindow({ today, end: endQ, days });
+  const end = win.end;
+  const baseStart = win.baseStart;
   const started = serviceStartedAt(store);
   const firstDay = started ? String(started).slice(0, 10) : null;
   const all = await ordersInRange(baseStart, end, req);
@@ -362,8 +372,8 @@ router.get("/item-movers", requireOwner, async (req, res) => {
   // 손님 수 — 결산과 같은 규칙(한 팀은 한 번 · 포장 한 건은 한 명). 2026-09-30
   // 사장님: "집계 날짜와 인원수 수량과 비례해서 해야돼." 점심만/저녁만 볼 때는 그
   // 시간대 손님만 센다.
-  const recentStart = addDays(end, -(RECENT_DAYS - 1));
-  const baseEnd = addDays(recentStart, -1);
+  const recentStart = win.recentStart;
+  const baseEnd = win.baseEnd;
   const baseFrom = firstDay && firstDay > baseStart ? firstDay : baseStart;
   const guestsIn = (list, s, e) => {
     if (s > e) return 0;
@@ -376,12 +386,14 @@ router.get("/item-movers", requireOwner, async (req, res) => {
   };
   const result = computeItemMovers(orders, {
     today,
+    end,
+    days: win.days,
     firstDay,
     menuItems: store.menuItems || [],
     isSoldOut: (m) => !isAvailableNow(m, store.settings),
     recentGuests: guestsIn(orders, recentStart, end),
     baseGuests: guestsIn(orders, baseFrom, baseEnd),
-    weekGuests: weekRanges(today).map(([s, e]) => guestsIn(orders, s < baseFrom ? baseFrom : s, e)),
+    weekGuests: win.periods.map(([s, e]) => guestsIn(orders, s < baseFrom ? baseFrom : s, e)),
   });
   // 하루 전체를 볼 때만 — 점심/저녁 사이로 옮겨간 메뉴.
   if (!shift) {
@@ -389,6 +401,8 @@ router.get("/item-movers", requireOwner, async (req, res) => {
     const pmOrders = all.filter((o) => halfOfO(o) === "pm");
     result.time_shift = computeTimeShift(all, {
       today,
+      end,
+      days: win.days,
       firstDay,
       halfOf: halfOfO,
       menuItems: store.menuItems || [],

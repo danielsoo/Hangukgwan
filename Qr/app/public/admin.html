@@ -541,14 +541,29 @@
 
             <!-- 요즘 달라진 메뉴 — 2026-09-30 사장님: "메뉴가 갑자기 안 팔리거나 갑자기
                  잘팔리거나 이런 걸 꾸준히 체크하면서 보여줬으면." 결산 탭을 열 때마다
-                 어제까지 7일을 그 전 4주 주 평균과 견준다(src/itemMovers.js). 위 날짜
-                 칸과 상관없이 늘 「지금」을 본다. -->
+                 고른 기간(기본 어제까지 7일)을 같은 길이로 그 전 4번의 평균과 견준다
+                 (src/itemMovers.js). 위 결산 날짜 칸과는 따로 논다. -->
             <div class="stl-pane owner-only" data-pane="soldMovers" hidden>
               <!-- 하루 전체 / 점심만 / 저녁만 — 2026-09-30 사장님: "시간대별로 팔리는 것도 추이를 보고 싶어." -->
               <div class="stl-movers-shift" id="settlementMoversShift">
                 <button type="button" data-shift="all" class="active" data-i18n="moversShiftAll">하루 전체</button>
                 <button type="button" data-shift="am" data-i18n="moversShiftAm">🌅 점심</button>
                 <button type="button" data-shift="pm" data-i18n="moversShiftPm">🌙 저녁</button>
+              </div>
+              <!-- 기간 — 2026-10-03 사장님: "7일만 보는데 그 전 7일을 모르는 거잖아 …
+                   아니면 날짜를 지정할 수 있게 해주던가". 고른 기간을 같은 길이로 그 전
+                   4번의 평균과 견주고, 바로 전 기간도 줄마다 적는다. -->
+              <div class="stl-movers-period">
+                <div class="stl-movers-shift" id="settlementMoversPeriod">
+                  <button type="button" data-days="7" class="active" data-i18n="moversDays7">최근 7일</button>
+                  <button type="button" data-days="14" data-i18n="moversDays14">14일</button>
+                  <button type="button" data-days="30" data-i18n="moversDays30">30일</button>
+                  <button type="button" data-days="custom" data-i18n="moversDaysCustom">📅 날짜 지정</button>
+                </div>
+                <span class="stl-movers-range" id="settlementMoversRange" hidden>
+                  <input type="date" id="settlementMoversFrom" /> ~ <input type="date" id="settlementMoversTo" />
+                  <button type="button" class="btn small" id="settlementMoversApply" data-i18n="moversApply">보기</button>
+                </span>
               </div>
               <p class="stl-note" id="settlementMoversNote"></p>
               <div class="stl-movers">
@@ -564,7 +579,7 @@
               <!-- 늘 저녁에 팔리던 메뉴가 점심에 팔리기 시작했나(하루 전체에서만). -->
               <div class="stl-time-shift" id="settlementTimeShiftWrap">
                 <h4 data-i18n="timeShiftTitle">🔄 시간대가 바뀐 메뉴</h4>
-                <p class="stl-note" data-i18n="timeShiftHint">메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소 4주와 최근 7일을 견줬어요.</p>
+                <p class="stl-note" id="settlementTimeShiftHint" data-i18n="timeShiftHint">메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소 4주와 최근 7일을 견줬어요.</p>
                 <div id="settlementTimeShift"></div>
               </div>
             </div>

@@ -965,21 +965,27 @@
       moversTitle: "📈 요즘 달라진 메뉴",
       moversUpTitle: "▲ 갑자기 잘 팔리는 메뉴",
       moversDownTitle: "▼ 갑자기 덜 팔리는 메뉴",
-      moversNote: "어제까지 7일({recent} · 손님 {rg}명)을 그 전({base} · 손님 {bg}명)과 **손님 100명당 판매 수**로 견줬어요. 손님이 많거나 적었던 주라서 달라 보이는 건 빼고, 정말 손이 더 가거나 덜 가는 메뉴만 골라요. 결산 탭을 열 때마다 다시 봐요.",
+      moversNote: "{recent}({n}일 · 손님 {rg}명)을 그 전 {n}일씩 4번({base} · 손님 {bg}명)의 **평균**과 **손님 100명당 판매 수**로 견줬어요. 바로 전 {n}일({prev} · 손님 {pg}명)도 줄마다 같이 적었어요. 손님이 많거나 적었던 때라서 달라 보이는 건 빼고, 정말 손이 더 가거나 덜 가는 메뉴만 골라요.",
       moversInsufficient: "아직 견줄 기록(손님 수)이 한 주도 안 돼요. 며칠 더 쌓이면 보여드릴게요.",
       moversNoneUp: "크게 늘어난 메뉴는 없어요.",
       moversNoneDown: "크게 줄어든 메뉴는 없어요.",
-      moversRow: "최근 7일 {recent}개 · 손님 100명당 {rp}개 (평소 {bp}개)",
+      moversRow: "{n}일간 {recent}개 · 손님 100명당 {rp}개 (바로 전 {n}일 {pp}개 · 평소 {bp}개)",
       moversNew: "새로 뜸",
-      moversStopped: "7일간 0개",
+      moversStopped: "{n}일간 0개",
       moversSoldOut: "지금 품절",
       moversFailed: "달라진 메뉴를 불러오지 못했어요.",
       moversShiftAll: "하루 전체",
+      moversDays7: "최근 7일",
+      moversDays14: "14일",
+      moversDays30: "30일",
+      moversDaysCustom: "📅 날짜 지정",
+      moversApply: "보기",
+      moversBadRange: "날짜를 확인해 주세요 — 끝날은 어제까지, 길이는 60일까지예요.",
       moversShiftAm: "🌅 점심",
       moversShiftPm: "🌙 저녁",
       timeShiftTitle: "🔄 시간대가 바뀐 메뉴",
-      timeShiftHint: "메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소 4주와 최근 7일을 견줬어요.",
-      timeShiftRow: "점심 비중 {before}% → {now}% · 최근 7일 점심 {am}개 · 저녁 {pm}개",
+      timeShiftHint: "메뉴마다 점심·저녁 중 어디서 더 팔리는지를 그 시간대 손님 100명당 판매 수로 재서, 평소(그 전 4번)와 고른 기간을 견줬어요.",
+      timeShiftRow: "점심 비중 {before}% → {now}% · {n}일간 점심 {am}개 · 저녁 {pm}개",
       timeShiftToLunch: "☀ 점심으로",
       timeShiftToDinner: "🌙 저녁으로",
       timeShiftNone: "점심·저녁 사이로 옮겨간 메뉴는 없어요.",
@@ -1893,21 +1899,27 @@
       moversTitle: "📈 最近變化的菜色",
       moversUpTitle: "▲ 突然賣得好的菜色",
       moversDownTitle: "▼ 突然賣得少的菜色",
-      moversNote: "以昨天為止的 7 天（{recent} · 客人 {rg} 位）對比之前（{base} · 客人 {bg} 位），以**每 100 位客人的銷售數**比較。排除因客人多或少造成的差異，只挑出真正變受歡迎或變冷門的菜色。每次打開結算頁都會重新計算。",
+      moversNote: "{recent}（{n} 天 · 客人 {rg} 位）對比之前每 {n} 天共 4 段（{base} · 客人 {bg} 位）的**平均**，以**每 100 位客人的銷售數**比較。前 {n} 天（{prev} · 客人 {pg} 位）也一併列在每一行。排除因客人多或少造成的差異，只挑出真正變受歡迎或變冷門的菜色。",
       moversInsufficient: "可比較的紀錄（客人數）還不到一週，再累積幾天就會顯示。",
       moversNoneUp: "沒有明顯增加的菜色。",
       moversNoneDown: "沒有明顯減少的菜色。",
-      moversRow: "最近 7 天 {recent} 份 · 每 100 位客人 {rp} 份（平時 {bp} 份）",
+      moversRow: "{n} 天 {recent} 份 · 每 100 位客人 {rp} 份（前 {n} 天 {pp} 份 · 平時 {bp} 份）",
       moversNew: "新熱門",
-      moversStopped: "7 天 0 份",
+      moversStopped: "{n} 天 0 份",
       moversSoldOut: "目前售完",
       moversFailed: "無法載入變化菜色。",
       moversShiftAll: "全天",
+      moversDays7: "最近 7 天",
+      moversDays14: "14 天",
+      moversDays30: "30 天",
+      moversDaysCustom: "📅 指定日期",
+      moversApply: "查看",
+      moversBadRange: "請確認日期 — 結束日最晚為昨天，最長 60 天。",
       moversShiftAm: "🌅 午餐",
       moversShiftPm: "🌙 晚餐",
       timeShiftTitle: "🔄 時段改變的菜色",
-      timeShiftHint: "以該時段每 100 位客人的銷售數，比較每道菜在午餐或晚餐賣得較多，並對比平時 4 週與最近 7 天。",
-      timeShiftRow: "午餐比重 {before}% → {now}% · 最近 7 天 午餐 {am} 份 · 晚餐 {pm} 份",
+      timeShiftHint: "以該時段每 100 位客人的銷售數，比較每道菜在午餐或晚餐賣得較多，並對比平時（之前 4 段）與所選期間。",
+      timeShiftRow: "午餐比重 {before}% → {now}% · {n} 天 午餐 {am} 份 · 晚餐 {pm} 份",
       timeShiftToLunch: "☀ 轉向午餐",
       timeShiftToDinner: "🌙 轉向晚餐",
       timeShiftNone: "沒有在午餐與晚餐之間轉移的菜色。",
@@ -15978,15 +15990,19 @@
     const last = pts[pts.length - 1];
     return `<svg class="stl-mover-spark" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><path d="${path}" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="2.4" fill="currentColor"/></svg>`;
   }
-  function moverRowHtml(m, dir) {
+  function moverRowHtml(m, dir, n = 7) {
     const tag =
-      m.kind === "new" ? T("moversNew") : m.kind === "stopped" ? T("moversStopped") : `${m.change_pct > 0 ? "+" : ""}${m.change_pct}%`;
+      m.kind === "new"
+        ? T("moversNew")
+        : m.kind === "stopped"
+          ? T("moversStopped").replace("{n}", n)
+          : `${m.change_pct > 0 ? "+" : ""}${m.change_pct}%`;
     return `
       <div class="stl-mover is-${dir}" data-item-id="${escapeHtml(String(m.item_id))}">
         <div class="stl-mover-main">
           <span class="stl-mover-name">${escapeHtml(itemDisplayName(m))}</span>
           ${m.sold_out ? `<span class="stl-mover-soldout">${escapeHtml(T("moversSoldOut"))}</span>` : ""}
-          <span class="stl-mover-sub">${escapeHtml(T("moversRow").replace("{recent}", m.recent).replace("{rp}", m.recent_per100).replace("{bp}", m.base_per100))}</span>
+          <span class="stl-mover-sub">${escapeHtml(T("moversRow").replace(/\{n\}/g, n).replace("{recent}", m.recent).replace("{rp}", m.recent_per100).replace("{pp}", m.prev_per100 == null ? "–" : m.prev_per100).replace("{bp}", m.base_per100))}</span>
         </div>
         ${moversSpark(m.weeks_per100 || m.weeks || [])}
         <span class="stl-mover-tag">${escapeHtml(tag)}</span>
@@ -16001,15 +16017,67 @@
       loadItemMovers();
     };
   });
+  // 기간 — 최근 7/14/30일, 또는 날짜 지정(2026-10-03 사장님: "7일만 보는데 그 전
+  // 7일을 모르는 거잖아 … 날짜를 지정할 수 있게 해주던가"). 고른 기간을 같은 길이로
+  // 그 전 4번의 평균과 견주고, 바로 전 기간 숫자도 줄마다 적는다(src/itemMovers.js).
+  let moversPeriod = { days: 7 };
+  const moversQuery = () => {
+    const q = [];
+    if (moversShift !== "all") q.push(`shift=${moversShift}`);
+    if (moversPeriod.from) q.push(`from=${moversPeriod.from}`, `to=${moversPeriod.to}`);
+    else if (moversPeriod.days !== 7) q.push(`days=${moversPeriod.days}`);
+    return q.length ? `?${q.join("&")}` : "";
+  };
+  const moversYesterday = () => {
+    const d = new Date(Date.now() - 86400000 + 8 * 3600000); // 타이베이 기준
+    return d.toISOString().slice(0, 10);
+  };
+  document.querySelectorAll("#settlementMoversPeriod button").forEach((b) => {
+    b.onclick = () => {
+      document.querySelectorAll("#settlementMoversPeriod button").forEach((x) => x.classList.toggle("active", x === b));
+      const range = $("#settlementMoversRange");
+      if (b.dataset.days === "custom") {
+        if (range) range.hidden = false;
+        const to = $("#settlementMoversTo");
+        const from = $("#settlementMoversFrom");
+        const y = moversYesterday();
+        if (to && !to.value) to.value = y;
+        if (from && !from.value) {
+          const d = new Date(`${y}T00:00:00Z`);
+          d.setUTCDate(d.getUTCDate() - 13);
+          from.value = d.toISOString().slice(0, 10);
+        }
+        if (to) to.max = y;
+        if (from) from.max = y;
+        return; // 「보기」를 눌러야 잰다
+      }
+      if (range) range.hidden = true;
+      moversPeriod = { days: parseInt(b.dataset.days, 10) || 7 };
+      loadItemMovers();
+    };
+  });
+  if ($("#settlementMoversApply"))
+    $("#settlementMoversApply").onclick = () => {
+      const from = ($("#settlementMoversFrom") || {}).value;
+      const to = ($("#settlementMoversTo") || {}).value;
+      const n = from && to ? Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1 : 0;
+      if (!(n >= 1 && n <= 60) || to > moversYesterday()) {
+        const note = $("#settlementMoversNote");
+        if (note) note.textContent = T("moversBadRange");
+        return;
+      }
+      moversPeriod = { from, to, days: n };
+      loadItemMovers();
+    };
   // 점심·저녁 사이로 옮겨간 메뉴 한 줄 — 「점심 비중 20% → 55%」와 막대 두 개.
-  function timeShiftRowHtml(m) {
+  function timeShiftRowHtml(m, n = 7) {
     const bar = (pct, cls) => `<span class="stl-shift-bar ${cls}"><i style="width:${Math.max(0, Math.min(100, pct))}%"></i></span>`;
     return `
       <div class="stl-mover is-${m.kind === "to_lunch" ? "up" : "down"} stl-shift-row" data-item-id="${escapeHtml(String(m.item_id))}">
         <div class="stl-mover-main">
           <span class="stl-mover-name">${escapeHtml(itemDisplayName(m))}</span>
           <span class="stl-mover-sub">${escapeHtml(
-            T("timeShiftRow").replace("{before}", m.lunch_share_before).replace("{now}", m.lunch_share_now).replace("{am}", m.recent_am).replace("{pm}", m.recent_pm)
+            T("timeShiftRow").replace("{n}", n).replace("{before}", m.lunch_share_before).replace("{now}", m.lunch_share_now).replace("{am}", m.recent_am).replace("{pm}", m.recent_pm)
           )}</span>
         </div>
         <span class="stl-shift-bars">${bar(m.lunch_share_before, "is-before")}${bar(m.lunch_share_now, "is-now")}</span>
@@ -16022,9 +16090,10 @@
     const note = $("#settlementMoversNote");
     if (!up || !down) return;
     const shiftNow = moversShift;
+    const query = moversQuery();
     let d;
     try {
-      const res = await fetch(`/api/settlements/item-movers${shiftNow === "all" ? "" : `?shift=${shiftNow}`}`);
+      const res = await fetch(`/api/settlements/item-movers${query}`);
       if (!res.ok) throw new Error(String(res.status));
       d = await res.json();
     } catch (e) {
@@ -16039,13 +16108,16 @@
           ? T("moversInsufficient")
           : (shiftNow === "all" ? "" : `${T(shiftNow === "am" ? "moversShiftAm" : "moversShiftPm")} · `) +
             T("moversNote")
+              .replace(/\{n\}/g, d.days || 7)
               .replace("{recent}", `${md(d.recent_start)}~${md(d.recent_end)}`)
               .replace("{base}", `${md(d.base_start)}~${md(d.base_end)}`)
+              .replace("{prev}", d.periods && d.periods[3] ? `${md(d.periods[3][0])}~${md(d.periods[3][1])}` : "–")
               .replace("{rg}", Number(d.recent_guests || 0).toLocaleString())
               .replace("{bg}", Number(d.base_guests || 0).toLocaleString())
+              .replace("{pg}", d.prev_guests == null ? "–" : Number(d.prev_guests).toLocaleString())
       ).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
     }
-    if (shiftNow !== moversShift) return; // 그 사이 다른 시간대를 눌렀다
+    if (shiftNow !== moversShift || query !== moversQuery()) return; // 그 사이 다른 시간대·기간을 눌렀다
     const cnt = $("#settlementMoversCount");
     // 탭 이름의 개수는 「하루 전체」 기준이다 — 점심/저녁을 눌러도 바뀌지 않는다.
     if (cnt && shiftNow === "all") {
@@ -16060,12 +16132,12 @@
       tsWrap.hidden = shiftNow !== "all";
       if (shiftNow === "all") {
         ts.innerHTML = (d.time_shift || []).length
-          ? d.time_shift.map(timeShiftRowHtml).join("")
+          ? d.time_shift.map((m) => timeShiftRowHtml(m, d.days || 7)).join("")
           : `<p class="stl-note">${escapeHtml(T("timeShiftNone"))}</p>`;
       }
     }
-    up.innerHTML = d.insufficient ? "" : (d.up || []).length ? d.up.map((m) => moverRowHtml(m, "up")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneUp"))}</p>`;
-    down.innerHTML = d.insufficient ? "" : (d.down || []).length ? d.down.map((m) => moverRowHtml(m, "down")).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneDown"))}</p>`;
+    up.innerHTML = d.insufficient ? "" : (d.up || []).length ? d.up.map((m) => moverRowHtml(m, "up", d.days || 7)).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneUp"))}</p>`;
+    down.innerHTML = d.insufficient ? "" : (d.down || []).length ? d.down.map((m) => moverRowHtml(m, "down", d.days || 7)).join("") : `<p class="stl-note">${escapeHtml(T("moversNoneDown"))}</p>`;
   }
 
   function renderSoldPie(data) {

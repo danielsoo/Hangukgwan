@@ -2638,6 +2638,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-movers-shift { display: inline-flex; gap: 4px; margin-bottom: 8px; }
 .stl-movers-shift button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: inherit; cursor: pointer; font-size: 14px; }
 .stl-movers-shift button.active { background: var(--navy); color: #fff; border-color: var(--navy); font-weight: 700; }
+.stl-movers-period { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.stl-movers-range { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.stl-movers-range input[type="date"] { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: inherit; font-size: 14px; }
 .stl-time-shift { margin-top: 18px; }
 .stl-time-shift h4 { margin: 4px 0 4px; font-size: 16px; }
 .stl-shift-bars { display: flex; flex-direction: column; gap: 3px; width: 70px; }

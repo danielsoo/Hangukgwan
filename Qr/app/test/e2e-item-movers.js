@@ -82,7 +82,14 @@ function check(name, cond, extra = "") {
   check("★★ 안 팔리게 된 메뉴가 보인다(7일간 0개)", downText.includes(down.name_ko) && /7일간 0개/.test(downText), downText);
   check("줄마다 5주 흐름 선이 있다", (await page.locator("#settlementMoversUp .stl-mover-spark").count()) === (await page.locator("#settlementMoversUp .stl-mover").count()), "");
   check("「7일간 0개」가 한 줄", await page.evaluate(() => [...document.querySelectorAll(".stl-mover-tag")].every((t) => t.getBoundingClientRect().height < 28)), "");
-  check("어느 기간을 견줬는지 말한다", /어제까지 7일/.test(await page.locator("#settlementMoversNote").textContent()), "");
+  {
+    const note = await page.locator("#settlementMoversNote").textContent();
+    // 2026-10-03 사장님: "7일만 보는데 그 전 7일을 모르는 거잖아. 평균 값을 해서
+    // 보이게 하는 게 좋을 것 같기도 하고 아니면 날짜를 지정할 수 있게."
+    check("어느 기간을 견줬는지 말한다 — 그 전 4번의 평균", /\(7일 · 손님/.test(note) && /4번/.test(note) && /평균/.test(note), note);
+    check("★★ 바로 전 7일이 언제·손님 몇 명이었는지도 적힌다", /바로 전 7일\(\d\d\/\d\d~\d\d\/\d\d · 손님 \d+명\)/.test(note), note);
+    check("★★ 줄마다 바로 전 7일 숫자 — 「바로 전 7일 N개 · 평소 M개」", /바로 전 7일 [\d.]+개 · 평소 [\d.]+개/.test(upText), upText);
+  }
   const ts = await page.locator("#settlementTimeShift").textContent();
   check("★★ 「🔄 시간대가 바뀐 메뉴」 — 저녁 메뉴가 점심으로", ts.includes(shifty.name_ko) && /점심으로/.test(ts) && /점심 비중 0% → 50%/.test(ts), ts);
   check("탭 이름에 🔄 개수도", /🔄1/.test(await page.locator("#settlementMoversTab").textContent()), await page.locator("#settlementMoversTab").textContent());
@@ -95,6 +102,37 @@ function check(name, cond, extra = "") {
   if (process.env.SHOT_AM) await page.locator('.stl-pane[data-pane="soldMovers"]').screenshot({ path: process.env.SHOT_AM });
   await page.locator('#settlementMoversShift button[data-shift="all"]').click();
   await page.waitForTimeout(800);
+
+  out.push("\n[기간 고르기 — 14일 · 날짜 지정]");
+  await page.locator('#settlementMoversPeriod button[data-days="14"]').click();
+  await page.waitForTimeout(900);
+  {
+    const note = await page.locator("#settlementMoversNote").textContent();
+    const rec = `${recentStart.slice(5).replace("-", "/")}`;
+    check("★★ 14일을 누르면 14일로 잰다", /\(14일 · 손님/.test(note) && /바로 전 14일/.test(note) && !note.includes(`${rec}~`), note);
+    const upTxt = await page.locator("#settlementMoversUp").textContent();
+    check("줄도 14일 기준", !upTxt || /14일간 \d+개/.test(upTxt) || /늘어난 메뉴는 없어요/.test(upTxt), upTxt);
+  }
+  await page.locator('#settlementMoversPeriod button[data-days="custom"]').click();
+  await page.waitForTimeout(300);
+  check("📅 날짜 지정을 누르면 날짜 칸이 열린다", await page.locator("#settlementMoversRange").isVisible(), "");
+  check("끝날은 어제로 채워진다", (await page.locator("#settlementMoversTo").inputValue()) === end, "");
+  const from3 = addDays(end, -2);
+  await page.fill("#settlementMoversFrom", from3);
+  await page.locator("#settlementMoversApply").click();
+  await page.waitForTimeout(900);
+  {
+    const note = await page.locator("#settlementMoversNote").textContent();
+    const md = (x) => x.slice(5).replace("-", "/");
+    check("★★ 고른 날짜(3일)로 잰다", note.includes(`${md(from3)}~${md(end)}(3일`), note);
+  }
+  await page.fill("#settlementMoversTo", today);
+  await page.locator("#settlementMoversApply").click();
+  await page.waitForTimeout(300);
+  check("★ 오늘(장사 중)을 끝날로 고르면 이유를 말한다", /어제까지/.test(await page.locator("#settlementMoversNote").textContent()), "");
+  await page.locator('#settlementMoversPeriod button[data-days="7"]').click();
+  await page.waitForTimeout(900);
+  check("7일로 돌아오면 날짜 칸이 닫힌다", !(await page.locator("#settlementMoversRange").isVisible()), "");
   await page.locator(".stl-tabs[data-tabgroup='sold']").screenshot({ path: process.env.SHOT_MOVERS || "/dev/null" }).catch(() => {});
   if (process.env.SHOT_MOVERS) await page.locator('.stl-pane[data-pane="soldMovers"]').screenshot({ path: process.env.SHOT_MOVERS });
 
