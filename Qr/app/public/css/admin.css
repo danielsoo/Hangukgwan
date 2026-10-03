@@ -2717,6 +2717,18 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-result .pr-warn { color: #b5232c; font-weight: 700; margin: 4px 0; }
 .payroll-result .pr-days { font-weight: 700; margin-bottom: 4px; }
 .payroll-rules { margin-top: 18px; }
+/* 넓은 화면: 표 오른쪽에 보너스·결과 칸. 스크롤해도 결과가 보이게 붙여 둔다. */
+.payroll-body { display: grid; grid-template-columns: minmax(0, max-content) minmax(300px, 440px); gap: 16px 28px; align-items: start; }
+.payroll-side { position: sticky; top: 72px; /* 위 메뉴줄(58px, sticky) 아래 */ padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; }
+.payroll-side .payroll-bonus { margin-top: 0; }
+.payroll-side .payroll-result { max-width: none; }
+/* 표(최소 760px)와 오른쪽 칸이 같이 들어가지 않으면 결과를 표 아래로 내린다. */
+@media (max-width: 1180px) {
+  .payroll-body { grid-template-columns: minmax(0, 1fr); }
+  .payroll-side { position: static; padding: 0; border: none; }
+  .payroll-side .payroll-bonus { margin-top: 12px; }
+  .payroll-side .payroll-result { max-width: 560px; }
+}
 .payroll-photo-btn { cursor: pointer; }
 .payroll-photo-msg { font-size: 14px; margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: rgba(31, 138, 76, 0.1); }
 .payroll-photo-msg.is-bad { background: rgba(181, 35, 44, 0.1); color: #b5232c; font-weight: 700; }

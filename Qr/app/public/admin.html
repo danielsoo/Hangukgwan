@@ -293,13 +293,20 @@
           <span id="payrollStatus" class="payroll-status"></span>
         </div>
         <div id="payrollPhotoMsg" class="payroll-photo-msg" hidden></div>
-        <div class="payroll-grid-wrap"><table id="payrollGrid" class="payroll-grid"></table></div>
-        <!-- 그 달 보너스 — 카드(그 달)와 같이 저장된다. -->
-        <div class="payroll-bonus">
-          <label><span data-i18n="payrollBonus">🎁 이 달 보너스</span> NT$<input type="number" id="payrollBonus" min="0" step="100" inputmode="numeric" placeholder="0" /></label>
-          <input type="text" id="payrollBonusNote" maxlength="60" data-i18n-placeholder="payrollBonusNote" placeholder="메모 (예: 명절 보너스)" />
+        <!-- 넓은 화면: 왼쪽 날짜 표, 오른쪽 보너스·계산 결과(스크롤해도 따라온다).
+             좁으면 표 아래로 내려간다(2026-10-03 사장님: "화면도 넓은데 오른쪽 공간도
+             사용해줘 물론 화면이 좁아지면 이동되어야 하겠지만"). -->
+        <div class="payroll-body">
+          <div class="payroll-grid-wrap"><table id="payrollGrid" class="payroll-grid"></table></div>
+          <aside class="payroll-side">
+            <!-- 그 달 보너스 — 카드(그 달)와 같이 저장된다. -->
+            <div class="payroll-bonus">
+              <label><span data-i18n="payrollBonus">🎁 이 달 보너스</span> NT$<input type="number" id="payrollBonus" min="0" step="100" inputmode="numeric" placeholder="0" /></label>
+              <input type="text" id="payrollBonusNote" maxlength="60" data-i18n-placeholder="payrollBonusNote" placeholder="메모 (예: 명절 보너스)" />
+            </div>
+            <div id="payrollResult" class="payroll-result"></div>
+          </aside>
         </div>
-        <div id="payrollResult" class="payroll-result"></div>
       </div>
       <details class="payroll-rules">
         <summary data-i18n="payrollRulesTitle">초과 시간 규칙</summary>
