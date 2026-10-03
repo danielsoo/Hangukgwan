@@ -47,6 +47,12 @@ function check(name, cond, extra = "") {
   await page.fill("#payrollMonth", "2026-06");
   await page.dispatchEvent("#payrollMonth", "change");
   await page.waitForTimeout(600);
+  {
+    const hrs = await page.locator("#payrollHours").innerText();
+    // 2026-10-03 사장님: "이미 있는 근무 시간대가 있잖아 우리 영업 시간"
+    check("★★ 근무 시간대 = 가게 영업시간이라고 보여준다", /영업시간 11:00–14:00 · 17:00–21:00/.test(hrs) && /하루 7시간/.test(hrs), hrs);
+    check("급여 화면에 따로 퇴근 시각 칸이 없다", (await page.locator("#payrollAmEnd, #payrollPmEnd").count()) === 0, "");
+  }
   check("직원이 없으면 그렇게 말한다", /직원이 없어요/.test(await page.locator("#payrollSummary").innerText()), "");
 
   await page.click("#payrollAddStaff");
@@ -90,8 +96,9 @@ function check(name, cond, extra = "") {
   check("★ + 를 누르면 1, 제안 0.5 도 같이 보인다", /^−\s*1\s*\+/.test(ot7b.trim()) && /제안 0\.5/.test(ot7b), ot7b);
   check("★ 고치면 확인된 것 — 노란 칸이 사라진다", !(await page.locator('#payrollGrid tr[data-day="7"]').evaluate((tr) => tr.classList.contains("is-check"))), "");
   const res2 = await page.locator("#payrollResult").innerText();
-  // 3일 × 10시간 + 초과 1시간 = 31시간 × 200
-  check("★★ 합계 NT$6,200 (31시간 × 200)", /합계\s*NT\$6,200/.test(res2), res2);
+  // 근무 시간대 = 가게 영업시간(11:00-14:00, 17:00-21:00) → 하루 7시간.
+  // 3일 × 7시간 + 초과 1시간 = 22시간 × 200
+  check("★★ 합계 NT$4,400 (영업시간 기준 22시간 × 200)", /합계\s*NT\$4,400/.test(res2), res2);
   check("확인 경고가 사라진다", !/확인하지 않은/.test(res2), res2);
 
   out.push("\n[저장 → 다시 열기]");
@@ -105,10 +112,10 @@ function check(name, cond, extra = "") {
   await page.fill("#payrollMonth", "2026-06");
   await page.dispatchEvent("#payrollMonth", "change");
   await page.waitForTimeout(800);
-  check("★ 직원 칩에 이 달 금액", /NT\$6,200/.test(await page.locator("#payrollStaffChips").innerText()), await page.locator("#payrollStaffChips").innerText());
+  check("★ 직원 칩에 이 달 금액", /NT\$4,400/.test(await page.locator("#payrollStaffChips").innerText()), await page.locator("#payrollStaffChips").innerText());
   await page.locator("#payrollStaffChips button").first().click();
   await page.waitForTimeout(900);
-  check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /합계\s*NT\$6,200/.test(await page.locator("#payrollResult").innerText()), "");
+  check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /합계\s*NT\$4,400/.test(await page.locator("#payrollResult").innerText()), "");
 
   out.push("\n[잘못 친 시각]");
   const bad = page.locator('#payrollGrid tr[data-day="9"] input[data-slot="am_in"]');

@@ -1,6 +1,7 @@
 // 직원 급여 — 사장님만(src/payroll.js 머리말).
 const express = require("express");
-const { getDb, connectDB } = require("../db");
+const { getDb, connectDB, store } = require("../db");
+const openHours = require("../openHours");
 const { requireOwner } = require("../auth");
 const { nowLocal } = require("../time");
 const P = require("../payroll");
@@ -20,10 +21,26 @@ async function loadRules() {
 async function loadStaff(id) {
   return (await col(P.STAFF_COLLECTION)).findOne({ _id: String(id) });
 }
+// 근무 시간대 = 가게 영업시간 — 설정의 「영업시간」 칸(store_hours, 손님에게도
+// 보이는 「11:00-14:00, 17:00-21:00」). 2026-10-03 사장님: "이미 있는 근무 시간대가
+// 있잖아 우리 영업 시간". QR 주문을 막는 시간(order_hours, 13:30·20:30 — 마감 30분
+// 전)은 쓰지 않는다: 그건 영업시간이 아니라 주문 마감이다.
+function businessHours() {
+  const text = (store.settings && store.settings.store_hours) || "";
+  const ranges = openHours.parseHoursText(text);
+  return { ranges, text, readable: ranges.length > 0 };
+}
+function compute(card, staff, rules) {
+  const bh = businessHours();
+  return {
+    ...P.computeMonth(card, staff, rules, () => bh.ranges, bh.ranges),
+    business_hours: bh.readable ? bh.ranges : null,
+  };
+}
 const staffOut = (s) => ({ id: String(s._id), name: s.name, pay_type: s.pay_type, hourly_rate: s.hourly_rate, monthly_salary: s.monthly_salary, active: s.active !== false });
 
 router.get("/status", async (req, res) => {
-  res.json({ min_wage: P.MIN_WAGE, rules: await loadRules() });
+  res.json({ min_wage: P.MIN_WAGE, rules: await loadRules(), business_hours: businessHours() });
 });
 
 router.put("/rules", async (req, res) => {
@@ -65,7 +82,7 @@ router.get("/card", async (req, res) => {
   const staff = await loadStaff(staffId);
   if (!staff) return res.status(404).json({ error: "not_found" });
   const card = (await (await col(P.CARDS_COLLECTION)).findOne({ _id: `${staff._id}|${month}` })) || { month, days: {} };
-  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, updated_at: card.updated_at || null }, result: P.computeMonth({ month, days: card.days || {} }, staff, await loadRules()) });
+  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, updated_at: card.updated_at || null }, result: compute({ month, days: card.days || {} }, staff, await loadRules()) });
 });
 
 // 저장하지 않고 계산만 — 표를 고치는 동안 아래 합계가 따라온다.
@@ -75,7 +92,7 @@ router.post("/preview", async (req, res) => {
   const staff = await loadStaff(b.staff_id);
   if (!staff) return res.status(404).json({ error: "not_found" });
   const days = P.cleanDays(b.days, b.month);
-  res.json({ result: P.computeMonth({ month: b.month, days }, staff, await loadRules()) });
+  res.json({ result: compute({ month: b.month, days }, staff, await loadRules()) });
 });
 
 router.put("/card", async (req, res) => {
@@ -87,7 +104,7 @@ router.put("/card", async (req, res) => {
   const _id = `${staff._id}|${b.month}`;
   const doc = { _id, staff_id: String(staff._id), month: b.month, days, updated_at: nowLocal() };
   await (await col(P.CARDS_COLLECTION)).replaceOne({ _id }, doc, { upsert: true });
-  res.json({ ok: true, card: doc, result: P.computeMonth(doc, staff, await loadRules()) });
+  res.json({ ok: true, card: doc, result: compute(doc, staff, await loadRules()) });
 });
 
 // 이 달 직원 전체 — 누구에게 얼마, 확인 안 한 날이 몇 날.
@@ -102,7 +119,7 @@ router.get("/summary", async (req, res) => {
     .filter((s) => s.active !== false || byStaff.has(String(s._id)))
     .map((s) => {
       const c = byStaff.get(String(s._id));
-      const r = P.computeMonth({ month, days: (c && c.days) || {} }, s, rules);
+      const r = compute({ month, days: (c && c.days) || {} }, s, rules);
       return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
     });
   res.json({ month, rows, total: rows.reduce((a, r) => a + r.total, 0) });

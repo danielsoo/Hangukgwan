@@ -253,13 +253,16 @@
          2026-10-03 사장님: "직원들 월급 계산을 하고 싶은데 시급제, 월급제 … 별이 없는
          건 주5일까지만 찍고 별부터는 주5일이 지난 것만 넣어." -->
     <section id="tab-payroll" class="tab-panel owner-only" hidden>
-      <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.</p>
+      <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 가게 영업시간으로 세고, 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.</p>
       <div class="payroll-top">
         <label><span data-i18n="payrollMonth">월</span> <input type="month" id="payrollMonth" /></label>
         <div id="payrollStaffChips" class="payroll-chips"></div>
         <input type="text" id="payrollNewName" maxlength="30" data-i18n-placeholder="payrollNewStaffName" placeholder="직원 이름" hidden />
         <button type="button" class="btn small" id="payrollAddStaff" data-i18n="payrollAddStaff">+ 직원</button>
       </div>
+      <!-- 근무 시간대 = 가게 영업시간(설정 > 영업시간). 2026-10-03 사장님: "이미 있는 근무
+           시간대가 있잖아 우리 영업 시간". 여기서 따로 적지 않는다. -->
+      <p id="payrollHours" class="payroll-hours"></p>
       <div id="payrollSummary" class="payroll-summary"></div>
       <div id="payrollEditor" hidden>
         <div class="payroll-staff-form">
@@ -284,8 +287,6 @@
       <details class="payroll-rules">
         <summary data-i18n="payrollRulesTitle">초과 시간 규칙</summary>
         <div class="payroll-rules-form">
-          <label><span data-i18n="payrollAmEnd">오전 퇴근</span> <input type="time" id="payrollAmEnd" /></label>
-          <label><span data-i18n="payrollPmEnd">오후 퇴근</span> <input type="time" id="payrollPmEnd" /></label>
           <label><span data-i18n="payrollThreshold">몇 분 넘기면 0.5시간</span> <input type="number" id="payrollThreshold" min="1" max="120" /></label>
           <label><span data-i18n="payrollStep">그 뒤 몇 분마다 0.5시간</span> <input type="number" id="payrollStep" min="1" max="120" /></label>
           <button type="button" class="btn small" id="payrollSaveRules" data-i18n="payrollSaveRules">규칙 저장</button>

@@ -14,7 +14,12 @@
 //   · 칸: 오전 출근·퇴근, 오후 출근·퇴근, 연장(加班) 출근·퇴근.
 //
 // ── 정한 것 (사장님 답, 2026-10-03)
-//   · 초과 시간: 정해진 퇴근(오전 14:00 · 오후 21:00)을 25분 넘기면 0.5시간,
+//   · 근무 시간대는 **가게 영업시간**이다(2026-10-03 사장님: "이미 있는 근무
+//     시간대가 있잖아 우리 영업 시간"). 설정 > 영업시간(settings.order_hours —
+//     QR 주문을 막는 그 시간)을 날짜마다 읽는다: 그 날짜 규칙 > 요일 휴무 >
+//     요일별 시간 > 기본. 첫 구간이 오전, 마지막 구간이 오후다. 급여 화면에
+//     따로 시각을 두지 않는다 — 두 군데 적으면 언젠가 어긋난다.
+//   · 초과 시간: 그 날 영업시간의 끝(오전 구간 끝 · 오후 구간 끝)을 25분 넘기면 0.5시간,
 //     그 뒤 30분마다 0.5. **확정이 아니다** — "사장이 한 번 더 확인하는 걸로".
 //     그래서 날마다 「제안」만 하고, 사장님이 확인(또는 고침)해야 확정이다.
 //   · 초과수당과 별 카드 날: 시급 그대로(1배).
@@ -30,11 +35,10 @@ const CARDS_COLLECTION = "payroll_cards";
 // 2026년(민국 115년) 대만 최저임금. 경고에만 쓴다.
 const MIN_WAGE = { monthly: 29500, hourly: 196 };
 
+// 영업시간을 못 받았을 때(시험 등)만 쓰는 구간.
+const FALLBACK_RANGES = [{ start: "09:00", end: "14:00" }, { start: "16:00", end: "21:00" }];
+
 const DEFAULT_RULES = {
-  am_start: "09:00",
-  am_end: "14:00",
-  pm_start: "16:00",
-  pm_end: "21:00",
   ot_threshold_min: 25, // 이만큼 넘기면 0.5시간
   ot_step_min: 30, // 그 뒤 이만큼마다 0.5시간 더
   borderline_min: 10, // 기준 ±10분이면 「확인 필요」로 칠한다
@@ -55,7 +59,6 @@ const r2 = (v) => Math.round(v * 100) / 100;
 
 function rulesOf(raw) {
   const r = { ...DEFAULT_RULES };
-  for (const k of ["am_start", "am_end", "pm_start", "pm_end"]) if (raw && cleanTime(raw[k])) r[k] = cleanTime(raw[k]);
   for (const k of ["ot_threshold_min", "ot_step_min", "borderline_min"]) {
     const n = Number(raw && raw[k]);
     if (Number.isFinite(n) && n > 0 && n <= 120) r[k] = Math.round(n);
@@ -78,27 +81,39 @@ function extraBlockHours(inT, outT) {
   return Math.floor((b - a) / 30) * 0.5;
 }
 
+/** 영업시간 구간들 → 오전 블록·오후 블록. 구간이 하나면 그 하나가 하루 전체. */
+function blocksOf(ranges) {
+  const rs = (Array.isArray(ranges) ? ranges : []).filter((r) => r && toMin(r.start) != null && toMin(r.end) != null);
+  const use = rs.length ? rs : FALLBACK_RANGES;
+  return use.length === 1 ? { single: use[0] } : { am: use[0], pm: use[use.length - 1] };
+}
+function blockHours(r) {
+  let m = toMin(r.end) - toMin(r.start);
+  if (m <= 0) m += 24 * 60; // 자정을 넘는 구간
+  return m / 60;
+}
+
 /**
  * 하루 — 기본 시간(찍힌 블록만큼), 제안 초과 시간, 「확인 필요」.
- * 기본 시간은 찍힌 시각이 아니라 **블록**으로 센다: 오전을 찍었으면 오전 블록
- * (09:00~14:00 = 5시간), 오후를 찍었으면 오후 블록. 몇 분 일찍 나온 것을 깎지
- * 않는다(카드에도 그렇게 계산해 오셨다 — 13:57·20:55 퇴근도 하루로 셌다).
+ * 기본 시간은 찍힌 시각이 아니라 **블록**(그날 영업시간 구간)으로 센다: 오전을
+ * 찍었으면 오전 구간, 오후를 찍었으면 오후 구간. 몇 분 일찍 나온 것을 깎지 않는다.
+ * ranges: 그 날짜의 영업시간 구간. 휴무일(빈 배열)에 일했으면 기본 구간으로 센다.
  */
-function dayOf(day, rules = DEFAULT_RULES) {
+function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
   const d = day || {};
   const has = (a, b) => !!(cleanTime(d[a]) || cleanTime(d[b]));
   const am = has("am_in", "am_out");
   const pm = has("pm_in", "pm_out");
   const ot = has("ot_in", "ot_out");
-  const block = (s, e) => Math.max(0, (toMin(rules[e]) - toMin(rules[s])) / 60);
-  const regular = (am ? block("am_start", "am_end") : 0) + (pm ? block("pm_start", "pm_end") : 0);
+  const b = blocksOf(ranges);
+  const regular = b.single ? (am || pm ? blockHours(b.single) : 0) : (am ? blockHours(b.am) : 0) + (pm ? blockHours(b.pm) : 0);
   const notes = [];
   let suggested = 0;
   let borderline = false;
-  const over = (outKey, endKey, label) => {
+  const over = (outKey, end, label) => {
     const out = toMin(d[outKey]);
-    if (out == null) return;
-    let o = out - toMin(rules[endKey]);
+    if (out == null || !end) return;
+    let o = out - toMin(end);
     if (o < -12 * 60) o += 24 * 60;
     if (o <= 0) return;
     const h = overtimeFor(o, rules);
@@ -106,14 +121,20 @@ function dayOf(day, rules = DEFAULT_RULES) {
     if (h > 0 || o >= rules.ot_threshold_min - rules.borderline_min) notes.push({ slot: label, over_min: o, hours: h });
     suggested += h;
   };
-  over("am_out", "am_end", "am");
-  over("pm_out", "pm_end", "pm");
+  if (b.single) {
+    // 하루 한 구간 — 마지막으로 나간 시각만 끝과 견준다.
+    over(cleanTime(d.pm_out) ? "pm_out" : "am_out", b.single.end, cleanTime(d.pm_out) ? "pm" : "am");
+  } else {
+    over("am_out", b.am.end, "am");
+    over("pm_out", b.pm.end, "pm");
+  }
   const extra = extraBlockHours(d.ot_in, d.ot_out);
   suggested += extra;
   const set = d.ot_hours != null && Number.isFinite(Number(d.ot_hours));
   return {
     worked: am || pm || ot,
     star: !!d.star,
+    blocks: b.single ? [b.single] : [b.am, b.pm],
     regular_hours: regular,
     suggested_ot: suggested,
     extra_hours: extra,
@@ -135,7 +156,11 @@ function daysInMonth(month) {
  *  · 월급제: 월급 + (별 카드 날 기본 시간 + 초과 시간) × 시급. 별 없는 날은
  *    월급에 들어 있다. 시급을 안 적었으면 월급 ÷ 240(30일 × 8시간).
  */
-function computeMonth(card, staff, rawRules) {
+/**
+ * hoursFor(dateStr) → 그날 영업시간 구간들. 휴무로 빈 배열이면 baseRanges(기본
+ * 영업시간)로 센다 — 문 닫은 날에 나와 일했으면(정리·행사) 평소 시간으로 본다.
+ */
+function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null) {
   const rules = rulesOf(rawRules);
   const month = card && card.month;
   const n = month ? daysInMonth(month) : 31;
@@ -143,7 +168,10 @@ function computeMonth(card, staff, rawRules) {
   const rows = [];
   let normalDays = 0, starDays = 0, normalHours = 0, starHours = 0, otHours = 0, unconfirmed = 0, borderlines = 0;
   for (let i = 1; i <= n; i++) {
-    const d = dayOf(days[i] || days[String(i)], rules);
+    const date = month ? `${month}-${String(i).padStart(2, "0")}` : null;
+    let ranges = hoursFor && date ? hoursFor(date) : null;
+    if (ranges && !ranges.length) ranges = baseRanges;
+    const d = dayOf(days[i] || days[String(i)], rules, ranges);
     rows.push({ day: i, ...d });
     if (!d.worked) continue;
     if (d.star) { starDays++; starHours += d.regular_hours; } else { normalDays++; normalHours += d.regular_hours; }
@@ -231,6 +259,6 @@ function cleanStaff(b) {
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 module.exports = {
-  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, SLOTS, MONTH_RE,
-  toMin, cleanTime, rulesOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff,
+  STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, FALLBACK_RANGES, SLOTS, MONTH_RE,
+  toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff,
 };

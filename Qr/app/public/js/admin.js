@@ -1481,7 +1481,7 @@
       tabVip: "회원(VIP)",
       tabAccounts: "계정",
       tabPayroll: "💰 급여",
-      payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.",
+      payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 가게 영업시간으로 세고, 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요.",
       payrollMonth: "월",
       payrollAddStaff: "+ 직원",
       payrollStaffName: "이름",
@@ -1494,9 +1494,9 @@
       payrollConfirmAll: "✓ 초과 시간 모두 확인",
       payrollSaveCard: "카드 저장",
       payrollRulesTitle: "초과 시간 규칙",
-      payrollAmEnd: "오전 퇴근",
-      payrollPmEnd: "오후 퇴근",
-      payrollThreshold: "몇 분 넘기면 0.5시간",
+      payrollThreshold: "영업시간 끝을 몇 분 넘기면 0.5시간",
+      payrollHoursLine: "근무 시간대 = 가게 영업시간 {ranges} (하루 {h}시간). 초과 시간은 각 구간이 끝나는 시각부터 셉니다. 바꾸려면 설정 > 영업시간.",
+      payrollHoursUnreadable: "⚠ 설정 > 영업시간 칸(「{text}」)에서 시각을 읽지 못해 09:00–14:00 · 16:00–21:00 으로 셌어요. 「11:00-14:00, 17:00-21:00」처럼 적어 주세요.",
       payrollStep: "그 뒤 몇 분마다 0.5시간",
       payrollSaveRules: "규칙 저장",
       payrollLoadFailed: "급여 정보를 불러오지 못했어요.",
@@ -2466,7 +2466,7 @@
       tabVip: "會員(VIP)",
       tabAccounts: "帳號",
       tabPayroll: "💰 薪資",
-      payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。加班時數只是建議 — 要確認（✓）或修改才算確定。",
+      payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依店家營業時間計算，加班時數只是建議 — 要確認（✓）或修改才算確定。",
       payrollMonth: "月份",
       payrollAddStaff: "+ 員工",
       payrollStaffName: "姓名",
@@ -2479,9 +2479,9 @@
       payrollConfirmAll: "✓ 全部加班確認",
       payrollSaveCard: "儲存考勤卡",
       payrollRulesTitle: "加班計算規則",
-      payrollAmEnd: "上午下班",
-      payrollPmEnd: "下午下班",
-      payrollThreshold: "超過幾分鐘算 0.5 小時",
+      payrollThreshold: "超過營業結束幾分鐘算 0.5 小時",
+      payrollHoursLine: "工作時段 = 店家營業時間 {ranges}（每天 {h} 小時）。加班從各時段結束時間起算。要修改請到 設定 > 營業時間。",
+      payrollHoursUnreadable: "⚠ 無法從 設定 > 營業時間（「{text}」）讀出時間，暫以 09:00–14:00 · 16:00–21:00 計算。請寫成「11:00-14:00, 17:00-21:00」。",
       payrollStep: "之後每幾分鐘加 0.5 小時",
       payrollSaveRules: "儲存規則",
       payrollLoadFailed: "無法載入薪資資料。",
@@ -13068,8 +13068,7 @@
       ]);
       payroll.staff = st.staff || [];
       const ru = rules.rules || {};
-      if ($("#payrollAmEnd")) $("#payrollAmEnd").value = ru.am_end || "14:00";
-      if ($("#payrollPmEnd")) $("#payrollPmEnd").value = ru.pm_end || "21:00";
+      payrollRenderHours(rules.business_hours);
       if ($("#payrollThreshold")) $("#payrollThreshold").value = ru.ot_threshold_min || 25;
       if ($("#payrollStep")) $("#payrollStep").value = ru.ot_step_min || 30;
     } catch (e) {
@@ -13078,6 +13077,26 @@
     }
     await loadPayrollSummary();
     if (payroll.current && payroll.staff.some((s) => s.id === payroll.current.id)) await openPayrollCard(payroll.current.id);
+  }
+  // 근무 시간대 = 가게 영업시간(설정 > 영업시간 칸). 무엇으로 셌는지 늘 보여준다 —
+  // 영업시간을 고치면 급여가 따라 바뀌므로, 숫자가 달라졌을 때 이유가 보여야 한다.
+  function payrollRenderHours(bh) {
+    const el = $("#payrollHours");
+    if (!el) return;
+    if (!bh || !bh.readable) {
+      el.className = "payroll-hours is-bad";
+      el.textContent = T("payrollHoursUnreadable").replace("{text}", (bh && bh.text) || "");
+      return;
+    }
+    const hours = bh.ranges.reduce((a, r) => {
+      const [sh, sm] = r.start.split(":").map(Number);
+      const [eh, em] = r.end.split(":").map(Number);
+      let m = eh * 60 + em - (sh * 60 + sm);
+      if (m <= 0) m += 1440;
+      return a + m / 60;
+    }, 0);
+    el.className = "payroll-hours";
+    el.textContent = T("payrollHoursLine").replace("{ranges}", bh.ranges.map((r) => `${r.start}–${r.end}`).join(" · ")).replace("{h}", hours);
   }
   async function loadPayrollSummary() {
     let sum = { rows: [], total: 0 };
@@ -13343,8 +13362,6 @@
   if ($("#payrollSaveRules"))
     $("#payrollSaveRules").onclick = async () => {
       const body = {
-        am_end: $("#payrollAmEnd").value,
-        pm_end: $("#payrollPmEnd").value,
         ot_threshold_min: Number($("#payrollThreshold").value),
         ot_step_min: Number($("#payrollStep").value),
       };

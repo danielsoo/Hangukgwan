@@ -98,6 +98,23 @@ check("이상한 시각은 버린다, 9:05 → 09:05", !c["1"] && c["2"].am_in =
 check("6월 31일은 없다", !c["31"], "");
 check("이름 없는 직원은 안 받는다", P.cleanStaff({ name: " " }) === null, "");
 
+out.push("\n[근무 시간대 = 가게 영업시간 — 2026-10-03]");
+// 사장님: "이미 있는 근무 시간대가 있잖아 우리 영업 시간". 지금 가게 영업시간은
+// 「11:00-14:00, 17:00-21:00」(손님 화면에도 그대로 보이는 문구).
+{
+  const BH = [{ start: "11:00", end: "14:00" }, { start: "17:00", end: "21:00" }];
+  const fixedDays = P.cleanDays(fixed, "2026-06");
+  const b = P.computeMonth({ month: "2026-06", days: fixedDays }, staff, null, () => BH, BH);
+  check("★★ 하루 = 오전 3시간 + 오후 4시간 = 7시간", b.rows.find((x) => x.day === 2).regular_hours === 7, String(b.rows.find((x) => x.day === 2).regular_hours));
+  check("★ 25일 × 7 = 175시간", b.normal_hours + b.star_hours === 175, String(b.normal_hours + b.star_hours));
+  check("★★ 초과 기준은 영업시간 끝(14:00·21:00) — 카드와 같은 날이 뜬다", b.rows.find((x) => x.day === 16).suggested_ot === 0.5 && b.rows.find((x) => x.day === 7).notes.some((n) => n.slot === "am" && n.over_min === 26), "");
+  check("(175 + 4) × 200 = 35,800", b.total === 35800, String(b.total));
+  const closedDay = P.computeMonth({ month: "2026-06", days: { 6: { am_in: "11:00", am_out: "14:00" } } }, staff, null, () => [], BH);
+  check("휴무일에 일했으면 기본 영업시간으로 센다", closedDay.rows.find((x) => x.day === 6).regular_hours === 3, "");
+  const one = P.dayOf({ am_in: "11:00", am_out: "15:00", pm_in: "15:30", pm_out: "21:40" }, P.DEFAULT_RULES, [{ start: "11:00", end: "21:00" }]);
+  check("영업시간이 한 구간이면 하루 그 길이, 마지막 퇴근만 견준다", one.regular_hours === 10 && one.suggested_ot === 0.5 && one.notes.length === 1, JSON.stringify(one));
+}
+
 out.push("\n[서버 — 사장님만]");
 (async () => {
   const request = require("supertest");
@@ -115,19 +132,32 @@ out.push("\n[서버 — 사장님만]");
   check("직원 추가", res.status === 200 && res.body.staff.id, JSON.stringify(res.body));
   const id = res.body.staff.id;
   res = await boss.post("/api/payroll/preview").send({ staff_id: id, month: "2026-06", days: fixed });
-  check("★ 저장 없이 계산", res.status === 200 && res.body.result.total === 50800, JSON.stringify(res.body.result && res.body.result.total));
+  // 가게 영업시간(11:00-14:00, 17:00-21:00) 기준 — 하루 7시간.
+  check("★ 저장 없이 계산 — 영업시간 기준", res.status === 200 && res.body.result.total === 35800 && JSON.stringify(res.body.result.business_hours) === JSON.stringify([{ start: "11:00", end: "14:00" }, { start: "17:00", end: "21:00" }]), JSON.stringify(res.body.result && res.body.result.total));
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
   check("미리 계산은 저장하지 않는다", res.status === 200 && Object.keys(res.body.card.days).length === 0, "");
   res = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed });
-  check("★ 저장", res.status === 200 && res.body.result.total === 50800, "");
+  check("★ 저장", res.status === 200 && res.body.result.total === 35800, "");
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
   check("★ 다시 열면 그대로", res.body.result.normal_days === 21 && res.body.result.star_days === 4 && res.body.result.ot_hours === 4, JSON.stringify(res.body.result.normal_days));
   res = await boss.get("/api/payroll/summary?month=2026-06");
-  check("★ 이 달 전체 합계", res.status === 200 && res.body.total === 50800 && res.body.rows.length === 1, JSON.stringify(res.body));
+  check("★ 이 달 전체 합계", res.status === 200 && res.body.total === 35800 && res.body.rows.length === 1, JSON.stringify(res.body));
+  // ★★ 영업시간을 바꾸면 급여 계산도 따라온다 — 따로 적는 칸이 없다.
+  const { store } = require("../src/db");
+  const before = store.settings.store_hours;
+  store.settings.store_hours = "09:00-14:00, 16:00-21:00";
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  check("★★ 영업시간 09–14 · 16–21 이면 하루 10시간 → 50,800", res.body.result.total === 50800, String(res.body.result.total));
+  store.settings.store_hours = "영업시간 문의";
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  check("영업시간 문구를 못 읽으면 그렇다고 알린다(business_hours null)", res.body.result.business_hours === null, JSON.stringify(res.body.result.business_hours));
+  store.settings.store_hours = before;
+  res = await boss.get("/api/payroll/status");
+  check("상태에 영업시간", res.body.business_hours && res.body.business_hours.readable, JSON.stringify(res.body.business_hours));
   res = await boss.put(`/api/payroll/staff/${id}`).send({ hourly_rate: 210 });
   check("시급 고치기", res.body.staff.hourly_rate === 210 && res.body.staff.name === "劉芷芸", JSON.stringify(res.body));
   res = await boss.put("/api/payroll/rules").send({ ot_threshold_min: 20 });
-  check("초과 기준 바꾸기", res.body.rules.ot_threshold_min === 20 && res.body.rules.am_end === "14:00", JSON.stringify(res.body));
+  check("초과 기준 바꾸기", res.body.rules.ot_threshold_min === 20 && !("am_end" in res.body.rules), JSON.stringify(res.body));
   res = await boss.get("/api/payroll/card?staff=nope&month=2026-06");
   check("없는 직원 404", res.status === 404, "");
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-13`);

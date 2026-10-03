@@ -2681,6 +2681,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-chips button.is-inactive { opacity: 0.5; }
 .payroll-chips small { margin-left: 4px; opacity: 0.8; }
 .payroll-summary { font-size: 14px; margin-bottom: 10px; }
+.payroll-hours { font-size: 14px; margin: 0 0 8px; color: var(--muted); }
+.payroll-hours.is-bad { color: #b5232c; font-weight: 700; }
 .payroll-staff-form, .payroll-actions, .payroll-rules-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
 .payroll-staff-form input[type="number"] { width: 110px; }
 .payroll-status { font-size: 14px; color: var(--muted); }
