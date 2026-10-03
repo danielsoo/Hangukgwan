@@ -38,7 +38,10 @@ function compute(card, staff, rules) {
     business_hours: bh.readable ? bh.ranges : null,
   };
 }
-const staffOut = (s) => ({ id: String(s._id), name: s.name, pay_type: s.pay_type, hourly_rate: s.hourly_rate, monthly_salary: s.monthly_salary, active: s.active !== false });
+const staffOut = (s) => ({
+  id: String(s._id), name: s.name, pay_type: s.pay_type, hourly_rate: s.hourly_rate, monthly_salary: s.monthly_salary,
+  ot_rate: s.ot_rate ?? null, star_rate: s.star_rate ?? null, active: s.active !== false,
+});
 
 router.get("/status", async (req, res) => {
   res.json({ min_wage: P.MIN_WAGE, rules: await loadRules(), business_hours: businessHours() });
@@ -83,7 +86,8 @@ router.get("/card", async (req, res) => {
   const staff = await loadStaff(staffId);
   if (!staff) return res.status(404).json({ error: "not_found" });
   const card = (await (await col(P.CARDS_COLLECTION)).findOne({ _id: `${staff._id}|${month}` })) || { month, days: {} };
-  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, updated_at: card.updated_at || null }, result: compute({ month, days: card.days || {} }, staff, await loadRules()) });
+  const bonus = P.cleanBonus(card);
+  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, ...bonus, updated_at: card.updated_at || null }, result: compute({ month, days: card.days || {}, ...bonus }, staff, await loadRules()) });
 });
 
 // 저장하지 않고 계산만 — 표를 고치는 동안 아래 합계가 따라온다.
@@ -93,7 +97,7 @@ router.post("/preview", async (req, res) => {
   const staff = await loadStaff(b.staff_id);
   if (!staff) return res.status(404).json({ error: "not_found" });
   const days = P.cleanDays(b.days, b.month);
-  res.json({ result: compute({ month: b.month, days }, staff, await loadRules()) });
+  res.json({ result: compute({ month: b.month, days, ...P.cleanBonus(b) }, staff, await loadRules()) });
 });
 
 router.put("/card", async (req, res) => {
@@ -103,7 +107,7 @@ router.put("/card", async (req, res) => {
   if (!staff) return res.status(404).json({ error: "not_found" });
   const days = P.cleanDays(b.days, b.month);
   const _id = `${staff._id}|${b.month}`;
-  const doc = { _id, staff_id: String(staff._id), month: b.month, days, updated_at: nowLocal() };
+  const doc = { _id, staff_id: String(staff._id), month: b.month, days, ...P.cleanBonus(b), updated_at: nowLocal() };
   await (await col(P.CARDS_COLLECTION)).replaceOne({ _id }, doc, { upsert: true });
   res.json({ ok: true, card: doc, result: compute(doc, staff, await loadRules()) });
 });
@@ -120,7 +124,7 @@ router.get("/summary", async (req, res) => {
     .filter((s) => s.active !== false || byStaff.has(String(s._id)))
     .map((s) => {
       const c = byStaff.get(String(s._id));
-      const r = compute({ month, days: (c && c.days) || {} }, s, rules);
+      const r = compute({ month, days: (c && c.days) || {}, ...P.cleanBonus(c) }, s, rules);
       return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
     });
   res.json({ month, rows, total: rows.reduce((a, r) => a + r.total, 0) });

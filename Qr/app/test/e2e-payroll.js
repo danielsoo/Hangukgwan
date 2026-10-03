@@ -117,6 +117,51 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(900);
   check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /합계\s*NT\$4,400/.test(await page.locator("#payrollResult").innerText()), "");
 
+  out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 이 달 보너스]");
+  {
+    // 2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간 얼마 줄거고 이런 걸 다
+    // 개개별로 정할 수 있게 해줘 그리고 보너스 칸도 만들어주고"
+    check("기본·초과·★ 시급 칸이 있다", (await page.locator("#payrollHourlyRate").isVisible()) && (await page.locator("#payrollOtRate").isVisible()) && (await page.locator("#payrollStarRate").isVisible()), "");
+    check("빈칸은 「기본 시급과 같음」", (await page.locator("#payrollOtRate").getAttribute("placeholder")) === "기본 시급과 같음", "");
+    check("시급제 안내 한 줄", /시급제: 근무 시간 × 기본 시급/.test(await page.locator("#payrollRatesHint").innerText()), "");
+    await page.fill("#payrollOtRate", "300");
+    await page.fill("#payrollStarRate", "250");
+    await page.click("#payrollSaveStaff");
+    await page.waitForTimeout(900);
+    const r1 = await page.locator("#payrollResult").innerText();
+    // 영업시간 기준 하루 7h: 별 없는 날 2일 14h × 200, ★ 날 7h × 250, 초과 1h × 300
+    check("★★ ★ 날은 ★ 날 시급(250), 초과는 초과 시급(300)", /★ 카드 날 · 7h × NT\$250/.test(r1) && /초과 · 1h × NT\$300/.test(r1) && /근무 · 14h × NT\$200/.test(r1), r1);
+    await page.fill("#payrollBonus", "2000");
+    await page.fill("#payrollBonusNote", "명절");
+    await page.waitForTimeout(900);
+    const r2 = await page.locator("#payrollResult").innerText();
+    check("★★ 보너스 줄 「보너스 · 명절 NT$2,000」, 합계에 들어간다", /보너스 · 명절\s*NT\$2,000/.test(r2) && /합계\s*NT\$6,850/.test(r2), r2);
+    check("보너스를 고치면 「저장 안 됨」", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    await page.selectOption("#payrollPayType", "monthly");
+    check("월급제로 바꾸면 월급 칸과 월급제 안내", (await page.locator("#payrollMonthlySalary").isVisible()) && /월급제: 월급/.test(await page.locator("#payrollRatesHint").innerText()), "");
+    await page.fill("#payrollMonthlySalary", "36000");
+    await page.click("#payrollSaveStaff");
+    await page.waitForTimeout(900);
+    const r3 = await page.locator("#payrollResult").innerText();
+    check("★★ 월급제: 월급 36,000 + ★ 날 1,750 + 초과 300 + 보너스 2,000", /월급\s*NT\$36,000/.test(r3) && /합계\s*NT\$40,050/.test(r3), r3);
+    // 다시 열어도 보너스가 남아 있다
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(600);
+    await page.locator('.admin-tabs button[data-tab="payroll"]').click();
+    await page.fill("#payrollMonth", "2026-06");
+    await page.dispatchEvent("#payrollMonth", "change");
+    await page.waitForTimeout(700);
+    await page.locator("#payrollStaffChips button").first().click();
+    await page.waitForTimeout(900);
+    check("★ 다시 열어도 보너스·초과 시급이 그대로", (await page.locator("#payrollBonus").inputValue()) === "2000" && (await page.locator("#payrollBonusNote").inputValue()) === "명절" && (await page.locator("#payrollOtRate").inputValue()) === "300", "");
+    // 뒤의 시험을 위해 시급제로 돌려 둔다
+    await page.selectOption("#payrollPayType", "hourly");
+    await page.click("#payrollSaveStaff");
+    await page.waitForTimeout(700);
+  }
+
   out.push("\n[📷 카드 사진으로 채우기 — AI 없이, 이 브라우저에서]");
   {
     // 2026-10-03 사장님: "손글씨로 인식이 되면 직접 채워 넣어야 한다는 걸 표시해줘."

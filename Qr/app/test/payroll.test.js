@@ -98,6 +98,27 @@ check("이상한 시각은 버린다, 9:05 → 09:05", !c["1"] && c["2"].am_in =
 check("6월 31일은 없다", !c["31"], "");
 check("이름 없는 직원은 안 받는다", P.cleanStaff({ name: " " }) === null, "");
 
+out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 그 달 보너스 — 2026-10-03]");
+// 사장님: "해당 직원의 급여가 시급제인지 월급제인지 나눠주고 둘 다 시급 얼마 줄 거고 초과 근무
+// 시간 얼마 줄거고 이런 걸 다 개개별로 정할 수 있게 해줘 그리고 보너스 칸도 만들어주고"
+{
+  const fd = P.cleanDays(fixed, "2026-06"); // 별 없는 날 210h · ★ 날 40h · 초과 4h
+  const h = P.computeMonth({ month: "2026-06", days: fd, bonus: 2000, bonus_note: "명절" }, { pay_type: "hourly", hourly_rate: 200, ot_rate: 300, star_rate: 250 });
+  const line = (r, k) => r.lines.find((l) => l.key === k) || {};
+  check("★★ 시급제: 기본 210h × 200", line(h, "regular").amount === 42000 && line(h, "regular").hours === 210, JSON.stringify(line(h, "regular")));
+  check("★★ ★ 날은 ★ 날 시급 — 40h × 250", line(h, "star").amount === 10000 && line(h, "star").rate === 250, JSON.stringify(line(h, "star")));
+  check("★★ 초과는 초과 시급 — 4h × 300", line(h, "overtime").amount === 1200 && line(h, "overtime").rate === 300, JSON.stringify(line(h, "overtime")));
+  check("★★ 보너스 2,000 (메모 「명절」)", line(h, "bonus").amount === 2000 && line(h, "bonus").note === "명절", JSON.stringify(line(h, "bonus")));
+  check("합계 = 42,000 + 10,000 + 1,200 + 2,000", h.total === 55200, String(h.total));
+  const m = P.computeMonth({ month: "2026-06", days: fd, bonus: 3000 }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150, ot_rate: 220 });
+  check("★★ 월급제: 월급 + ★ 날(시급 비움 → 기본 150) + 초과(220) + 보너스", m.total === 36000 + 40 * 150 + 4 * 220 + 3000 && line(m, "star").rate === 150 && line(m, "overtime").rate === 220, JSON.stringify(m.lines));
+  const plain = P.computeMonth({ month: "2026-06", days: fd }, { pay_type: "hourly", hourly_rate: 200 });
+  check("초과·★ 시급을 비우면 기본 시급과 같다", plain.ot_rate === 200 && plain.star_rate === 200 && !line(plain, "bonus").amount, "");
+  check("보너스 정리 — 음수·글자는 0, 메모는 60자", P.cleanBonus({ bonus: -5 }).bonus === 0 && P.cleanBonus({ bonus: "abc" }).bonus === 0 && P.cleanBonus({ bonus: 1500.4, bonus_note: "x".repeat(80) }).bonus_note.length === 60, "");
+  const st = P.cleanStaff({ name: "A", pay_type: "monthly", monthly_salary: 30000, hourly_rate: 160, ot_rate: 240, star_rate: "" });
+  check("직원 정보에 초과 시급·★ 시급", st.ot_rate === 240 && st.star_rate === null, JSON.stringify(st));
+}
+
 out.push("\n[근무 시간대 = 가게 영업시간 — 2026-10-03]");
 // 사장님: "이미 있는 근무 시간대가 있잖아 우리 영업 시간". 지금 가게 영업시간은
 // 「11:00-14:00, 17:00-21:00」(손님 화면에도 그대로 보이는 문구).
@@ -138,6 +159,15 @@ out.push("\n[서버 — 사장님만]");
   check("미리 계산은 저장하지 않는다", res.status === 200 && Object.keys(res.body.card.days).length === 0, "");
   res = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed });
   check("★ 저장", res.status === 200 && res.body.result.total === 35800, "");
+  res = await boss.put(`/api/payroll/staff/${id}`).send({ ot_rate: 300, star_rate: 250 });
+  check("★ 직원별 초과 시급·★ 날 시급 저장", res.body.staff.ot_rate === 300 && res.body.staff.star_rate === 250 && res.body.staff.hourly_rate === 200, JSON.stringify(res.body));
+  res = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed, bonus: 2000, bonus_note: "명절" });
+  check("★ 보너스를 카드와 같이 저장", res.body.card.bonus === 2000 && res.body.card.bonus_note === "명절", JSON.stringify(res.body.card && res.body.card.bonus));
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  // 영업시간(11–14, 17–21) 기준: 별 없는 날 147h×200 + ★ 날 28h×250 + 초과 4h×300 + 보너스 2,000
+  check("★★ 다시 열면 보너스·시급이 그대로 들어간 합계", res.body.card.bonus === 2000 && res.body.result.total === 147 * 200 + 28 * 250 + 4 * 300 + 2000, String(res.body.result.total));
+  await boss.put(`/api/payroll/staff/${id}`).send({ ot_rate: null, star_rate: null });
+  await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-06", days: fixed });
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
   check("★ 다시 열면 그대로", res.body.result.normal_days === 21 && res.body.result.star_days === 4 && res.body.result.ot_hours === 4, JSON.stringify(res.body.result.normal_days));
   res = await boss.get("/api/payroll/summary?month=2026-06");

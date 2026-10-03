@@ -183,26 +183,37 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   const type = s.pay_type === "monthly" ? "monthly" : "hourly";
   const salary = Math.max(0, Number(s.monthly_salary) || 0);
   const hourly = Number(s.hourly_rate) > 0 ? Number(s.hourly_rate) : type === "monthly" && salary ? r2(salary / 240) : 0;
+  // 직원마다 따로 정하는 값(2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간
+  // 얼마 줄거고 이런 걸 다 개개별로 정할 수 있게"). 비워 두면 기본 시급과 같다.
+  const otRate = Number(s.ot_rate) > 0 ? Number(s.ot_rate) : hourly;
+  const starRate = Number(s.star_rate) > 0 ? Number(s.star_rate) : hourly;
   const lines = [];
   if (type === "hourly") {
-    lines.push({ key: "regular", hours: normalHours + starHours, rate: hourly, amount: (normalHours + starHours) * hourly });
+    lines.push({ key: "regular", hours: normalHours, rate: hourly, amount: normalHours * hourly });
   } else {
     lines.push({ key: "salary", amount: salary });
-    if (starHours) lines.push({ key: "star", hours: starHours, rate: hourly, amount: starHours * hourly });
   }
-  if (otHours) lines.push({ key: "overtime", hours: otHours, rate: hourly, amount: otHours * hourly });
+  // ★ 날(주 5일을 넘긴 날)은 시급제·월급제 모두 따로 — 월급에 들어 있지 않다.
+  if (starHours) lines.push({ key: "star", hours: starHours, rate: starRate, amount: starHours * starRate });
+  if (otHours) lines.push({ key: "overtime", hours: otHours, rate: otRate, amount: otHours * otRate });
+  // 그 달 보너스 — 카드(그 달 문서)에 적는다.
+  const bonus = Math.max(0, Number(card && card.bonus) || 0);
+  if (bonus) lines.push({ key: "bonus", amount: bonus, note: (card && card.bonus_note) || "" });
   for (const l of lines) l.amount = Math.round(l.amount);
   const total = lines.reduce((a, l) => a + l.amount, 0);
   const warnings = [];
   if (type === "hourly" && hourly > 0 && hourly < MIN_WAGE.hourly) warnings.push({ key: "below_min_hourly", min: MIN_WAGE.hourly });
   if (type === "monthly" && salary > 0 && salary < MIN_WAGE.monthly) warnings.push({ key: "below_min_monthly", min: MIN_WAGE.monthly });
-  if (!hourly && (type === "hourly" || otHours || starHours)) warnings.push({ key: "no_rate" });
+  if ((type === "hourly" && !hourly) || (otHours && !otRate) || (starHours && !starRate)) warnings.push({ key: "no_rate" });
   return {
     month,
     rules,
     rows,
     pay_type: type,
     hourly_rate: hourly,
+    ot_rate: otRate,
+    star_rate: starRate,
+    bonus,
     normal_days: normalDays,
     star_days: starDays,
     normal_hours: normalHours,
@@ -244,6 +255,7 @@ function cleanStaff(b) {
   const name = String((b && b.name) || "").trim().slice(0, 30);
   if (!name) return null;
   const num = (v) => {
+    if (v == null || v === "") return null; // 빈칸 = 정하지 않음(기본 시급을 따른다)
     const x = Number(v);
     return Number.isFinite(x) && x >= 0 && x < 10000000 ? Math.round(x * 100) / 100 : null;
   };
@@ -252,7 +264,18 @@ function cleanStaff(b) {
     pay_type: b.pay_type === "monthly" ? "monthly" : "hourly",
     hourly_rate: num(b.hourly_rate),
     monthly_salary: num(b.monthly_salary),
+    ot_rate: num(b.ot_rate), // 초과 시급(비우면 기본 시급)
+    star_rate: num(b.star_rate), // ★ 날 시급(비우면 기본 시급)
     active: b.active !== false,
+  };
+}
+
+/** 그 달 보너스 — 금액과 메모. */
+function cleanBonus(b) {
+  const x = Number(b && b.bonus);
+  return {
+    bonus: Number.isFinite(x) && x > 0 && x < 10000000 ? Math.round(x) : 0,
+    bonus_note: String((b && b.bonus_note) || "").trim().slice(0, 60),
   };
 }
 
@@ -260,5 +283,5 @@ const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 module.exports = {
   STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, FALLBACK_RANGES, SLOTS, MONTH_RE,
-  toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff,
+  toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff, cleanBonus,
 };

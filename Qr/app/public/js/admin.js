@@ -1488,7 +1488,15 @@
       payrollHourly: "시급제",
       payrollMonthly: "월급제",
       payrollMonthlySalary: "월급",
-      payrollHourlyRate: "시급",
+      payrollHourlyRate: "기본 시급",
+      payrollOtRate: "초과 근무 시급",
+      payrollStarRate: "★ 날 시급",
+      payrollSameAsHourly: "기본 시급과 같음",
+      payrollRatesHintHourly: "시급제: 근무 시간 × 기본 시급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 빈칸은 기본 시급을 따른다.",
+      payrollRatesHintMonthly: "월급제: 월급 + ★ 날 시간 × ★ 날 시급 + 초과 시간 × 초과 근무 시급. 기본 시급을 비우면 월급 ÷ 240.",
+      payrollBonus: "🎁 이 달 보너스",
+      payrollBonusNote: "메모 (예: 명절 보너스)",
+      payrollLineBonus: "보너스",
       payrollSaveStaff: "직원 정보 저장",
       payrollInactive: "그만둔 직원",
       payrollConfirmAll: "✓ 초과 시간 모두 확인",
@@ -2485,7 +2493,15 @@
       payrollHourly: "時薪制",
       payrollMonthly: "月薪制",
       payrollMonthlySalary: "月薪",
-      payrollHourlyRate: "時薪",
+      payrollHourlyRate: "基本時薪",
+      payrollOtRate: "加班時薪",
+      payrollStarRate: "★ 日時薪",
+      payrollSameAsHourly: "同基本時薪",
+      payrollRatesHintHourly: "時薪制：工時 × 基本時薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。空白則依基本時薪。",
+      payrollRatesHintMonthly: "月薪制：月薪 + ★ 日工時 × ★ 日時薪 + 加班時數 × 加班時薪。基本時薪空白時為月薪 ÷ 240。",
+      payrollBonus: "🎁 本月獎金",
+      payrollBonusNote: "備註（例：節日獎金）",
+      payrollLineBonus: "獎金",
       payrollSaveStaff: "儲存員工資料",
       payrollInactive: "已離職",
       payrollConfirmAll: "✓ 全部加班確認",
@@ -13160,7 +13176,12 @@
     $("#payrollPayType").value = d.staff.pay_type;
     $("#payrollMonthlySalary").value = d.staff.monthly_salary ?? "";
     $("#payrollHourlyRate").value = d.staff.hourly_rate ?? "";
+    $("#payrollOtRate").value = d.staff.ot_rate ?? "";
+    $("#payrollStarRate").value = d.staff.star_rate ?? "";
     $("#payrollStaffInactive").checked = !d.staff.active;
+    payroll.bonus = { bonus: d.card.bonus || 0, bonus_note: d.card.bonus_note || "" };
+    $("#payrollBonus").value = d.card.bonus || "";
+    $("#payrollBonusNote").value = d.card.bonus_note || "";
     payrollSyncPayType();
     $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => b.classList.toggle("active", b.dataset.payrollStaff === staffId));
     renderPayrollGrid();
@@ -13168,6 +13189,8 @@
   }
   function payrollSyncPayType() {
     const monthly = $("#payrollPayType").value === "monthly";
+    // 무엇에 무엇이 쓰이는지 한 줄로.
+    if ($("#payrollRatesHint")) $("#payrollRatesHint").textContent = T(monthly ? "payrollRatesHintMonthly" : "payrollRatesHintHourly");
     $(".payroll-salary-wrap").hidden = !monthly;
   }
   function renderPayrollGrid() {
@@ -13271,7 +13294,7 @@
     const r = payroll.result;
     const box = $("#payrollResult");
     if (!r || !box) return;
-    const lineName = { regular: T("payrollLineRegular"), salary: T("payrollLineSalary"), star: T("payrollLineStar"), overtime: T("payrollLineOvertime") };
+    const lineName = { regular: T("payrollLineRegular"), salary: T("payrollLineSalary"), star: T("payrollLineStar"), overtime: T("payrollLineOvertime"), bonus: T("payrollLineBonus") };
     const warn = (r.warnings || []).map((w) =>
       w.key === "below_min_hourly"
         ? T("payrollWarnMinHourly").replace("{min}", w.min)
@@ -13285,7 +13308,7 @@
       ${warn.map((w) => `<div class="pr-warn">⚠ ${escapeHtml(w)}</div>`).join("")}
       ${(r.lines || [])
         .map(
-          (l) => `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
+          (l) => `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}${l.note ? ` · ${escapeHtml(l.note)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
         )
         .join("")}
       <div class="pr-line pr-total"><span>${escapeHtml(T("payrollTotal"))}</span><span>NT$${money(r.total)}</span></div>`;
@@ -13296,6 +13319,12 @@
     el.textContent = payroll.dirty ? T("payrollUnsaved") : "";
     el.classList.toggle("is-dirty", payroll.dirty);
   }
+  function payrollBonusNow() {
+    const v = $("#payrollBonus") ? $("#payrollBonus").value : "";
+    return { bonus: v === "" ? 0 : Number(v), bonus_note: $("#payrollBonusNote") ? $("#payrollBonusNote").value : "" };
+  }
+  if ($("#payrollBonus")) $("#payrollBonus").oninput = () => payrollChanged();
+  if ($("#payrollBonusNote")) $("#payrollBonusNote").oninput = () => payrollChanged();
   let payrollPreviewTimer = null;
   function payrollChanged() {
     payroll.dirty = true;
@@ -13309,7 +13338,7 @@
     const res = await fetch("/api/payroll/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days }),
+      body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days, ...payrollBonusNow() }),
     });
     if (!res.ok || seq !== payroll.seq) return;
     payroll.result = (await res.json()).result;
@@ -13501,6 +13530,8 @@
         pay_type: $("#payrollPayType").value,
         monthly_salary: $("#payrollMonthlySalary").value === "" ? null : Number($("#payrollMonthlySalary").value),
         hourly_rate: $("#payrollHourlyRate").value === "" ? null : Number($("#payrollHourlyRate").value),
+        ot_rate: $("#payrollOtRate").value === "" ? null : Number($("#payrollOtRate").value),
+        star_rate: $("#payrollStarRate").value === "" ? null : Number($("#payrollStarRate").value),
         active: !$("#payrollStaffInactive").checked,
       };
       const res = await fetch(`/api/payroll/staff/${encodeURIComponent(payroll.current.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -13527,7 +13558,7 @@
       const res = await fetch("/api/payroll/card", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days }),
+        body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days, ...payrollBonusNow() }),
       });
       if (!res.ok) return showAlert(T("payrollSaveFailed"));
       const d = await res.json();

@@ -2685,6 +2685,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-hours.is-bad { color: #b5232c; font-weight: 700; }
 .payroll-staff-form, .payroll-actions, .payroll-rules-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-bottom: 10px; }
 .payroll-staff-form input[type="number"] { width: 110px; }
+.payroll-rates { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; margin-bottom: 10px; }
+.payroll-rates label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.payroll-rates input, .payroll-bonus input { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 15px; font-family: inherit; background: transparent; color: var(--ink); width: 130px; }
+.payroll-rates-hint { flex-basis: 100%; margin: 0; font-size: 13px; color: var(--muted); }
+.payroll-bonus { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 12px; }
+.payroll-bonus label { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+.payroll-bonus #payrollBonusNote { width: 240px; max-width: 100%; }
 .payroll-status { font-size: 14px; color: var(--muted); }
 .payroll-status.is-dirty { color: #b5232c; font-weight: 700; }
 .payroll-grid-wrap { overflow-x: auto; max-width: 100%; }
