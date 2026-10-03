@@ -1498,6 +1498,17 @@
       payrollBonusNote: "메모 (예: 명절 보너스)",
       payrollLineBonus: "보너스",
       payrollLineDeduct: "지각·조퇴 차감",
+      payrollLineHoliday: "국가 공휴일 ×{m}",
+      payrollLineHolidayStar: "★ 국가 공휴일 ×{m}",
+      payrollHolidaysTitle: "🎌 국가 공휴일",
+      payrollHolidayNone: "이 달 없음",
+      payrollHolidayNotePh: "이유 (예: 태풍)",
+      payrollHolidayAdd: "공휴일로 지정",
+      payrollHolidayPickDate: "날짜를 고르세요.",
+      payrollHolidayRemove: "{date} 공휴일 지정을 풀까요? (모든 직원 급여에 같이 적용돼요)",
+      payrollHolidayTag: "🎌 ×{m}",
+      payrollClosedTag: "휴무",
+      payrollClosedTip: "휴무로 지정된 날 — 지각·조퇴를 세지 않아요(설정 > 주문 받는 시간)",
       payrollDeductDetail: "지각 {late}h + 조퇴 {early}분",
       payrollSaveStaff: "직원 정보 저장",
       payrollInactive: "그만둔 직원",
@@ -2526,6 +2537,17 @@
       payrollBonusNote: "備註（例：節日獎金）",
       payrollLineBonus: "獎金",
       payrollLineDeduct: "遲到·早退扣款",
+      payrollLineHoliday: "國定假日 ×{m}",
+      payrollLineHolidayStar: "★ 國定假日 ×{m}",
+      payrollHolidaysTitle: "🎌 國定假日",
+      payrollHolidayNone: "本月沒有",
+      payrollHolidayNotePh: "原因（例：颱風）",
+      payrollHolidayAdd: "設為國定假日",
+      payrollHolidayPickDate: "請選擇日期。",
+      payrollHolidayRemove: "要取消 {date} 的國定假日嗎？（所有員工薪資都會一起變）",
+      payrollHolidayTag: "🎌 ×{m}",
+      payrollClosedTag: "公休",
+      payrollClosedTip: "設為公休的日子 — 不計遲到·早退（設定 > 接單時間）",
       payrollDeductDetail: "遲到 {late}h + 早退 {early} 分",
       payrollSaveStaff: "儲存員工資料",
       payrollInactive: "已離職",
@@ -13168,6 +13190,7 @@
       return;
     }
     await loadPayrollSummary();
+    loadPayrollHolidays();
     if (payroll.current && payroll.staff.some((s) => s.id === payroll.current.id)) await openPayrollCard(payroll.current.id);
   }
   // 근무 시간 = 급여 「근무 규칙」(2026-10-03 사장님: "아침 09:00 - 14:00 / 저녁 16:30 - 21:00").
@@ -13244,6 +13267,58 @@
     renderPayrollGrid();
     renderPayrollResult();
   }
+  // 국가 공휴일 — 가게 전체(모든 직원). 이 달 것만 칩으로.
+  async function loadPayrollHolidays() {
+    const list = $("#payrollHolidayList");
+    if (!list) return;
+    let days = {};
+    try {
+      days = (await (await fetch(`/api/payroll/holidays?month=${payroll.month}`)).json()).days || {};
+    } catch (e) {}
+    const entries = Object.entries(days);
+    list.innerHTML = entries.length
+      ? entries
+          .map(([d, h]) => `<span class="pr-hol-chip">${escapeHtml(d.slice(5).replace("-", "/"))} ×${h.mult}${h.note ? ` · ${escapeHtml(h.note)}` : ""}<button type="button" data-hol-del="${escapeHtml(d)}" aria-label="remove">✕</button></span>`)
+          .join("")
+      : `<span class="pr-hol-empty">${escapeHtml(T("payrollHolidayNone"))}</span>`;
+    list.querySelectorAll("[data-hol-del]").forEach((b) => {
+      b.onclick = async () => {
+        if (!(await showConfirm(T("payrollHolidayRemove").replace("{date}", b.dataset.holDel)))) return;
+        await fetch(`/api/payroll/holidays/${b.dataset.holDel}`, { method: "DELETE" });
+        payrollHolidaysChanged();
+      };
+    });
+    const dateEl = $("#payrollHolidayDate");
+    if (dateEl) {
+      const [y, m] = payroll.month.split("-").map(Number);
+      dateEl.min = `${payroll.month}-01`;
+      dateEl.max = `${payroll.month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+      if (!dateEl.value || !dateEl.value.startsWith(payroll.month)) dateEl.value = "";
+    }
+  }
+  function payrollHolidaysChanged() {
+    loadPayrollHolidays();
+    loadPayrollSummary();
+    if (payroll.current) payrollPreview();
+  }
+  $$(".pr-hol-mult [data-hol-mult]").forEach((b) => {
+    b.onclick = () => $$(".pr-hol-mult [data-hol-mult]").forEach((x) => x.classList.toggle("active", x === b));
+  });
+  if ($("#payrollHolidayAdd"))
+    $("#payrollHolidayAdd").onclick = async () => {
+      const date = $("#payrollHolidayDate").value;
+      if (!date) return showAlert(T("payrollHolidayPickDate"));
+      const active = $(".pr-hol-mult [data-hol-mult].active");
+      const res = await fetch(`/api/payroll/holidays/${date}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mult: Number(active ? active.dataset.holMult : 1.3), note: $("#payrollHolidayNote").value }),
+      });
+      if (!res.ok) return showAlert(T("payrollSaveFailed"));
+      $("#payrollHolidayDate").value = "";
+      $("#payrollHolidayNote").value = "";
+      payrollHolidaysChanged();
+    };
   function payrollSyncPayType() {
     const monthly = $("#payrollPayType").value === "monthly";
     $$(".pr-seg [data-pay-type]").forEach((b) => {
@@ -13321,6 +13396,22 @@
     $$("#payrollGrid tbody tr").forEach((tr) => {
       const r = rows.find((x) => String(x.day) === tr.dataset.day);
       const cell = tr.querySelector(".pg-ot");
+      // 국가 공휴일·휴무 표시 — 날짜 칸 밑에 작게.
+      const dayCell = tr.querySelector(".pg-day");
+      let tag = dayCell.querySelector(".pg-tag");
+      const tagText = r && r.holiday ? T("payrollHolidayTag").replace("{m}", r.holiday.mult) : r && r.closed ? T("payrollClosedTag") : "";
+      if (tagText && !tag) {
+        tag = document.createElement("span");
+        tag.className = "pg-tag";
+        dayCell.appendChild(tag);
+      }
+      if (tag) {
+        tag.textContent = tagText;
+        tag.title = r && r.closed && !r.holiday ? T("payrollClosedTip") : (r && r.holiday && r.holiday.note) || "";
+        if (!tagText) tag.remove();
+      }
+      tr.classList.toggle("is-holiday", !!(r && r.holiday));
+      tr.classList.toggle("is-closed", !!(r && r.closed));
       // 지각·조퇴 — 그 날 어느 구간에 몇 분.
       const le = tr.querySelector(".pg-le");
       const leText = (k, list) =>
@@ -13386,7 +13477,9 @@
       ${(r.lines || [])
         .map(
           (l) =>
-            l.key === "deduct"
+            l.key === "holiday"
+              ? `<div class="pr-line pr-holiday"><span>${escapeHtml(T(l.star ? "payrollLineHolidayStar" : "payrollLineHoliday").replace("{m}", l.mult))} · ${l.hours}h × NT$${money(l.rate)} × ${l.mult}</span><span>NT$${money(l.amount)}</span></div>`
+              : l.key === "deduct"
               ? `<div class="pr-line pr-deduct"><span>${escapeHtml(lineName.deduct)} · ${escapeHtml(T("payrollDeductDetail").replace("{late}", l.late_hours).replace("{early}", l.early_min))}</span><span>−NT$${money(-l.amount)}</span></div>`
               : `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}${l.note ? ` · ${escapeHtml(l.note)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
         )

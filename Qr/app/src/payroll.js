@@ -107,7 +107,7 @@ function blockHours(r) {
  * 찍었으면 오전 구간, 오후를 찍었으면 오후 구간. 몇 분 일찍 나온 것을 깎지 않는다.
  * ranges: 그 날짜의 영업시간 구간. 휴무일(빈 배열)에 일했으면 기본 구간으로 센다.
  */
-function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
+function dayOf(day, rules = DEFAULT_RULES, ranges = null, info = null) {
   const d = day || {};
   const has = (a, b) => !!(cleanTime(d[a]) || cleanTime(d[b]));
   const am = has("am_in", "am_out");
@@ -158,7 +158,12 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
       early.push({ slot: label, min, hours: min / 60 });
     }
   };
-  if (b.single) {
+  // 휴무로 지정된 날(설정 > 주문 받는 시간의 요일 휴무·날짜 휴무)은 지각·조퇴를 안 본다 —
+  // 2026-10-03 사장님: "휴무라고 지정되면 그건 지각이나 그런 걸로 적용 안되게 해줘".
+  const closed = !!(info && info.closed);
+  if (closed) {
+    // 아무것도 안 센다
+  } else if (b.single) {
     lateEarly("am_in", cleanTime(d.pm_out) ? "pm_out" : "am_out", b.single, "am");
   } else {
     lateEarly("am_in", "am_out", b.am, "am");
@@ -175,6 +180,8 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null) {
     day_units: dayUnits,
     late,
     early,
+    closed,
+    holiday: (info && info.holiday) || null,
     deduct_hours: late.reduce((a, x) => a + x.hours, 0) + early.reduce((a, x) => a + x.hours, 0),
     star: !!d.star,
     blocks: b.single ? [b.single] : [b.am, b.pm],
@@ -203,19 +210,20 @@ function daysInMonth(month) {
  * hoursFor(dateStr) → 그날 영업시간 구간들. 휴무로 빈 배열이면 baseRanges(기본
  * 영업시간)로 센다 — 문 닫은 날에 나와 일했으면(정리·행사) 평소 시간으로 본다.
  */
-function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null) {
+function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null, infoFor = null) {
   const rules = rulesOf(rawRules);
   const month = card && card.month;
   const n = month ? daysInMonth(month) : 31;
   const days = (card && card.days) || {};
   const rows = [];
   let normalDays = 0, starDays = 0, normalHours = 0, starHours = 0, otHours = 0, unconfirmed = 0, borderlines = 0;
+  const holidayHours = {}; // 배율마다 — 국가 공휴일에 일한 기본 시간
   let lateCount = 0, lateMin = 0, lateHours = 0, earlyCount = 0, earlyMin = 0, deductStar = 0, deductNormal = 0;
   for (let i = 1; i <= n; i++) {
     const date = month ? `${month}-${String(i).padStart(2, "0")}` : null;
     let ranges = hoursFor && date ? hoursFor(date) : null;
     if (ranges && !ranges.length) ranges = baseRanges;
-    const d = dayOf(days[i] || days[String(i)], rules, ranges);
+    const d = dayOf(days[i] || days[String(i)], rules, ranges, infoFor && date ? infoFor(date) : null);
     rows.push({ day: i, ...d });
     if (!d.worked) continue;
     if (d.star) { starDays += d.day_units; starHours += d.regular_hours; } else { normalDays += d.day_units; normalHours += d.regular_hours; }
@@ -223,6 +231,12 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     for (const x of d.early) { earlyCount++; earlyMin += x.min; }
     if (d.star) deductStar += d.deduct_hours;
     else deductNormal += d.deduct_hours;
+    if (d.holiday) {
+      const key = String(d.holiday.mult);
+      const h = (holidayHours[key] = holidayHours[key] || { mult: d.holiday.mult, normal: 0, star: 0, days: [] });
+      h[d.star ? "star" : "normal"] += d.regular_hours;
+      h.days.push(i);
+    }
     otHours += d.ot_hours;
     if ((d.suggested_ot > 0 || d.ot_hours > 0 || d.borderline) && !d.ot_confirmed) unconfirmed++;
     if (d.borderline && !d.ot_confirmed) borderlines++;
@@ -237,13 +251,25 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
   const otRate = Number(s.ot_rate) > 0 ? Number(s.ot_rate) : hourly;
   const starRate = Number(s.star_rate) > 0 ? Number(s.star_rate) : hourly;
   const lines = [];
+  // 국가 공휴일(2026-10-03 사장님: "대만 국가지정 공휴일은 급여가 별도로 책정이 돼. 1.3배 또는
+  // 1.7배로 고를 수 있게"). 그 날 일한 기본 시간은 시급 × 배율로 따로 한 줄. 시급제는 평소 줄에서
+  // 그 시간을 빼서 옮기고, 월급제는 월급에 공휴일 유급이 들어 있으므로 일한 시간만큼 얹는다.
+  const hol = Object.values(holidayHours).sort((a, b) => a.mult - b.mult);
+  const holNormal = hol.reduce((a, h) => a + h.normal, 0);
+  const holStar = hol.reduce((a, h) => a + h.star, 0);
   if (type === "hourly") {
-    lines.push({ key: "regular", hours: normalHours, rate: hourly, amount: normalHours * hourly });
+    const h = normalHours - holNormal;
+    lines.push({ key: "regular", hours: h, rate: hourly, amount: h * hourly });
   } else {
     lines.push({ key: "salary", amount: salary });
   }
   // ★ 날(주 5일을 넘긴 날)은 시급제·월급제 모두 따로 — 월급에 들어 있지 않다.
-  if (starHours) lines.push({ key: "star", hours: starHours, rate: starRate, amount: starHours * starRate });
+  const starPlain = starHours - holStar;
+  if (starPlain) lines.push({ key: "star", hours: starPlain, rate: starRate, amount: starPlain * starRate });
+  for (const h of hol) {
+    if (h.normal) lines.push({ key: "holiday", mult: h.mult, hours: h.normal, rate: hourly, days: h.days, amount: h.normal * hourly * h.mult });
+    if (h.star) lines.push({ key: "holiday", star: true, mult: h.mult, hours: h.star, rate: starRate, days: h.days, amount: h.star * starRate * h.mult });
+  }
   if (otHours) lines.push({ key: "overtime", hours: otHours, rate: otRate, amount: otHours * otRate });
   // 그 달 보너스 — 카드(그 달 문서)에 적는다.
   const bonus = Math.max(0, Number(card && card.bonus) || 0);
@@ -274,6 +300,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null)
     late_count: lateCount,
     late_min: lateMin,
     late_hours: lateHours,
+    holiday_days: hol.reduce((a, h) => a + h.days.length, 0),
     early_count: earlyCount,
     early_min: earlyMin,
     unconfirmed_days: unconfirmed,
@@ -337,8 +364,17 @@ function cleanBonus(b) {
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const HOLIDAY_MULTS = [1.3, 1.7];
+
+/** 국가 공휴일 한 날 — 배율은 1.3 또는 1.7 만. */
+function cleanHoliday(b) {
+  const m = Number(b && b.mult);
+  return { mult: HOLIDAY_MULTS.includes(m) ? m : 1.3, note: String((b && b.note) || "").trim().slice(0, 40) };
+}
 
 module.exports = {
   STAFF_COLLECTION, CARDS_COLLECTION, MIN_WAGE, DEFAULT_RULES, DEFAULT_WORK_HOURS, FALLBACK_RANGES, SLOTS, MONTH_RE,
+  DATE_RE, HOLIDAY_MULTS, cleanHoliday,
   toMin, cleanTime, rulesOf, blocksOf, overtimeFor, extraBlockHours, dayOf, daysInMonth, computeMonth, cleanDays, cleanStaff, cleanBonus,
 };

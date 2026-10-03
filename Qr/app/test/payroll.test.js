@@ -179,6 +179,33 @@ out.push("\n[출근 일수 — 오전 0.5 · 오후 0.5, 반올림 없음 / 지�
   check("퇴근만 없으면 조퇴로 세지 않는다", P.dayOf({ am_in: "10:55" }, P.DEFAULT_RULES, BH).early.length === 0, "");
 }
 
+out.push("\n[휴무 날은 지각·조퇴 없음 / 국가 공휴일 ×1.3 · ×1.7 — 2026-10-03]");
+// 사장님: "휴무라고 지정되면 그건 지각이나 그런 걸로 적용 안되게 해줘. 대만 국가지정 공휴일은
+// 급여가 별도로 책정이 돼. 1.3배 또는 1.7배로 고를 수 있게 … 태풍이 나거나 천재지변이 나면 국가
+// 공휴일로 바로 정해버리거든".
+{
+  const W = P.FALLBACK_RANGES; // 09:00–14:00 · 16:30–21:00
+  const late = { am_in: "10:10", am_out: "12:00" }; // 지각 70분(1h) · 조퇴 120분
+  const open = P.dayOf(late, P.DEFAULT_RULES, W);
+  const shut = P.dayOf(late, P.DEFAULT_RULES, W, { closed: true });
+  check("★★ 평소엔 지각 1h + 조퇴 2h", open.deduct_hours === 3, String(open.deduct_hours));
+  check("★★ 휴무로 지정된 날은 지각·조퇴 0 — 일한 블록은 그대로", shut.deduct_hours === 0 && shut.late.length === 0 && shut.early.length === 0 && shut.regular_hours === 5 && shut.closed, JSON.stringify(shut));
+  const full = { am_in: "09:00", am_out: "14:00", pm_in: "16:30", pm_out: "21:00" };
+  const days = { 9: full, 10: full, 11: { ...full, star: true } };
+  const hol = { "2026-10-10": { mult: 1.7, note: "국경일" }, "2026-10-11": { mult: 1.3, note: "태풍" } };
+  const info = (d) => ({ closed: false, holiday: hol[d] || null });
+  const r = P.computeMonth({ month: "2026-10", days }, { pay_type: "hourly", hourly_rate: 220, star_rate: 250 }, null, () => W, W, info);
+  const line = (k, extra = () => true) => r.lines.find((l) => l.key === k && extra(l)) || {};
+  check("★★ 시급제 — 평소 9일 9.5h × 220", line("regular").hours === 9.5 && line("regular").amount === 2090, JSON.stringify(line("regular")));
+  check("★★ 10일 공휴일 ×1.7 — 9.5h × 220 × 1.7 = 3,553", line("holiday", (l) => l.mult === 1.7).amount === 3553, JSON.stringify(r.lines));
+  check("★★ 11일 ★ 날이면서 공휴일 ×1.3 — ★ 시급으로 9.5h × 250 × 1.3 = 3,088", line("holiday", (l) => l.mult === 1.3 && l.star).amount === 3088 && !line("star").amount, JSON.stringify(r.lines));
+  check("합계 2,090 + 3,553 + 3,088", r.total === 2090 + 3553 + 3088 && r.holiday_days === 2, String(r.total));
+  check("출근 일수는 그대로 3일(★ 1)", r.normal_days === 2 && r.star_days === 1, "");
+  const m = P.computeMonth({ month: "2026-10", days: { 10: full } }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150 }, null, () => W, W, info);
+  check("★ 월급제 — 월급에 공휴일 유급이 들어 있으니 일한 시간 × 시급 × 배율을 얹는다", m.total === 36000 + Math.round(9.5 * 150 * 1.7), String(m.total));
+  check("배율은 1.3·1.7 만 — 그 밖은 1.3", P.cleanHoliday({ mult: 2 }).mult === 1.3 && P.cleanHoliday({ mult: "1.7" }).mult === 1.7, "");
+}
+
 out.push("\n[서버 — 사장님만]");
 (async () => {
   const request = require("supertest");
@@ -232,6 +259,28 @@ out.push("\n[서버 — 사장님만]");
   await boss.put("/api/payroll/rules").send({ default_hourly: 220 });
   res = await boss.get("/api/payroll/status");
   check("상태에 근무 시간", res.body.work_hours && res.body.work_hours.readable && res.body.work_hours.text === "09:00-14:00, 16:30-21:00", JSON.stringify(res.body.work_hours));
+  // 국가 공휴일 지정 → 그 날 일한 시간이 배율로. 6월 2일(별 없는 날, 9.5h × 200)
+  res = await boss.put("/api/payroll/holidays/2026-06-02").send({ mult: 1.7, note: "태풍" });
+  check("★★ 공휴일 지정(×1.7, 태풍)", res.status === 200 && res.body.holiday.mult === 1.7 && res.body.holiday.note === "태풍", JSON.stringify(res.body));
+  res = await boss.get("/api/payroll/holidays?month=2026-06");
+  check("그 달 공휴일 목록", res.body.days["2026-06-02"] && res.body.days["2026-06-02"].mult === 1.7 && JSON.stringify(res.body.mults) === "[1.3,1.7]", JSON.stringify(res.body));
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  check("★★ 공휴일에 일한 9.5h 는 × 1.7 — 9.5 × 200 × 0.7 = 1,330 더", res.body.result.total === 48260 + 1330, String(res.body.result.total));
+  res = await boss.delete("/api/payroll/holidays/2026-06-02");
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  check("해제하면 원래대로", res.body.result.total === 48260, String(res.body.result.total));
+  res = await boss.put("/api/payroll/holidays/2026-13-40").send({ mult: 1.3 });
+  check("이상한 날짜 400", res.status === 400, "");
+  // 휴무로 지정된 날(설정 > 주문 받는 시간)은 지각·조퇴를 안 본다 — 6월 5일 13:57 조퇴(3분)
+  const ohBefore = store.settings.order_hours;
+  store.settings.order_hours = { enabled: 1, ranges: [{ start: "11:00", end: "21:00" }], date_rules: { "2026-06-05": { closed: 1, note: "태풍" } } };
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  check("★★ 휴무(태풍) 날 조퇴 3분은 안 뺀다 — 48,260 + 10", res.body.result.total === 48270 && res.body.result.rows.find((x) => x.day === 5).closed, String(res.body.result.total));
+  store.settings.order_hours = { enabled: 1, ranges: [{ start: "11:00", end: "21:00" }], closed_days: [2] };
+  res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-06`);
+  // 6월 화요일 2·9·16·23·30 — 16일 13:58(2분) 조퇴가 빠진다
+  check("★ 요일 휴무(화)도 — 16일 조퇴 2분 안 뺀다", res.body.result.rows.find((x) => x.day === 16).early.length === 0 && res.body.result.total === 48260 + 7, String(res.body.result.total));
+  store.settings.order_hours = ohBefore;
   res = await boss.put(`/api/payroll/staff/${id}`).send({ hourly_rate: 210 });
   check("시급 고치기", res.body.staff.hourly_rate === 210 && res.body.staff.name === "劉芷芸", JSON.stringify(res.body));
   res = await boss.put("/api/payroll/rules").send({ ot_threshold_min: 20 });

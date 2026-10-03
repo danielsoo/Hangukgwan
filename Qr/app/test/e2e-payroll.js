@@ -143,6 +143,27 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(900);
   check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /이 달 지급액\s*NT\$5,900/.test(await page.locator("#payrollResult").innerText()), "");
 
+  out.push("\n[국가 공휴일 ×1.3 · ×1.7 — 2026-10-03]");
+  {
+    // 사장님: "1.3배 또는 1.7배로 고를 수 있게 해주고. 또 날짜를 따로 국가 공휴일이라고 지정할 수
+    // 있게 급여 페이지에 넣어줘. 왜냐면 태풍이 나거나 천재지변이 나면 국가 공휴일로 바로 정해버리거든"
+    check("★ 공휴일 칸 — 이 달 없음", /이 달 없음/.test(await page.locator("#payrollHolidays").innerText()), await page.locator("#payrollHolidays").innerText());
+    await page.fill("#payrollHolidayDate", "2026-06-02");
+    await page.click('.pr-hol-mult [data-hol-mult="1.7"]');
+    await page.fill("#payrollHolidayNote", "태풍");
+    await page.click("#payrollHolidayAdd");
+    await page.waitForTimeout(1200);
+    check("★★ 칩 「06/02 ×1.7 · 태풍」", /06\/02 ×1\.7 · 태풍/.test(await page.locator("#payrollHolidayList").innerText()), await page.locator("#payrollHolidayList").innerText());
+    check("★ 표의 2일에 「🎌 ×1.7」", /🎌 ×1\.7/.test(await page.locator('#payrollGrid tr[data-day="2"] .pg-day').innerText()) && (await page.locator('#payrollGrid tr[data-day="2"]').evaluate((tr) => tr.classList.contains("is-holiday"))), "");
+    const rh = await page.locator("#payrollResult").innerText();
+    // 2일 9.5h × 200 × 1.7 = 3,230 / 7일 9.5h × 200 / ★ 6일 9.5h × 200 / 초과 1h × 200
+    check("★★ 「국가 공휴일 ×1.7 · 9.5h × NT$200 × 1.7 NT$3,230」, 지급액 NT$7,230", /국가 공휴일 ×1\.7 · 9\.5h × NT\$200 × 1\.7\s*NT\$3,230/.test(rh) && /이 달 지급액\s*NT\$7,230/.test(rh) && /근무 · 9\.5h × NT\$200/.test(rh), rh);
+    await page.locator('#payrollHolidayList [data-hol-del="2026-06-02"]').click();
+    await page.click("#appDialogOk");
+    await page.waitForTimeout(1200);
+    check("★ 풀면 원래대로 NT$5,900", /이 달 지급액\s*NT\$5,900/.test(await page.locator("#payrollResult").innerText()) && /이 달 없음/.test(await page.locator("#payrollHolidayList").innerText()), await page.locator("#payrollResult").innerText());
+  }
+
   out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 이 달 보너스]");
   {
     // 2026-10-03 사장님: "둘 다 시급 얼마 줄 거고 초과 근무 시간 얼마 줄거고 이런 걸 다

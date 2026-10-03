@@ -2767,6 +2767,18 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-grid input.pg-t.is-hand::placeholder { color: var(--pr-red); opacity: 1; }
 .payroll-grid tr.is-star td { background: rgba(214, 48, 49, 0.05); }
 .payroll-grid tr.is-star td.pg-day { box-shadow: inset 3px 0 0 #e17070; }
+.payroll-grid tr.is-holiday td { background: rgba(230, 160, 20, 0.10); }
+.payroll-grid td.pg-day .pg-tag { display: block; margin: 2px 0 0; font-size: 11px; font-weight: 700; color: #b26a00; }
+.payroll-grid tr.is-closed td.pg-day .pg-tag { color: #6b7a8c; }
+.payroll-holidays { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 10px 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--pr-card); }
+.payroll-holidays .pr-hol-title { font-weight: 700; }
+.payroll-holidays .pr-hol-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.payroll-holidays .pr-hol-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: 999px; background: #fff3dc; color: #7a4b00; font-size: 13px; font-weight: 600; }
+.payroll-holidays .pr-hol-chip button { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,0.06); cursor: pointer; }
+.payroll-holidays .pr-hol-empty { color: #8a8078; font-size: 13px; }
+.payroll-holidays .pr-hol-add { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.payroll-holidays input { height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; font: inherit; background: var(--pr-card); color: var(--ink); }
+.payroll-holidays #payrollHolidayNote { width: 130px; }
 .payroll-grid td.pg-ot { white-space: nowrap; min-width: 160px; transition: background 0.15s; }
 .payroll-grid tr.is-check td.pg-ot { background: var(--pr-amber-bg); }
 .payroll-grid td.pg-ot b { display: inline-block; min-width: 34px; font-size: 15px; font-variant-numeric: tabular-nums; }
