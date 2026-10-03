@@ -154,7 +154,7 @@ function check(name, cond, extra = "") {
     await page.click("#payrollHolidayAdd");
     await page.waitForTimeout(1200);
     check("★★ 칩 「06/02 ×1.7 · 태풍」", /06\/02 ×1\.7 · 태풍/.test(await page.locator("#payrollHolidayList").innerText()), await page.locator("#payrollHolidayList").innerText());
-    check("★ 표의 2일에 「🎌 ×1.7」", /🎌 ×1\.7/.test(await page.locator('#payrollGrid tr[data-day="2"] .pg-day').innerText()) && (await page.locator('#payrollGrid tr[data-day="2"]').evaluate((tr) => tr.classList.contains("is-holiday"))), "");
+    check("★ 표의 2일에 「공휴일 ×1.7」 — 일본 국기(🎌)를 쓰지 않는다", /공휴일 ×1\.7/.test(await page.locator('#payrollGrid tr[data-day="2"] .pg-day').innerText()) && (await page.locator('#payrollGrid tr[data-day="2"]').evaluate((tr) => tr.classList.contains("is-holiday"))) && !/🎌/.test(await page.locator("#tab-payroll").innerText()), "");
     const rh = await page.locator("#payrollResult").innerText();
     // 2일 9.5h × 200 × 1.7 = 3,230 / 7일 9.5h × 200 / ★ 6일 9.5h × 200 / 초과 1h × 200
     check("★★ 「국가 공휴일 ×1.7 · 9.5h × NT$200 × 1.7 NT$3,230」, 지급액 NT$7,230", /국가 공휴일 ×1\.7 · 9\.5h × NT\$200 × 1\.7\s*NT\$3,230/.test(rh) && /이 달 지급액\s*NT\$7,230/.test(rh) && /근무 · 9\.5h × NT\$200/.test(rh), rh);
