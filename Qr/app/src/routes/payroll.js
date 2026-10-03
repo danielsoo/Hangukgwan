@@ -1,6 +1,6 @@
 // 직원 급여 — 사장님만(src/payroll.js 머리말).
 const express = require("express");
-const { getDb, connectDB, store } = require("../db");
+const { getDb, connectDB } = require("../db");
 const openHours = require("../openHours");
 const { requireOwner } = require("../auth");
 const { nowLocal } = require("../time");
@@ -22,21 +22,18 @@ async function loadRules() {
 async function loadStaff(id) {
   return (await col(P.STAFF_COLLECTION)).findOne({ _id: String(id) });
 }
-// 근무 시간 = 가게 영업시간(설정 > 「영업시간」, store_hours) + 준비 시간(근무 규칙).
-// 2026-10-03 사장님: "시간을 고정하는 게 아니라 우리가 운영시간 정하는 곳이 있잖아? 그거에
-// 따라 움직일 수 있게". QR 주문 마감(order_hours, 10:55–13:35 …)은 쓰지 않는다 — 그건
-// 주문을 막는 시각이지 가게 문을 여닫는 시각이 아니다.
+// 근무 시간 — 급여 「근무 규칙」의 work_hours(2026-10-03 사장님: "아침 09:00 - 14:00 /
+// 저녁 16:30 - 21:00"). 손님에게 보이는 가게 영업시간(store_hours)과는 따로다.
 function workHours(rules) {
-  const text = (store.settings && store.settings.store_hours) || "";
-  const business = openHours.parseHoursText(text);
-  return { ranges: P.workRanges(business, rules), business, text, readable: business.length > 0 };
+  const text = rules.work_hours || P.DEFAULT_WORK_HOURS;
+  const ranges = openHours.parseHoursText(text);
+  return { ranges, text, readable: ranges.length > 0 };
 }
 function compute(card, staff, rules) {
   const wh = workHours(rules);
   return {
     ...P.computeMonth(card, staff, rules, () => wh.ranges, wh.ranges),
-    work_hours: wh.ranges,
-    business_hours: wh.readable ? wh.business : null,
+    work_hours: wh.readable ? wh.ranges : null,
   };
 }
 const staffOut = (s) => ({
@@ -52,6 +49,7 @@ router.get("/status", async (req, res) => {
 router.put("/rules", async (req, res) => {
   // 보낸 칸만 바꾼다 — 나머지는 저장돼 있던 값.
   const r = P.rulesOf({ ...(await loadRules()), ...(req.body || {}) });
+  if (!openHours.parseHoursText(r.work_hours).length) return res.status(400).json({ error: "bad_work_hours" });
   await (await col("payroll_settings")).updateOne({ _id: RULES_ID }, { $set: r }, { upsert: true });
   res.json({ rules: r });
 });
