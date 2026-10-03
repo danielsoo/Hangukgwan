@@ -1483,6 +1483,7 @@
       tabPayroll: "💰 급여",
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
+      payrollMonthFmt: "{y}년 {m}월",
       payrollAddStaff: "+ 직원 추가",
       payrollStaffName: "이름",
       payrollHourly: "시급제",
@@ -2520,6 +2521,7 @@
       tabPayroll: "💰 薪資",
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依下方「工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
+      payrollMonthFmt: "{y}年{m}月",
       payrollAddStaff: "+ 員工",
       payrollStaffName: "姓名",
       payrollHourly: "時薪制",
@@ -3617,6 +3619,7 @@
       if (openTableNumber) openTableDetail(openTableNumber, openTableLabel, openFocusOrderId);
       if (!$("#tab-settlement").hidden) loadSettlement($("#settlementStartDate").value, $("#settlementEndDate").value);
       if (!$("#tab-reservations").hidden) renderReservations();
+      payrollPaintMonth();
       // 설정 화면 — 「주문 받는 시간」 카드와 찾기 결과도 JS 가 글자를 만든다.
       refreshOrderHoursI18n();
       // 테스터 띠도 JS 가 글자를 만든다.
@@ -13165,6 +13168,7 @@
     if (!monthEl) return;
     if (!monthEl.value) monthEl.value = payrollThisMonth();
     payroll.month = monthEl.value;
+    payrollPaintMonth();
     try {
       const [st, rules] = await Promise.all([
         fetch("/api/payroll/staff").then((r) => r.json()),
@@ -13680,6 +13684,24 @@
       payrollSyncPayType();
     };
   });
+  // 달 이름 — 브라우저 말(「October 2026」)이 아니라 관리자 화면 말로(「2026년 10월」).
+  function payrollPaintMonth() {
+    const lab = $("#payrollMonthLabel");
+    const el = $("#payrollMonth");
+    if (!lab || !el) return;
+    const [y, m] = (el.value || payrollThisMonth()).split("-").map(Number);
+    lab.textContent = T("payrollMonthFmt").replace("{y}", y).replace("{m}", m);
+  }
+  if ($("#payrollMonthLabel"))
+    $("#payrollMonthLabel").onclick = () => {
+      const el = $("#payrollMonth");
+      try {
+        el.showPicker();
+      } catch (e) {
+        el.focus();
+        el.click();
+      }
+    };
   // 달 ‹ › — 한 달씩.
   const payrollShiftMonth = (delta) => {
     const el = $("#payrollMonth");

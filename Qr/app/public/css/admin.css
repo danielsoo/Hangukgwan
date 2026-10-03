@@ -2695,8 +2695,10 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 위: 달 · 직원 */
 .pr-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin: 4px 0 10px; }
 .pr-month { display: inline-flex; align-items: center; gap: 6px; padding: 4px; border-radius: 12px; background: var(--pr-card); border: 1px solid var(--line); }
-.pr-month input[type="month"] { height: 36px; border: none; background: transparent; font: inherit; font-size: 16px; font-weight: 700; color: var(--ink); padding: 0 4px; }
-.pr-month input[type="month"]:focus { outline: none; }
+.pr-month-pick { position: relative; display: inline-flex; }
+.pr-month-label { height: 36px; min-width: 112px; border: none; background: transparent; font: inherit; font-size: 16px; font-weight: 700; color: var(--ink); padding: 0 6px; cursor: pointer; }
+/* 진짜 달 칸은 보이지 않게 밑에 깐다 — showPicker() 로 달력만 연다. */
+.pr-month-pick input[type="month"] { position: absolute; left: 0; bottom: 0; width: 100%; height: 1px; opacity: 0; border: 0; padding: 0; pointer-events: none; }
 .payroll-chips { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 auto; }
 .payroll-chips button { display: inline-flex; align-items: baseline; gap: 6px; height: 40px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--pr-card); color: var(--ink); cursor: pointer; font: inherit; font-size: 15px; font-weight: 600; transition: background 0.15s, box-shadow 0.15s; align-items: center; }
 .payroll-chips button:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }

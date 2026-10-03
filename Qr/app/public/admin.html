@@ -259,7 +259,12 @@
       <div class="pr-head">
         <div class="pr-month" role="group">
           <button type="button" class="pr-icon-btn" id="payrollPrevMonth" aria-label="이전 달">‹</button>
-          <input type="month" id="payrollMonth" />
+          <!-- 「October 2026」처럼 브라우저 말로 나오는 달 칸 대신 「2026년 10월」(2026-10-03 사장님:
+               "저 위에 october 이렇게 되어있는데 한국어로 해줘"). 달력은 누르면 그대로 열린다. -->
+          <span class="pr-month-pick">
+            <button type="button" id="payrollMonthLabel" class="pr-month-label"></button>
+            <input type="month" id="payrollMonth" tabindex="-1" aria-hidden="true" />
+          </span>
           <button type="button" class="pr-icon-btn" id="payrollNextMonth" aria-label="다음 달">›</button>
         </div>
         <div id="payrollStaffChips" class="payroll-chips"></div>

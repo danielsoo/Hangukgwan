@@ -47,6 +47,8 @@ function check(name, cond, extra = "") {
   await page.fill("#payrollMonth", "2026-06");
   await page.dispatchEvent("#payrollMonth", "change");
   await page.waitForTimeout(600);
+  // 2026-10-03 사장님: "저 위에 october 이렇게 되어있는데 한국어로 해줘"
+  check("★★ 달 이름은 「2026년 6월」 — 브라우저 말(June 2026)이 아니다", (await page.locator("#payrollMonthLabel").innerText()).trim() === "2026년 6월" && (await page.locator("#payrollMonthLabel").isVisible()), await page.locator("#payrollMonthLabel").innerText());
   {
     const hrs = await page.locator("#payrollHours").innerText();
     // 2026-10-03 사장님: "아침 09:00 - 14:00 / 저녁 16:30 - 21:00 … 시급 220"
@@ -62,6 +64,17 @@ function check(name, cond, extra = "") {
     const m1 = await page.inputValue("#payrollMonth");
     await page.click("#payrollPrevMonth");
     await page.waitForTimeout(300);
+    await page.click("#payrollNextMonth");
+    await page.waitForTimeout(500);
+    check("★ › 누르면 이름도 「2026년 7월」, 중국어로 바꾸면 「2026年7月」", (await page.locator("#payrollMonthLabel").innerText()).trim() === "2026년 7월", await page.locator("#payrollMonthLabel").innerText());
+    await page.locator('.admin-lang-btn[data-admin-lang="zh"]').first().click();
+    await page.waitForTimeout(300);
+    const zh = (await page.locator("#payrollMonthLabel").innerText()).trim();
+    await page.locator('.admin-lang-btn[data-admin-lang="ko"]').first().click();
+    await page.waitForTimeout(300);
+    check("중국어 「2026年7月」", zh === "2026年7月", zh);
+    await page.click("#payrollPrevMonth");
+    await page.waitForTimeout(500);
     check("★ 달 ‹ › 로 한 달씩", m1 === "2026-07" && (await page.inputValue("#payrollMonth")) === m0, `${m0} → ${m1}`);
   }
   check("직원이 없으면 그렇게 말한다", /직원이 없어요/.test(await page.locator("#payrollSummary").innerText()), "");
