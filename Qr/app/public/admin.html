@@ -277,10 +277,15 @@
           <label class="payroll-inactive"><input type="checkbox" id="payrollStaffInactive" /> <span data-i18n="payrollInactive">그만둔 직원</span></label>
         </div>
         <div class="payroll-actions">
+          <!-- 카드 사진 → 표(2026-10-03 사장님: "사진 넣으면 자동으로 넣는 걸 넣어줘").
+               읽은 값은 표에 채울 뿐 저장하지 않는다 — 보고 「카드 저장」. -->
+          <label class="btn small payroll-photo-btn"><span data-i18n="payrollPhotoBtn">📷 카드 사진으로 채우기</span>
+            <input type="file" id="payrollPhoto" accept="image/*" multiple hidden /></label>
           <button type="button" class="btn small" id="payrollConfirmAll" data-i18n="payrollConfirmAll">✓ 초과 시간 모두 확인</button>
           <button type="button" class="btn primary" id="payrollSaveCard" data-i18n="payrollSaveCard">카드 저장</button>
           <span id="payrollStatus" class="payroll-status"></span>
         </div>
+        <div id="payrollPhotoMsg" class="payroll-photo-msg" hidden></div>
         <div class="payroll-grid-wrap"><table id="payrollGrid" class="payroll-grid"></table></div>
         <div id="payrollResult" class="payroll-result"></div>
       </div>

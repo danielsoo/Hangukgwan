@@ -294,8 +294,14 @@ git checkout -- Qr/app/package-lock.json
   시급이 없으면 월급 ÷ 240). 최저임금(2026: 월 29,500 · 시 196)은 **올리지 않고 경고만**.
 - 저장은 `payroll_staff`·`payroll_cards`(「직원|YYYY-MM」 자연 키)·`payroll_settings`
   컬렉션. store 문서와 `nextId` 를 쓰지 않는다.
-- 카드 사진 자동 읽기는 **아직 없다** — 직원 이름·근태가 담긴 사진을 바깥 AI 로 보내는
-  일이라 사장님이 정하실 일로 남겨 두었다.
+- **카드 사진으로 채우기**(2026-10-03 사장님: "사진 넣으면 자동으로 넣는 걸 넣어줘").
+  화면이 사진을 줄여 `POST /api/payroll/read-card` 로 보내고, 서버가 Claude(`claude-opus-5-5`,
+  `@anthropic-ai/sdk`, 구조화 출력)로 표를 읽는다(`src/payrollVision.js`). 사진에는 직원
+  이름·근태가 있다 — 바깥 AI 로 간다는 것을 들으시고 정하신 일이다. 사진은 저장하지 않는다.
+  읽은 값은 **표에 채우기만** 하고 저장은 사장님이 「카드 저장」(파란 글씨 = 읽은 칸, 노란 칸
+  = 확실치 않은 칸). 다른 달 카드는 채우지 않고 말한다. 키는 Vercel 환경변수
+  `ANTHROPIC_API_KEY` 에만 — 없으면 화면이 그렇게 말하고 손 입력은 그대로 된다.
+  시험은 가짜 클라이언트(`setClientForTest`)로 한다 — `test/payroll-vision.test.js`.
 
 ## store 문서를 통째로 쓰지 않는다
 

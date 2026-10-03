@@ -117,6 +117,51 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(900);
   check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /합계\s*NT\$4,400/.test(await page.locator("#payrollResult").innerText()), "");
 
+  out.push("\n[📷 카드 사진으로 채우기 — 2026-10-03]");
+  {
+    // 진짜 Claude 대신 가짜 — ★ 카드(6월)를 읽었다고 답한다.
+    const V = require("../src/payrollVision");
+    const answer = {
+      name: "劉芷芸", roc_year: 115, month: 6, star: true,
+      days: [
+        { day: 12, am_in: "09:04", am_out: "14:00", pm_in: "16:11", pm_out: "21:08", ot_in: null, ot_out: null },
+        { day: 19, am_in: "09:00", am_out: "14:07", pm_in: "16:07", pm_out: "21:06", ot_in: null, ot_out: null },
+      ],
+      unclear: [{ day: 19, slot: "pm_out", note: "smudged" }],
+    };
+    let calls = 0;
+    V.setClientForTest({ beta: { messages: { create: async () => { calls++; return { stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(answer) }] }; } } } });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(600);
+    await page.locator('.admin-tabs button[data-tab="payroll"]').click();
+    await page.fill("#payrollMonth", "2026-06");
+    await page.dispatchEvent("#payrollMonth", "change");
+    await page.waitForTimeout(700);
+    await page.locator("#payrollStaffChips button").first().click();
+    await page.waitForTimeout(800);
+    check("「📷 카드 사진으로 채우기」 버튼", /카드 사진/.test(await page.locator(".payroll-photo-btn").innerText()), "");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    await page.setInputFiles("#payrollPhoto", { name: "card.png", mimeType: "image/png", buffer: png });
+    await page.waitForTimeout(1500);
+    const msg = await page.locator("#payrollPhotoMsg").innerText();
+    check("★★ 「★ 카드에서 2일을 읽었어요」", /★ 카드에서 2일을 읽었어요/.test(msg), msg);
+    check("★★ 12일이 표에 들어가고 ★ 가 켜진다", (await page.locator('#payrollGrid tr[data-day="12"] input[data-slot="pm_out"]').inputValue()) === "21:08" && (await page.locator('#payrollGrid tr[data-day="12"] input.pg-star').isChecked()), "");
+    check("★ 읽은 칸은 파란 글씨", await page.locator('#payrollGrid tr[data-day="12"] input[data-slot="am_in"]').evaluate((el) => el.classList.contains("is-read")), "");
+    check("★ 확실치 않은 칸(19일 오후 퇴근)은 노란 칸", await page.locator('#payrollGrid tr[data-day="19"] input[data-slot="pm_out"]').evaluate((el) => el.classList.contains("is-unclear")), "");
+    check("★★ 저장 전 — 「저장 안 됨」(사진만으로 저장하지 않는다)", /저장 안 됨/.test(await page.locator("#payrollStatus").innerText()), "");
+    check("결과에 ★ 날이 늘었다(1 → 3)", /★3일/.test(await page.locator("#payrollResult").innerText()), await page.locator("#payrollResult").innerText());
+    // 다른 달 카드는 채우지 않고 말한다.
+    answer.month = 7;
+    await page.setInputFiles("#payrollPhoto", { name: "card.png", mimeType: "image/png", buffer: png });
+    await page.waitForTimeout(1500);
+    check("★ 다른 달 카드는 채우지 않고 이유를 말한다", /2026-07 카드예요/.test(await page.locator("#payrollPhotoMsg").innerText()), await page.locator("#payrollPhotoMsg").innerText());
+    check("모델을 두 번 불렀다", calls === 2, String(calls));
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    check("저장하면 저장된다", /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
+    V.setClientForTest(null);
+  }
+
   out.push("\n[잘못 친 시각]");
   const bad = page.locator('#payrollGrid tr[data-day="9"] input[data-slot="am_in"]');
   await bad.fill("2599");

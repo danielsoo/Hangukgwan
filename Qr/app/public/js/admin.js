@@ -1492,6 +1492,24 @@
       payrollSaveStaff: "직원 정보 저장",
       payrollInactive: "그만둔 직원",
       payrollConfirmAll: "✓ 초과 시간 모두 확인",
+      payrollPhotoBtn: "📷 카드 사진으로 채우기",
+      payrollPhotoReading: "사진 읽는 중… ({i}/{n})",
+      payrollPhotoOne: "사진 {i}: {star}카드에서 {n}일을 읽었어요.",
+      payrollPhotoCheck: "파란 글씨가 사진에서 읽은 칸, 노란 칸은 확실하지 않은 칸이에요. 카드와 맞춰 보고 「카드 저장」을 누르세요.",
+      payrollPhotoOtherMonth: "이 사진은 {got} 카드예요(지금 {want}). 위에서 달을 바꾸고 다시 올려 주세요.",
+      payrollPhotoOtherName: "사진의 이름은 「{got}」이에요(지금 {want}). 맞는 직원인지 확인하세요.",
+      payrollPhotoFailed: "사진 {i}을 읽지 못했어요 — {why}",
+      payrollPhotoUnclear: "확실하지 않음",
+      payrollPhotoNoKey: "사진 읽기를 쓰려면 Vercel 환경변수 ANTHROPIC_API_KEY 가 있어야 해요. 그 전까지는 표에 직접 넣어 주세요.",
+      payrollPhotoErr_no_vision_key: "사진 읽기 키(ANTHROPIC_API_KEY)가 없어요",
+      payrollPhotoErr_vision_key_rejected: "사진 읽기 키가 맞지 않아요",
+      payrollPhotoErr_vision_busy: "잠시 뒤에 다시 해 주세요(요청이 많아요)",
+      payrollPhotoErr_bad_image: "사진 파일이 아니에요",
+      payrollPhotoErr_vision_unreadable: "카드 표를 찾지 못했어요 — 카드가 화면에 꽉 차게 다시 찍어 주세요",
+      payrollPhotoErr_vision_refused: "읽기를 거절당했어요",
+      payrollPhotoErr_vision_bad_request: "요청이 잘못됐어요",
+      payrollPhotoErr_vision_failed: "읽는 곳에서 오류가 났어요",
+      payrollPhotoErr_vision_unreachable: "읽는 곳에 연결하지 못했어요",
       payrollSaveCard: "카드 저장",
       payrollRulesTitle: "초과 시간 규칙",
       payrollThreshold: "영업시간 끝을 몇 분 넘기면 0.5시간",
@@ -2477,6 +2495,24 @@
       payrollSaveStaff: "儲存員工資料",
       payrollInactive: "已離職",
       payrollConfirmAll: "✓ 全部加班確認",
+      payrollPhotoBtn: "📷 用考勤卡照片填入",
+      payrollPhotoReading: "讀取照片中…（{i}/{n}）",
+      payrollPhotoOne: "照片 {i}：從{star}考勤卡讀到 {n} 天。",
+      payrollPhotoCheck: "藍字是從照片讀到的格子，黃色格是不確定的格子。請對照考勤卡後按「儲存考勤卡」。",
+      payrollPhotoOtherMonth: "這張照片是 {got} 的考勤卡（目前是 {want}）。請先在上方切換月份再上傳。",
+      payrollPhotoOtherName: "照片上的姓名是「{got}」（目前是 {want}）。請確認是否為同一位員工。",
+      payrollPhotoFailed: "無法讀取照片 {i} — {why}",
+      payrollPhotoUnclear: "不確定",
+      payrollPhotoNoKey: "要使用照片讀取，需要在 Vercel 環境變數設定 ANTHROPIC_API_KEY。在那之前請直接填表。",
+      payrollPhotoErr_no_vision_key: "沒有照片讀取金鑰（ANTHROPIC_API_KEY）",
+      payrollPhotoErr_vision_key_rejected: "照片讀取金鑰不正確",
+      payrollPhotoErr_vision_busy: "請稍後再試（請求太多）",
+      payrollPhotoErr_bad_image: "不是照片檔",
+      payrollPhotoErr_vision_unreadable: "找不到考勤卡表格 — 請讓考勤卡佔滿畫面重新拍攝",
+      payrollPhotoErr_vision_refused: "讀取被拒絕",
+      payrollPhotoErr_vision_bad_request: "請求有誤",
+      payrollPhotoErr_vision_failed: "讀取服務發生錯誤",
+      payrollPhotoErr_vision_unreachable: "無法連線到讀取服務",
       payrollSaveCard: "儲存考勤卡",
       payrollRulesTitle: "加班計算規則",
       payrollThreshold: "超過營業結束幾分鐘算 0.5 小時",
@@ -13040,7 +13076,7 @@
   // 「25분 넘기면 0.5」로 **제안만** 하고, 사장님이 ✓ 하거나 −/+ 로 고쳐야 확정이다
   // ("확정짓지 말고 사장이 한 번 더 확인하는 걸로").
   const PAYROLL_SLOTS = ["am_in", "am_out", "pm_in", "pm_out", "ot_in", "ot_out"];
-  const payroll = { month: null, staff: [], current: null, days: {}, result: null, dirty: false, seq: 0 };
+  const payroll = { month: null, staff: [], current: null, days: {}, result: null, dirty: false, seq: 0, vision: false, unclear: {}, read: {} };
   const payrollThisMonth = () => {
     const d = new Date(Date.now() + 8 * 3600000);
     return d.toISOString().slice(0, 7);
@@ -13069,6 +13105,7 @@
       payroll.staff = st.staff || [];
       const ru = rules.rules || {};
       payrollRenderHours(rules.business_hours);
+      payroll.vision = !!rules.vision;
       if ($("#payrollThreshold")) $("#payrollThreshold").value = ru.ot_threshold_min || 25;
       if ($("#payrollStep")) $("#payrollStep").value = ru.ot_step_min || 30;
     } catch (e) {
@@ -13125,6 +13162,9 @@
     const d = await res.json();
     payroll.current = d.staff;
     payroll.days = JSON.parse(JSON.stringify(d.card.days || {}));
+    payroll.unclear = {};
+    payroll.read = {};
+    $("#payrollPhotoMsg").hidden = true;
     payroll.result = d.result;
     payroll.dirty = false;
     $("#payrollEditor").hidden = false;
@@ -13158,7 +13198,12 @@
       rows.push(`<tr data-day="${i}" class="${d.star ? "is-star" : ""}${dow === 0 || dow === 6 ? " is-weekend" : ""}">
         <td class="pg-day">${i}<small>${escapeHtml(wd[dow] || "")}</small></td>
         <td><input type="checkbox" class="pg-star" ${d.star ? "checked" : ""} /></td>
-        ${PAYROLL_SLOTS.map((s) => `<td><input class="pg-t" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="--:--" value="${escapeHtml(d[s] || "")}" /></td>`).join("")}
+        ${PAYROLL_SLOTS.map((s) => {
+          const key = `${i}|${s}`;
+          const unclear = payroll.unclear[key];
+          const cls = `pg-t${unclear ? " is-unclear" : ""}${payroll.read[key] ? " is-read" : ""}`;
+          return `<td><input class="${cls}" data-slot="${s}" inputmode="numeric" maxlength="5" placeholder="--:--" value="${escapeHtml(d[s] || "")}"${unclear ? ` title="${escapeHtml(unclear)}"` : ""} /></td>`;
+        }).join("")}
         <td class="pg-ot"></td>
       </tr>`);
     }
@@ -13171,6 +13216,8 @@
         if (v === null) return;
         inp.value = v;
         const day = inp.closest("tr").dataset.day;
+        delete payroll.unclear[`${day}|${inp.dataset.slot}`];
+        inp.classList.remove("is-unclear");
         const d = (payroll.days[day] = payroll.days[day] || {});
         if (v) d[inp.dataset.slot] = v;
         else delete d[inp.dataset.slot];
@@ -13277,6 +13324,110 @@
     renderPayrollOtCells();
     renderPayrollResult();
   }
+  // ---- 카드 사진으로 채우기 (src/payrollVision.js) ----
+  // 사진은 서버가 Claude 에 보내 표로 읽어 온다. 읽은 값은 표에 **채우기만** 하고
+  // 저장은 사장님이 본 뒤 「카드 저장」. 확실치 않은 칸은 노랗게, 읽은 칸은 파랗게.
+  function payrollShrinkPhoto(file) {
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const max = 2200;
+        const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * k);
+        c.height = Math.round(img.naturalHeight * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        c.toBlob((b) => resolve(b || file), "image/jpeg", 0.88);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  }
+  function payrollPhotoMsg(lines, bad) {
+    const el = $("#payrollPhotoMsg");
+    el.hidden = !lines.length;
+    el.classList.toggle("is-bad", !!bad);
+    el.innerHTML = lines.map((l) => `<div>${escapeHtml(l)}</div>`).join("");
+  }
+  /** 읽은 카드 한 장을 표에 얹는다. 돌려주는 값: 채운 날 수(달이 다르면 -1). */
+  function payrollApplyCard(card, msgs) {
+    const want = payroll.month;
+    if (card.year && card.month) {
+      const got = `${card.year}-${String(card.month).padStart(2, "0")}`;
+      if (got !== want) {
+        msgs.push(T("payrollPhotoOtherMonth").replace("{got}", got).replace("{want}", want));
+        return -1;
+      }
+    }
+    if (card.name && payroll.current && card.name.replace(/\s/g, "") !== payroll.current.name.replace(/\s/g, "")) {
+      msgs.push(T("payrollPhotoOtherName").replace("{got}", card.name).replace("{want}", payroll.current.name));
+    }
+    const [yy, mm] = want.split("-").map(Number);
+    const dim = new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+    let n = 0;
+    for (const [day, row] of Object.entries(card.days || {})) {
+      if (Number(day) > dim) continue;
+      const d = (payroll.days[day] = payroll.days[day] || {});
+      for (const sl of PAYROLL_SLOTS) {
+        if (row[sl]) {
+          d[sl] = row[sl];
+          payroll.read[`${day}|${sl}`] = true;
+        }
+      }
+      if (card.star) d.star = true;
+      else delete d.star;
+      // 시각이 새로 들어왔으니 초과 시간은 다시 제안부터.
+      delete d.ot_hours;
+      delete d.ot_confirmed;
+      n++;
+    }
+    for (const u of card.unclear || []) {
+      for (const sl of u.slot ? [u.slot] : PAYROLL_SLOTS) payroll.unclear[`${u.day}|${sl}`] = u.note || T("payrollPhotoUnclear");
+    }
+    return n;
+  }
+  if ($("#payrollPhoto"))
+    $("#payrollPhoto").onchange = async (e) => {
+      const files = [...(e.target.files || [])];
+      e.target.value = "";
+      if (!files.length || !payroll.current) return;
+      if (!payroll.vision) return payrollPhotoMsg([T("payrollPhotoNoKey")], true);
+      const msgs = [];
+      let filled = 0;
+      let failed = 0;
+      for (let k = 0; k < files.length; k++) {
+        payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", k + 1).replace("{n}", files.length)]);
+        const fd = new FormData();
+        fd.append("photo", await payrollShrinkPhoto(files[k]), "card.jpg");
+        let r = null;
+        try {
+          r = await (await fetch("/api/payroll/read-card", { method: "POST", body: fd })).json();
+        } catch (err) {
+          r = { ok: false, error: "vision_unreachable" };
+        }
+        if (!r || !r.ok) {
+          failed++;
+          msgs.push(T("payrollPhotoFailed").replace("{i}", k + 1).replace("{why}", T(`payrollPhotoErr_${(r && r.error) || "vision_failed"}`) || (r && r.error) || ""));
+          continue;
+        }
+        const n = payrollApplyCard(r.card, msgs);
+        if (n > 0) {
+          filled += n;
+          msgs.push(T("payrollPhotoOne").replace("{i}", k + 1).replace("{star}", r.card.star ? "★ " : "").replace("{n}", n));
+        }
+      }
+      if (filled) {
+        msgs.push(T("payrollPhotoCheck"));
+        renderPayrollGrid();
+        payrollChanged();
+      }
+      payrollPhotoMsg(msgs, !filled && (failed || msgs.length));
+    };
   if ($("#payrollMonth"))
     $("#payrollMonth").onchange = async () => {
       if (payroll.dirty && !(await showConfirm(T("payrollDiscard")))) {

@@ -1,13 +1,19 @@
 // 직원 급여 — 사장님만(src/payroll.js 머리말).
 const express = require("express");
+const multer = require("multer");
 const { getDb, connectDB, store } = require("../db");
 const openHours = require("../openHours");
 const { requireOwner } = require("../auth");
 const { nowLocal } = require("../time");
 const P = require("../payroll");
+const vision = require("../payrollVision");
 
 const router = express.Router();
 router.use(requireOwner);
+
+// 카드 사진 — 메모리에서 읽고 버린다(저장하지 않는다). Vercel 요청 한도(4.5MB)
+// 안에 들도록 화면이 미리 줄여서 보낸다.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 4 * 1024 * 1024 } });
 
 const col = async (name) => {
   await connectDB();
@@ -40,7 +46,7 @@ function compute(card, staff, rules) {
 const staffOut = (s) => ({ id: String(s._id), name: s.name, pay_type: s.pay_type, hourly_rate: s.hourly_rate, monthly_salary: s.monthly_salary, active: s.active !== false });
 
 router.get("/status", async (req, res) => {
-  res.json({ min_wage: P.MIN_WAGE, rules: await loadRules(), business_hours: businessHours() });
+  res.json({ vision: vision.hasKey(), min_wage: P.MIN_WAGE, rules: await loadRules(), business_hours: businessHours() });
 });
 
 router.put("/rules", async (req, res) => {
@@ -123,6 +129,14 @@ router.get("/summary", async (req, res) => {
       return { staff: staffOut(s), has_card: !!c, normal_days: r.normal_days, star_days: r.star_days, ot_hours: r.ot_hours, total: r.total, unconfirmed_days: r.unconfirmed_days, warnings: r.warnings };
     });
   res.json({ month, rows, total: rows.reduce((a, r) => a + r.total, 0) });
+});
+
+// 카드 사진 → 표. **저장하지 않는다** — 화면이 표에 채우고 사장님이 「카드 저장」.
+router.post("/read-card", upload.single("photo"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ ok: false, error: "bad_image" });
+  const r = await vision.readCard(req.file.buffer, req.file.mimetype);
+  if (!r.ok) return res.status(r.error === "no_vision_key" ? 503 : r.error === "bad_image" ? 400 : 502).json(r);
+  res.json(r);
 });
 
 module.exports = router;

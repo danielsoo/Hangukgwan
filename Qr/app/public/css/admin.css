@@ -2710,3 +2710,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-result .pr-warn { color: #b5232c; font-weight: 700; margin: 4px 0; }
 .payroll-result .pr-days { font-weight: 700; margin-bottom: 4px; }
 .payroll-rules { margin-top: 18px; }
+.payroll-photo-btn { cursor: pointer; }
+.payroll-photo-msg { font-size: 14px; margin: 0 0 8px; padding: 8px 10px; border-radius: 8px; background: rgba(31, 138, 76, 0.1); }
+.payroll-photo-msg.is-bad { background: rgba(181, 35, 44, 0.1); color: #b5232c; font-weight: 700; }
+.payroll-photo-msg div + div { margin-top: 3px; }
+.payroll-grid input.pg-t.is-unclear { border-color: #e0a800; background: rgba(240, 180, 0, 0.18); }
+.payroll-grid input.pg-t.is-read { color: #1f6fb5; }
