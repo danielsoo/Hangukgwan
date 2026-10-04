@@ -67,6 +67,7 @@
       <button data-tab="vip" class="owner-only" data-i18n="tabVip">회원(VIP)</button>
       <button data-tab="accounts" class="owner-only" data-i18n="tabAccounts">계정</button>
       <button data-tab="payroll" class="owner-only" data-i18n="tabPayroll">💰 급여</button>
+      <button data-tab="ingredients" class="owner-only" data-i18n="tabIngredients">🧾 식자재</button>
       <button data-tab="settlement" data-i18n="tabSettlement">결산</button>
       <button data-tab="settings" data-i18n="tabSettings">설정</button>
     </nav>
@@ -408,6 +409,69 @@
         <summary data-i18n="payrollHelpTitle">ⓘ 이렇게 써요</summary>
         <p class="settings-hint" data-i18n="payrollHint">출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.</p>
       </details>
+    </section>
+
+    <!-- 식자재 (매입) TAB — 「무엇을 · 얼마에 · 몇 개 샀나」.
+         2026-10-04 사장님: "그냥 뭘 얼마에 몇개 샀다는 걸 바라는거야" /
+         "gitignore 추가하고 가져오기부터 해줘, 사장님만 보이게."
+         사장님이 2025-01 부터 엑셀로 적어 오신 20,877줄을 가져오는 것이
+         시작이다 — 화면 로직은 public/js/ingredients.js. -->
+    <section id="tab-ingredients" class="tab-panel owner-only" hidden>
+      <div class="ing-shell">
+        <div class="ing-toolbar">
+          <label class="ing-field">
+            <span data-i18n="ingStore">지점</span>
+            <select id="ingStore">
+              <option value="all" data-i18n="ingStoreAll">전체</option>
+            </select>
+          </label>
+          <label class="ing-field">
+            <span data-i18n="ingStart">시작</span>
+            <input type="date" id="ingStart" />
+          </label>
+          <label class="ing-field">
+            <span data-i18n="ingEnd">끝</span>
+            <input type="date" id="ingEnd" />
+          </label>
+          <button type="button" id="ingAllPeriod" data-i18n="ingAllPeriod">전체 기간</button>
+          <button type="button" id="ingReload" class="primary" data-i18n="ingReload">보기</button>
+          <span class="ing-spacer"></span>
+          <button type="button" id="ingImportBtn" data-i18n="ingImportBtn">⬆️ 엑셀 가져오기</button>
+          <input type="file" id="ingImportFile" accept=".xlsx" hidden />
+        </div>
+
+        <p class="ing-note" id="ingMeta"></p>
+        <div class="ing-import-log" id="ingImportLog" hidden></div>
+
+        <div class="ing-hero">
+          <div class="ing-hero-label" data-i18n="ingTotalLabel">이 기간 식자재비</div>
+          <div class="ing-hero-value" id="ingTotal">NT$0</div>
+          <div class="ing-hero-sub" id="ingTotalSub"></div>
+        </div>
+
+        <div class="ing-block">
+          <h3 class="ing-block-title" data-i18n="ingMonthsTitle">📈 달마다</h3>
+          <div class="ing-bars" id="ingMonths"></div>
+        </div>
+
+        <div class="ing-two">
+          <div class="ing-block">
+            <h3 class="ing-block-title" data-i18n="ingVendorsTitle">🏪 업체별</h3>
+            <div class="ing-bars" id="ingVendors"></div>
+          </div>
+          <div class="ing-block">
+            <h3 class="ing-block-title" data-i18n="ingItemsTitle">🥬 품목별</h3>
+            <p class="ing-note" data-i18n="ingItemsHint">품목을 누르면 단가가 언제 얼마였는지 봅니다.</p>
+            <div class="ing-bars" id="ingItems"></div>
+          </div>
+        </div>
+
+        <div class="ing-block" id="ingPriceBlock" hidden>
+          <h3 class="ing-block-title" id="ingPriceTitle"></h3>
+          <div id="ingPriceChart" class="ing-price-chart"></div>
+          <div class="ing-rows" id="ingPriceRows"></div>
+        </div>
+      </div>
     </section>
 
     <!-- SETTLEMENT (결산) TAB — 매출을 보여준다.
@@ -2092,6 +2156,11 @@
 <script src="/js/season.js"></script>
 <script src="/js/qz-tray.js"></script>
 <script src="/js/escpos.js"></script>
+<!-- 엑셀을 기기 안에서 읽는다(식자재 가져오기). admin.js 보다 먼저 와야
+     window.HG_XLSX 가 준비된다. -->
+<script src="/js/xlsx-lite.js"></script>
 <script src="/js/admin.js"></script>
+<!-- 식자재 탭. admin.js 가 만든 T()/money() 를 쓰므로 뒤에 온다. -->
+<script src="/js/ingredients.js"></script>
 </body>
 </html>

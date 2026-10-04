@@ -434,6 +434,7 @@ app.use("/api/bootstrap", require("./src/routes/bootstrap"));
 app.use("/api/_diag", require("./src/routes/diag"));
 app.use("/api/members", require("./src/routes/members"));
 app.use("/api/payroll", require("./src/routes/payroll"));
+app.use("/api/ingredients", require("./src/routes/ingredients"));
 
 // Only start a listening server for local dev / Railway / Render. On
 // Vercel this file is required by api/index.js as a plain request handler

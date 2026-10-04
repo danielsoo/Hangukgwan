@@ -15,7 +15,8 @@
 const bcrypt = require("bcryptjs");
 const { store, saveFields } = require("./db");
 
-const AREAS = ["payroll", "settlement"];
+// 2026-10-04: 식자재(매입 금액)도 같은 자리다 — 사장님: "사장님만 보이게."
+const AREAS = ["payroll", "settlement", "ingredients"];
 const TTL_MS = 15 * 60 * 1000;
 const MAX_FAILS = 5;
 const BLOCK_MS = 5 * 60 * 1000;

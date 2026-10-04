@@ -1512,6 +1512,33 @@
       tabVip: "회원(VIP)",
       tabAccounts: "계정",
       tabPayroll: "💰 급여",
+      tabIngredients: "🧾 식자재",
+      ingStore: "지점",
+      ingStoreAll: "전체",
+      ingStart: "시작",
+      ingEnd: "끝",
+      ingAllPeriod: "전체 기간",
+      ingReload: "보기",
+      ingImportBtn: "⬆️ 엑셀 가져오기",
+      ingTotalLabel: "이 기간 식자재비",
+      ingMonthsTitle: "📈 달마다",
+      ingVendorsTitle: "🏪 업체별",
+      ingItemsTitle: "🥬 품목별",
+      ingItemsHint: "품목을 누르면 단가가 언제 얼마였는지 봅니다.",
+      ingEmpty: "아직 가져온 것이 없어요. 오른쪽 위 「엑셀 가져오기」로 기록 엑셀을 넣어 주세요.",
+      ingMetaFmt: "지금 {lines}줄 · {first} ~ {last}",
+      ingMetaNone: "아직 비어 있어요.",
+      ingLinesFmt: "{n}줄",
+      ingPriceTitleFmt: "💰 「{name}」 단가",
+      ingPriceNone: "단가 기록이 없어요.",
+      ingImportPick: "식자재 기록 엑셀(.xlsx)을 고르세요.",
+      ingImportReading: "엑셀을 읽는 중이에요…",
+      ingImportNoSheet: "아는 시트가 없어요. 시트 이름에 「總店」 또는 「台元」 이 있어야 해요.",
+      ingImportSendingFmt: "{done} / {total}줄 보내는 중…",
+      ingImportDoneFmt: "✔ 가져왔어요 — {inserted}줄 ({skipped}줄은 날짜나 품목이 없어 건너뛰었어요)",
+      ingImportFailed: "가져오지 못했어요: ",
+      ingImportConfirmFmt: "「{file}」에서 {lines}줄을 읽었어요.\n\n넣는 날짜의 기록은 지우고 새로 넣습니다. 계속할까요?",
+      ingVendorAliasFmt: "{from} 는 {to} 로 모아서 셉니다 (같은 회사).",
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 맨 위 「⚙ 근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
@@ -2655,6 +2682,33 @@
       tabVip: "會員(VIP)",
       tabAccounts: "帳號",
       tabPayroll: "💰 薪資",
+      tabIngredients: "🧾 食材",
+      ingStore: "分店",
+      ingStoreAll: "全部",
+      ingStart: "開始",
+      ingEnd: "結束",
+      ingAllPeriod: "全部期間",
+      ingReload: "查看",
+      ingImportBtn: "⬆️ 匯入 Excel",
+      ingTotalLabel: "這段期間的食材支出",
+      ingMonthsTitle: "📈 每月",
+      ingVendorsTitle: "🏪 依廠商",
+      ingItemsTitle: "🥬 依品項",
+      ingItemsHint: "點品項可看單價何時是多少。",
+      ingEmpty: "還沒有匯入資料。請用右上角「匯入 Excel」放入紀錄檔。",
+      ingMetaFmt: "目前 {lines} 筆 · {first} ~ {last}",
+      ingMetaNone: "目前是空的。",
+      ingLinesFmt: "{n} 筆",
+      ingPriceTitleFmt: "💰「{name}」單價",
+      ingPriceNone: "沒有單價紀錄。",
+      ingImportPick: "請選擇食材紀錄 Excel（.xlsx）。",
+      ingImportReading: "正在讀取 Excel…",
+      ingImportNoSheet: "找不到認得的工作表。工作表名稱需含「總店」或「台元」。",
+      ingImportSendingFmt: "{done} / {total} 筆傳送中…",
+      ingImportDoneFmt: "✔ 已匯入 — {inserted} 筆（{skipped} 筆因缺日期或品項而略過）",
+      ingImportFailed: "匯入失敗：",
+      ingImportConfirmFmt: "從「{file}」讀到 {lines} 筆。\n\n這些日期的既有紀錄會先刪除再寫入。要繼續嗎？",
+      ingVendorAliasFmt: "{from} 會併入 {to} 計算（同一家公司）。",
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依最上方「⚙ 工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
@@ -4121,9 +4175,10 @@
   // 정산 추이처럼 전 데이터를 읽어오는 건 직원은 못 보게 해줘"). 날짜를
   // 못 박는 일은 서버가 한다(GET /api/settlements) — 화면에서 날짜 칸을
   // 감추는 것만으로는 막은 것이 아니다.
-  const OWNER_ONLY_TABS = new Set(["vip", "accounts", "payroll"]);
+  // 2026-10-04: 식자재(매입 금액)도 사장님만 — "사장님만 보이게."
+  const OWNER_ONLY_TABS = new Set(["vip", "accounts", "payroll", "ingredients"]);
   // 들어갈 때마다 비밀번호를 묻는 탭 → 서버 잠금 이름(src/sensitiveLock.js)
-  const LOCKED_TABS = { payroll: "payroll", settlement: "settlement" };
+  const LOCKED_TABS = { payroll: "payroll", settlement: "settlement", ingredients: "ingredients" };
 
   // 비밀번호 창. 맞히면 true, 취소하면 false. 틀리면 창에서 바로 말한다.
   function askSensitivePin(tab, label) {
@@ -4230,6 +4285,8 @@
       if (btn.dataset.tab === "vip") loadVipCards();
       if (btn.dataset.tab === "accounts") loadAccounts();
       if (btn.dataset.tab === "payroll") loadPayroll();
+      // 식자재 — 화면 로직은 public/js/ingredients.js 가 들고 있다.
+      if (btn.dataset.tab === "ingredients" && window.HG_INGREDIENTS) window.HG_INGREDIENTS.load();
       // 설정 > 인쇄의 「프로필별 터치 수」 — 들어올 때마다 새로 센다(보내지 않은 것도 먼저 보낸다).
       if (btn.dataset.tab === "settings") flushPadTouches().then(reportPadSeen).then(() => Promise.all([loadPadTouches(), loadPadDevices()]));
       // 결제 탭(item 22) — 배치도(zones)는 "테이블 / QR 코드" 탭에서만
@@ -18751,6 +18808,22 @@
     await fetch(`/api/reservations/${editingReservationId}`, { method: "DELETE" });
     $("#reservationModalBackdrop").hidden = true;
     loadReservations($("#reservationDateFilter").value || undefined);
+  };
+
+  // 식자재 탭(public/js/ingredients.js)이 쓰는 다리.
+  //
+  // 문구와 금액 서식은 **이 파일에 한 벌만** 둔다 — 두 벌이 되면 언젠가
+  // 어긋나고, i18n 빠짐을 재는 시험(test/i18n-parity.test.js)도 이 파일만
+  // 읽는다. 그래서 식자재 탭의 문구도 위 ADMIN_I18N 에 적혀 있다.
+  window.HG_ADMIN = {
+    T,
+    money,
+    escapeHtml,
+    showConfirm,
+    showAlert,
+    get lang() {
+      return adminLang;
+    },
   };
 
   applyAdminI18n();

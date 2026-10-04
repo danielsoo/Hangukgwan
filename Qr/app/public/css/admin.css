@@ -2901,3 +2901,60 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-saved-at .is-dirty-at { color: #b5232c; }
 .pr-ov-table td.pr-ov-saved { color: #6b625a; font-size: 13px; }
 .payroll-photo-msg .pm-warn { color: var(--pr-red); font-weight: 700; }
+
+/* ───────── 식자재 탭 (2026-10-04) ─────────
+   「무엇을 · 얼마에 · 몇 개 샀나」. 결산 탭과 같은 뼈대를 쓴다 — 두 화면이
+   다른 모양이면 사장님이 매번 눈을 다시 맞춰야 한다. */
+.ing-shell { padding: 4px 2px 40px; }
+.ing-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 10px; }
+.ing-field { display: flex; flex-direction: column; gap: 3px; font-size: 14px; color: var(--muted); }
+.ing-field select, .ing-field input {
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: #fff;
+}
+.ing-toolbar button {
+  padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  font-size: 15px; cursor: pointer;
+}
+.ing-toolbar button:hover { background: var(--cream); }
+/* 가져오기 단추는 오른쪽 끝으로 민다 — 날마다 쓰는 것이 아니라 가끔 쓰는 것이다. */
+.ing-spacer { flex: 1 1 auto; }
+.ing-note { color: var(--muted); font-size: 14px; margin: 4px 0 10px; }
+.ing-import-log {
+  margin: 0 0 12px; padding: 9px 12px; border-radius: 8px;
+  background: var(--cream); border: 1px solid var(--line); font-size: 14.5px;
+}
+
+.ing-hero { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-bottom: 14px; }
+.ing-hero-label { color: var(--muted); font-size: 14px; }
+.ing-hero-value { font-size: 34px; font-weight: 800; line-height: 1.2; }
+.ing-hero-sub { color: var(--muted); font-size: 14px; }
+
+.ing-block { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+.ing-block-title { margin: 0 0 10px; font-size: 17px; }
+/* 업체와 품목을 나란히 — 둘을 같이 보는 일이 많다. 좁으면 한 줄로 내려간다. */
+.ing-two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 900px) { .ing-two { grid-template-columns: 1fr; } }
+
+/* 한 줄 = 이름 · 막대 · 금액 · 작은 글씨. 결산의 막대와 같은 모양이다. */
+.ing-bar {
+  display: grid; grid-template-columns: minmax(90px, 1.4fr) minmax(60px, 2fr) auto auto;
+  align-items: center; gap: 8px; padding: 5px 2px; font-size: 14.5px;
+}
+.ing-bar.clickable { cursor: pointer; border-radius: 6px; }
+.ing-bar.clickable:hover { background: #faf7f1; }
+.ing-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ing-bar-track { background: var(--cream); border-radius: 999px; height: 10px; overflow: hidden; }
+.ing-bar-fill { height: 100%; background: var(--brand, #c0392b); opacity: .8; }
+.ing-bar-value { text-align: right; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ing-bar-sub { text-align: right; color: var(--muted); font-size: 13px; white-space: nowrap; min-width: 54px; }
+
+/* 단가 추이 — 선 하나. 높이를 못 박아 둔다(viewBox 가 늘어나면 점이 뭉갠다). */
+.ing-price-chart { margin: 4px 0 10px; }
+.ing-price-chart svg { width: 100%; height: 140px; display: block; }
+.ing-rows { display: flex; flex-direction: column; }
+.ing-row {
+  display: grid; grid-template-columns: 96px 1fr auto auto; gap: 10px;
+  padding: 5px 2px; border-top: 1px solid var(--line); font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+}
+.ing-row:first-child { border-top: none; }
