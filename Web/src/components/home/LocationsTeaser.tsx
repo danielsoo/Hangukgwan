@@ -2,6 +2,7 @@
 
 import { useLanguage } from '@/context/LanguageContext'
 import { useTranslatedInfo } from '@/lib/useTranslatedInfo'
+import { LOCATION_PHOTOS } from '@/lib/locationPhotos'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
 
 export default function LocationsTeaser() {
@@ -42,7 +43,11 @@ export default function LocationsTeaser() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 'clamp(36px, 5vw, 72px)' }}>
           <div>
             <div style={{ position: 'relative', aspectRatio: '16 / 10', marginBottom: 30 }}>
-              <ImagePlaceholder label="本店 · Main restaurant" />
+              <ImagePlaceholder
+                label="本店 · Main restaurant"
+                src={LOCATION_PHOTOS.main.card}
+                alt="韓國館 縣政九路本店 야간 외관"
+              />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>
               <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 01</span>
@@ -80,7 +85,11 @@ export default function LocationsTeaser() {
 
           <div>
             <div style={{ position: 'relative', aspectRatio: '16 / 10', marginBottom: 30 }}>
-              <ImagePlaceholder label="直營店 · Corporate branch" />
+              <ImagePlaceholder
+                label="直營店 · Corporate branch"
+                src={LOCATION_PHOTOS.branch.card}
+                alt="韓國館 太元一街直營店 카운터"
+              />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>
               <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.2em', color: 'var(--muted)' }}>Nº 02</span>

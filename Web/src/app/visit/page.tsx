@@ -2,6 +2,7 @@
 
 import { useLanguage } from '@/context/LanguageContext'
 import { useTranslatedInfo } from '@/lib/useTranslatedInfo'
+import { LOCATION_PHOTOS } from '@/lib/locationPhotos'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
 
 export default function VisitPage() {
@@ -41,7 +42,11 @@ export default function VisitPage() {
       <div style={{ display: 'grid', gap: 'clamp(48px, 6vw, 80px)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'start', paddingTop: 34, borderTop: '1px solid var(--gold-a28)' }}>
           <div style={{ position: 'relative', aspectRatio: '4 / 3' }}>
-            <ImagePlaceholder label="本店 · Main restaurant" />
+            <ImagePlaceholder
+              label="本店 · Main restaurant"
+              src={LOCATION_PHOTOS.main.detail}
+              alt="韓國館 縣政九路本店 외관"
+            />
           </div>
           <div>
             <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 16px' }}>
@@ -84,7 +89,11 @@ export default function VisitPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'start', paddingTop: 34, borderTop: '1px solid var(--gold-a28)' }}>
           <div style={{ position: 'relative', aspectRatio: '4 / 3' }}>
-            <ImagePlaceholder label="直營店 · Corporate branch" />
+            <ImagePlaceholder
+              label="直營店 · Corporate branch"
+              src={LOCATION_PHOTOS.branch.detail}
+              alt="韓國館 太元一街直營店 매장 전경"
+            />
           </div>
           <div>
             <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 16px' }}>
