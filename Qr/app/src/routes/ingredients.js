@@ -134,6 +134,76 @@ router.get("/rows", async (req, res) => {
 });
 
 /**
+ * 입력 화면이 고르게 할 목록.
+ *
+ * vendor 가 없으면 **업체 목록**(최근에 산 순), 있으면 그 업체의 **품목 목록**
+ * (최근·자주 산 순, 지난 단위와 지난 단가를 달아서).
+ *
+ * 2026-10-04 사장님: "종이를 보면서 엑셀에 기입하고 하는 과정이 너무 귀찮아서."
+ * 이 목록이 그 타이핑을 없애는 자리다.
+ */
+router.get("/catalog", async (req, res) => {
+  const q = req.query || {};
+  const c = await col();
+  const where = {};
+  const store = String(q.store || "").trim();
+  if (store && store !== "all") where.store = store;
+  const vendor = G.canonicalVendor(q.vendor);
+
+  if (!vendor) {
+    const rows = await c.find(where, { projection: { vendor: 1, date: 1, _id: 0 } }).toArray();
+    const by = new Map();
+    for (const r of rows) {
+      const v = by.get(r.vendor) || { vendor: r.vendor, count: 0, last_date: "" };
+      v.count += 1;
+      if (r.date > v.last_date) v.last_date = r.date;
+      by.set(r.vendor, v);
+    }
+    return res.json({
+      vendors: [...by.values()].sort((a, b) => b.last_date.localeCompare(a.last_date) || b.count - a.count),
+    });
+  }
+
+  const rows = await c.find({ ...where, vendor }, { projection: { _id: 0 } }).toArray();
+  // 「최근」은 90일로 본다 — 철 지난 재료가 목록 맨 위에 올라오지 않게.
+  const recentFrom = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
+  res.json({ vendor, items: G.buildCatalog(rows, { recentFrom }) });
+});
+
+/**
+ * 영수증 한 장을 손으로 넣는다(또는 고친다).
+ *
+ * 한 장 = (지점, 날짜, 업체). 다시 저장하면 그 한 장만 갈아끼운다 — 같은 날
+ * 다른 업체 영수증은 건드리지 않는다.
+ *
+ * **막지 않는다.** 새 품목도, 오른 단가도, 산수가 안 맞는 줄도 저장은 된다 —
+ * 종이에 그렇게 적혀 있으면 그게 사실이다. 이상한 자리는 화면이 노란 칸으로
+ * 보여주고 사장님이 정하신다(src/ingredients.js lineWarnings).
+ */
+router.post("/rows", async (req, res) => {
+  const b = req.body || {};
+  const store = String(b.store || "").trim();
+  if (!G.storeByKey(store)) return res.status(400).json({ error: "unknown_store" });
+  const date = G.anyDate(b.date);
+  if (!date) return res.status(400).json({ error: "bad_date" });
+  const vendor = G.canonicalVendor(b.vendor);
+  if (!vendor) return res.status(400).json({ error: "no_vendor" });
+  const lines = Array.isArray(b.lines) ? b.lines : [];
+  if (lines.length > 100) return res.status(400).json({ error: "too_many_lines" });
+
+  const rows = lines.map((l) => G.normalizeRow({ ...l, date, vendor, note: l.name_ko }, store)).filter(Boolean);
+
+  const c = await col();
+  // 그 한 장만 갈아끼운다.
+  const removed = await c.deleteMany({ store, date, vendor });
+  if (rows.length) {
+    const docs = G.withIds(rows);
+    await c.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
+  }
+  res.json({ ok: true, saved: rows.length, removed: (removed && removed.deletedCount) || 0 });
+});
+
+/**
  * 전부 지운다. 가져오기를 처음부터 다시 할 때만.
  *
  * 2만 줄을 되돌릴 방법이 없으므로 화면이 한 번 더 묻고, 여기서도 지점을

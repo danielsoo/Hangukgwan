@@ -2958,3 +2958,50 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-variant-numeric: tabular-nums;
 }
 .ing-row:first-child { border-top: none; }
+
+/* 영수증 넣기 — 식자재 탭의 주 작업이다.
+   2026-10-04 사장님: "종이를 보면서 엑셀에 기입하고 하는 과정이 너무 귀찮아서." */
+.ing-entry-head { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 8px; }
+.ing-field-wide { flex: 1 1 220px; }
+.ing-field-wide input { width: 100%; }
+.ing-entry-head input, .ing-entry-head select {
+  padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 16px; background: #fff;
+}
+.ing-entry-head button {
+  padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 15px; cursor: pointer;
+}
+.ing-entry-head button.primary { background: var(--brand, #c0392b); color: #fff; border-color: transparent; }
+
+/* 한 줄 = 품목 · 수량 · 단위 · 단가 · 금액 · 지우기. 경고는 그 아래 한 줄. */
+.ing-line {
+  display: grid; grid-template-columns: minmax(130px, 2.2fr) 80px 70px 90px 100px 34px;
+  gap: 6px; align-items: center; padding: 3px 0;
+}
+.ing-line-head { color: var(--muted); font-size: 13px; padding-bottom: 2px; }
+.ing-line input {
+  width: 100%; padding: 6px 7px; border: 1px solid var(--line); border-radius: 7px;
+  font-size: 15px; font-variant-numeric: tabular-nums;
+}
+/* 금액은 거의 늘 저절로 나온다 — 쳐야 하는 칸이 아니라는 것이 보이게 연하게. */
+.ing-in-amount { background: #faf7f1; font-weight: 700; }
+.ing-x { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: 16px; }
+.ing-x:hover { color: var(--brand, #c0392b); }
+/* 경고 줄은 품목 칸 아래로 들여쓴다 — 어느 줄의 말인지 보이게. */
+.ing-line-warn { grid-column: 1 / -1; padding: 0 0 4px 4px; font-size: 13px; min-height: 0; }
+.ing-warn { color: #b9770e; background: #fdf3df; border-radius: 999px; padding: 1px 8px; margin-right: 6px; }
+.ing-hint { color: var(--muted); margin-right: 6px; }
+.ing-new { color: #1e7e34; background: #e8f5ec; border-radius: 999px; padding: 1px 8px; }
+.ing-add-line {
+  margin-top: 6px; padding: 6px 12px; border: 1px dashed var(--line); border-radius: 8px;
+  background: #fff; cursor: pointer; font-size: 14.5px; color: var(--muted);
+}
+.ing-add-line:hover { background: var(--cream); }
+.ing-entry-foot {
+  display: flex; justify-content: flex-end; align-items: baseline; gap: 10px;
+  margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 16px;
+}
+.ing-entry-foot strong { font-size: 20px; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) {
+  .ing-line { grid-template-columns: 1fr 64px 56px 76px 86px 30px; }
+  .ing-line input { font-size: 14px; padding: 5px; }
+}

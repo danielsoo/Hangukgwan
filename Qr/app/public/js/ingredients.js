@@ -276,6 +276,16 @@
         sel.appendChild(o);
       }
     }
+    // 넣는 칸의 지점은 「전체」가 없다 — 영수증은 한 지점의 것이다.
+    const esel = $("#ingEntryStore");
+    if (esel && !esel.options.length) {
+      for (const s of m.stores || []) {
+        const o = document.createElement("option");
+        o.value = s.key;
+        o.textContent = s.name_ko;
+        esel.appendChild(o);
+      }
+    }
     const alias = Object.entries(m.vendor_aliases || {})
       .map(([from, to]) => fmt("ingVendorAliasFmt", { from, to }))
       .join(" ");
@@ -283,6 +293,204 @@
       ? `${fmt("ingMetaFmt", { lines: m.total, first: m.first, last: m.last })}${alias ? "  ·  " + alias : ""}`
       : T("ingMetaNone");
     return m;
+  }
+
+  // ───────── 영수증 넣기 ─────────
+  //
+  // 2026-10-04 사장님: "지금은 계속 종이를 보면서 엑셀에 기입하고 하는 과정이
+  // 너무 귀찮아서."
+  //
+  // 치는 것을 줄이는 길은 둘이다:
+  //   · 품목은 **그 업체에서 보통 사는 것** 중에서 고른다(가운데 8가지)
+  //   · 금액은 수량 × 단가로 **저절로** 나온다 (2만 줄에서 예외 0)
+  //
+  // 지난 단가는 먼저 채워 넣되 **옆에 「지난번 얼마」를 늘 보여준다.** 단가가
+  // 지난번과 같은 비율이 84.3% 였다 — 여섯 번에 한 번은 바뀐다. 바뀐 것을
+  // 못 보고 지나가면 여섯 장에 한 장이 틀린 금액이 된다(사장님 지적).
+  //
+  // 목록에 없는 품목은 **그냥 적으면 된다.** 이 목록은 울타리가 아니라
+  // 지름길이다.
+  let entryLines = [];
+  let catalog = { vendor: "", items: [] };
+
+  const blankLine = () => ({ name: "", name_ko: "", qty: "", unit: "", price: "", amount: "", amountEdited: false });
+  const knownOf = (name) => catalog.items.find((i) => i.name === String(name || "").trim()) || null;
+
+  function recalc(line) {
+    const q = Number(line.qty);
+    const p = Number(line.price);
+    if (!line.amountEdited && Number.isFinite(q) && Number.isFinite(p) && line.qty !== "" && line.price !== "") {
+      line.amount = Math.round(q * p * 100) / 100;
+    }
+  }
+
+  function warnHtml(line) {
+    const known = String(line.name || "").trim() ? knownOf(line.name) : undefined;
+    const bits = [];
+    const q = Number(line.qty) || 0;
+    const p = Number(line.price) || 0;
+    const a = Number(line.amount) || 0;
+    if (q && p && a && Math.abs(q * p - a) >= 0.5) {
+      bits.push(`<span class="ing-warn">${esc(fmt("ingWarnMathFmt", { expected: money(Math.round(q * p * 100) / 100) }))}</span>`);
+    }
+    if (known && known.last_price != null && p && p !== known.last_price) {
+      bits.push(`<span class="ing-warn">${esc(fmt("ingWarnPriceFmt", { last: money(known.last_price) }))}</span>`);
+    } else if (known && known.last_price != null) {
+      bits.push(`<span class="ing-hint">${esc(fmt("ingLastPriceFmt", { price: money(known.last_price), date: known.last_date }))}</span>`);
+    }
+    if (known === null && String(line.name || "").trim()) {
+      bits.push(`<span class="ing-new">${esc(T("ingWarnNewItem"))}</span>`);
+    }
+    return bits.join(" ");
+  }
+
+  function renderLines() {
+    const box = $("#ingEntryLines");
+    if (!box) return;
+    box.innerHTML = `
+      <div class="ing-line ing-line-head">
+        <span>${esc(T("ingColItem"))}</span><span>${esc(T("ingColQty"))}</span><span>${esc(T("ingColUnit"))}</span>
+        <span>${esc(T("ingColPrice"))}</span><span>${esc(T("ingColAmount"))}</span><span></span>
+      </div>
+      ${entryLines
+        .map(
+          (l, i) => `
+        <div class="ing-line" data-i="${i}">
+          <span><input list="ingItemList" class="ing-in-name" value="${esc(l.name)}" placeholder="${esc(T("ingItemPh"))}" /></span>
+          <span><input type="number" step="any" class="ing-in-qty" value="${esc(l.qty)}" /></span>
+          <span><input class="ing-in-unit" value="${esc(l.unit)}" /></span>
+          <span><input type="number" step="any" class="ing-in-price" value="${esc(l.price)}" /></span>
+          <span><input type="number" step="any" class="ing-in-amount" value="${esc(l.amount)}" /></span>
+          <span><button type="button" class="ing-x" title="${esc(T("ingRemoveLine"))}">✕</button></span>
+          <div class="ing-line-warn">${warnHtml(l)}</div>
+        </div>`
+        )
+        .join("")}`;
+
+    box.querySelectorAll(".ing-line[data-i]").forEach((el) => {
+      const i = Number(el.dataset.i);
+      const L = entryLines[i];
+      const bind = (sel, key, after) => {
+        const input = el.querySelector(sel);
+        if (!input) return;
+        input.oninput = () => {
+          L[key] = input.value;
+          if (after) after();
+        };
+        // 다 치고 칸을 떠날 때 다시 그린다 — 글자마다 다시 그리면 커서가 튄다.
+        input.onchange = () => {
+          L[key] = input.value;
+          if (after) after();
+          renderLines();
+          updateTotal();
+        };
+      };
+      bind(".ing-in-name", "name", () => {
+        const k = knownOf(L.name);
+        // 고른 품목의 지난 단위·단가를 **먼저 채워** 준다. 종이와 다르면
+        // 사장님이 고치시고, 그때 옆에 「지난번 얼마」가 뜬다.
+        if (k) {
+          if (!L.unit) L.unit = k.unit || "";
+          if (L.price === "") L.price = k.last_price;
+          if (!L.name_ko) L.name_ko = k.name_ko || "";
+          recalc(L);
+        }
+      });
+      bind(".ing-in-qty", "qty", () => recalc(L));
+      bind(".ing-in-price", "price", () => recalc(L));
+      bind(".ing-in-unit", "unit");
+      const amt = el.querySelector(".ing-in-amount");
+      if (amt) {
+        amt.oninput = () => {
+          L.amount = amt.value;
+          L.amountEdited = true;
+        };
+        amt.onchange = () => {
+          L.amount = amt.value;
+          L.amountEdited = true;
+          renderLines();
+          updateTotal();
+        };
+      }
+      el.querySelector(".ing-x").onclick = () => {
+        entryLines.splice(i, 1);
+        if (!entryLines.length) entryLines.push(blankLine());
+        renderLines();
+        updateTotal();
+      };
+    });
+    updateTotal();
+  }
+
+  function updateTotal() {
+    const sum = entryLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
+    if ($("#ingEntryTotal")) $("#ingEntryTotal").textContent = `NT$${money(Math.round(sum * 100) / 100)}`;
+  }
+
+  async function loadCatalog() {
+    const vendor = ($("#ingEntryVendor").value || "").trim();
+    const store = $("#ingEntryStore").value || "";
+    if (!vendor) {
+      catalog = { vendor: "", items: [] };
+      $("#ingEntryHint").textContent = T("ingEntryPickVendor");
+      $("#ingItemList").innerHTML = "";
+      renderLines();
+      return;
+    }
+    const res = await fetch(`/api/ingredients/catalog?vendor=${encodeURIComponent(vendor)}&store=${encodeURIComponent(store)}`);
+    catalog = res.ok ? await res.json() : { vendor, items: [] };
+    $("#ingEntryHint").textContent = fmt("ingEntryHintFmt", { vendor: catalog.vendor || vendor, n: catalog.items.length });
+    // 최근·자주 산 순으로 담는다 — 목록 맨 위가 손이 먼저 가는 자리다.
+    $("#ingItemList").innerHTML = catalog.items
+      .map((i) => `<option value="${esc(i.name)}">${esc(i.name_ko ? `${i.name_ko} · ${i.unit || ""} · NT$${i.last_price}` : i.name)}</option>`)
+      .join("");
+    renderLines();
+  }
+
+  async function saveEntry() {
+    const store = $("#ingEntryStore").value;
+    const date = $("#ingEntryDate").value;
+    const vendor = ($("#ingEntryVendor").value || "").trim();
+    if (!vendor) return logLine(esc(T("ingEntryNeedVendor")));
+    if (!date) return logLine(esc(T("ingEntryNeedDate")));
+    const lines = entryLines.filter((l) => String(l.name || "").trim() && (l.qty !== "" || l.amount !== ""));
+    if (!lines.length) return logLine(esc(T("ingEntryNeedLine")));
+
+    // 같은 날 같은 업체 영수증이 이미 있으면 **덮기 전에 묻는다.**
+    const had = await fetch(`/api/ingredients/rows?start=${date}&end=${date}&vendor=${encodeURIComponent(vendor)}&store=${encodeURIComponent(store)}&limit=200`)
+      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .catch(() => ({ rows: [] }));
+    if ((had.rows || []).length) {
+      const ok = A().showConfirm
+        ? await A().showConfirm(fmt("ingEntryReplaceFmt", { date, vendor, n: had.rows.length }))
+        : true;
+      if (!ok) return;
+    }
+
+    try {
+      const res = await fetch("/api/ingredients/rows", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store, date, vendor, lines }),
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const got = await res.json();
+      logLine(esc(fmt("ingEntrySavedFmt", { n: got.saved })));
+      entryLines = [blankLine()];
+      renderLines();
+      await loadCatalog();
+      await loadSummary();
+      await loadMeta();
+    } catch (e) {
+      logLine(esc(T("ingEntrySaveFailed") + (e && e.message)));
+    }
+  }
+
+  async function loadVendorList() {
+    const res = await fetch(`/api/ingredients/catalog?store=${encodeURIComponent($("#ingEntryStore").value || "")}`);
+    if (!res.ok) return;
+    const { vendors } = await res.json();
+    $("#ingVendorList").innerHTML = (vendors || []).map((v) => `<option value="${esc(v.vendor)}"></option>`).join("");
   }
 
   let wired = false;
@@ -302,10 +510,31 @@
         loadSummary();
       };
       $("#ingStore").onchange = () => loadSummary();
+
+      // 영수증 넣기
+      entryLines = [blankLine()];
+      $("#ingEntryAdd").onclick = () => {
+        entryLines.push(blankLine());
+        renderLines();
+      };
+      $("#ingEntrySave").onclick = () => saveEntry();
+      $("#ingEntryClear").onclick = () => {
+        entryLines = [blankLine()];
+        renderLines();
+      };
+      $("#ingEntryVendor").onchange = () => loadCatalog();
+      $("#ingEntryStore").onchange = () => {
+        loadVendorList();
+        loadCatalog();
+      };
+      // 오늘 날짜로 시작한다 — 거의 늘 오늘 받은 영수증이다.
+      if (!$("#ingEntryDate").value) $("#ingEntryDate").value = new Date().toISOString().slice(0, 10);
+      renderLines();
     }
     await loadMeta();
+    await loadVendorList();
     await loadSummary();
   }
 
-  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD };
+  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml };
 })();

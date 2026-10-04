@@ -131,6 +131,85 @@ out.push("\n[단가 추이]");
   check("단가가 따라온다", pts[1].price === 30, "");
 }
 
+out.push("\n[그 업체에서 보통 사는 것 — 치는 것을 줄이는 목록]");
+{
+  const rows = [
+    G.normalizeRow(row({ name: "甲", date: "2026-01-01", price: 10, unit: "斤" }), "main"),
+    G.normalizeRow(row({ name: "甲", date: "2026-03-01", price: 30, unit: "Kg" }), "main"),
+    G.normalizeRow(row({ name: "乙", date: "2026-02-01", price: 20 }), "main"),
+    G.normalizeRow(row({ name: "乙", date: "2026-02-02", price: 20 }), "main"),
+    G.normalizeRow(row({ name: "乙", date: "2026-02-03", price: 20 }), "main"),
+  ];
+  const cat = G.buildCatalog(rows, { recentFrom: "2026-03-01" });
+  check("★ 최근에 산 것이 위로 — 손이 먼저 가는 자리다", cat[0].name === "甲", JSON.stringify(cat.map((c) => c.name)));
+  check("★★ 지난 단가는 **제일 최근 것**", cat[0].last_price === 30, `${cat[0].last_price}`);
+  check("★ 단위도 최근 것 (斤 → Kg 로 바뀐 품목이 있다)", cat[0].unit === "Kg", cat[0].unit);
+  check("몇 번 샀는지 센다", cat.find((c) => c.name === "乙").count === 3, "");
+  const cat2 = G.buildCatalog(rows, { recentFrom: "2099-01-01" });
+  check("최근이 없으면 자주 산 순", cat2[0].name === "乙", JSON.stringify(cat2.map((c) => c.name)));
+}
+
+out.push("\n[새 품목·바뀐 가격 — 막지 않고 말만 한다]");
+{
+  // 2026-10-04 사장님: "근데 그러다가 메뉴가 추가되거나 가격이 달라지거나
+  // 그러면 안되잖아."
+  //
+  // 단가가 지난번과 같은 비율이 84.3% 였다 — **여섯 번에 한 번은 바뀐다.**
+  // 지난 값을 정답으로 쓰면 여섯 장에 한 장이 틀린 금액이 된다.
+  const known = { name: "甲", last_price: 25, last_date: "2026-09-01", unit: "斤" };
+
+  const changed = G.lineWarnings({ qty: 2, price: 30, amount: 60 }, known);
+  check(
+    "★★ 단가가 지난번과 다르면 **말해준다**",
+    changed.some((w) => w.kind === "price_changed" && w.last === 25),
+    JSON.stringify(changed)
+  );
+  check("★★ 그런다고 값을 고치지는 않는다 — 돌려주는 것은 경고뿐", !changed.some((w) => w.fixed || w.price), JSON.stringify(changed));
+
+  const same = G.lineWarnings({ qty: 2, price: 25, amount: 50 }, known);
+  check("같으면 조용하다", same.length === 0, JSON.stringify(same));
+
+  const fresh = G.lineWarnings({ qty: 1, price: 99, amount: 99 }, null);
+  check("★★ 목록에 없는 품목도 쓸 수 있다 — 「새 품목」이라고만 한다", fresh.some((w) => w.kind === "new_item"), JSON.stringify(fresh));
+
+  const bad = G.lineWarnings({ qty: 3, price: 25, amount: 999 }, known);
+  check(
+    "★★ 산수가 안 맞으면 잡는다 — 종이 안에서 닫히는 검사다",
+    bad.some((w) => w.kind === "math" && w.expected === 75),
+    JSON.stringify(bad)
+  );
+  check("★ 가격이 올랐어도 산수 검사는 그대로 돈다", G.lineWarnings({ qty: 2, price: 30, amount: 60 }, known).every((w) => w.kind !== "math"), "");
+  // 아직 다 안 친 줄에 대고 떠들면 안 된다.
+  check("덜 친 줄에는 조용하다", G.lineWarnings({ qty: "", price: "", amount: "" }, undefined).length === 0, "");
+}
+
+out.push("\n[넣는 길이 막지 않는가]");
+{
+  const src = require("fs").readFileSync(require("path").join(__dirname, "..", "src/routes/ingredients.js"), "utf8");
+  check("영수증 한 장을 넣는 길이 있다", /router\.post\("\/rows"/.test(src), "");
+  check("고를 목록을 주는 길이 있다", /router\.get\("\/catalog"/.test(src), "");
+  check(
+    "★★ 한 장 = (지점·날짜·업체) 만 갈아끼운다 — 같은 날 다른 업체를 안 건드린다",
+    /deleteMany\(\{ store, date, vendor \}\)/.test(src),
+    ""
+  );
+  // 경고는 **화면이 보여주는 것**이지 저장을 막는 문이 아니다. 그래서 넣는
+  // 길은 lineWarnings 를 아예 부르지 않는다 — 부르기 시작하면 언젠가 그걸로
+  // 거절하게 되고, 그러면 종이에 적힌 사실을 넣을 수 없게 된다.
+  check(
+    "★★ 이상한 줄이라고 저장을 거부하지 않는다 — 종이에 그렇게 적혀 있으면 그게 사실이다",
+    !/G\.lineWarnings\(/.test(src),
+    "넣는 길이 경고를 문으로 쓰고 있다"
+  );
+  // 거절하는 것은 「어느 영수증인지 모르겠는」 경우뿐이어야 한다.
+  const rejects = (src.match(/res\.status\(400\)\.json\(\{ error: "([^"]+)"/g) || []).join(" ");
+  check(
+    "★ 거절은 지점·날짜·업체가 없을 때만",
+    !/amount|price|qty|math/.test(rejects),
+    rejects
+  );
+}
+
 out.push("\n[사장님만 보는 자리]");
 {
   const lock = require("../src/sensitiveLock");

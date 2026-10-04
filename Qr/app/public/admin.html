@@ -443,6 +443,38 @@
         <p class="ing-note" id="ingMeta"></p>
         <div class="ing-import-log" id="ingImportLog" hidden></div>
 
+        <!-- 영수증 한 장 넣기. 2026-10-04 사장님: "지금은 계속 종이를 보면서
+             엑셀에 기입하고 하는 과정이 너무 귀찮아서."
+             2만 줄을 재보니 영수증 한 장이 보통 2줄, 그 업체가 그 달에 사는
+             품목이 보통 4가지다 — 「4개 중 골라 2줄」이면 치는 것보다 빠르다. -->
+        <div class="ing-block ing-entry">
+          <h3 class="ing-block-title" data-i18n="ingEntryTitle">🧾 영수증 넣기</h3>
+          <div class="ing-entry-head">
+            <label class="ing-field">
+              <span data-i18n="ingStore">지점</span>
+              <select id="ingEntryStore"></select>
+            </label>
+            <label class="ing-field">
+              <span data-i18n="ingEntryDate">날짜</span>
+              <input type="date" id="ingEntryDate" />
+            </label>
+            <label class="ing-field ing-field-wide">
+              <span data-i18n="ingEntryVendor">업체</span>
+              <input list="ingVendorList" id="ingEntryVendor" data-i18n-placeholder="ingEntryVendorPh" placeholder="업체를 고르거나 적으세요" />
+              <datalist id="ingVendorList"></datalist>
+            </label>
+            <button type="button" id="ingEntrySave" class="primary" data-i18n="ingEntrySave">저장</button>
+            <button type="button" id="ingEntryClear" data-i18n="ingEntryClear">비우기</button>
+          </div>
+          <p class="ing-note" id="ingEntryHint"></p>
+          <div class="ing-lines" id="ingEntryLines"></div>
+          <button type="button" id="ingEntryAdd" class="ing-add-line" data-i18n="ingEntryAdd">+ 줄 추가</button>
+          <div class="ing-entry-foot">
+            <span data-i18n="ingEntryTotal">합계</span>
+            <strong id="ingEntryTotal">NT$0</strong>
+          </div>
+        </div>
+
         <div class="ing-hero">
           <div class="ing-hero-label" data-i18n="ingTotalLabel">이 기간 식자재비</div>
           <div class="ing-hero-value" id="ingTotal">NT$0</div>

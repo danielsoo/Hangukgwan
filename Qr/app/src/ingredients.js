@@ -214,8 +214,84 @@ function priceHistory(rows) {
   return [...seen.values()].sort((a, b) => a.date.localeCompare(b.date) || a.price - b.price);
 }
 
+/**
+ * 그 업체에서 **보통 사는 것** — 입력 화면이 고르게 할 목록.
+ *
+ * 2026-10-04 사장님: "지금은 계속 종이를 보면서 엑셀에 기입하고 하는 과정이
+ * 너무 귀찮아서."
+ *
+ * 그래서 이 목록이 이 기능의 핵심이다. 2만 줄을 재보니:
+ *   · 영수증 한 장이 보통 2줄
+ *   · 그 업체가 그 달에 사는 품목이 보통 4가지
+ * 그러니 「2줄짜리 종이를 4개 중에서 고르기」가 된다 — 치는 것보다 훨씬 빠르다.
+ *
+ * ── 지난 단가는 **채워 넣는 값이 아니라 견주는 값**이다
+ *
+ * 사장님: "근데 그러다가 메뉴가 추가되거나 가격이 달라지거나 그러면 안되잖아."
+ *
+ * 맞다. 단가가 지난번과 같은 비율이 84.3% 였다 — **여섯 번에 한 번은 바뀐다.**
+ * 지난 값을 그냥 넣으면 여섯 장에 한 장은 틀린 금액이 들어간다. 돈 기록에서
+ * 그건 안 된다.
+ *
+ * 그래서 last_price 는 **먼저 채우되 반드시 사장님이 보고 넘어가게** 하고,
+ * 종이에 적힌 값이 다르면 그 값이 맞다. 화면은 「지난번 25였어요」를 옆에
+ * 보여주기만 한다. 목록에 없는 새 품목도 그냥 적을 수 있어야 한다 — 이
+ * 목록은 **가두는 울타리가 아니라 지름길**이다.
+ */
+function buildCatalog(rows, opts) {
+  const recentFrom = (opts && opts.recentFrom) || "";
+  const byName = new Map();
+  for (const r of rows || []) {
+    const it = byName.get(r.name) || {
+      name: r.name,
+      name_ko: r.name_ko,
+      unit: r.unit,
+      last_price: r.price,
+      last_date: r.date,
+      count: 0,
+      recent: 0,
+    };
+    it.count += 1;
+    if (recentFrom && r.date >= recentFrom) it.recent += 1;
+    // 제일 최근 줄의 단위·단가를 쓴다. 단위가 바뀐 품목이 있다(斤 → Kg).
+    if (r.date >= it.last_date) {
+      it.last_date = r.date;
+      it.last_price = r.price;
+      if (r.unit) it.unit = r.unit;
+    }
+    if (!it.name_ko && r.name_ko) it.name_ko = r.name_ko;
+    byName.set(r.name, it);
+  }
+  // 최근에 산 것이 위로. 같으면 자주 산 것이 위로 — 손이 먼저 가는 순서다.
+  return [...byName.values()].sort((a, b) => b.recent - a.recent || b.count - a.count || b.last_date.localeCompare(a.last_date));
+}
+
+/**
+ * 한 줄이 그럴듯한가. **막지는 않고 말만 한다.**
+ *
+ * 새 품목도 오르는 가격도 정상이다. 다만 조용히 지나가면 안 되는 것 둘:
+ *   · 산수가 안 맞는다 → 셋 중 하나를 잘못 봤다(종이 안에서 닫히는 검사다)
+ *   · 단가가 지난번과 다르다 → 올랐을 수도, 잘못 봤을 수도. 사장님이 정한다
+ */
+function lineWarnings(line, known) {
+  const warn = [];
+  const qty = Number(line.qty) || 0;
+  const price = Number(line.price) || 0;
+  const amount = Number(line.amount) || 0;
+  if (qty && price && amount && Math.abs(qty * price - amount) >= 0.5) {
+    warn.push({ kind: "math", expected: Math.round(qty * price * 100) / 100 });
+  }
+  if (known && known.last_price != null && price && price !== known.last_price) {
+    warn.push({ kind: "price_changed", last: known.last_price, last_date: known.last_date });
+  }
+  if (known === null) warn.push({ kind: "new_item" });
+  return warn;
+}
+
 module.exports = {
   PURCHASES,
+  buildCatalog,
+  lineWarnings,
   STORES,
   storeByKey,
   VENDOR_ALIASES,
