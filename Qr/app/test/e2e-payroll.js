@@ -336,6 +336,46 @@ function check(name, cond, extra = "") {
     await page.waitForTimeout(500);
   }
 
+  out.push("\n[카드 사진을 끌어다 놓기 — 2026-10-04]");
+  {
+    // 사장님: "급여에서 사진 선택 말고도 드래그로 할 수 있게 해줘"
+    const fs = require("fs");
+    const fx = (f) => require("path").join(__dirname, "fixtures", f);
+    const drop = (files, type = "drop") =>
+      page.evaluate(
+        ({ files, type }) => {
+          const dt = new DataTransfer();
+          for (const f of files) {
+            const bin = Uint8Array.from(atob(f.b64), (c) => c.charCodeAt(0));
+            dt.items.add(new File([bin], f.name, { type: f.type }));
+          }
+          const el = document.querySelector("#payrollGrid") || document.querySelector("#tab-payroll");
+          for (const ev of type === "drop" ? ["dragenter", "dragover", "drop"] : [type]) el.dispatchEvent(new DragEvent(ev, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        },
+        { files, type }
+      );
+    const file = (f) => ({ name: f, type: "image/webp", b64: fs.readFileSync(fx(f)).toString("base64") });
+    check("「📷」 단추에 「끌어다 놓아도 돼요」", /끌어다 놓아도 돼요/.test(await page.locator(".payroll-photo-btn").innerText()), "");
+    await drop([file("timecard-star.webp")], "dragenter");
+    await page.waitForTimeout(200);
+    check("★ 끌고 들어오면 탭에 「카드 사진을 여기에 놓으세요」", (await page.locator("#tab-payroll").evaluate((el) => el.classList.contains("is-dropping"))) && (await page.locator("#tab-payroll").getAttribute("data-drop-label")) === "카드 사진을 여기에 놓으세요", "");
+    await drop([file("timecard-star.webp"), file("timecard-normal.webp")]);
+    await page.locator("#payrollPhotoMsg").getByText("사진 2").first().waitFor({ timeout: 30000 }).catch(() => {});
+    await page.waitForTimeout(1200);
+    check("놓으면 점선 안내는 사라진다", !(await page.locator("#tab-payroll").evaluate((el) => el.classList.contains("is-dropping"))), "");
+    const res = await page.locator("#payrollResult").innerText();
+    check("★★ 두 장을 끌어다 놓으면 📷 와 똑같이 읽는다 — 「출근 21일」 「★ 4일」", /출근 21일[\s\S]*★ 4일/.test(res), res);
+    await drop([{ name: "memo.txt", type: "text/plain", b64: Buffer.from("hi").toString("base64") }]);
+    await page.waitForTimeout(400);
+    check("사진이 아닌 파일은 「사진 파일만」", /사진 파일만/.test(await page.locator("#appDialogMessage").innerText()), await page.locator("#appDialogMessage").innerText());
+    await page.click("#appDialogOk").catch(() => {});
+    page.once("dialog", (d) => d.accept());
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(300);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(500);
+  }
+
   out.push("\n[두 사람 카드가 섞이면 말한다]");
   {
     // 2026-10-03: 黃美花·黃美華 카드 4장을 한 직원에 한 번에 올려 같은 날짜가 덮어써졌다.

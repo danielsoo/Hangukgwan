@@ -2878,3 +2878,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .pin-gate-title { font-weight: 700; font-size: 17px; margin: 0 0 12px; }
 .pin-gate input { width: 100%; box-sizing: border-box; height: 46px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 18px; letter-spacing: 0.1em; }
 .pin-gate-error { color: #b5232c; font-size: 14px; margin: 8px 0 0; }
+
+/* 급여 — 카드 사진 끌어다 놓기(2026-10-04). 끌고 들어오면 탭 전체에 점선 테두리와 안내. */
+#tab-payroll { position: relative; }
+#tab-payroll.is-dropping::after {
+  content: attr(data-drop-label);
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; align-items: flex-start; justify-content: center; padding-top: 120px;
+  border: 3px dashed var(--navy); border-radius: 16px;
+  background: rgba(22, 33, 62, 0.08);
+  font-size: 22px; font-weight: 800; color: var(--navy);
+  pointer-events: none;
+}

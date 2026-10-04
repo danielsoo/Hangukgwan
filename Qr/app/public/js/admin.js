@@ -1515,6 +1515,9 @@
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 맨 위 「⚙ 근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
+      payrollDropHere: "카드 사진을 여기에 놓으세요",
+      payrollDropNotImage: "사진 파일만 넣을 수 있어요.",
+      payrollDropPickStaff: "먼저 위에서 직원을 골라 주세요 — 그 직원 카드에 넣어요.",
       payrollAllChip: "📊 전체",
       payrollConflict: "다른 기기에서 {when}에 「{name} · {month}」 카드를 먼저 저장했어요. 지금 저장하면 그 내용이 이 화면 것으로 바뀝니다.",
       payrollConflictReload: "그쪽 것 불러오기",
@@ -1591,7 +1594,7 @@
       payrollSaveStaff: "직원 정보 저장",
       payrollInactive: "그만둔 직원",
       payrollConfirmAll: "✓ 초과 시간 모두 확인",
-      payrollPhotoBtn: "📷 카드 사진으로 채우기",
+      payrollPhotoBtn: "📷 카드 사진으로 채우기 · 끌어다 놓아도 돼요",
       payrollPhotoReading: "사진 읽는 중… ({i}/{n})",
       payrollPhotoOne: "사진 {i}: {star}카드 {side}에서 {n}일을 읽었어요.",
       payrollPhotoSideBlue: "1~15일 면",
@@ -2632,6 +2635,9 @@
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依最上方「⚙ 工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
+      payrollDropHere: "把卡片照片放在這裡",
+      payrollDropNotImage: "只能放照片檔。",
+      payrollDropPickStaff: "請先在上方選擇員工 — 會放進該員工的卡。",
       payrollAllChip: "📊 全部",
       payrollConflict: "另一台裝置在 {when} 先儲存了「{name} · {month}」的卡。現在儲存的話，會改成這個畫面的內容。",
       payrollConflictReload: "載入那邊的",
@@ -2708,7 +2714,7 @@
       payrollSaveStaff: "儲存員工資料",
       payrollInactive: "已離職",
       payrollConfirmAll: "✓ 全部加班確認",
-      payrollPhotoBtn: "📷 用考勤卡照片填入",
+      payrollPhotoBtn: "📷 用考勤卡照片填入 · 也可以直接拖進來",
       payrollPhotoReading: "讀取照片中…（{i}/{n}）",
       payrollPhotoOne: "照片 {i}：從{star}考勤卡 {side} 讀到 {n} 天。",
       payrollPhotoSideBlue: "1~15 日面",
@@ -14108,66 +14114,109 @@
     return Object.keys(card.days || {}).filter((d) => Number(d) <= dim).length;
   }
   if ($("#payrollPhoto"))
-    $("#payrollPhoto").onchange = async (e) => {
+    $("#payrollPhoto").onchange = (e) => {
       const files = [...(e.target.files || [])];
       e.target.value = "";
-      if (!files.length || !payroll.current) return;
-      payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", 1).replace("{n}", files.length)]);
-      try {
-        await loadTimecardOcr();
-      } catch (err) {
-        return payrollPhotoMsg([T("payrollLoadFailed")], true);
-      }
-      const msgs = [];
-      let filled = 0;
-      const batch = { clash: new Set() };
-      for (let k = 0; k < files.length; k++) {
-        payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", k + 1).replace("{n}", files.length)]);
-        // 화면이 「읽는 중」을 그릴 틈을 준다 — 읽기는 한두 초 화면을 붙잡는다.
-        await new Promise((r) => setTimeout(r, 30));
-        const pixels = await payrollPhotoPixels(files[k]);
-        if (!pixels) {
-          msgs.push(T("payrollPhotoBad").replace("{i}", k + 1));
-          continue;
-        }
-        const { cards } = window.HG_TIMECARD.readTimecards(pixels);
-        if (!cards.length) {
-          msgs.push(T("payrollPhotoNoCard").replace("{i}", k + 1));
-          continue;
-        }
-        for (const card of cards) {
-          const n = payrollApplyCard(card, batch);
-          filled += n + card.handwritten.length;
-          msgs.push(
-            T("payrollPhotoOne")
-              .replace("{i}", k + 1)
-              .replace("{star}", card.star ? "★ " : "")
-              .replace("{side}", T(card.color === "blue" ? "payrollPhotoSideBlue" : "payrollPhotoSideOrange"))
-              .replace("{n}", n)
-          );
-        }
-      }
-      const handKeys = Object.keys(payroll.hand);
-      if (handKeys.length) {
-        const label = PAYROLL_SLOT_LABEL();
-        const list = handKeys
-          .map((k) => k.split("|"))
-          .sort((a, b) => Number(a[0]) - Number(b[0]))
-          .map(([day, sl]) => `${day}${T("payrollDayShort")} ${label[sl]}`)
-          .join(", ");
-        msgs.push(T("payrollPhotoHand").replace("{n}", handKeys.length).replace("{list}", list));
-      }
-      if (batch.clash.size) {
-        msgs.push(T("payrollPhotoClash").replace("{days}", [...batch.clash].sort((a, b) => a - b).map((d) => `${d}${T("payrollDayShort")}`).join(", ")));
-      }
-      if (filled) {
-        msgs.push(T("payrollPhotoWho").replace("{name}", payroll.current.name).replace("{month}", payroll.month));
-        msgs.push(T("payrollPhotoCheck"));
-        renderPayrollGrid();
-        payrollChanged();
-      }
-      payrollPhotoMsg(msgs, !filled);
+      payrollReadPhotos(files);
     };
+  // 카드 사진 읽기 — 「📷 카드 사진으로 채우기」와 끌어다 놓기가 같이 쓴다.
+  async function payrollReadPhotos(files) {
+    if (!files.length || !payroll.current) return;
+    payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", 1).replace("{n}", files.length)]);
+    try {
+      await loadTimecardOcr();
+    } catch (err) {
+      return payrollPhotoMsg([T("payrollLoadFailed")], true);
+    }
+    const msgs = [];
+    let filled = 0;
+    const batch = { clash: new Set() };
+    for (let k = 0; k < files.length; k++) {
+      payrollPhotoMsg([T("payrollPhotoReading").replace("{i}", k + 1).replace("{n}", files.length)]);
+      // 화면이 「읽는 중」을 그릴 틈을 준다 — 읽기는 한두 초 화면을 붙잡는다.
+      await new Promise((r) => setTimeout(r, 30));
+      const pixels = await payrollPhotoPixels(files[k]);
+      if (!pixels) {
+        msgs.push(T("payrollPhotoBad").replace("{i}", k + 1));
+        continue;
+      }
+      const { cards } = window.HG_TIMECARD.readTimecards(pixels);
+      if (!cards.length) {
+        msgs.push(T("payrollPhotoNoCard").replace("{i}", k + 1));
+        continue;
+      }
+      for (const card of cards) {
+        const n = payrollApplyCard(card, batch);
+        filled += n + card.handwritten.length;
+        msgs.push(
+          T("payrollPhotoOne")
+            .replace("{i}", k + 1)
+            .replace("{star}", card.star ? "★ " : "")
+            .replace("{side}", T(card.color === "blue" ? "payrollPhotoSideBlue" : "payrollPhotoSideOrange"))
+            .replace("{n}", n)
+        );
+      }
+    }
+    const handKeys = Object.keys(payroll.hand);
+    if (handKeys.length) {
+      const label = PAYROLL_SLOT_LABEL();
+      const list = handKeys
+        .map((k) => k.split("|"))
+        .sort((a, b) => Number(a[0]) - Number(b[0]))
+        .map(([day, sl]) => `${day}${T("payrollDayShort")} ${label[sl]}`)
+        .join(", ");
+      msgs.push(T("payrollPhotoHand").replace("{n}", handKeys.length).replace("{list}", list));
+    }
+    if (batch.clash.size) {
+      msgs.push(T("payrollPhotoClash").replace("{days}", [...batch.clash].sort((a, b) => a - b).map((d) => `${d}${T("payrollDayShort")}`).join(", ")));
+    }
+    if (filled) {
+      msgs.push(T("payrollPhotoWho").replace("{name}", payroll.current.name).replace("{month}", payroll.month));
+      msgs.push(T("payrollPhotoCheck"));
+      renderPayrollGrid();
+      payrollChanged();
+    }
+    payrollPhotoMsg(msgs, !filled);
+  }
+  // 끌어다 놓기(2026-10-04 사장님: "급여에서 사진 선택 말고도 드래그로 할 수 있게 해줘"). 급여 탭 어디에
+  // 놓아도 받는다 — 직원을 안 골랐으면 고르라고 말한다. 사진이 아닌 파일은 빼고, 브라우저가 사진을 새 창으로
+  // 여는 기본 동작은 막는다.
+  (function payrollDropZone() {
+    const tab = $("#tab-payroll");
+    if (!tab) return;
+    let depth = 0;
+    const hasFiles = (e) => e.dataTransfer && [...(e.dataTransfer.types || [])].includes("Files");
+    const setOn = (on) => {
+      tab.dataset.dropLabel = T("payrollDropHere");
+      tab.classList.toggle("is-dropping", on);
+    };
+    tab.addEventListener("dragenter", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth++;
+      setOn(true);
+    });
+    tab.addEventListener("dragover", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    });
+    tab.addEventListener("dragleave", (e) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (!depth) setOn(false);
+    });
+    tab.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setOn(false);
+      const files = [...(e.dataTransfer.files || [])].filter((f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|gif|bmp)$/i.test(f.name));
+      if (!files.length) return showAlert(T("payrollDropNotImage"));
+      if (!payroll.current) return showAlert(T("payrollDropPickStaff"));
+      payrollReadPhotos(files);
+    });
+  })();
   if ($("#payrollMonth"))
     $("#payrollMonth").onchange = async () => {
       if (payroll.dirty && !(await showConfirm(T("payrollDiscard")))) {

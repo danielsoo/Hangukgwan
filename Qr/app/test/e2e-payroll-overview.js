@@ -147,6 +147,16 @@ function check(name, cond, extra = "") {
   await page.click("#appDialogOk");
   await page.waitForTimeout(1200);
 
+  // 직원을 안 고른 채(「📊 전체」) 카드 사진을 끌어다 놓으면 — 누구 카드인지 모르니 고르라고 말한다.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array([1, 2, 3])], "card.jpg", { type: "image/jpeg" }));
+    const el = document.querySelector("#tab-payroll");
+    for (const ev of ["dragenter", "dragover", "drop"]) el.dispatchEvent(new DragEvent(ev, { bubbles: true, cancelable: true, dataTransfer: dt }));
+  });
+  await page.waitForTimeout(400);
+  check("★ 직원을 안 고르고 사진을 놓으면 「먼저 위에서 직원을 골라 주세요」", /먼저 위에서 직원을 골라/.test(await page.locator("#appDialogMessage").innerText()), await page.locator("#appDialogMessage").innerText());
+  await page.click("#appDialogOk").catch(() => {});
   out.push("\n[달을 바꾸면 따라온다]");
   check("버리기를 고르면 한눈에 보기", await page.locator("#payrollOverview").isVisible(), "");
   await page.click("#payrollPrevMonth");
