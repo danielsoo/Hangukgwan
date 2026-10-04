@@ -360,6 +360,33 @@ out.push("\n[서버 — 사장님만]");
     r2 = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-12", days: { 6: { am_in: "09:00" } } });
     check("base_rev 없이 보내면(업데이트 전 열려 있던 화면) 예전처럼 저장", r2.status === 200 && r2.body.card.rev === 2, `${r2.status}`);
   }
+  // 다른 달·직원으로 옮기기(2026-10-04 사장님: "이미 기입 열심히 한 걸 버려야 하니까 그거 월 변경으로 할 수 있게")
+  {
+    const other = (await boss.post("/api/payroll/staff").send({ name: "옮김받는사람", pay_type: "hourly", hourly_rate: 200 })).body.staff.id;
+    const wrong = { 5: { am_in: "09:00", am_out: "14:00", ot_hours: 0.5, ot_confirmed: true }, 31: { am_in: "09:00", am_out: "14:00" } };
+    let r = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2027-10", days: wrong, bonus: 700, bonus_note: "x" });
+    const rev = r.body.card.rev;
+    // 9월 카드를 10월에 잘못 넣었다 — 화면에서 하나 더 고친 상태(저장 안 함)로 옮긴다
+    const onScreen = { ...wrong, 6: { am_in: "09:00", am_out: "14:00" } };
+    r = await boss.post("/api/payroll/card/move").send({ staff_id: id, month: "2027-10", base_rev: rev, days: onScreen, bonus: 700, bonus_note: "x", to_staff_id: other, to_month: "2027-09" });
+    check("★★ 옮기기 — 받는 쪽(다른 직원 · 9월)에 화면 그대로(저장 안 한 6일까지)", r.status === 200 && r.body.card._id === `${other}|2027-09` && r.body.card.days["5"].ot_hours === 0.5 && r.body.card.days["6"] && r.body.card.bonus === 700, JSON.stringify(r.body));
+    check("★★ 9월엔 31일이 없다 — 빠진 날을 알려 준다", JSON.stringify(r.body.dropped) === "[31]" && !r.body.card.days["31"], JSON.stringify(r.body.dropped));
+    const gone = (await boss.get(`/api/payroll/card?staff=${id}&month=2027-10`)).body.card;
+    check("★ 원래 자리(10월)는 비었다", Object.keys(gone.days).length === 0 && gone.bonus === 0, JSON.stringify(gone));
+    // 받는 자리에 이미 넣은 날이 있으면 묻는다
+    await boss.put("/api/payroll/card").send({ staff_id: id, month: "2027-08", days: { 2: { am_in: "09:00" } } });
+    r = await boss.post("/api/payroll/card/move").send({ staff_id: id, month: "2027-08", base_rev: 1, days: { 2: { am_in: "09:00" } }, to_staff_id: other, to_month: "2027-09" });
+    check("★★ 받는 쪽에 이미 카드가 있으면 덮지 않고 409(target_has_data)", r.status === 409 && r.body.error === "target_has_data" && r.body.days === 2, JSON.stringify(r.body));
+    r = await boss.post("/api/payroll/card/move").send({ staff_id: id, month: "2027-08", base_rev: 1, days: { 2: { am_in: "09:00" } }, to_staff_id: other, to_month: "2027-09", overwrite: true });
+    check("덮어쓰기를 고르면 옮긴다", r.status === 200 && Object.keys(r.body.card.days).join() === "2", JSON.stringify(r.body.card && r.body.card.days));
+    // 원래 카드를 그 사이 다른 기기가 고쳤다
+    await boss.put("/api/payroll/card").send({ staff_id: id, month: "2027-07", days: { 1: { am_in: "09:00" } } });
+    await boss.put("/api/payroll/card").send({ staff_id: id, month: "2027-07", base_rev: 1, days: { 1: { am_in: "09:01" } } });
+    r = await boss.post("/api/payroll/card/move").send({ staff_id: id, month: "2027-07", base_rev: 1, days: { 1: { am_in: "09:00" } }, to_month: "2027-06" });
+    check("★ 원래 카드를 그 사이 다른 기기가 고쳤으면 409(changed) — 옮기지 않는다", r.status === 409 && r.body.error === "changed", JSON.stringify(r.body));
+    r = await boss.post("/api/payroll/card/move").send({ staff_id: id, month: "2027-07", days: {}, to_month: "2027-07" });
+    check("같은 자리로는 안 옮긴다", r.status === 400, String(r.status));
+  }
   res = await boss.get("/api/payroll/card?staff=nope&month=2026-06");
   check("없는 직원 404", res.status === 404, "");
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-13`);

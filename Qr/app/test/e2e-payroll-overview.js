@@ -163,6 +163,53 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(1500);
   check("★ 8월 — NT$1,900, 1명, 지각·조퇴 없음", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()) && /지각·조퇴가 없어요/.test(await page.locator("#prOvLateBars").innerText()), await page.locator("#prOvTotal").innerText());
 
+  out.push("\n[다른 달·직원으로 옮기기 — 2026-10-04]");
+  {
+    // 사장님: "이미 기입 열심히 한 걸 버려야 하니까 그거 월 변경으로 할 수 있게"
+    const sa = (await (await page.request.get(`${base}/api/payroll/staff`)).json()).staff.find((x) => x.name === "사아자").id;
+    await page.fill("#payrollMonth", "2026-09");
+    await page.dispatchEvent("#payrollMonth", "change");
+    await page.waitForTimeout(1200);
+    await page.locator(`#payrollStaffChips [data-payroll-staff="${a}"]`).click();
+    await page.waitForTimeout(900);
+    // 화면에서 하나 더 고친다(저장 안 함)
+    const c7 = page.locator('#payrollGrid tr[data-day="7"] input[data-slot="am_in"]');
+    await c7.fill("0905");
+    await c7.press("Tab");
+    await page.waitForTimeout(400);
+    await page.click("#payrollMoveCard");
+    await page.waitForTimeout(300);
+    check("★ 「↪ 다른 달·직원으로 옮기기」 창 — 지금 달·직원이 골라져 있다", (await page.locator("#payrollMoveBackdrop").isVisible()) && (await page.inputValue("#payrollMoveMonth")) === "2026-09" && (await page.inputValue("#payrollMoveStaff")) === a && /가나다 · 2026년 9월/.test(await page.locator("#payrollMoveTitle").innerText()), "");
+    await page.fill("#payrollMoveMonth", "2026-10");
+    await page.selectOption("#payrollMoveStaff", sa);
+    await page.click("#payrollMoveOk");
+    await page.waitForTimeout(1800);
+    check("★★ 옮긴 뒤 화면은 사아자 · 2026년 10월", (await page.inputValue("#payrollStaffName")) === "사아자" && (await page.locator("#payrollMonthLabel").innerText()).trim() === "2026년 10월" && /옮겼어요/.test(await page.locator("#payrollStatus").innerText()), await page.locator("#payrollStatus").innerText());
+    check("★★ 고친 것 그대로 — 1일·2일과 저장 안 했던 7일 09:05", (await page.inputValue('#payrollGrid tr[data-day="1"] input[data-slot="am_in"]')) === "09:00" && (await page.inputValue('#payrollGrid tr[data-day="7"] input[data-slot="am_in"]')) === "09:05", "");
+    const srcLeft = (await (await page.request.get(`${base}/api/payroll/card?staff=${a}&month=2026-09`)).json()).card.days;
+    check("★ 원래 자리(가나다 9월)는 비었다", Object.keys(srcLeft).length === 0, JSON.stringify(srcLeft));
+    // 이미 카드가 있는 곳(라마바 9월)으로 옮기려 하면 묻는다 — 취소하면 그대로
+    await page.click("#payrollMoveCard");
+    await page.waitForTimeout(300);
+    await page.fill("#payrollMoveMonth", "2026-09");
+    await page.selectOption("#payrollMoveStaff", b);
+    await page.click("#payrollMoveOk");
+    await page.waitForTimeout(900);
+    check("★★ 받는 쪽에 이미 넣은 날이 있으면 「덮어쓸까요?」", /라마바 · 2026년 9월.*이미 1날/.test(await page.locator("#appDialogMessage").innerText()), await page.locator("#appDialogMessage").innerText());
+    await page.click("#appDialogCancel");
+    await page.waitForTimeout(500);
+    const stillB = (await (await page.request.get(`${base}/api/payroll/card?staff=${b}&month=2026-09`)).json()).card.days;
+    check("취소하면 라마바 9월은 그대로, 화면도 사아자 10월 그대로", stillB["3"] && Object.keys(stillB).length === 1 && (await page.inputValue("#payrollStaffName")) === "사아자", JSON.stringify(stillB));
+    // 되돌려 놓는다(아래 시험이 가나다 9월을 쓴다)
+    await page.click("#payrollMoveCard");
+    await page.waitForTimeout(300);
+    await page.fill("#payrollMoveMonth", "2026-09");
+    await page.selectOption("#payrollMoveStaff", a);
+    await page.click("#payrollMoveOk");
+    await page.waitForTimeout(1800);
+    check("다시 가나다 9월로 옮길 수 있다", (await page.inputValue("#payrollStaffName")) === "가나다" && (await page.inputValue('#payrollGrid tr[data-day="7"] input[data-slot="am_in"]')) === "09:05", "");
+  }
+
   out.push("\n[두 기기에서 같은 카드 — 먼저 저장한 것을 조용히 덮지 않는다]");
   {
     // 2026-10-03 사장님: "그거 확인하고 알려주게 만들어줘"

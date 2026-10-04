@@ -2890,3 +2890,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-size: 22px; font-weight: 800; color: var(--navy);
   pointer-events: none;
 }
+
+/* 급여 카드 옮기기 창(2026-10-04) */
+.pr-move label { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; font-size: 14px; font-weight: 600; }
+.pr-move input, .pr-move select { height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 16px; }

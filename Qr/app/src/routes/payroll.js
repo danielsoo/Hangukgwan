@@ -158,6 +158,46 @@ router.put("/card", async (req, res) => {
 });
 
 // 이 달 직원 전체 — 누구에게 얼마, 확인 안 한 날이 몇 날.
+// 다른 달·다른 직원으로 옮기기(2026-10-04 사장님: "이미 기입 열심히 한 걸 버려야 하니까 그거 월 변경으로 할 수
+// 있게" — 9월 카드를 10월·다른 직원에 넣고 한참 고친 뒤에 알아챈 경우). 화면에 있는 그대로(저장 안 한 것까지)
+// 옮기고 원래 자리는 지운다. 원래 카드를 그 사이 다른 기기가 고쳤으면 409(changed), 옮길 자리에 이미 넣은
+// 날이 있으면 덮을지 먼저 묻는다(409 target_has_data, overwrite 로 다시).
+router.post("/card/move", async (req, res) => {
+  const b = req.body || {};
+  if (!monthOk(b.month) || !monthOk(b.to_month)) return res.status(400).json({ error: "bad_month" });
+  const staff = await loadStaff(b.staff_id);
+  const to = await loadStaff(b.to_staff_id || b.staff_id);
+  if (!staff || !to) return res.status(404).json({ error: "not_found" });
+  if (String(staff._id) === String(to._id) && b.month === b.to_month) return res.status(400).json({ error: "same_place" });
+  const cards = await col(P.CARDS_COLLECTION);
+  const srcId = `${staff._id}|${b.month}`;
+  const dstId = `${to._id}|${b.to_month}`;
+  const src = await cards.findOne({ _id: srcId });
+  const srcRev = src ? Number(src.rev) || 0 : 0;
+  if (b.base_rev != null && b.base_rev !== "" && Number(b.base_rev) !== srcRev) return res.status(409).json({ error: "changed" });
+  const dst = await cards.findOne({ _id: dstId });
+  const dstDays = dst && dst.days ? Object.keys(dst.days).length : 0;
+  if (dstDays && !b.overwrite) return res.status(409).json({ error: "target_has_data", days: dstDays, updated_at: dst.updated_at || null });
+  // 옮길 달에 없는 날(10월 31일 → 9월)은 빠진다 — 몇 날이 빠지는지 화면이 먼저 말한다(아래 dropped).
+  const days = P.cleanDays(b.days, b.to_month);
+  const dropped = Object.keys(P.cleanDays(b.days, b.month)).filter((d) => !days[d]).map(Number);
+  const dstRev = dst ? Number(dst.rev) || 0 : 0;
+  const doc = { _id: dstId, staff_id: String(to._id), month: b.to_month, days, ...P.cleanBonus(b), rev: dstRev + 1, updated_at: nowLocal() };
+  if (dst) {
+    const r = await cards.replaceOne(dst.rev == null ? { _id: dstId, rev: { $exists: false } } : { _id: dstId, rev: dstRev }, doc);
+    if (!r.matchedCount) return res.status(409).json({ error: "changed" });
+  } else {
+    try {
+      await cards.insertOne(doc);
+    } catch (e) {
+      if (String(e && (e.code || e.message)).includes("11000")) return res.status(409).json({ error: "changed" });
+      throw e;
+    }
+  }
+  if (src) await cards.deleteOne(src.rev == null ? { _id: srcId } : { _id: srcId, rev: srcRev });
+  res.json({ ok: true, card: doc, dropped, result: compute(doc, to, await loadRules(), await loadHolidays()) });
+});
+
 // 한 달 직원 전체 — 누구에게 얼마, 몇 시간, 확인 안 한 날이 몇 날. 「한눈에 보기」와 칩이 쓴다.
 async function summaryFor(month, rules, holidays, staff) {
   const cards = await (await col(P.CARDS_COLLECTION)).find({ month }).toArray();

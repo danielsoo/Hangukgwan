@@ -1515,6 +1515,17 @@
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 맨 위 「⚙ 근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
+      payrollMoveCard: "↪ 다른 달·직원으로 옮기기",
+      payrollMoveTitle: "「{name} · {month}」 표를 옮겨요",
+      payrollMoveToMonth: "옮길 달",
+      payrollMoveToStaff: "옮길 직원",
+      payrollMoveOk: "옮기기",
+      payrollMoveNote: "지금 화면에 있는 그대로(저장 안 한 것까지) 옮기고, 이 자리는 비워요.",
+      payrollMoveSame: "같은 직원·같은 달이에요. 다른 달이나 직원을 골라 주세요.",
+      payrollMoveDropped: "{month}에는 {days}일이 없어서 그 날은 빠져요. 그래도 옮길까요?",
+      payrollMoveOverwrite: "「{name} · {month}」에 이미 {n}날이 들어 있어요. 이 표로 덮어쓸까요? (그쪽에 넣은 것은 없어져요)",
+      payrollMoveChanged: "그 사이 다른 기기에서 이 카드를 저장했어요. 다시 열어 확인한 뒤 옮겨 주세요.",
+      payrollMoved: "「{name} · {month}」로 옮겼어요.",
       payrollDropHere: "카드 사진을 여기에 놓으세요",
       payrollDropNotImage: "사진 파일만 넣을 수 있어요.",
       payrollDropPickStaff: "먼저 위에서 직원을 골라 주세요 — 그 직원 카드에 넣어요.",
@@ -2635,6 +2646,17 @@
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依最上方「⚙ 工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
+      payrollMoveCard: "↪ 移到別的月份·員工",
+      payrollMoveTitle: "移動「{name} · {month}」的表",
+      payrollMoveToMonth: "移到月份",
+      payrollMoveToStaff: "移到員工",
+      payrollMoveOk: "移動",
+      payrollMoveNote: "照現在畫面上的內容（含未儲存的）移過去，這裡會清空。",
+      payrollMoveSame: "是同一位員工·同一個月。請選別的月份或員工。",
+      payrollMoveDropped: "{month} 沒有 {days} 日，那幾天會被去掉。還是要移嗎？",
+      payrollMoveOverwrite: "「{name} · {month}」已經有 {n} 天的資料。要用這張表覆蓋嗎？（那邊的資料會消失）",
+      payrollMoveChanged: "這段時間有別的裝置儲存了這張卡。請重新開啟確認後再移。",
+      payrollMoved: "已移到「{name} · {month}」。",
       payrollDropHere: "把卡片照片放在這裡",
       payrollDropNotImage: "只能放照片檔。",
       payrollDropPickStaff: "請先在上方選擇員工 — 會放進該員工的卡。",
@@ -14328,6 +14350,71 @@
       $("#payrollPhotoMsg").hidden = true;
       renderPayrollGrid();
       payrollChanged();
+    };
+  // 다른 달·직원으로 옮기기 — 화면 그대로 옮기고 원래 자리는 비운다(서버 POST /card/move).
+  function payrollAskMove() {
+    return new Promise((resolve) => {
+      const back = $("#payrollMoveBackdrop");
+      $("#payrollMoveTitle").textContent = T("payrollMoveTitle").replace("{name}", payroll.current.name).replace("{month}", payrollMonthName(payroll.month));
+      $("#payrollMoveMonth").value = payroll.month;
+      $("#payrollMoveStaff").innerHTML = payroll.staff
+        .map((s) => `<option value="${escapeHtml(s.id)}"${s.id === payroll.current.id ? " selected" : ""}>${escapeHtml(s.name)}</option>`)
+        .join("");
+      $("#payrollMoveNote").textContent = T("payrollMoveNote");
+      back.hidden = false;
+      const done = (v) => {
+        back.hidden = true;
+        $("#payrollMoveOk").onclick = null;
+        $("#payrollMoveCancel").onclick = null;
+        resolve(v);
+      };
+      $("#payrollMoveOk").onclick = () => done({ month: $("#payrollMoveMonth").value, staffId: $("#payrollMoveStaff").value });
+      $("#payrollMoveCancel").onclick = () => done(null);
+    });
+  }
+  if ($("#payrollMoveCard"))
+    $("#payrollMoveCard").onclick = async () => {
+      if (!payroll.current) return;
+      if ($("#payrollGrid .pg-t.is-bad")) return showAlert(T("payrollBadTime"));
+      const pick = await payrollAskMove();
+      if (!pick || !/^\d{4}-\d{2}$/.test(pick.month)) return;
+      if (pick.month === payroll.month && pick.staffId === payroll.current.id) return showAlert(T("payrollMoveSame"));
+      const toStaff = payroll.staff.find((s) => s.id === pick.staffId) || payroll.current;
+      // 옮길 달에 없는 날(31일 등)이 있으면 먼저 말한다
+      const [ty, tm] = pick.month.split("-").map(Number);
+      const dim = new Date(Date.UTC(ty, tm, 0)).getUTCDate();
+      const lost = Object.keys(payroll.days).filter((d) => Number(d) > dim && Object.keys(payroll.days[d] || {}).length);
+      if (lost.length && !(await showConfirm(T("payrollMoveDropped").replace("{month}", payrollMonthName(pick.month)).replace("{days}", lost.join("·"))))) return;
+      const body = {
+        staff_id: payroll.current.id,
+        month: payroll.month,
+        base_rev: payroll.rev || 0,
+        days: payroll.days,
+        ...payrollBonusNow(),
+        to_staff_id: toStaff.id,
+        to_month: pick.month,
+      };
+      const post = (extra) => fetch("/api/payroll/card/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, ...extra }) });
+      let res = await post({});
+      if (res.status === 409) {
+        const b = await res.json().catch(() => ({}));
+        if (b.error === "target_has_data") {
+          if (!(await showConfirm(T("payrollMoveOverwrite").replace("{name}", toStaff.name).replace("{month}", payrollMonthName(pick.month)).replace("{n}", b.days)))) return;
+          res = await post({ overwrite: true });
+        } else {
+          return showAlert(T("payrollMoveChanged"));
+        }
+      }
+      if (!res.ok) return showAlert(res.status === 409 ? T("payrollMoveChanged") : T("payrollSaveFailed"));
+      // 읽은 칸 표시(파랑·노랑·빨강)는 그대로 들고 간다 — 옮긴 뒤에도 무엇을 확인해야 하는지 보이게.
+      const marks = { unclear: payroll.unclear, read: payroll.read, hand: payroll.hand };
+      payroll.dirty = false;
+      payroll.current = toStaff;
+      $("#payrollMonth").value = pick.month;
+      await loadPayroll();
+      Object.assign(payroll, marks);
+      renderPayrollGrid();
+      $("#payrollStatus").textContent = T("payrollMoved").replace("{name}", toStaff.name).replace("{month}", payrollMonthName(pick.month));
     };
   if ($("#payrollSaveCard"))
     $("#payrollSaveCard").onclick = async () => {
