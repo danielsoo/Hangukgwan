@@ -105,7 +105,7 @@ router.get("/card", async (req, res) => {
   if (!staff) return res.status(404).json({ error: "not_found" });
   const card = (await (await col(P.CARDS_COLLECTION)).findOne({ _id: `${staff._id}|${month}` })) || { month, days: {} };
   const bonus = P.cleanBonus(card);
-  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, ...bonus, updated_at: card.updated_at || null }, result: compute({ month, days: card.days || {}, ...bonus }, staff, await loadRules(), await loadHolidays()) });
+  res.json({ staff: staffOut(staff), card: { month, days: card.days || {}, ...bonus, rev: Number(card.rev) || 0, updated_at: card.updated_at || null }, result: compute({ month, days: card.days || {}, ...bonus }, staff, await loadRules(), await loadHolidays()) });
 });
 
 // 저장하지 않고 계산만 — 표를 고치는 동안 아래 합계가 따라온다.
@@ -118,6 +118,10 @@ router.post("/preview", async (req, res) => {
   res.json({ result: compute({ month: b.month, days, ...P.cleanBonus(b) }, staff, await loadRules(), await loadHolidays()) });
 });
 
+// 저장 — 다른 기기가 먼저 바꿨으면 덮지 않고 알린다(2026-10-03 사장님: "그거 확인하고 알려주게
+// 만들어줘"). 카드마다 번호(rev)가 있고, 화면은 열 때 받은 번호(base_rev)를 같이 보낸다. 서버의 번호가
+// 그보다 앞서 있으면 409 와 지금 카드를 돌려준다 — 고르는 것은 사장님(다시 불러오기 / 내 것으로 덮기).
+// 확인과 쓰기는 한 번에(rev 를 조건으로 건 replaceOne) — 그 사이에 끼어든 저장도 잡는다.
 router.put("/card", async (req, res) => {
   const b = req.body || {};
   if (!monthOk(b.month)) return res.status(400).json({ error: "bad_month" });
@@ -125,8 +129,29 @@ router.put("/card", async (req, res) => {
   if (!staff) return res.status(404).json({ error: "not_found" });
   const days = P.cleanDays(b.days, b.month);
   const _id = `${staff._id}|${b.month}`;
-  const doc = { _id, staff_id: String(staff._id), month: b.month, days, ...P.cleanBonus(b), updated_at: nowLocal() };
-  await (await col(P.CARDS_COLLECTION)).replaceOne({ _id }, doc, { upsert: true });
+  const cards = await col(P.CARDS_COLLECTION);
+  const cur = await cards.findOne({ _id });
+  const curRev = cur ? Number(cur.rev) || 0 : 0;
+  const changed = (latest) =>
+    res.status(409).json({
+      error: "changed",
+      card: latest ? { days: latest.days || {}, ...P.cleanBonus(latest), rev: Number(latest.rev) || 0, updated_at: latest.updated_at || null } : null,
+    });
+  // base_rev 가 없으면(이 기능 전의 열린 화면) 예전처럼 저장한다.
+  const base = b.base_rev == null || b.base_rev === "" ? null : Number(b.base_rev);
+  if (base != null && base !== curRev) return changed(cur);
+  const doc = { _id, staff_id: String(staff._id), month: b.month, days, ...P.cleanBonus(b), rev: curRev + 1, updated_at: nowLocal() };
+  if (cur) {
+    const r = await cards.replaceOne(cur.rev == null ? { _id, rev: { $exists: false } } : { _id, rev: curRev }, doc);
+    if (!r.matchedCount) return changed(await cards.findOne({ _id }));
+  } else {
+    try {
+      await cards.insertOne(doc);
+    } catch (e) {
+      if (String(e && (e.code || e.message)).includes("11000")) return changed(await cards.findOne({ _id }));
+      throw e;
+    }
+  }
   res.json({ ok: true, card: doc, result: compute(doc, staff, await loadRules(), await loadHolidays()) });
 });
 

@@ -116,6 +116,68 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(1500);
   check("★ 8월 — NT$1,900, 1명, 지각·조퇴 없음", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()) && /지각·조퇴가 없어요/.test(await page.locator("#prOvLateBars").innerText()), await page.locator("#prOvTotal").innerText());
 
+  out.push("\n[두 기기에서 같은 카드 — 먼저 저장한 것을 조용히 덮지 않는다]");
+  {
+    // 2026-10-03 사장님: "그거 확인하고 알려주게 만들어줘"
+    const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const pad = await ctx2.newPage();
+    await pad.goto(`${base}/admin`, { waitUntil: "networkidle" });
+    await pad.request.post(`${base}/api/auth/login`, { data: { password: "ownerpass123" } });
+    const openA = async (pg) => {
+      await pg.reload({ waitUntil: "networkidle" });
+      await pg.waitForTimeout(700);
+      await pg.locator('.admin-tabs button[data-tab="payroll"]').click();
+      await pg.waitForTimeout(400);
+      await pg.fill("#payrollMonth", "2026-09");
+      await pg.dispatchEvent("#payrollMonth", "change");
+      await pg.waitForTimeout(1200);
+      await pg.locator(`#payrollStaffChips [data-payroll-staff="${a}"]`).click();
+      await pg.waitForTimeout(900);
+    };
+    const put = async (pg, day, v) => {
+      const inp = pg.locator(`#payrollGrid tr[data-day="${day}"] input[data-slot="am_in"]`);
+      await inp.fill(v);
+      await inp.press("Tab");
+      await pg.waitForTimeout(400);
+    };
+    await openA(page); // PC
+    await openA(pad); // 패드 — 둘 다 같은 rev 로 연다
+    await put(page, 10, "0900");
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    check("PC 가 먼저 저장", /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
+    await put(pad, 11, "0900");
+    await pad.click("#payrollSaveCard");
+    await pad.waitForTimeout(900);
+    const msg = await pad.locator("#appDialogMessage").innerText();
+    check("★★ 패드가 저장하면 「다른 기기에서 … 먼저 저장했어요」라고 묻는다", (await pad.locator("#appDialogBackdrop").isVisible()) && /다른 기기에서 .*「가나다 · 2026년 9월」 카드를 먼저 저장했어요/.test(msg), msg);
+    check("★ 세 갈래 — 그쪽 것 불러오기 / 내 것으로 덮어쓰기 / 취소", (await pad.locator("#appDialogOk").innerText()) === "그쪽 것 불러오기" && (await pad.locator("#appDialogAlt").innerText()) === "내 것으로 덮어쓰기", "");
+    let srv = (await (await page.request.get(`${base}/api/payroll/card?staff=${a}&month=2026-09`)).json()).card.days;
+    check("★★ 묻는 동안 서버에는 PC 것(10일)이 그대로 — 패드의 11일이 덮지 않았다", srv["10"] && !srv["11"], JSON.stringify(Object.keys(srv)));
+    await pad.click("#appDialogOk");
+    await pad.waitForTimeout(1200);
+    check("★ 「그쪽 것 불러오기」 → 패드 화면에 PC 가 넣은 10일, 패드의 11일은 사라짐", (await pad.inputValue('#payrollGrid tr[data-day="10"] input[data-slot="am_in"]')) === "09:00" && (await pad.inputValue('#payrollGrid tr[data-day="11"] input[data-slot="am_in"]')) === "" && /불러왔어요/.test(await pad.locator("#payrollStatus").innerText()), "");
+    // 이제 PC 가 옛 화면 — 덮어쓰기를 고른다
+    await put(pad, 12, "0900");
+    await pad.click("#payrollSaveCard");
+    await pad.waitForTimeout(900);
+    check("불러온 뒤 저장은 그냥 된다", /저장했어요/.test(await pad.locator("#payrollStatus").innerText()) && !(await pad.locator("#appDialogBackdrop").isVisible()), "");
+    await put(page, 13, "0900");
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    check("PC 도 이번엔 옛 화면이라 묻는다", await page.locator("#appDialogBackdrop").isVisible(), "");
+    await page.click("#appDialogAlt");
+    await page.waitForTimeout(1200);
+    srv = (await (await page.request.get(`${base}/api/payroll/card?staff=${a}&month=2026-09`)).json()).card.days;
+    check("★ 「내 것으로 덮어쓰기」 → PC 화면 것(13일)이 저장되고 패드의 12일은 빠진다", srv["13"] && !srv["12"] && /저장했어요/.test(await page.locator("#payrollStatus").innerText()), JSON.stringify(Object.keys(srv)));
+    await put(page, 14, "0900");
+    await pad.locator('#payrollGrid tr[data-day="15"] input[data-slot="am_in"]').fill("0900");
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(900);
+    check("덮어쓴 뒤 PC 는 다시 그냥 저장된다", !(await page.locator("#appDialogBackdrop").isVisible()) && /저장했어요/.test(await page.locator("#payrollStatus").innerText()), "");
+    await ctx2.close();
+  }
+
   out.push("\n[휴대폰 폭]");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(500);

@@ -296,6 +296,36 @@ out.push("\n[서버 — 사장님만]");
   check("★★ 최근 3달 — 5·6·7월, 카드 넣은 6월만 금액", tm.map((m) => m.month).join() === "2026-05,2026-06,2026-07" && tm[0].total === 0 && tm[1].total === row.total && tm[1].staff === 1 && tm[2].total === 0, JSON.stringify(tm));
   res = await boss.get("/api/payroll/trend?month=2026-13");
   check("이상한 달 400", res.status === 400, "");
+  // 두 기기에서 같은 카드 — 나중 저장이 먼저 저장을 조용히 덮지 않는다(2026-10-03 사장님: "그거 확인하고
+  // 알려주게 만들어줘"). 카드마다 rev, 화면은 연 때의 rev 를 base_rev 로 보낸다.
+  {
+    const m = "2026-11";
+    const pc = (await boss.get(`/api/payroll/card?staff=${id}&month=${m}`)).body.card; // PC 가 연다
+    const pad = (await boss.get(`/api/payroll/card?staff=${id}&month=${m}`)).body.card; // 패드도 연다
+    check("빈 카드는 rev 0", pc.rev === 0 && pad.rev === 0, JSON.stringify(pc));
+    let r1 = await boss.put("/api/payroll/card").send({ staff_id: id, month: m, base_rev: pc.rev, days: { 3: { am_in: "09:00", am_out: "14:00" } } });
+    check("★ PC 가 먼저 저장 → rev 1", r1.status === 200 && r1.body.card.rev === 1, JSON.stringify(r1.body.card));
+    let r2 = await boss.put("/api/payroll/card").send({ staff_id: id, month: m, base_rev: pad.rev, days: { 5: { am_in: "09:00", am_out: "14:00" } }, bonus: 300 });
+    check("★★ 패드가 옛 rev(0)로 저장 → 409, 덮지 않는다", r2.status === 409 && r2.body.error === "changed", `${r2.status}`);
+    check("★★ 409 에 지금 카드(PC 가 넣은 3일, rev 1, 저장 시각)를 같이 준다", r2.body.card && r2.body.card.rev === 1 && r2.body.card.days["3"] && !r2.body.card.days["5"] && r2.body.card.updated_at, JSON.stringify(r2.body.card));
+    let now = (await boss.get(`/api/payroll/card?staff=${id}&month=${m}`)).body.card;
+    check("★ 서버에는 PC 것이 그대로", now.days["3"] && !now.days["5"] && now.bonus === 0, JSON.stringify(now.days));
+    // 사장님이 「내 것으로 덮어쓰기」를 고르면 화면이 받은 rev(1)로 다시 보낸다.
+    r2 = await boss.put("/api/payroll/card").send({ staff_id: id, month: m, base_rev: r2.body.card.rev, days: { 5: { am_in: "09:00", am_out: "14:00" } }, bonus: 300 });
+    check("★ 덮어쓰기를 고르면 저장 → rev 2", r2.status === 200 && r2.body.card.rev === 2 && r2.body.card.days["5"] && !r2.body.card.days["3"], JSON.stringify(r2.body.card));
+    r1 = await boss.put("/api/payroll/card").send({ staff_id: id, month: m, base_rev: 1, days: {} });
+    check("이번엔 PC 가 옛 rev(1) → 409", r1.status === 409 && r1.body.card.rev === 2, `${r1.status}`);
+    // 이 기능 전에 저장된 카드(rev 없음)도 0 으로 보고 지킨다.
+    const { getDb } = require("../src/db");
+    await getDb().collection(P.CARDS_COLLECTION).replaceOne({ _id: `${id}|2026-12` }, { _id: `${id}|2026-12`, staff_id: id, month: "2026-12", days: { 1: { am_in: "09:00" } } }, { upsert: true });
+    const old = (await boss.get(`/api/payroll/card?staff=${id}&month=2026-12`)).body.card;
+    check("rev 없는 옛 카드는 rev 0 으로 읽힌다", old.rev === 0 && old.days["1"], JSON.stringify(old));
+    r1 = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-12", base_rev: 0, days: { 2: { am_in: "09:00" } } });
+    r2 = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-12", base_rev: 0, days: { 4: { am_in: "09:00" } } });
+    check("★ 옛 카드도 — 첫 저장은 되고(rev 1) 같은 rev 0 으로 온 두 번째는 409", r1.status === 200 && r1.body.card.rev === 1 && r2.status === 409, `${r1.status} ${r2.status}`);
+    r2 = await boss.put("/api/payroll/card").send({ staff_id: id, month: "2026-12", days: { 6: { am_in: "09:00" } } });
+    check("base_rev 없이 보내면(업데이트 전 열려 있던 화면) 예전처럼 저장", r2.status === 200 && r2.body.card.rev === 2, `${r2.status}`);
+  }
   res = await boss.get("/api/payroll/card?staff=nope&month=2026-06");
   check("없는 직원 404", res.status === 404, "");
   res = await boss.get(`/api/payroll/card?staff=${id}&month=2026-13`);

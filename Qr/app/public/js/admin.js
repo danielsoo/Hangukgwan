@@ -1487,6 +1487,11 @@
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
+      payrollConflict: "다른 기기에서 {when}에 「{name} · {month}」 카드를 먼저 저장했어요. 지금 저장하면 그 내용이 이 화면 것으로 바뀝니다.",
+      payrollConflictReload: "그쪽 것 불러오기",
+      payrollConflictOverwrite: "내 것으로 덮어쓰기",
+      payrollConflictReloaded: "다른 기기에서 저장한 카드를 불러왔어요.",
+      payrollConflictAgain: "그 사이에 또 다른 기기가 저장했어요. 「그쪽 것 불러오기」로 확인한 뒤 다시 저장해 주세요.",
       payrollOvLabel: "{month} 인건비",
       payrollOvSub: "카드 넣은 직원 {n}명 · 아래 줄을 누르면 그 직원 카드가 열려요",
       payrollOvByStaff: "직원별 지급액",
@@ -2568,6 +2573,11 @@
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依下方「工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
+      payrollConflict: "另一台裝置在 {when} 先儲存了「{name} · {month}」的卡。現在儲存的話，會改成這個畫面的內容。",
+      payrollConflictReload: "載入那邊的",
+      payrollConflictOverwrite: "用我的覆蓋",
+      payrollConflictReloaded: "已載入另一台裝置儲存的卡。",
+      payrollConflictAgain: "這段時間又有別的裝置儲存了。請先「載入那邊的」確認後再儲存。",
       payrollOvLabel: "{month} 人事費",
       payrollOvSub: "已放卡片的員工 {n} 位 · 點下方列可開啟該員工的卡",
       payrollOvByStaff: "各員工薪資",
@@ -13506,6 +13516,7 @@
     const d = await res.json();
     payroll.current = d.staff;
     payroll.days = JSON.parse(JSON.stringify(d.card.days || {}));
+    payroll.rev = Number(d.card.rev) || 0; // 다른 기기가 먼저 저장했는지 볼 번호
     payroll.unclear = {};
     payroll.read = {};
     payroll.hand = {};
@@ -14044,13 +14055,38 @@
     $("#payrollSaveCard").onclick = async () => {
       if (!payroll.current) return;
       if ($("#payrollGrid .pg-t.is-bad")) return showAlert(T("payrollBadTime"));
-      const res = await fetch("/api/payroll/card", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, days: payroll.days, ...payrollBonusNow() }),
-      });
+      const send = () =>
+        fetch("/api/payroll/card", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ staff_id: payroll.current.id, month: payroll.month, base_rev: payroll.rev || 0, days: payroll.days, ...payrollBonusNow() }),
+        });
+      let res = await send();
+      // 다른 기기(PC·패드)가 이 카드를 먼저 저장했다 — 조용히 덮지 않고 묻는다(2026-10-03 사장님:
+      // "그거 확인하고 알려주게 만들어줘").
+      if (res.status === 409) {
+        const latest = ((await res.json()) || {}).card || {};
+        const when = latest.updated_at ? String(latest.updated_at).slice(5, 16).replace("-", "/") : "";
+        const pick = await showChoice(
+          T("payrollConflict").replace("{name}", payroll.current.name).replace("{month}", payrollMonthName(payroll.month)).replace("{when}", when),
+          T("payrollConflictReload"),
+          T("payrollConflictOverwrite"),
+          T("appDialogCancel")
+        );
+        if (pick === "ok") {
+          payroll.dirty = false;
+          await openPayrollCard(payroll.current.id);
+          $("#payrollStatus").textContent = T("payrollConflictReloaded");
+          return;
+        }
+        if (pick !== "alt") return; // 취소 — 고치던 것은 화면에 그대로
+        payroll.rev = Number(latest.rev) || 0;
+        res = await send();
+        if (res.status === 409) return showAlert(T("payrollConflictAgain"));
+      }
       if (!res.ok) return showAlert(T("payrollSaveFailed"));
       const d = await res.json();
+      payroll.rev = Number(d.card.rev) || 0;
       payroll.days = d.card.days;
       payroll.result = d.result;
       payroll.dirty = false;
