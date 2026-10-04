@@ -55,6 +55,18 @@ function check(name, cond, extra = "") {
     check("★★ 근무 시간 09:00–14:00 · 16:30–21:00 (하루 9.5시간) · 기본 시급 220 을 보여준다", /근무 시간 09:00–14:00 · 16:30–21:00/.test(hrs) && /하루 9\.5시간/.test(hrs) && /NT\$220/.test(hrs), hrs);
     check("★ 근무 규칙 칸에 그 값", (await page.inputValue("#payrollWorkHours")) === "09:00-14:00, 16:30-21:00" && (await page.inputValue("#payrollDefaultHourly")) === "220" && (await page.inputValue("#payrollLateUnit")) === "30", "");
     check("급여 화면에 따로 퇴근 시각 칸이 없다", (await page.locator("#payrollAmEnd, #payrollPmEnd").count()) === 0, "");
+    // 2026-10-04 사장님: "이거 아래 있어서 잘 모를 거 같아 위나 옆으로 옮겨줘"
+    const rulesY = await page.locator("#payrollRules > summary").evaluate((el) => el.getBoundingClientRect().top);
+    const chipsY = await page.locator("#payrollStaffChips").evaluate((el) => el.getBoundingClientRect().top);
+    check("★★ 「⚙ 근무 규칙」은 맨 위 — 달·직원 줄 바로 밑, 첫 화면 안", rulesY > chipsY && rulesY - chipsY < 120 && rulesY < 400 && /⚙ 근무 규칙/.test(await page.locator("#payrollRules > summary").innerText()), `chips ${chipsY} rules ${rulesY}`);
+    check("처음엔 접혀 있다(한 줄 요약만)", !(await page.locator("#payrollWorkHours").isVisible()), "");
+    await page.locator("#payrollRules > summary").click();
+    await page.waitForTimeout(300);
+    check("★ 누르면 그 자리에서 칸이 열린다", (await page.locator("#payrollWorkHours").isVisible()) && (await page.locator("#payrollSaveRules").isVisible()), "");
+    await page.fill("#payrollLateUnit", "30");
+    await page.click("#payrollSaveRules");
+    await page.waitForTimeout(900);
+    check("★ 규칙 저장하면 다시 접히고 한 줄이 그대로 보인다", !(await page.locator("#payrollWorkHours").isVisible()) && /하루 9\.5시간/.test(await page.locator("#payrollHours").innerText()), "");
   }
   {
     // 2026-10-03 사장님: "ui 좀 더 다듬어줘. 좀 더 직관적이고 부드럽게"

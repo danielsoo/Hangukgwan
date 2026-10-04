@@ -57,6 +57,14 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(1500);
 
   if (process.env.SHOT) await page.locator("#payrollOverview").screenshot({ path: process.env.SHOT });
+  if (process.env.SHOT_TOP) {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.screenshot({ path: process.env.SHOT_TOP + "-closed.png", clip: { x: 0, y: 0, width: 1280, height: 420 } });
+    await page.locator("#payrollRules > summary").click();
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: process.env.SHOT_TOP + "-open.png", clip: { x: 0, y: 0, width: 1280, height: 420 } });
+    await page.locator("#payrollRules > summary").click();
+  }
   out.push("[큰 숫자]");
   check("★★ 「2026년 9월 인건비」 NT$5,905 (2,900 + 2,480 + 525) — 카드 넣은 직원만", (await page.locator("#prOvLabel").innerText()).includes("2026년 9월 인건비") && (await page.locator("#prOvTotal").innerText()) === "NT$5,905", await page.locator("#prOvTotal").innerText());
   const stats = await page.locator("#prOvStats").innerText();

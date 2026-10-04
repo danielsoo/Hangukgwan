@@ -2813,6 +2813,16 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-bonus #payrollBonusNote { height: 38px; padding: 0 12px; border: 1px solid #ecdcb3; border-radius: 10px; background: #fff; font: inherit; font-size: 14px; color: var(--ink); }
 .pr-save { display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: center; }
 .payroll-rules, .payroll-help { margin-top: 18px; font-size: 14px; color: #6b625a; }
+/* 근무 규칙은 맨 위 — 한 줄 요약이 곧 여는 손잡이(2026-10-04). */
+.pr-rules-top { margin: 0 0 10px; }
+.pr-rules-top > summary { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pr-rules-top > summary::-webkit-details-marker { display: none; }
+.pr-rules-top .pr-rules-gear { font-weight: 700; color: var(--ink); }
+.pr-rules-top .payroll-hours { margin: 0; }
+.pr-rules-top .pr-rules-edit { padding: 4px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--pr-card); color: var(--ink); font-size: 13px; font-weight: 600; }
+.pr-rules-top .pr-rules-edit::after { content: " ▾"; }
+.pr-rules-top[open] .pr-rules-edit::after { content: " ▴"; }
+.pr-rules-top[open] .payroll-rules-form { padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--pr-card); }
 .payroll-rules summary, .payroll-help summary { cursor: pointer; font-weight: 600; }
 .payroll-rules-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 10px; }
 .payroll-rules-form input { height: 38px; width: 80px; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; font: inherit; background: var(--pr-card); color: var(--ink); }
