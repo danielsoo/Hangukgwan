@@ -8,6 +8,8 @@ const P = require("../payroll");
 
 const router = express.Router();
 router.use(requireOwner);
+// 급여 탭은 들어갈 때마다 따로 비밀번호(src/sensitiveLock.js, 2026-10-04).
+router.use(require("../sensitiveLock").requireUnlocked("payroll"));
 
 
 const col = async (name) => {

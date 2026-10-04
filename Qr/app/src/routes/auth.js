@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const { store, save, getDb, connectDB } = require("../db");
 const { requireOwner } = require("../auth");
 const { isAdminRole } = require("../accounts");
+const lockbox = require("../sensitiveLock");
 
 const router = express.Router();
 
@@ -110,6 +111,8 @@ router.get("/me", (req, res) => {
     role,
     permissions,
     staffPasswordSet: !!store.settings.staff_password_hash,
+    // 급여·결산 비밀번호를 정했는가 — 정했으면 화면이 그 탭에 들어갈 때마다 묻는다.
+    sensitivePinSet: lockbox.pinSet(),
     expiresAt: expires ? new Date(expires).toISOString() : null,
   });
 });
@@ -131,6 +134,9 @@ router.post("/change-password", async (req, res) => {
   if (!store.settings[hashKey] || !bcrypt.compareSync(currentPassword, store.settings[hashKey])) {
     return res.status(401).json({ error: "wrong_current_password" });
   }
+  // 로그인 비밀번호는 급여·결산 비밀번호와 달라야 한다(2026-10-04 사장님: "로그인 비번이랑 결산 급여 비번은
+  // 다르게") — 같으면 로그인한 사람이 그대로 탭을 연다.
+  if (lockbox.sameAsPin(newPassword)) return res.status(400).json({ error: "same_as_pin" });
   store.settings[hashKey] = bcrypt.hashSync(newPassword, 10);
   await save();
   res.json({ ok: true });
@@ -141,8 +147,35 @@ router.post("/change-password", async (req, res) => {
 router.post("/set-staff-password", requireOwner, async (req, res) => {
   const { newPassword } = req.body || {};
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: "invalid_input" });
+  if (lockbox.sameAsPin(newPassword)) return res.status(400).json({ error: "same_as_pin" });
   store.settings.staff_password_hash = bcrypt.hashSync(newPassword, 10);
   await save();
+  res.json({ ok: true });
+});
+
+// 급여·결산 잠금(src/sensitiveLock.js). 풀기·잠그기는 로그인한 관리자 누구나 — 결산은 직원도 오늘 것을 본다.
+// 비밀번호 정하기는 사장님만, 그것도 사장님 로그인 비밀번호를 한 번 더 확인하고 — 열려 있는 사장님
+// 화면에서 누가 바꿔 버리지 못하게.
+router.post("/sensitive-unlock", (req, res) => {
+  if (!req.session || !isAdminRole(req.session.role)) return res.status(401).json({ error: "not_authenticated" });
+  const { area, pin } = req.body || {};
+  const r = lockbox.unlock(req, String(area || ""), pin);
+  if (!r.ok) return res.status(r.status).json(r);
+  res.json({ ok: true });
+});
+router.post("/sensitive-lock", (req, res) => {
+  if (!req.session || !isAdminRole(req.session.role)) return res.status(401).json({ error: "not_authenticated" });
+  lockbox.lock(req, req.body && req.body.area);
+  res.json({ ok: true });
+});
+router.put("/sensitive-pin", requireOwner, async (req, res) => {
+  const { ownerPassword, pin } = req.body || {};
+  if (!ownerPassword || !bcrypt.compareSync(String(ownerPassword), store.settings.admin_password_hash || "")) {
+    return res.status(401).json({ error: "wrong_owner_password" });
+  }
+  const r = await lockbox.setPin(pin);
+  if (!r.ok) return res.status(r.status).json(r);
+  lockbox.lock(req); // 새 비밀번호로 다시 풀게
   res.json({ ok: true });
 });
 

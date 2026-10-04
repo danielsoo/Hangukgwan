@@ -19,6 +19,10 @@ const { computeItemMovers, computeTimeShift, moversWindow, RECENT_DAYS } = requi
 const { isAvailableNow } = require("../availability");
 
 const router = express.Router();
+// 결산 탭은 들어갈 때마다 따로 비밀번호(src/sensitiveLock.js, 2026-10-04 사장님: "사장 탭에 급여와 결산이
+// 직원들이나 다른 사람한테 엑세스가 될까봐"). 탭이 쓰는 길만 잠근다 — 실시간 주문 화면의
+// 「오전/오후 정산」(shift-close)·밤 마감(cron-close)·LINE 시험은 결산 탭이 아니라 그대로 둔다.
+const settlementUnlocked = require("../sensitiveLock").requireUnlocked("settlement");
 
 // 마감 스냅샷도 자기 컬렉션에 산다(src/db.js) — 하루에 한 줄씩 영원히
 // 쌓이는 것이라 store 문서에 두면 계속 커진다. 같은 날짜를 다시 닫으면
@@ -111,7 +115,7 @@ async function saveSettlementSnapshot(snapshot, testId) {
  *
  * 지난 정산 기록(/history)과 기록 저장(/close)은 아래에서 사장님 전용 그대로다.
  */
-router.get("/", requireAdmin, requireTodayForStaff, async (req, res) => {
+router.get("/", requireAdmin, requireTodayForStaff, settlementUnlocked, async (req, res) => {
   const today = taipeiDateString();
   const isOwner = !!(req.session && req.session.role === "owner");
   const start = isOwner ? req.query.start || req.query.date || today : today;
@@ -299,7 +303,7 @@ function ordersInRange(start, end, req) {
  * requireOwner — 여러 날에 걸친 것이라 직원에게는 애초에 열 수 없는 화면이다
  * (src/auth.js requireTodayForStaff 와 같은 이유).
  */
-router.get("/item-trend", requireOwner, async (req, res) => {
+router.get("/item-trend", requireOwner, settlementUnlocked, async (req, res) => {
   const q = req.query || {};
   const valid = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
   const today = taipeiDateString();
@@ -346,7 +350,7 @@ router.get("/item-trend", requireOwner, async (req, res) => {
 // 갑자기 잘 팔리거나 안 팔리는 메뉴 — 어제까지 7일 vs 그 전 4주 주 평균.
 // 2026-09-30 사장님: "메뉴가 갑자기 안 팔리거나 갑자기 잘팔리거나 이런 걸
 // 꾸준히 체크하면서 보여줬으면." 계산은 src/itemMovers.js.
-router.get("/item-movers", requireOwner, async (req, res) => {
+router.get("/item-movers", requireOwner, settlementUnlocked, async (req, res) => {
   const today = taipeiDateString();
   // 기간 — ?days=14 또는 ?from=2026-09-01&to=2026-09-14(2026-10-03 사장님: "날짜를
   // 지정할 수 있게"). 아무것도 없으면 예전처럼 어제까지 7일.
@@ -431,7 +435,7 @@ function dayCount(start, end) {
 // via POST /close) — kept in case orders are later edited/pruned and the
 // live numbers for an old date would otherwise drift from what actually
 // closed that night.
-router.get("/history", requireOwner, async (req, res) => {
+router.get("/history", requireOwner, settlementUnlocked, async (req, res) => {
   // 결산과 같은 규칙(위 ordersInRange 주석) — 테스트 기기는 테스트 마감만,
   // 평소 기기는 진짜 마감만. 한 화면에 섞이면 어느 줄이 진짜 장부인지
   // 알 수 없게 된다.
@@ -488,7 +492,7 @@ async function backfillMissingSnapshots(list, req) {
 // Manually snapshot a given date (defaults to today) into permanent history.
 // Safe to call more than once for the same date — replaces any existing
 // snapshot for that date rather than duplicating it.
-router.post("/close", requireOwner, async (req, res) => {
+router.post("/close", requireOwner, settlementUnlocked, async (req, res) => {
   // 테스터 모드에서도 마감이 된다(2026-09-10 사장님: "결산이랑 주문까지
   // 구현되게 해줘"). 다만 찍히는 것은 **테스트 세션의 스냅샷**이다 —
   // 그날의 진짜 마감과는 다른 줄이고, 테스터 모드를 끄면 같이 사라진다.
@@ -1000,7 +1004,7 @@ async function runAutoAmClose(req) {
  * 보낼 때 「다시 보낸 것」이라고 적는다. 안 적으면 지난 날짜 숫자가 오늘
  * 마감으로 읽힌다 — 문자에는 앞뒤 맥락이 없다.
  */
-router.post("/resend-line", requireOwner, async (req, res) => {
+router.post("/resend-line", requireOwner, settlementUnlocked, async (req, res) => {
   const date = String((req.body && req.body.date) || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "bad_date" });
   // 테스터 모드에서는 안 보낸다. 직원 폰으로 가는 것이라 시험으로 보낼 수 없다.

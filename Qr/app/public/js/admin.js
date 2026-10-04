@@ -222,14 +222,20 @@
     // 같은 출처의 /api 요청만. Pusher 자신의 통신이나 외부 주소는 건드리지
     // 않는다.
     if (!plainUrl.startsWith("/api/")) return nativeFetch(input, init);
+    // 급여·결산이 다시 잠겼다(423, src/sensitiveLock.js) — 화면이 알아채게 한 번 알린다.
+    const watch = (p) =>
+      p.then((r) => {
+        if (r && r.status === 423) window.dispatchEvent(new Event("hg-sensitive-locked"));
+        return r;
+      });
 
-    if (!sid) return nativeFetch(input, init);
+    if (!sid) return watch(nativeFetch(input, init));
     try {
       const opts = Object.assign({}, init);
       const headers = new Headers((init && init.headers) || (typeof input === "object" && input && input.headers) || undefined);
       headers.set("X-Socket-Id", sid);
       opts.headers = headers;
-      return nativeFetch(input, opts);
+      return watch(nativeFetch(input, opts));
     } catch (e) {
       // 헤더를 못 붙이는 상황이 있더라도 요청 자체는 나가야 한다.
       return nativeFetch(input, init);
@@ -691,6 +697,8 @@
   // 서버가 답하기 전에는 「직원」— 사장님 칸(급여·마감 알림·결제·진단)은 답을 받은 뒤에 열린다.
   // 2026-10-03 사장님: "직원들은 급여 페이지 보이면 절대 안되고 링크로 타도 안돼".
   let currentRole = "staff";
+  // 급여·결산 비밀번호가 정해져 있는가(/api/auth/me). 정해져 있으면 그 탭에 들어갈 때마다 묻는다.
+  let sensitivePinSet = false;
   let staffPermissions = { menuEdit: true, tableEdit: true, settingsEdit: true, orderCancel: true, orderEdit: true, reservationManage: true };
   const canMenuEdit = () => currentRole === "owner" || staffPermissions.menuEdit;
   const canTableEdit = () => currentRole === "owner" || staffPermissions.tableEdit;
@@ -710,6 +718,26 @@
     ko: {
       appDialogOk: "확인",
       appDialogCancel: "취소",
+      pinGateOk: "열기",
+      pinGateTitle: "「{tab}」 비밀번호를 입력하세요",
+      pinGateWrong: "비밀번호가 달라요. ({left}번 더 틀리면 5분 동안 못 열어요)",
+      pinGateTooMany: "너무 많이 틀렸어요. {sec}초 뒤에 다시 해 주세요.",
+      pinGateFailed: "확인하지 못했어요. 다시 해 주세요.",
+      pinGateRelocked: "오래 쓰지 않아 「{tab}」이 다시 잠겼어요. 탭을 다시 눌러 비밀번호를 넣어 주세요.",
+      sensitivePinTitle: "🔒 급여·결산 비밀번호",
+      sensitivePinHint: "정해 두면 「💰 급여」와 「결산」 탭에 들어갈 때마다 이 비밀번호를 물어요. 로그인 비밀번호(사장·직원)와 달라야 해요. 15분 동안 아무것도 안 하면 다시 잠겨요.",
+      sensitivePinOwnerPw: "사장 로그인 비밀번호 (확인용)",
+      sensitivePinNew: "새 급여·결산 비밀번호 (4자 이상)",
+      sensitivePinConfirm: "한 번 더",
+      sensitivePinSave: "비밀번호 저장",
+      sensitivePinOn: "✔ 정해져 있어요 — 급여·결산 탭에 들어갈 때마다 물어요.",
+      sensitivePinOff: "아직 정하지 않았어요 — 지금은 급여·결산 탭이 비밀번호 없이 열려요.",
+      sensitivePinSaved: "저장했어요. 이제 급여·결산 탭에 들어갈 때마다 물어요.",
+      sensitivePinMismatch: "두 칸이 달라요.",
+      sensitivePinShort: "4자 이상으로 정해 주세요.",
+      sensitivePinSameAsLogin: "로그인 비밀번호(사장·직원)와 같아요. 다른 비밀번호로 정해 주세요.",
+      sensitivePinWrongOwner: "사장 로그인 비밀번호가 달라요.",
+      pwSameAsPin: "급여·결산 비밀번호와 같아요. 다른 비밀번호로 정해 주세요.",
       pageTitle: "한국관 관리자 페이지",
       loginTitle: "관리자 로그인",
       loginSubtitle: "직원·사장 전용 화면입니다",
@@ -1804,6 +1832,26 @@
     zh: {
       appDialogOk: "確定",
       appDialogCancel: "取消",
+      pinGateOk: "開啟",
+      pinGateTitle: "請輸入「{tab}」密碼",
+      pinGateWrong: "密碼不對。（再錯 {left} 次就要等 5 分鐘）",
+      pinGateTooMany: "錯太多次了。請 {sec} 秒後再試。",
+      pinGateFailed: "無法確認，請再試一次。",
+      pinGateRelocked: "太久沒操作，「{tab}」又鎖上了。請再點一次分頁輸入密碼。",
+      sensitivePinTitle: "🔒 薪資·結算密碼",
+      sensitivePinHint: "設定後，每次進入「💰 薪資」與「結算」分頁都會詢問此密碼。必須和登入密碼（老闆·員工）不同。15 分鐘沒有操作會再鎖上。",
+      sensitivePinOwnerPw: "老闆登入密碼（確認用）",
+      sensitivePinNew: "新的薪資·結算密碼（4 字以上）",
+      sensitivePinConfirm: "再輸入一次",
+      sensitivePinSave: "儲存密碼",
+      sensitivePinOn: "✔ 已設定 — 每次進入薪資·結算分頁都會詢問。",
+      sensitivePinOff: "尚未設定 — 目前薪資·結算分頁不需密碼即可開啟。",
+      sensitivePinSaved: "已儲存。之後每次進入薪資·結算分頁都會詢問。",
+      sensitivePinMismatch: "兩欄不一致。",
+      sensitivePinShort: "請設定 4 字以上。",
+      sensitivePinSameAsLogin: "和登入密碼（老闆·員工）相同，請換一個。",
+      sensitivePinWrongOwner: "老闆登入密碼不對。",
+      pwSameAsPin: "和薪資·結算密碼相同，請換一個。",
       pageTitle: "韓國館 管理後台",
       loginTitle: "管理員登入",
       loginSubtitle: "員工與負責人專用畫面",
@@ -3768,6 +3816,8 @@
       return;
     }
     currentRole = data.role === "owner" ? "owner" : "staff";
+    sensitivePinSet = !!data.sensitivePinSet;
+    renderSensitivePinStatus();
     staffPermissions = data.permissions || staffPermissions;
     // 다음에 이 기기가 열릴 때는 기다림 없이 바로 대시보드로 뜬다.
     rememberSignedIn(data.expiresAt);
@@ -4004,6 +4054,75 @@
   // 못 박는 일은 서버가 한다(GET /api/settlements) — 화면에서 날짜 칸을
   // 감추는 것만으로는 막은 것이 아니다.
   const OWNER_ONLY_TABS = new Set(["vip", "accounts", "payroll"]);
+  // 들어갈 때마다 비밀번호를 묻는 탭 → 서버 잠금 이름(src/sensitiveLock.js)
+  const LOCKED_TABS = { payroll: "payroll", settlement: "settlement" };
+
+  // 비밀번호 창. 맞히면 true, 취소하면 false. 틀리면 창에서 바로 말한다.
+  function askSensitivePin(tab, label) {
+    return new Promise((resolve) => {
+      const back = $("#pinGateBackdrop");
+      const input = $("#pinGateInput");
+      const err = $("#pinGateError");
+      $("#pinGateTitle").textContent = T("pinGateTitle").replace("{tab}", label);
+      input.value = "";
+      err.hidden = true;
+      back.hidden = false;
+      setTimeout(() => input.focus(), 30);
+      const done = (ok) => {
+        back.hidden = true;
+        $("#pinGateOk").onclick = null;
+        $("#pinGateCancel").onclick = null;
+        input.onkeydown = null;
+        resolve(ok);
+      };
+      const tryIt = async () => {
+        let res;
+        try {
+          res = await fetch("/api/auth/sensitive-unlock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ area: LOCKED_TABS[tab], pin: input.value }),
+          });
+        } catch (e) {
+          res = null;
+        }
+        if (res && res.ok) return done(true);
+        const body = res ? await res.json().catch(() => ({})) : {};
+        err.textContent =
+          body.error === "wrong_pin"
+            ? T("pinGateWrong").replace("{left}", body.left)
+            : body.error === "too_many"
+              ? T("pinGateTooMany").replace("{sec}", body.retryAfter)
+              : T("pinGateFailed");
+        err.hidden = false;
+        input.value = "";
+        input.focus();
+      };
+      $("#pinGateOk").onclick = tryIt;
+      $("#pinGateCancel").onclick = () => done(false);
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") tryIt();
+        if (e.key === "Escape") done(false);
+      };
+    });
+  }
+  function lockSensitive(tab) {
+    if (!sensitivePinSet) return;
+    fetch("/api/auth/sensitive-lock", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ area: LOCKED_TABS[tab] }) }).catch(() => {});
+  }
+  // 탭에 둔 채 15분이 지나 서버가 다시 잠갔다(423) — 그 탭을 닫고 실시간 주문으로, 이유를 말한다.
+  let relockShown = 0;
+  window.addEventListener("hg-sensitive-locked", () => {
+    const active = $(".admin-tabs button.active");
+    if (!active || !LOCKED_TABS[active.dataset.tab]) return;
+    const label = active.textContent.trim();
+    const ordersBtn = $('.admin-tabs button[data-tab="orders"]');
+    if (ordersBtn) ordersBtn.click();
+    if (Date.now() - relockShown > 3000) {
+      relockShown = Date.now();
+      showAlert(T("pinGateRelocked").replace("{tab}", label));
+    }
+  });
 
   // 주소의 #탭이름 으로 탭을 못 박을 수 있다.
   //
@@ -4020,11 +4139,18 @@
   window.addEventListener("hashchange", openTabFromHash);
 
   $$(".admin-tabs button").forEach((btn) => {
-    btn.onclick = () => {
+    btn.onclick = async () => {
       // owner 전용 탭 — 직원 세션이 탭 버튼을 눌러도 열리지 않게. (실제
       // 데이터 차단은 서버가 하지만, 눌리는데 아무것도 안 나오는 것보다
       // 아예 안 눌리는 편이 덜 헷갈린다.)
       if (OWNER_ONLY_TABS.has(btn.dataset.tab) && currentRole !== "owner") return;
+      // 급여·결산 — 들어갈 때마다 따로 비밀번호(2026-10-04). 떠날 때는 서버에서도 다시 잠근다.
+      const prev = $(".admin-tabs button.active");
+      const prevTab = prev && prev.dataset.tab;
+      if (LOCKED_TABS[btn.dataset.tab] && prevTab !== btn.dataset.tab && sensitivePinSet) {
+        if (!(await askSensitivePin(btn.dataset.tab, btn.textContent.trim()))) return;
+      }
+      if (prevTab && LOCKED_TABS[prevTab] && prevTab !== btn.dataset.tab) lockSensitive(prevTab);
       $$(".admin-tabs button").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
@@ -13223,13 +13349,46 @@
       $(`#${curId}`).value = "";
       $(`#${newId}`).value = "";
     } else {
+      const body = await res.json().catch(() => ({}));
       msg.style.color = "#b5232c";
-      msg.textContent = T("pwChangeFailed");
+      msg.textContent = T(body.error === "same_as_pin" ? "pwSameAsPin" : "pwChangeFailed");
     }
     msg.hidden = false;
   }
 
   $("#changePwBtn").onclick = () => changeOwnPassword("pw_current", "pw_new", "pwMsg");
+
+  // 급여·결산 비밀번호 — 사장님만, 사장 로그인 비밀번호를 한 번 더 받고 정한다(2026-10-04).
+  function renderSensitivePinStatus() {
+    const el = $("#sensitivePinStatus");
+    if (el) el.textContent = T(sensitivePinSet ? "sensitivePinOn" : "sensitivePinOff");
+  }
+  if ($("#saveSensitivePinBtn"))
+    $("#saveSensitivePinBtn").onclick = async () => {
+      const msg = $("#sensitivePinMsg");
+      const say = (key, ok) => {
+        msg.style.color = ok ? "#1a8a44" : "#b5232c";
+        msg.textContent = T(key);
+        msg.hidden = false;
+      };
+      const pin = $("#sensitive_pin_new").value;
+      if (pin.length < 4) return say("sensitivePinShort");
+      if (pin !== $("#sensitive_pin_confirm").value) return say("sensitivePinMismatch");
+      const res = await fetch("/api/auth/sensitive-pin", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ownerPassword: $("#sensitive_owner_pw").value, pin }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok)
+        return say(
+          body.error === "same_as_login" ? "sensitivePinSameAsLogin" : body.error === "wrong_owner_password" ? "sensitivePinWrongOwner" : body.error === "too_short" ? "sensitivePinShort" : "pwChangeFailed"
+        );
+      ["#sensitive_owner_pw", "#sensitive_pin_new", "#sensitive_pin_confirm"].forEach((sel) => ($(sel).value = ""));
+      sensitivePinSet = true;
+      renderSensitivePinStatus();
+      say("sensitivePinSaved", true);
+    };
   $("#changeOwnerPwBtn").onclick = () => changeOwnPassword("owner_pw_current", "owner_pw_new", "ownerPwMsg");
 
   // ---------- 계정 관리 (owner only) ----------
@@ -16232,8 +16391,9 @@
       $("#staff_new_password").value = "";
       renderStaffPasswordStatus(true);
     } else {
+      const body = await res.json().catch(() => ({}));
       msg.style.color = "#b5232c";
-      msg.textContent = T("staffPasswordFailed");
+      msg.textContent = T(body.error === "same_as_pin" ? "pwSameAsPin" : "staffPasswordFailed");
     }
     msg.hidden = false;
     setTimeout(() => (msg.hidden = true), 2500);

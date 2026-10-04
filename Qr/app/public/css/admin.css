@@ -2866,3 +2866,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 지각·조퇴 막대는 차감 색 — 돈이 빠지는 쪽이라 지급액 막대(남색)와 갈라 읽힌다. */
 .pr-ov-late .stl-bar-fill { background: #b4532a; }
 .pr-ov-late { grid-template-columns: minmax(88px, 220px) 1fr minmax(96px, max-content) minmax(44px, max-content); }
+
+/* 급여·결산 잠금 창(2026-10-04) */
+.pin-gate-title { font-weight: 700; font-size: 17px; margin: 0 0 12px; }
+.pin-gate input { width: 100%; box-sizing: border-box; height: 46px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; font: inherit; font-size: 18px; letter-spacing: 0.1em; }
+.pin-gate-error { color: #b5232c; font-size: 14px; margin: 8px 0 0; }

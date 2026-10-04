@@ -1174,6 +1174,18 @@
           <button id="changeOwnerPwBtn" data-i18n="changePwBtn">비밀번호 변경</button>
           <div class="save-msg" id="ownerPwMsg" hidden></div>
         </div>
+        <!-- 급여·결산 비밀번호(2026-10-04 사장님: "그 탭 들어갈 때마다 비밀번호 치게 해줘. 비밀번호 설정에서
+             한 번 저장하게 해줘. 로그인 비번이랑 결산 급여 비번은 다르게"). -->
+        <div class="settings-card owner-only">
+          <h3 data-i18n="sensitivePinTitle">🔒 급여·결산 비밀번호</h3>
+          <p class="settings-hint" data-i18n="sensitivePinHint">정해 두면 「💰 급여」와 「결산」 탭에 들어갈 때마다 이 비밀번호를 물어요. 로그인 비밀번호(사장·직원)와 달라야 해요. 15분 동안 아무것도 안 하면 다시 잠겨요.</p>
+          <div id="sensitivePinStatus" class="settings-hint"></div>
+          <label><span data-i18n="sensitivePinOwnerPw">사장 로그인 비밀번호 (확인용)</span><input id="sensitive_owner_pw" type="password" autocomplete="current-password" /></label>
+          <label><span data-i18n="sensitivePinNew">새 급여·결산 비밀번호 (4자 이상)</span><input id="sensitive_pin_new" type="password" autocomplete="new-password" /></label>
+          <label><span data-i18n="sensitivePinConfirm">한 번 더</span><input id="sensitive_pin_confirm" type="password" autocomplete="new-password" /></label>
+          <button id="saveSensitivePinBtn" data-i18n="sensitivePinSave">비밀번호 저장</button>
+          <div class="save-msg" id="sensitivePinMsg" hidden></div>
+        </div>
         <div class="settings-card owner-only">
           <h3 data-i18n="staffPermTitle">직원 권한 관리</h3>
           <p class="settings-hint" data-i18n="staffPermHint">직원 계정으로 로그인하면 아래에서 켠 항목만 추가/삭제/변경할 수 있어요. 주문 확인, 상태 변경(조리 시작/서빙/결제 완료), 인쇄는 항상 가능합니다.</p>
@@ -1826,6 +1838,18 @@
   </div>
 </div>
 
+<!-- 급여·결산 잠금 — 그 탭에 들어갈 때마다 따로 비밀번호(2026-10-04, src/sensitiveLock.js). -->
+<div id="pinGateBackdrop" class="modal-backdrop" hidden>
+  <div class="modal app-dialog-modal pin-gate">
+    <p id="pinGateTitle" class="pin-gate-title"></p>
+    <input id="pinGateInput" type="password" autocomplete="off" inputmode="text" />
+    <p id="pinGateError" class="pin-gate-error" hidden></p>
+    <div class="modal-actions">
+      <button class="danger-btn" id="pinGateCancel" data-i18n="appDialogCancel">취소</button>
+      <button class="primary-btn" id="pinGateOk" data-i18n="pinGateOk">열기</button>
+    </div>
+  </div>
+</div>
 <div id="appDialogBackdrop" class="modal-backdrop" hidden>
   <div class="modal app-dialog-modal">
     <p id="appDialogMessage"></p>
