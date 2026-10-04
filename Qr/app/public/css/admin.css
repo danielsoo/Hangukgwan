@@ -2900,3 +2900,4 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-saved-at b { color: var(--ink); font-weight: 700; }
 .payroll-saved-at .is-dirty-at { color: #b5232c; }
 .pr-ov-table td.pr-ov-saved { color: #6b625a; font-size: 13px; }
+.payroll-photo-msg .pm-warn { color: var(--pr-red); font-weight: 700; }

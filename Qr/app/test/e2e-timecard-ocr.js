@@ -56,6 +56,7 @@ function grade(cards, truth) {
   await page.setContent("<html><body></body></html>");
   const pub = path.join(__dirname, "../public/js");
   await page.addScriptTag({ content: fs.readFileSync(path.join(pub, "timecard-templates.js"), "utf8") });
+  await page.addScriptTag({ content: fs.readFileSync(path.join(pub, "timecard-handdigits.js"), "utf8") });
   await page.addScriptTag({ content: fs.readFileSync(path.join(pub, "timecard-ocr.js"), "utf8") });
   const b64 = (f) => "data:image/webp;base64," + fs.readFileSync(path.join(__dirname, "fixtures", f)).toString("base64");
 
@@ -93,12 +94,17 @@ function grade(cards, truth) {
   check("밑줄(파란 펜)은 손글씨로 치지 않는다 — 7·16·21·23·28일", !gn.hand.some((h) => /^(7|16|21|23|28)/.test(h)), gn.hand.join());
   check("빨간 메모(0.5 · 1)는 시각으로 읽지 않는다 — 연장 칸이 비어 있다", n.cards.every((c) => Object.values(c.days).every((d) => !d.ot_in && !d.ot_out)), "");
   check(`읽는 데 3초 안 (${n.ms}ms)`, n.ms < 3000, `${n.ms}ms`);
+  // 2026-10-04 사장님: "연도랑 월 인식해서 다른 달이면 알려주는 것도" / "대만은 … 자기 연도로" — 펜으로 쓴 「115 年 6 月份」.
+  const hd = (r) => JSON.stringify(r.cards.map((c) => c.header ? (c.header.unread ? "unread" : `${c.header.roc}/${c.header.month}`) : "-"));
+  check(`★★ 파란 면 머리 「115年 6月」 = 2026-06 (${hd(n)})`, n.cards[0].header && n.cards[0].header.roc === 115 && n.cards[0].header.year === 2026 && n.cards[0].header.month === 6, hd(n));
+  check("주황 면에는 머리를 읽지 않는다", !n.cards[1].header, hd(n));
 
   out.push("\n[★ 카드]");
   const st = await read(b64("timecard-star.webp"));
   check("★★ 별 카드를 알아본다", st.cards.length === 2 && st.cards.every((c) => c.star), JSON.stringify(st.cards.map((c) => c.star)));
   const gs = grade(st.cards, truthOf(STAR));
   check(`★ 4일 16칸 (${gs.ok}/16)`, gs.ok >= 14 && gs.wrong.length === 0, gs.wrong.join(" "));
+  check(`★ 카드 머리도 「115年 6月」 (${hd(st)})`, st.cards[0].header && st.cards[0].header.roc === 115 && st.cards[0].header.month === 6, hd(st));
 
   // 2026-10-03 사장님이 더 보내신 8월 카드 — 한 장에 한 면, 「NO.」 옆 빨간 ○ 표시.
   // 주 5일을 넘긴 날만 찍는 카드에 ★ 대신 ○·△ 를 그리기도 한다 — 모양을 가리지 않는다.
@@ -107,6 +113,7 @@ function grade(cards, truth) {
   check("★★ 빨간 ○ 도 추가 카드 표시로 알아본다", mo.cards.length === 1 && mo.cards[0].star === true, JSON.stringify(mo.cards.map((c) => c.star)));
   const gmo = grade(mo.cards, { 4: ["09:07", "14:04", "16:10", "21:07"], 11: ["09:12", "14:02", "16:11", "21:17"] });
   check(`4·11일 8칸 — 틀림 0 (맞음 ${gmo.ok}, 확인 필요 ${gmo.flagged})`, gmo.wrong.length === 0 && gmo.ok + gmo.flagged === 8 && gmo.ok >= 5, gmo.wrong.join(" "));
+  check(`★ 8월 카드 머리 「115年 8月」 (${hd(mo)})`, mo.cards[0].header && mo.cards[0].header.roc === 115 && mo.cards[0].header.month === 8, hd(mo));
   const oo = await read(b64("timecard-orange-one.webp"));
   check("주황 면 한 장 — 표시 없음", oo.cards.length === 1 && oo.cards[0].color === "orange" && !oo.cards[0].star, JSON.stringify(oo.cards.map((c) => [c.color, c.star])));
   const goo = grade(oo.cards, { 16: ["09:07", "14:02", "16:14", "21:00"] });
@@ -133,6 +140,8 @@ function grade(cards, truth) {
     const r = await read(b64("timecard-normal.webp"), opt);
     const g = grade(r.cards, truthOf(NORMAL));
     check(`${name}: 카드 둘 · 손글씨 둘 · 틀림 0 (맞음 ${g.ok}, 확인 필요 ${g.flagged}, 기울기 ${r.skew}°)`, r.cards.length === 2 && g.hand.length === 2 && g.wrong.length === 0 && g.ok >= 40, g.wrong.join(" ") + " hand " + g.hand.join());
+    const h = r.cards[0] && r.cards[0].header;
+    check(`${name}: 머리는 115/6 이거나 「못 읽음」 — 다른 달을 지어내지 않는다 (${hd(r)})`, h && (h.unread || (h.roc === 115 && h.month === 6)), hd(r));
   }
 
   out.push("\n[카드가 아닌 사진]");

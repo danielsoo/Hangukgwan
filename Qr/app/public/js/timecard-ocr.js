@@ -333,6 +333,228 @@
     return { color, xs, colX, ys, pitch, bottom, firstDay: color === "blue" ? 0 : 16 };
   }
 
+  // ---- 카드에 손으로 쓴 연도·월(파란 면 「115 年 9 月份」) ----
+  // 2026-10-04 사장님: "연도랑 월 인식해서 다른 달이면 알려주는 것도 만들어줘 경고 같은 걸로" / "대만은 2026년
+  // 이런식으로 안하고 자기 연도로 해서" — 민국 연도(115 = 2026). 펜 글씨라 기계 숫자 견본으로는 못 읽는다.
+  // 표 바로 위 띠(「考勤表」 줄과 표 머리 사이)에서 펜 획만 모아 글자로 나누고, 손글씨 숫자 인식기
+  // (timecard-handdigits.js — 공개 손글씨 숫자 모음으로 학습한 작은 신경망)로 읽는다. 확실치 않으면 말하지 않는다.
+  function headerPenGlyphs(G, card) {
+    if (card.color !== "blue") return null;
+    // 보랏빛 펜(isPen)으로 먼저 — 글자가 셋 이상 나오면 그걸 쓴다. 모자라면(하늘빛 펜) 넓힌 색으로 다시.
+    // 「연도 3자리 + 월 1~2자리」 꼴에 맞는 쪽을 고른다(어두운 남색 펜은 넓힌 색에서만 잡히고, 좁은 색은
+    // 그때 엉뚱한 티끌 셋을 낼 수 있다 — 2026-10 사장님 카드 28).
+    const shape = (r) => {
+      if (!r || !r.groups || !r.groups.length) return 0;
+      const gs = r.groups;
+      const n = gs.reduce((a, g) => a + g.length, 0);
+      return (gs.length === 2 && gs[0].length === 3 && gs[1].length <= 2 ? 100 : 0) + (gs.length === 2 ? 10 : 0) + n;
+    };
+    const strict = headerPenGlyphsWith(G, card, isPen);
+    if (shape(strict) >= 100) return strict;
+    const loose = headerPenGlyphsWith(G, card, (r, g, b) => isPen(r, g, b) || (b - g >= 19 && b - r >= 34 && lum(r, g, b) < 184));
+    return shape(loose) > shape(strict) ? loose : strict;
+  }
+  function headerPenGlyphsWith(G, card, headerPen) {
+    const x0 = Math.max(0, card.xs[0] - Math.round(card.pitch * 0.2));
+    const x1 = Math.min(G.W - 1, card.xs[3]);
+    // 표 머리(日期·上午…)의 맨 윗선 — 몸통 첫 줄 위 1~2.4줄 사이에서 폭을 가장 많이 채운 가로선. 연도·월은 그
+    // 바로 위 한 줄에 쓴다(「考勤表」·「攷勤表」는 그보다 위라 뺀다). 「9」의 꼬리는 선 아래로 내려오기도 해서
+    // 선 밑 0.4줄까지 본다.
+    let topLine = -1;
+    let topN = 0;
+    for (let y = Math.round(card.ys[0] - card.pitch * 2.4); y <= Math.round(card.ys[0] - card.pitch * 0.9); y++) {
+      if (y < 0) continue;
+      let n = 0;
+      for (let x = x0; x < x1; x += 2) if (isBlueTint(...G.rgb(x, y))) n++;
+      if (n > topN) (topN = n), (topLine = y);
+    }
+    if (topLine < 0 || topN < (x1 - x0) / 2 * 0.5) topLine = Math.round(card.ys[0] - card.pitch * 1.4);
+    const y0 = Math.max(0, Math.round(topLine - card.pitch * 1.75));
+    const y1 = Math.min(G.H - 1, Math.round(topLine + card.pitch * 0.4));
+    if (y1 - y0 < card.pitch) return null;
+    const W = x1 - x0;
+    const H = y1 - y0;
+    const m = new Uint8Array(W * H);
+    // 펜 색은 카드마다 다르다 — 보랏빛(isPen)도, 하늘빛에 가까운 파랑(2026-09 劉芷芸 카드, 134/165/189)도
+    // 있다. 하늘빛 펜은 인쇄된 「年·月份」(밝기 ≈195, 파랑−초록 ≈15)보다 어둡고 더 파랗다(위 headerPenGlyphs).
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (headerPen(...G.rgb(x0 + x, y0 + y))) m[y * W + x] = 1;
+    // 하늘빛 펜과 카드의 인쇄 선은 색이 가깝다 — 선은 모양으로 뺀다. 폭의 40% 넘게 칠해진 줄은 인쇄 선이 지나는
+    // 줄이라 그 줄에서는 어두운(펜) 점만 남긴다 — 「5」의 아랫배가 선 위에 걸쳐 있어도(카드 30) 지워지지 않게.
+    // 그래도 남은 줄기 중 줄 간격의 3배보다 긴 가로 줄기는 지운다. 아주 가는 세로 막대는 아래에서 버린다.
+    for (let y = 0; y < H; y++) {
+      let n = 0;
+      for (let x = 0; x < W; x++) n += m[y * W + x];
+      if (n > W * 0.4)
+        for (let x = 0; x < W; x++) if (m[y * W + x] && lum(...G.rgb(x0 + x, y0 + y)) >= 128) m[y * W + x] = 0;
+    }
+    const maxRun = card.pitch * 3;
+    for (let y = 0; y < H; y++) {
+      let x = 0;
+      while (x < W) {
+        if (!m[y * W + x]) {
+          x++;
+          continue;
+        }
+        let e = x;
+        while (e < W && m[y * W + e]) e++;
+        if (e - x > maxRun) for (let k = x; k < e; k++) m[y * W + k] = 0;
+        x = e;
+      }
+    }
+    // 이어진 덩어리(8방향)
+    const lab = new Int32Array(W * H).fill(-1);
+    const comps = [];
+    const stack = [];
+    for (let i = 0; i < W * H; i++) {
+      if (!m[i] || lab[i] >= 0) continue;
+      const c = { x0: W, y0: H, x1: 0, y1: 0, n: 0, px: [] };
+      lab[i] = comps.length;
+      stack.push(i);
+      while (stack.length) {
+        const j = stack.pop();
+        const x = j % W;
+        const y = (j - x) / W;
+        c.n++;
+        c.px.push(j);
+        if (x < c.x0) c.x0 = x;
+        if (x > c.x1) c.x1 = x;
+        if (y < c.y0) c.y0 = y;
+        if (y > c.y1) c.y1 = y;
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            const yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+            const k = yy * W + xx;
+            if (m[k] && lab[k] < 0) {
+              lab[k] = comps.length;
+              stack.push(k);
+            }
+          }
+      }
+      comps.push(c);
+    }
+    // 티끌은 버린다. 글자 크기 ≈ 줄 간격 0.5~2배.
+    const p = card.pitch;
+    let big = comps.filter((c) => c.n >= p * 0.6 && c.y1 - c.y0 >= p * 0.25 && c.x1 - c.x0 + 1 >= (c.y1 - c.y0 + 1) * 0.125);
+    if (!big.length) return { glyphs: [], groups: [] };
+    // 인쇄된 작은 글자(「中華民國」·「年」 — 다른 기계 카드는 펜과 같은 남색)는 숫자보다 훨씬 작다 — 가장 큰 획의
+    // 0.45 배보다 낮은 덩어리는 뺀다.
+    const tallest = Math.max(...big.map((c) => c.y1 - c.y0 + 1));
+    big = big.filter((c) => c.y1 - c.y0 + 1 >= tallest * 0.45);
+    // 숫자들은 한 줄에 있다 — 가운데 높이가 그 줄에서 크게 벗어난 티끌·선 조각은 뺀다.
+    const mids = big.map((c) => (c.y0 + c.y1) / 2).sort((a, b) => a - b);
+    const midY = mids[Math.floor(mids.length / 2)];
+    big = big.filter((c) => Math.abs((c.y0 + c.y1) / 2 - midY) <= p * 0.75);
+    // 가로로 겹치는 덩어리는 한 글자(「5」의 윗획처럼 떨어진 획).
+    big.sort((a, b) => a.x0 - b.x0);
+    const glyphs = [];
+    for (const c of big) {
+      const g = glyphs[glyphs.length - 1];
+      const ov = g && Math.min(g.x1, c.x1) - Math.max(g.x0, c.x0);
+      if (g && ov > Math.min(g.x1 - g.x0, c.x1 - c.x0) * 0.35) {
+        g.x0 = Math.min(g.x0, c.x0);
+        g.x1 = Math.max(g.x1, c.x1);
+        g.y0 = Math.min(g.y0, c.y0);
+        g.y1 = Math.max(g.y1, c.y1);
+        g.px = g.px.concat(c.px);
+      } else glyphs.push({ x0: c.x0, x1: c.x1, y0: c.y0, y1: c.y1, px: c.px.slice() });
+    }
+    // 글자 사이가 크게 벌어진 곳(인쇄된 「年」 자리)에서 연도 · 월로 나눈다.
+    const groups = [[glyphs[0]]];
+    for (let i = 1; i < glyphs.length; i++) {
+      const gap = glyphs[i].x0 - glyphs[i - 1].x1;
+      if (gap > p * 1.1) groups.push([glyphs[i]]);
+      else groups[groups.length - 1].push(glyphs[i]);
+    }
+    // 붙어 쓴 숫자(「15」가 한 덩어리 — 카드 30) — 연도 칸이 3자리가 안 되면 가장 넓은 글자를 잉크가 가장
+    // 적은 세로줄에서 가른다.
+    const split = (g, lo, hi) => {
+      const w = g.x1 - g.x0 + 1;
+      const col = new Array(w).fill(0);
+      for (const j of g.px) col[(j % W) - g.x0]++;
+      let best = -1;
+      let bv = Infinity;
+      for (let x = Math.round(w * lo); x <= Math.round(w * hi); x++) if (col[x] < bv) (bv = col[x]), (best = x);
+      if (best <= 0) return null;
+      const L = { x0: W, x1: 0, y0: H, y1: 0, px: [] };
+      const R = { x0: W, x1: 0, y0: H, y1: 0, px: [] };
+      for (const j of g.px) {
+        const x = j % W;
+        const y = (j - x) / W;
+        const t = x - g.x0 < best ? L : R;
+        t.px.push(j);
+        if (x < t.x0) t.x0 = x;
+        if (x > t.x1) t.x1 = x;
+        if (y < t.y0) t.y0 = y;
+        if (y > t.y1) t.y1 = y;
+      }
+      return L.px.length && R.px.length ? [L, R] : null;
+    };
+    if (groups.length >= 1 && groups[0].length === 2) {
+      const yr = groups[0];
+      const wi = yr[0].x1 - yr[0].x0 > yr[1].x1 - yr[1].x0 ? 0 : 1;
+      const g = yr[wi];
+      if ((g.x1 - g.x0 + 1) / (g.y1 - g.y0 + 1) > 0.7) {
+        const parts = split(g, 0.2, 0.55);
+        if (parts) yr.splice(wi, 1, ...parts);
+      }
+    }
+    // 28×28 손글씨 숫자 꼴(가운데 20×20 칸, 무게중심 가운데)로.
+    const toMnist = (g) => {
+      const gw = g.x1 - g.x0 + 1;
+      const gh = g.y1 - g.y0 + 1;
+      const k = 20 / Math.max(gw, gh);
+      const out = new Float32Array(28 * 28);
+      const ow = Math.max(1, Math.round(gw * k));
+      const oh = Math.max(1, Math.round(gh * k));
+      const tmp = new Float32Array(ow * oh);
+      for (const j of g.px) {
+        const x = (j % W) - g.x0;
+        const y = Math.floor(j / W) - g.y0;
+        const tx = Math.min(ow - 1, Math.floor(x * k));
+        const ty = Math.min(oh - 1, Math.floor(y * k));
+        tmp[ty * ow + tx] += 1;
+      }
+      // 칸마다 덮인 정도 → 0~1, 획이 얇으면(스캔 펜 글씨) 한 번 굵게 해서 공개 손글씨 숫자 굵기에 맞춘다.
+      const cover = 1 / Math.max(1, 1 / (k * k));
+      let sx = 0;
+      let sy = 0;
+      let s = 0;
+      const img = new Float32Array(ow * oh);
+      for (let i = 0; i < ow * oh; i++) img[i] = Math.min(1, tmp[i] * cover * 1.5);
+      const thick = new Float32Array(ow * oh);
+      for (let y = 0; y < oh; y++)
+        for (let x = 0; x < ow; x++) {
+          let v = img[y * ow + x];
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              const xx = x + dx;
+              const yy = y + dy;
+              if (xx >= 0 && yy >= 0 && xx < ow && yy < oh) v = Math.max(v, img[yy * ow + xx] * (dx && dy ? 0.6 : 0.85));
+            }
+          thick[y * ow + x] = v;
+          sx += x * v;
+          sy += y * v;
+          s += v;
+        }
+      const cx = s ? sx / s : ow / 2;
+      const cy = s ? sy / s : oh / 2;
+      const ox = Math.round(14 - cx);
+      const oy = Math.round(14 - cy);
+      for (let y = 0; y < oh; y++)
+        for (let x = 0; x < ow; x++) {
+          const X = x + ox;
+          const Y = y + oy;
+          if (X >= 0 && Y >= 0 && X < 28 && Y < 28) out[Y * 28 + X] = thick[y * ow + x];
+        }
+      return out;
+    };
+    return {
+      groups: groups.map((gr) => gr.map((g) => ({ box: [x0 + g.x0, y0 + g.y0, g.x1 - g.x0 + 1, g.y1 - g.y0 + 1], aspect: (g.x1 - g.x0 + 1) / (g.y1 - g.y0 + 1), img: toMnist(g) }))),
+    };
+  }
+
   // ---- 추가 카드 표시 — 「NO.」 옆 빨간 표시(★ · ○ · △) ----
   // 2026-10-03 사장님 카드들: 주 5일을 넘긴 날만 찍는 카드에 빨간 펜으로 ★ 를 그리기도
   // 하고 ○·△ 를 그리기도 한다. 모양은 가리지 않고 「그 자리에 빨간 표시가 있나」만 본다.
@@ -628,6 +850,36 @@
   }
 
   /**
+   * 파란 면 머리의 「115 年 9 月份」 → { roc: 115, year: 2026, month: 9, p } / { unread: true } / null(파란 면 아님).
+   * 연도는 민국 110~125 만, 월은 1~12 만 받는다. 숫자마다 확률이 0.6 아래면 「못 읽음」 — 틀린 달로
+   * 경고하느니 말하지 않는다.
+   */
+  function readHeader(G, card, classify) {
+    if (card.color !== "blue" || !classify) return null;
+    let h = null;
+    try {
+      h = headerPenGlyphs(G, card);
+    } catch (e) {
+      h = null;
+    }
+    if (!h || !h.groups || !h.groups.length) return { unread: true };
+    const read = h.groups.map((gr) => gr.map((g) => classify(g.img)));
+    const num = (rs) => Number(rs.map((r) => r.digit).join(""));
+    for (let i = 0; i + 1 < read.length; i++) {
+      const y = read[i];
+      const m = read[i + 1];
+      if (y.length !== 3 || m.length < 1 || m.length > 2) continue;
+      const roc = num(y);
+      const month = num(m);
+      if (roc < 110 || roc > 125 || month < 1 || month > 12) continue;
+      const p = Math.min(...y.concat(m).map((r) => r.p));
+      if (p < 0.6) return { unread: true, guess: { roc, month }, p };
+      return { roc, year: roc + 1911, month, p };
+    }
+    return { unread: true };
+  }
+
+  /**
    * img: { width, height, data(RGBA) } — canvas 의 getImageData 그대로.
    * 돌려주는 값: { cards: [{ color, star, days: { "2": { am_in: "09:11", ... } },
    *   handwritten: [{day, slot}], unclear: [{day, slot}] }] }
@@ -670,12 +922,14 @@
           if (bad && !res.unclear.some((u) => String(u.day) === day && u.slot === seq[k].sl)) res.unclear.push({ day: Number(day), slot: seq[k].sl });
         }
       }
+      const header = readHeader(G, card, opts.classifyDigit || (root.HG_HANDDIGITS && root.HG_HANDDIGITS.classify));
+      if (header) res.header = header;
       out.push(res);
     }
     return { cards: out, skew };
   }
 
-  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains, _grabber: grabber, _bestSeven: bestSeven, _layoutCard: layoutCard, _lines: { isBlueLine, isOrangeLine, isBlueTint, isOrangeTint, isRedLine, isRedTint } };
+  const api = { readTimecards, SLOTS, GW, GH, glyphVectorForTest: glyphVector, decodeTemplates, findSkew, whiteGains, _grabber: grabber, _bestSeven: bestSeven, _layoutCard: layoutCard, _headerPenGlyphs: headerPenGlyphs, _lines: { isBlueLine, isOrangeLine, isBlueTint, isOrangeTint, isRedLine, isRedTint } };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.HG_TIMECARD = api;
 })(typeof window !== "undefined" ? window : globalThis);

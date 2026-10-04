@@ -384,7 +384,43 @@ function check(name, cond, extra = "") {
     await page.locator("#payrollPhotoMsg").getByText("섞이지 않았는지").waitFor({ timeout: 20000 }).catch(() => {});
     const msg = await page.locator("#payrollPhotoMsg").innerText();
     check("★★ 같은 날짜에 다른 시각 → 「다른 직원의 카드가 섞이지 않았는지」 (4·11일)", /섞이지 않았는지/.test(msg) && /4일/.test(msg) && /11일/.test(msg), msg);
-    check("★ 이름·달은 읽지 않는다고, 어디에 넣었는지 말한다", /이름·달은 읽지 않아요/.test(msg) && /2026-06/.test(msg), msg);
+    check("★ 이름은 읽지 않는다고, 어디에 넣었는지 말한다", /이름은 읽지 않아요/.test(msg) && /2026년 6월/.test(msg), msg);
+    check("★★ 카드 머리 달이 서로 다르면(115年 6月 · 115年 8月) 섞였다고 말한다", /적힌 달이 서로 달라요/.test(msg) && /115年 6月/.test(msg) && /115年 8月/.test(msg), msg);
+    page.once("dialog", (d) => d.accept());
+    await page.click("#payrollResetCard");
+    await page.waitForTimeout(300);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(500);
+  }
+
+  // 2026-10-04 사장님: "연도랑 월 인식해서 다른 달이면 알려주는 것도 만들어줘 경고 같은 걸로" /
+  // "대만은 2026년 이런식으로 안하고 자기 연도로" — 카드 머리 「115 年 6 月份」 = 2026년 6월.
+  out.push("\n[카드에 적힌 달이 고른 달과 다르면 말한다]");
+  {
+    const fx = (f) => require("path").join(__dirname, "fixtures", f);
+    await page.fill("#payrollMonth", "2026-10");
+    await page.dispatchEvent("#payrollMonth", "change");
+    await page.waitForTimeout(300);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(600);
+    await page.setInputFiles("#payrollPhoto", fx("timecard-normal.webp"));
+    await page.locator("#appDialogMessage").getByText("옮길까요").waitFor({ timeout: 20000 }).catch(() => {});
+    const ask = await page.locator("#appDialogMessage").innerText().catch(() => "");
+    const msg = await page.locator("#payrollPhotoMsg").innerText();
+    check("★★ 다른 달이면 빨간 경고 — 「115年 6月」(2026년 6월)인데 2026년 10월에 넣었다", /⚠ 카드에 「115年 6月」\(2026년 6월\)/.test(msg) && /2026년 10월/.test(msg) && (await page.locator("#payrollPhotoMsg .pm-warn").count()) >= 1, msg);
+    check("★★ 옮길지 묻는다 — 민국 연도와 서기 둘 다", /115年 6月/.test(ask) && /2026년 6월로 옮길까요|2026년 6월로/.test(ask) && (await page.locator("#appDialogOk").innerText()) === "2026년 6월로 옮기기", ask);
+    await page.locator("#appDialogOk").click();
+    // 6월 표에 이미 넣은 게 있으면 덮어쓸지 한 번 더 묻는다
+    await page.waitForTimeout(800);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForFunction(() => document.querySelector("#payrollMonth").value === "2026-06", null, { timeout: 8000 }).catch(() => {});
+    const am2 = await page.locator('#payrollGrid tr[data-day="2"] input[data-slot="am_in"]').inputValue().catch(() => "");
+    check(`★★ 「옮기기」 → 2026년 6월로, 읽은 값을 그대로 들고 (${await page.inputValue("#payrollMonth")}, 2일 ${am2})`, (await page.inputValue("#payrollMonth")) === "2026-06" && /^\d\d:\d\d$/.test(am2), am2);
+    // 같은 달이면 ✓ 한 줄
+    await page.setInputFiles("#payrollPhoto", fx("timecard-star.webp"));
+    await page.locator("#payrollPhotoMsg").getByText("고른 달과 같아요").waitFor({ timeout: 20000 }).catch(() => {});
+    const ok = await page.locator("#payrollPhotoMsg").innerText();
+    check("★ 같은 달이면 「✓ … 지금 고른 달과 같아요」, 묻지 않는다", /✓ 카드에 적힌 달 「115年 6月」/.test(ok) && !(await page.locator("#appDialogBackdrop").isVisible()), ok);
     page.once("dialog", (d) => d.accept());
     await page.click("#payrollResetCard");
     await page.waitForTimeout(300);
