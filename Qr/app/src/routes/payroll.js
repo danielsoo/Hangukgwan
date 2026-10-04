@@ -214,6 +214,7 @@ async function summaryFor(month, rules, holidays, staff) {
         late_count: r.late_count, late_min: r.late_min, late_hours: r.late_hours, early_count: r.early_count, early_min: r.early_min,
         holiday_days: r.holiday_days, bonus: r.bonus, deduct: -line("deduct"), total: r.total,
         unconfirmed_days: r.unconfirmed_days, warnings: r.warnings,
+        updated_at: (c && c.updated_at) || null, // 마지막 저장 시각(타이베이) — 「한눈에 보기」 표
       };
     });
   return { month, rows, total: rows.reduce((a, r) => a + r.total, 0) };

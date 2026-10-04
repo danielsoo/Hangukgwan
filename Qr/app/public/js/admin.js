@@ -1686,6 +1686,11 @@
       payrollWarnUnconfirmed: "초과 시간을 확인하지 않은 날이 {n}일 있어요(노란 칸).",
       payrollDaysLine: "출근 {a} + ★{b}일 · 근무 {h}시간 · 초과 {ot}시간",
       payrollUnsaved: "● 저장 안 됨",
+      payrollStampFmt: "{y}년 {m}월 {d}일 {hm}",
+      payrollSavedAtLine: "마지막 저장: {at}",
+      payrollNeverSaved: "아직 저장한 적 없어요",
+      payrollChangedAtLine: "마지막 고침: {at} (저장 안 됨)",
+      payrollOvColSaved: "마지막 저장",
       payrollSaved: "저장했어요.",
       payrollSaveFailed: "저장하지 못했어요.",
       payrollNewStaffName: "직원 이름",
@@ -2817,6 +2822,11 @@
       payrollWarnUnconfirmed: "有 {n} 天的加班時數尚未確認（黃色格）。",
       payrollDaysLine: "出勤 {a} + ★{b} 天 · 工時 {h} 小時 · 加班 {ot} 小時",
       payrollUnsaved: "● 尚未儲存",
+      payrollStampFmt: "{y}年{m}月{d}日 {hm}",
+      payrollSavedAtLine: "最後儲存：{at}",
+      payrollNeverSaved: "還沒儲存過",
+      payrollChangedAtLine: "最後修改：{at}（尚未儲存）",
+      payrollOvColSaved: "最後儲存",
       payrollSaved: "已儲存。",
       payrollSaveFailed: "儲存失敗。",
       payrollNewStaffName: "員工姓名",
@@ -13656,10 +13666,10 @@
           .join("")
       : `<div class="stl-bars-empty">${escapeHtml(T(withCard.length ? "payrollOvLateNone" : "payrollOvNone"))}</div>`;
     // 표 — 한 줄에 한 직원, 아래 합계.
-    const head = ["Staff", "Type", "Days", "Hours", "Ot", "Late", "Early", "Holiday", "Bonus", "Deduct", "Total", "Check"].map((k) => `<th>${escapeHtml(T(`payrollOvCol${k}`))}</th>`).join("");
+    const head = ["Staff", "Type", "Days", "Hours", "Ot", "Late", "Early", "Holiday", "Bonus", "Deduct", "Total", "Check", "Saved"].map((k) => `<th>${escapeHtml(T(`payrollOvCol${k}`))}</th>`).join("");
     const cell = (r) => {
       if (!r.has_card)
-        return `<tr class="is-nocard" data-payroll-ov="${escapeHtml(r.staff.id)}"><td>${escapeHtml(r.staff.name)}</td><td>${escapeHtml(T(r.pay_type === "monthly" ? "payrollOvMonthly" : "payrollOvHourly"))}</td><td colspan="10" class="pr-ov-nocard">${escapeHtml(T("payrollOvNoCard"))}</td></tr>`;
+        return `<tr class="is-nocard" data-payroll-ov="${escapeHtml(r.staff.id)}"><td>${escapeHtml(r.staff.name)}</td><td>${escapeHtml(T(r.pay_type === "monthly" ? "payrollOvMonthly" : "payrollOvHourly"))}</td><td colspan="11" class="pr-ov-nocard">${escapeHtml(T("payrollOvNoCard"))}</td></tr>`;
       const days = payrollNum(Number(r.normal_days || 0) + Number(r.star_days || 0));
       return `<tr data-payroll-ov="${escapeHtml(r.staff.id)}">
         <td>${escapeHtml(r.staff.name)}</td>
@@ -13674,13 +13684,14 @@
         <td>${r.deduct ? `<span class="pr-ov-minus">−NT$${money(r.deduct)}</span>` : "—"}</td>
         <td class="is-total">NT$${money(r.total)}</td>
         <td>${r.unconfirmed_days ? `<span class="pr-ov-warn">⚠ ${r.unconfirmed_days}${escapeHtml(T("payrollOvDaysUnit"))}</span>` : "✓"}</td>
+        <td class="pr-ov-saved">${escapeHtml(payrollStamp(r.updated_at) || "—")}</td>
       </tr>`;
     };
     const foot = withCard.length
       ? `<tfoot><tr><td>${escapeHtml(T("payrollOvTotalRow"))}</td><td>${escapeHtml(T("payrollOvPeople").replace("{n}", withCard.length))}</td>
           <td>${payrollNum(add("normal_days") + add("star_days"))}</td><td>${payrollNum(add("hours"))}</td><td>${payrollNum(add("ot_hours"))}</td>
           <td>${add("late_count") || "—"}</td><td>${add("early_count") || "—"}</td><td>${add("holiday_days") || "—"}</td>
-          <td>NT$${money(add("bonus"))}</td><td>${deduct ? `−NT$${money(deduct)}` : "—"}</td><td class="is-total">NT$${money(total)}</td><td>${add("unconfirmed_days") ? `⚠ ${add("unconfirmed_days")}` : "✓"}</td></tr></tfoot>`
+          <td>NT$${money(add("bonus"))}</td><td>${deduct ? `−NT$${money(deduct)}` : "—"}</td><td class="is-total">NT$${money(total)}</td><td>${add("unconfirmed_days") ? `⚠ ${add("unconfirmed_days")}` : "✓"}</td><td></td></tr></tfoot>`
       : "";
     $("#prOvTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${sorted.map(cell).join("")}</tbody>${foot}`;
     box.querySelectorAll("[data-payroll-ov]").forEach((el) => {
@@ -13732,6 +13743,8 @@
     payroll.current = d.staff;
     payroll.days = JSON.parse(JSON.stringify(d.card.days || {}));
     payroll.rev = Number(d.card.rev) || 0; // 다른 기기가 먼저 저장했는지 볼 번호
+    payroll.savedAt = d.card.updated_at || null;
+    payroll.changedAt = null;
     payroll.unclear = {};
     payroll.read = {};
     payroll.hand = {};
@@ -13757,6 +13770,7 @@
     $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => b.classList.toggle("active", b.dataset.payrollStaff === staffId));
     renderPayrollGrid();
     renderPayrollResult();
+    payrollSetStatus(); // 「● 저장 안 됨」 지우고 마지막 저장 시각
   }
   // 국가 공휴일 — 가게 전체(모든 직원). 이 달 것만 칩으로.
   async function loadPayrollHolidays() {
@@ -14018,6 +14032,31 @@
     if (!el) return;
     el.textContent = payroll.dirty ? T("payrollUnsaved") : "";
     el.classList.toggle("is-dirty", payroll.dirty);
+    payrollRenderSavedAt();
+  }
+  // 「2026-10-04 14:05:33」 → 「2026년 10월 4일 14:05」 — 연·월·일·시·분까지(2026-10-04 사장님).
+  function payrollStamp(v) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(String(v || ""));
+    if (!m) return "";
+    return T("payrollStampFmt").replace("{y}", m[1]).replace("{m}", Number(m[2])).replace("{d}", Number(m[3])).replace("{hm}", `${m[4]}:${m[5]}`);
+  }
+  // 지금 시각(가게 시간, 타이베이)을 서버와 같은 꼴로 — 저장 안 한 마지막 고침에 쓴다.
+  function payrollNowStamp() {
+    const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date());
+    const g = (t) => (p.find((x) => x.type === t) || {}).value;
+    return `${g("year")}-${g("month")}-${g("day")} ${g("hour")}:${g("minute")}`;
+  }
+  // 저장 단추 밑 — 마지막 저장, 그리고 저장 안 한 고침이 있으면 그 시각.
+  function payrollRenderSavedAt() {
+    const el = $("#payrollSavedAt");
+    if (!el) return;
+    if (!payroll.current) {
+      el.textContent = "";
+      return;
+    }
+    const saved = payroll.savedAt ? T("payrollSavedAtLine").replace("{at}", `<b>${escapeHtml(payrollStamp(payroll.savedAt))}</b>`) : escapeHtml(T("payrollNeverSaved"));
+    const changed = payroll.dirty && payroll.changedAt ? `<br><span class="is-dirty-at">${T("payrollChangedAtLine").replace("{at}", escapeHtml(payrollStamp(payroll.changedAt)))}</span>` : "";
+    el.innerHTML = saved + changed;
   }
   function payrollBonusNow() {
     const v = $("#payrollBonus") ? $("#payrollBonus").value : "";
@@ -14028,6 +14067,7 @@
   let payrollPreviewTimer = null;
   function payrollChanged() {
     payroll.dirty = true;
+    payroll.changedAt = payrollNowStamp();
     payrollSetStatus();
     clearTimeout(payrollPreviewTimer);
     payrollPreviewTimer = setTimeout(payrollPreview, 250);
@@ -14452,6 +14492,8 @@
       if (!res.ok) return showAlert(T("payrollSaveFailed"));
       const d = await res.json();
       payroll.rev = Number(d.card.rev) || 0;
+      payroll.savedAt = d.card.updated_at || null;
+      payroll.changedAt = null;
       payroll.days = d.card.days;
       payroll.result = d.result;
       payroll.dirty = false;

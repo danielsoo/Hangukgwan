@@ -163,6 +163,48 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(1500);
   check("★ 8월 — NT$1,900, 1명, 지각·조퇴 없음", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()) && /지각·조퇴가 없어요/.test(await page.locator("#prOvLateBars").innerText()), await page.locator("#prOvTotal").innerText());
 
+  out.push("\n[마지막 저장·고침 시각 — 연·월·일·시·분]");
+  {
+    // 2026-10-04 사장님: "마지막 변경이나 저장이 언제인지도 기록해줘 연 일 월 시 분까지"
+    await page.fill("#payrollMonth", "2026-09");
+    await page.dispatchEvent("#payrollMonth", "change");
+    await page.waitForTimeout(1200);
+    const stampRe = /20\d\d년 \d{1,2}월 \d{1,2}일 \d\d:\d\d/;
+    const row = await page.locator(`#prOvTable tbody tr[data-payroll-ov="${a}"]`).innerText();
+    check("★ 한눈에 보기 표에 「마지막 저장」 — 연·월·일·시·분", (await page.locator("#prOvTable thead").innerText()).includes("마지막 저장") && stampRe.test(row), row);
+    await page.locator(`#payrollStaffChips [data-payroll-staff="${a}"]`).click();
+    await page.waitForTimeout(900);
+    const at1 = await page.locator("#payrollSavedAt").innerText();
+    check("★★ 카드 저장 단추 밑에 「마지막 저장: 2026년 10월 4일 14:05」 꼴", /^마지막 저장: /.test(at1) && stampRe.test(at1) && !/저장 안 됨/.test(at1), at1);
+    const c9 = page.locator('#payrollGrid tr[data-day="9"] input[data-slot="am_in"]');
+    await c9.fill("0910");
+    await c9.press("Tab");
+    await page.waitForTimeout(500);
+    const at2 = await page.locator("#payrollSavedAt").innerText();
+    check("★★ 고치면 「마지막 고침: … (저장 안 됨)」이 붙는다", /마지막 고침: 20\d\d년 \d{1,2}월 \d{1,2}일 \d\d:\d\d \(저장 안 됨\)/.test(at2) && /마지막 저장: /.test(at2), at2);
+    const before = (await (await page.request.get(`${base}/api/payroll/card?staff=${a}&month=2026-09`)).json()).card.updated_at;
+    await page.waitForTimeout(1100);
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(1000);
+    const after = (await (await page.request.get(`${base}/api/payroll/card?staff=${a}&month=2026-09`)).json()).card.updated_at;
+    const at3 = await page.locator("#payrollSavedAt").innerText();
+    check("★ 저장하면 「마지막 고침」은 사라지고 마지막 저장이 새 시각으로", !/마지막 고침/.test(at3) && after > before && at3.includes(after.slice(11, 16)), `${before} → ${after} | ${at3}`);
+    await c9.fill("");
+    await c9.press("Tab");
+    await page.waitForTimeout(300);
+    await page.click("#payrollSaveCard");
+    await page.waitForTimeout(800);
+    const newbie = (await (await page.request.post(`${base}/api/payroll/staff`, { data: { name: "새사람", pay_type: "hourly" } })).json()).staff.id;
+    await page.locator("#payrollStaffChips [data-payroll-all]").click();
+    await page.waitForTimeout(600);
+    await page.dispatchEvent("#payrollMonth", "change"); // 직원 목록을 다시 받는다
+    await page.waitForTimeout(1200);
+    await page.locator(`#payrollStaffChips [data-payroll-staff="${newbie}"]`).click();
+    await page.waitForTimeout(900);
+    check("카드를 처음 여는 직원은 「아직 저장한 적 없어요」", /아직 저장한 적 없어요/.test(await page.locator("#payrollSavedAt").innerText()), await page.locator("#payrollSavedAt").innerText());
+    await page.request.put(`${base}/api/payroll/staff/${newbie}`, { data: { active: false } });
+  }
+
   out.push("\n[다른 달·직원으로 옮기기 — 2026-10-04]");
   {
     // 사장님: "이미 기입 열심히 한 걸 버려야 하니까 그거 월 변경으로 할 수 있게"
