@@ -2793,6 +2793,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .payroll-grid td.pg-ot button.pg-ok.is-on { background: var(--pr-green); color: #fff; border-color: var(--pr-green); }
 .payroll-grid td.pg-ot small { display: block; margin-top: 2px; font-size: 11px; color: #8a8078; }
 .payroll-grid td.pg-le { white-space: nowrap; font-size: 12px; color: #b4532a; min-width: 90px; }
+.payroll-grid td.pg-le .pg-le-what { display: block; }
+.payroll-grid td.pg-le .pg-le-ctl { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; color: var(--ink); }
+.payroll-grid td.pg-le .pg-le-ctl b { min-width: 40px; text-align: center; font-size: 13px; color: #b4532a; }
+.payroll-grid td.pg-le button { height: 26px; min-width: 26px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--pr-card); color: var(--ink); font-size: 13px; cursor: pointer; }
+.payroll-grid td.pg-le button.pg-le-excuse { color: #1a7a43; border-color: #bfe0cb; }
+.payroll-grid td.pg-le small { display: block; margin-top: 2px; font-size: 11px; color: #8a8078; }
+.payroll-grid td.pg-le.is-excused .pg-le-ctl b { color: #1a7a43; }
 
 /* 오른쪽: 이 달 지급액 · 보너스 · 저장. 넓으면 표 오른쪽에 붙어 스크롤을 따라온다. */
 .payroll-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 18px 24px; align-items: start; }

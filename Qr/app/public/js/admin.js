@@ -1613,7 +1613,15 @@
       payrollDefaultHourly: "가게 기본 시급 (직원 시급을 비우면)",
       payrollLateUnit: "지각 — 몇 분마다 0.5시간 차감",
       payrollThreshold: "근무 끝을 몇 분 넘기면 초과 0.5시간",
-      payrollHoursLine: "근무 시간 {ranges} (하루 {h}시간) · 기본 시급 NT${rate}. 지각은 시작 시각부터 {late}분마다 0.5시간, 조퇴는 비운 분만큼 급여에서 빠져요. 초과는 끝 시각부터.",
+      payrollHoursLine: "근무 시간 {ranges} (하루 {h}시간) · 기본 시급 NT${rate}. 출근 {lg}분·퇴근 {eg}분까지는 봐주고, 지각은 시작 시각부터 {late}분마다 0.5시간, 조퇴는 비운 분만큼 급여에서 빠져요(날마다 고칠 수 있어요). 초과는 끝 시각부터.",
+      payrollLateGrace: "출근 — 몇 분 늦은 것까지 봐줌",
+      payrollEarlyGrace: "퇴근 — 몇 분 일찍 간 것까지 봐줌",
+      payrollExcuse: "봐주기",
+      payrollExcuseTip: "납득할 만한 이유가 있으면 — 이 날 지각·조퇴를 빼지 않아요",
+      payrollUnexcuse: "규칙대로",
+      payrollExcused: "봐줌",
+      payrollDeductLine: "{h}h × NT${rate}",
+      payrollDeductEdited: " · {n}날 고침",
       payrollHoursUnreadable: "⚠ 근무 시간(「{text}」)을 읽지 못했어요. 「바꾸기」를 눌러 「09:00-14:00, 16:30-21:00」처럼 적어 주세요.",
       payrollBadWorkHours: "근무 시간을 「09:00-14:00, 16:30-21:00」처럼 적어 주세요.",
       payrollStep: "그 뒤 몇 분마다 0.5시간",
@@ -2722,7 +2730,15 @@
       payrollDefaultHourly: "店家基本時薪（員工時薪空白時）",
       payrollLateUnit: "遲到 — 每幾分鐘扣 0.5 小時",
       payrollThreshold: "超過下班幾分鐘算加班 0.5 小時",
-      payrollHoursLine: "工作時間 {ranges}（每天 {h} 小時）· 基本時薪 NT${rate}。遲到從上班時間起每 {late} 分鐘扣 0.5 小時，早退依離開分鐘扣薪。加班從下班時間起算。",
+      payrollHoursLine: "工作時間 {ranges}（每天 {h} 小時）· 基本時薪 NT${rate}。上班 {lg} 分·下班 {eg} 分內不計，遲到從上班時間起每 {late} 分鐘扣 0.5 小時，早退依離開分鐘扣薪（每天可修改）。加班從下班時間起算。",
+      payrollLateGrace: "上班 — 晚幾分鐘內不算",
+      payrollEarlyGrace: "下班 — 早幾分鐘內不算",
+      payrollExcuse: "不扣",
+      payrollExcuseTip: "有正當理由時 — 這天的遲到·早退不扣",
+      payrollUnexcuse: "照規則",
+      payrollExcused: "不扣",
+      payrollDeductLine: "{h}h × NT${rate}",
+      payrollDeductEdited: " · 修改 {n} 天",
       payrollHoursUnreadable: "⚠ 無法讀出工作時間（「{text}」）。請按「修改」寫成「09:00-14:00, 16:30-21:00」。",
       payrollBadWorkHours: "請把工作時間寫成「09:00-14:00, 16:30-21:00」。",
       payrollStep: "之後每幾分鐘加 0.5 小時",
@@ -13448,6 +13464,8 @@
       if ($("#payrollWorkHours")) $("#payrollWorkHours").value = ru.work_hours || "";
       if ($("#payrollDefaultHourly")) $("#payrollDefaultHourly").value = ru.default_hourly ?? "";
       if ($("#payrollLateUnit")) $("#payrollLateUnit").value = ru.late_unit_min || 30;
+      if ($("#payrollLateGrace")) $("#payrollLateGrace").value = ru.late_grace_min ?? 5;
+      if ($("#payrollEarlyGrace")) $("#payrollEarlyGrace").value = ru.early_grace_min ?? 5;
       // 시급을 비운 직원은 가게 기본 시급 — 빈칸에 그 값을 흐리게 보여준다.
       if ($("#payrollHourlyRate")) $("#payrollHourlyRate").placeholder = ru.default_hourly ? String(ru.default_hourly) : "";
       if ($("#payrollThreshold")) $("#payrollThreshold").value = ru.ot_threshold_min || 25;
@@ -13483,7 +13501,9 @@
       .replace("{ranges}", bh.ranges.map((r) => `${r.start}–${r.end}`).join(" · "))
       .replace("{h}", hours)
       .replace("{rate}", money(ru.default_hourly ?? 220))
-      .replace("{late}", ru.late_unit_min || 30);
+      .replace("{late}", ru.late_unit_min || 30)
+      .replace("{lg}", ru.late_grace_min ?? 5)
+      .replace("{eg}", ru.early_grace_min ?? 5);
   }
   async function loadPayrollSummary() {
     let sum = { rows: [], total: 0 };
@@ -13869,7 +13889,34 @@
       const le = tr.querySelector(".pg-le");
       const leText = (k, list) =>
         (list || []).map((x) => `${T(k)} ${T(x.slot === "am" ? "payrollAmShort" : "payrollPmShort")} ${x.min}${T("payrollMinShort")}${k === "payrollLate" && x.hours ? ` (−${x.hours}h)` : ""}`);
-      le.textContent = r && r.worked ? leText("payrollLate", r.late).concat(leText("payrollEarly", r.early)).join(" · ") : "";
+      // 지각·조퇴 칸 — 무엇이 몇 분인지 + 초과처럼 사장님이 고치는 −/+ · 「봐주기」(2026-10-04 사장님: "초과
+      // 시간처럼 지각 조퇴에도 숫자를 우리가 하게 해줘. 만약에 우리가 납득할 만한 이유거나 1분인데 차감하면
+      // 안되니까"). 규칙이 낸 숫자는 「제안」으로 남겨 보인다.
+      const what = r && r.worked ? leText("payrollLate", r.late).concat(leText("payrollEarly", r.early)).join(" · ") : "";
+      const hasLe = r && r.worked && (r.suggested_deduct > 0 || r.deduct_set);
+      le.classList.toggle("is-excused", !!(r && r.excused));
+      if (!hasLe) {
+        le.textContent = what;
+      } else {
+        const h = Math.round(r.deduct_hours * 100) / 100;
+        const sug = Math.round(r.suggested_deduct * 100) / 100;
+        le.innerHTML = `<span class="pg-le-what">${escapeHtml(what)}</span>
+          <span class="pg-le-ctl"><button type="button" class="pg-le-minus">−</button> <b>${r.excused ? escapeHtml(T("payrollExcused")) : `−${h}h`}</b> <button type="button" class="pg-le-plus">+</button>
+          ${r.deduct_set ? `<button type="button" class="pg-le-reset" title="${escapeHtml(T("payrollUnexcuse"))}">↺</button>` : `<button type="button" class="pg-le-excuse" title="${escapeHtml(T("payrollExcuseTip"))}">${escapeHtml(T("payrollExcuse"))}</button>`}</span>
+          ${r.deduct_set ? `<small>${escapeHtml(T("payrollSuggested"))} −${sug}h</small>` : ""}`;
+        const dd = () => (payroll.days[tr.dataset.day] = payroll.days[tr.dataset.day] || {});
+        const setLe = (v) => {
+          if (v == null) delete dd().le_hours;
+          else dd().le_hours = Math.max(0, Math.round(v * 100) / 100);
+          payrollChanged();
+        };
+        le.querySelector(".pg-le-minus").onclick = () => setLe(Math.max(0, Math.ceil(h * 2) / 2 - 0.5));
+        le.querySelector(".pg-le-plus").onclick = () => setLe(Math.floor(h * 2) / 2 + 0.5);
+        const ex = le.querySelector(".pg-le-excuse");
+        if (ex) ex.onclick = () => setLe(0);
+        const rs = le.querySelector(".pg-le-reset");
+        if (rs) rs.onclick = () => setLe(null);
+      }
       if (!r || !r.worked) {
         cell.innerHTML = "";
         tr.classList.remove("is-check");
@@ -13933,7 +13980,7 @@
             l.key === "holiday"
               ? `<div class="pr-line pr-holiday"><span>${escapeHtml(T("payrollLineHoliday").replace("{m}", l.mult))} · ${l.hours}h × NT$${money(l.rate)} × ${l.mult}</span><span>NT$${money(l.amount)}</span></div>`
               : l.key === "deduct"
-              ? `<div class="pr-line pr-deduct"><span>${escapeHtml(lineName.deduct)} · ${escapeHtml(T("payrollDeductDetail").replace("{late}", l.late_hours).replace("{early}", l.early_min))}</span><span>−NT$${money(-l.amount)}</span></div>`
+              ? `<div class="pr-line pr-deduct"><span>${escapeHtml(lineName.deduct)} · ${escapeHtml(T("payrollDeductLine").replace("{h}", l.hours).replace("{rate}", money(l.rate)) + (l.edited ? T("payrollDeductEdited").replace("{n}", l.edited) : ""))}</span><span>−NT$${money(-l.amount)}</span></div>`
               : `<div class="pr-line"><span>${escapeHtml(lineName[l.key] || l.key)}${l.hours != null ? ` · ${l.hours}h × NT$${money(l.rate)}` : ""}${l.note ? ` · ${escapeHtml(l.note)}` : ""}</span><span>NT$${money(l.amount)}</span></div>`
         )
         .join("")}`;
@@ -14284,6 +14331,8 @@
         ot_threshold_min: Number($("#payrollThreshold").value),
         ot_step_min: Number($("#payrollStep").value),
         late_unit_min: Number($("#payrollLateUnit").value),
+        late_grace_min: Number($("#payrollLateGrace").value),
+        early_grace_min: Number($("#payrollEarlyGrace").value),
         default_hourly: $("#payrollDefaultHourly").value === "" ? 0 : Number($("#payrollDefaultHourly").value),
         work_hours: $("#payrollWorkHours").value,
       };

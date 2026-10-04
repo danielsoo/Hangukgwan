@@ -60,9 +60,12 @@ function check(name, cond, extra = "") {
     const chipsY = await page.locator("#payrollStaffChips").evaluate((el) => el.getBoundingClientRect().top);
     check("★★ 「⚙ 근무 규칙」은 맨 위 — 달·직원 줄 바로 밑, 첫 화면 안", rulesY > chipsY && rulesY - chipsY < 120 && rulesY < 400 && /⚙ 근무 규칙/.test(await page.locator("#payrollRules > summary").innerText()), `chips ${chipsY} rules ${rulesY}`);
     check("처음엔 접혀 있다(한 줄 요약만)", !(await page.locator("#payrollWorkHours").isVisible()), "");
+    // 2026-10-04 사장님: "출퇴근에 각각 몇 분 정도 봐줄지 근무 규칙에 넣어주고"
+    check("★ 한 줄에 「출근 5분·퇴근 5분까지는 봐주고」", /출근 5분·퇴근 5분까지는 봐주고/.test(await page.locator("#payrollHours").innerText()), await page.locator("#payrollHours").innerText());
     await page.locator("#payrollRules > summary").click();
     await page.waitForTimeout(300);
     check("★ 누르면 그 자리에서 칸이 열린다", (await page.locator("#payrollWorkHours").isVisible()) && (await page.locator("#payrollSaveRules").isVisible()), "");
+    check("★ 출근·퇴근 봐주는 분 칸(5·5)", (await page.inputValue("#payrollLateGrace")) === "5" && (await page.inputValue("#payrollEarlyGrace")) === "5", "");
     await page.fill("#payrollLateUnit", "30");
     await page.click("#payrollSaveRules");
     await page.waitForTimeout(900);
@@ -133,9 +136,26 @@ function check(name, cond, extra = "") {
   check("★★ 오전만 찍은 날 → 「출근 2.5일」(3 으로 올리지 않는다)", /출근 2\.5일/.test(resHalf), resHalf);
   check("★★ 「지각 1번 · 40분 (차감 0.5시간)」 「조퇴 1번 · 10분」 알약", /지각 1번 · 40분 \(차감 0\.5시간\)/.test(resHalf) && /조퇴 1번 · 10분/.test(resHalf), resHalf);
   // 2026-10-03 사장님: "지각, 조퇴시 급여에서 차감" — 0.5h × 200 + 10분 × 200/60 = 133
-  check("★★ 차감 줄 「지각·조퇴 차감 · 지각 0.5h + 조퇴 10분 −NT$133」", /지각·조퇴 차감 · 지각 0\.5h \+ 조퇴 10분\s*−NT\$133/.test(resHalf), resHalf);
-  const le9 = await page.locator('#payrollGrid tr[data-day="9"] .pg-le').innerText();
+  // 0.5h + 10분 = 0.67h × 200 = 133
+  check("★★ 차감 줄 「지각·조퇴 차감 · 0.67h × NT$200 −NT$133」", /지각·조퇴 차감 · 0\.67h × NT\$200\s*−NT\$133/.test(resHalf), resHalf);
+  const le9 = await page.locator('#payrollGrid tr[data-day="9"] .pg-le .pg-le-what').innerText();
   check("★ 그 날 줄에 「지각 오전 40분 (−0.5h) · 조퇴 오전 10분」", le9.trim() === "지각 오전 40분 (−0.5h) · 조퇴 오전 10분", le9);
+
+  // 2026-10-04 사장님: "초과 시간처럼 지각 조퇴에도 숫자를 우리가 하게 해줘. 만약에 우리가 납득할 만한 이유거나
+  // 1분인데 차감하면 안되니까"
+  const ctl = (sel) => page.locator(`#payrollGrid tr[data-day="9"] .pg-le ${sel}`);
+  check("그 날 칸에 −/+ 와 「봐주기」, 지금 차감 −0.67h", (await ctl(".pg-le-excuse").isVisible()) && /−0\.67h/.test(await ctl(".pg-le-ctl").innerText()), await ctl(".pg-le-ctl").innerText());
+  await ctl(".pg-le-excuse").click();
+  await page.waitForTimeout(900);
+  let rr = await page.locator("#payrollResult").innerText();
+  check("★★ 「봐주기」 → 그 날 「봐줌」, 차감 줄이 사라지고 지각·조퇴 알약도 빠진다", /봐줌/.test(await ctl(".pg-le-ctl").innerText()) && !/지각·조퇴 차감/.test(rr) && !/지각 1번/.test(rr) && /제안 −0\.67h/.test(await page.locator('#payrollGrid tr[data-day="9"] .pg-le').innerText()), rr);
+  await ctl(".pg-le-plus").click();
+  await page.waitForTimeout(900);
+  rr = await page.locator("#payrollResult").innerText();
+  check("★ + 를 누르면 0.5h — 차감 −NT$100, 「1날 고침」", /−0\.5h/.test(await ctl(".pg-le-ctl").innerText()) && /0\.5h × NT\$200 · 1날 고침\s*−NT\$100/.test(rr), rr);
+  await ctl(".pg-le-reset").click();
+  await page.waitForTimeout(900);
+  check("↺ 를 누르면 규칙대로(−0.67h, −NT$133)", /−0\.67h/.test(await ctl(".pg-le-ctl").innerText()) && /−NT\$133/.test(await page.locator("#payrollResult").innerText()), "");
   check("09:11 출근은 30분 안 — 지각 칸이 비어 있다", (await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText()).trim() === "", await page.locator('#payrollGrid tr[data-day="2"] .pg-le').innerText());
   await put(9, ["", ""]);
   await page.waitForTimeout(900);

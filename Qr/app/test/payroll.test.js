@@ -42,6 +42,8 @@ const days = {};
 for (const [d, a, b, c, e] of NORMAL) days[d] = { am_in: a, am_out: b, pm_in: c, pm_out: e };
 for (const [d, a, b, c, e] of STAR) days[d] = { am_in: a, am_out: b, pm_in: c, pm_out: e, star: true };
 const card = { month: "2026-06", days: P.cleanDays(days, "2026-06") };
+// 지각·조퇴 차감 계산을 재는 줄들은 「봐주는 분」 0 으로 — 봐주기(기본 5분)는 아래에서 따로 잰다.
+const NOGRACE = { late_grace_min: 0, early_grace_min: 0 };
 
 out.push("[초과 시간 제안 — 25분 넘기면 0.5]");
 check("24분 → 0", P.overtimeFor(24) === 0, "");
@@ -52,7 +54,7 @@ check("기준을 바꿀 수 있다(20분)", P.overtimeFor(23, P.rulesOf({ ot_thr
 
 out.push("\n[劉芷芸 6월 — 두 장을 합친다]");
 const staff = { name: "劉芷芸", pay_type: "hourly", hourly_rate: 200 };
-const r = P.computeMonth(card, staff);
+const r = P.computeMonth(card, staff, NOGRACE);
 check("★★ 출근 21 + 4 (별 없는 카드 21일 · 별 카드 4일)", r.normal_days === 21 && r.star_days === 4, `${r.normal_days} + ${r.star_days}`);
 // 근무 시간 09:00–14:00 · 16:30–21:00(2026-10-03 사장님) → 하루 5 + 4.5 = 9.5시간.
 check("하루 9.5시간(오전 09–14 5h + 오후 16:30–21 4.5h) — 13:57·20:55 퇴근도 블록은 하루", r.normal_hours === 199.5 && r.star_hours === 38, `${r.normal_hours} / ${r.star_hours}`);
@@ -74,13 +76,13 @@ out.push("\n[사장님이 확인·고침 → 카드에 적은 대로]");
 const fixed = JSON.parse(JSON.stringify(card.days));
 for (const [d, h] of [[7, 1], [16, 0.5], [21, 0.5], [23, 0.5], [28, 1.5]]) Object.assign(fixed[d], { ot_hours: h, ot_confirmed: true });
 for (const d of Object.keys(fixed)) fixed[d].ot_confirmed = true;
-const r2 = P.computeMonth({ month: "2026-06", days: P.cleanDays(fixed, "2026-06") }, staff);
+const r2 = P.computeMonth({ month: "2026-06", days: P.cleanDays(fixed, "2026-06") }, staff, NOGRACE);
 check("★★ 초과 합계 4시간", r2.ot_hours === 4, String(r2.ot_hours));
 check("확인 안 한 날 0", r2.unconfirmed_days === 0, String(r2.unconfirmed_days));
 check("★★ 시급제: (237.5 + 4) × 200 − 조퇴 12분(12/60 × 200 = 40) = 48,260", r2.total === 48260, String(r2.total));
 
 out.push("\n[월급제]");
-const m = P.computeMonth({ month: "2026-06", days: P.cleanDays(fixed, "2026-06") }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150 });
+const m = P.computeMonth({ month: "2026-06", days: P.cleanDays(fixed, "2026-06") }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150 }, NOGRACE);
 check("★★ 월급 + 별 카드 날(38시간) + 초과(4시간) − 조퇴 12분 — 1배", m.total === 36000 + 42 * 150 - 30, String(m.total));
 check("★ 시급 150 은 최저(196) 밑이지만 월급제는 월급으로만 경고", !m.warnings.some((w) => w.key === "below_min_hourly"), JSON.stringify(m.warnings));
 const m2 = P.computeMonth({ month: "2026-06", days: {} }, { pay_type: "monthly", monthly_salary: 24000 });
@@ -107,7 +109,7 @@ out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 그 달 보너�
 // 시간 얼마 줄거고 이런 걸 다 개개별로 정할 수 있게 해줘 그리고 보너스 칸도 만들어주고"
 {
   const fd = P.cleanDays(fixed, "2026-06"); // 별 없는 날 199.5h · ★ 날 38h · 초과 4h · 조퇴 10분 + ★ 날 2분
-  const h = P.computeMonth({ month: "2026-06", days: fd, bonus: 2000, bonus_note: "명절" }, { pay_type: "hourly", hourly_rate: 200, ot_rate: 300, star_rate: 250 });
+  const h = P.computeMonth({ month: "2026-06", days: fd, bonus: 2000, bonus_note: "명절" }, { pay_type: "hourly", hourly_rate: 200, ot_rate: 300, star_rate: 250 }, NOGRACE);
   const line = (r, k) => r.lines.find((l) => l.key === k) || {};
   // ★ 날도 같은 시급 — 2026-10-03 사장님: "우린 주5일 넘어도 다른 시급으로 주지 않아 다 똑같은
   // 시급으로 고정으로 줘". 예전에 적어 둔 star_rate(250)가 있어도 안 쓴다.
@@ -116,7 +118,7 @@ out.push("\n[직원마다 시급·초과 시급·★ 날 시급, 그 달 보너�
   check("★★ 초과는 초과 시급 — 4h × 300", line(h, "overtime").amount === 1200 && line(h, "overtime").rate === 300, JSON.stringify(line(h, "overtime")));
   check("★★ 보너스 2,000 (메모 「명절」)", line(h, "bonus").amount === 2000 && line(h, "bonus").note === "명절", JSON.stringify(line(h, "bonus")));
   check("합계 = 47,500 + 1,200 + 2,000 − 40", h.total === 50660, String(h.total));
-  const m = P.computeMonth({ month: "2026-06", days: fd, bonus: 3000 }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150, ot_rate: 220 });
+  const m = P.computeMonth({ month: "2026-06", days: fd, bonus: 3000 }, { pay_type: "monthly", monthly_salary: 36000, hourly_rate: 150, ot_rate: 220 }, NOGRACE);
   check("★★ 월급제: 월급 + ★ 날(시급 비움 → 기본 150) + 초과(220) + 보너스", m.total === 36000 + 38 * 150 + 4 * 220 + 3000 - 30 && line(m, "star").rate === 150 && line(m, "overtime").rate === 220, JSON.stringify(m.lines));
   const plain = P.computeMonth({ month: "2026-06", days: fd }, { pay_type: "hourly", hourly_rate: 200 });
   check("초과 시급을 비우면 기본 시급과 같다", plain.ot_rate === 200 && !line(plain, "bonus").amount, "");
@@ -129,7 +131,7 @@ out.push("\n[근무 시간을 다르게 적으면 그대로 따른다 — 11–1
 {
   const BH = [{ start: "11:00", end: "14:00" }, { start: "17:00", end: "21:00" }];
   const fixedDays = P.cleanDays(fixed, "2026-06");
-  const b = P.computeMonth({ month: "2026-06", days: fixedDays }, staff, null, () => BH, BH);
+  const b = P.computeMonth({ month: "2026-06", days: fixedDays }, staff, NOGRACE, () => BH, BH);
   check("★★ 하루 = 오전 3시간 + 오후 4시간 = 7시간", b.rows.find((x) => x.day === 2).regular_hours === 7, String(b.rows.find((x) => x.day === 2).regular_hours));
   check("★ 25일 × 7 = 175시간", b.normal_hours + b.star_hours === 175, String(b.normal_hours + b.star_hours));
   check("★★ 초과 기준은 영업시간 끝(14:00·21:00) — 카드와 같은 날이 뜬다", b.rows.find((x) => x.day === 16).suggested_ot === 0.5 && b.rows.find((x) => x.day === 7).notes.some((n) => n.slot === "am" && n.over_min === 26), "");
@@ -207,6 +209,36 @@ out.push("\n[휴무 날은 지각·조퇴 없음 / 국가 공휴일 ×1.3 · ×1
   check("배율은 1.3·1.7 만 — 그 밖은 1.3", P.cleanHoliday({ mult: 2 }).mult === 1.3 && P.cleanHoliday({ mult: "1.7" }).mult === 1.7, "");
 }
 
+out.push("\n[출퇴근 봐주는 분 · 지각·조퇴 차감을 사장님이 고친다 — 2026-10-04]");
+// 사장님: "출퇴근에 각각 몇 분 정도 봐줄지 근무 규칙에 넣어주고 초과 시간처럼 지각 조퇴에도 숫자를 우리가
+// 하게 해줘. 만약에 우리가 납득할 만한 이유거나 1분인데 차감하면 안되니까"
+{
+  const W = P.FALLBACK_RANGES; // 09:00–14:00 · 16:30–21:00
+  check("기본 봐주는 분 — 출근 5 · 퇴근 5", P.DEFAULT_RULES.late_grace_min === 5 && P.DEFAULT_RULES.early_grace_min === 5, "");
+  const g = P.computeMonth(card, staff);
+  check("★★ 劉芷芸 6월 13:57·13:58·20:55·20:58(2~5분 일찍) — 기본 5분 봐줘서 조퇴 0, 차감 0", g.early_count === 0 && !g.lines.some((l) => l.key === "deduct"), JSON.stringify([g.early_count, g.lines.map((l) => l.key)]));
+  const d1 = (out, rules) => P.dayOf({ am_in: "09:00", am_out: out }, P.rulesOf(rules), W);
+  check("★★ 1분 일찍(13:59) → 조퇴 아님", d1("13:59").early.length === 0, "");
+  check("5분(13:55)까지 봐준다, 6분(13:54)부터 조퇴 6분", d1("13:55").early.length === 0 && d1("13:54").early[0].min === 6, "");
+  check("★ 퇴근 봐주는 분을 10으로 — 13:51 은 봐주고 13:49 는 11분", d1("13:51", { early_grace_min: 10 }).early.length === 0 && d1("13:49", { early_grace_min: 10 }).early[0].min === 11, "");
+  const l1 = (inT, rules) => P.dayOf({ am_in: inT, am_out: "14:00" }, P.rulesOf(rules), W);
+  check("★ 출근 봐주는 분을 40으로 — 09:35(35분)도 지각 아님, 09:41 은 지각 0.5h", l1("09:35", { late_grace_min: 40 }).late.length === 0 && l1("09:41", { late_grace_min: 40 }).deduct_hours === 0.5, "");
+  check("봐주는 분은 0~120 만", P.rulesOf({ early_grace_min: 500 }).early_grace_min === 5 && P.rulesOf({ early_grace_min: 0 }).early_grace_min === 0, "");
+  // 날마다 고치기 — le_hours
+  const day = { am_in: "10:05", am_out: "13:30" }; // 지각 65분(1h) + 조퇴 30분(0.5h) = 1.5h 제안
+  const base = P.dayOf(day, P.DEFAULT_RULES, W);
+  check("규칙이 낸 차감 제안 1.5h", base.suggested_deduct === 1.5 && base.deduct_hours === 1.5 && !base.deduct_set, JSON.stringify(base));
+  const fixed0 = P.dayOf({ ...day, le_hours: 0 }, P.DEFAULT_RULES, W);
+  check("★★ 「봐주기」(0) — 그 날 차감 0, 제안 1.5 는 남겨 보여준다", fixed0.deduct_hours === 0 && fixed0.suggested_deduct === 1.5 && fixed0.deduct_set && fixed0.excused, JSON.stringify(fixed0));
+  const mo = (d) => P.computeMonth({ month: "2026-09", days: P.cleanDays({ 4: d }, "2026-09") }, { pay_type: "hourly", hourly_rate: 200 }, null, () => W, W);
+  const a = mo(day), b0 = mo({ ...day, le_hours: 0 }), b5 = mo({ ...day, le_hours: 0.5 });
+  check("★★ 차감: 그대로 1.5h(−300) · 봐주기 0 · 0.5 로 고치면 −100", a.lines.find((l) => l.key === "deduct").amount === -300 && !b0.lines.some((l) => l.key === "deduct") && b5.lines.find((l) => l.key === "deduct").amount === -100, JSON.stringify([a.total, b0.total, b5.total]));
+  check("★ 봐준 날은 지각·조퇴 횟수에도 안 잡힌다(누가 많이에 안 나옴)", a.late_count === 1 && a.early_count === 1 && b0.late_count === 0 && b0.early_count === 0, "");
+  check("0.5 로 고친 날은 횟수는 남는다(봐준 게 아니라 줄인 것)", b5.late_count === 1, "");
+  check("차감 줄에 몇 날 고쳤는지", b5.lines.find((l) => l.key === "deduct").edited === 1 && b5.lines.find((l) => l.key === "deduct").hours === 0.5, JSON.stringify(b5.lines));
+  check("le_hours 정리 — 음수·글자는 버림, 0 은 남김", P.cleanDays({ 1: { am_in: "09:00", le_hours: -1 } }, "2026-09")["1"].le_hours === undefined && P.cleanDays({ 1: { am_in: "09:00", le_hours: 0 } }, "2026-09")["1"].le_hours === 0, "");
+}
+
 out.push("\n[서버 — 사장님만]");
 (async () => {
   const request = require("supertest");
@@ -220,6 +252,8 @@ out.push("\n[서버 — 사장님만]");
   check("★★ 직원 계정은 못 본다(급여는 사장님만)", res.status === 401 || res.status === 403, String(res.status));
   const boss = request.agent(app);
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
+  // 아래 서버 시험은 조퇴 몇 분까지 빼는 계산을 재므로 봐주는 분을 0 으로(봐주기는 위에서 따로).
+  await boss.put("/api/payroll/rules").send({ late_grace_min: 0, early_grace_min: 0 });
   res = await boss.post("/api/payroll/staff").send({ name: "劉芷芸", pay_type: "hourly", hourly_rate: 200 });
   check("직원 추가", res.status === 200 && res.body.staff.id, JSON.stringify(res.body));
   const id = res.body.staff.id;

@@ -284,6 +284,8 @@
           <div class="payroll-rules-form">
           <label><span data-i18n="payrollWorkHours">근무 시간 (오전, 오후)</span> <input type="text" id="payrollWorkHours" placeholder="09:00-14:00, 16:30-21:00" /></label>
           <label><span data-i18n="payrollDefaultHourly">가게 기본 시급 (직원 시급을 비우면)</span> <input type="number" id="payrollDefaultHourly" min="0" step="1" inputmode="numeric" /></label>
+          <label><span data-i18n="payrollLateGrace">출근 — 몇 분 늦은 것까지 봐줌</span> <input type="number" id="payrollLateGrace" min="0" max="120" /></label>
+          <label><span data-i18n="payrollEarlyGrace">퇴근 — 몇 분 일찍 간 것까지 봐줌</span> <input type="number" id="payrollEarlyGrace" min="0" max="120" /></label>
           <label><span data-i18n="payrollLateUnit">지각 — 몇 분마다 0.5시간 차감</span> <input type="number" id="payrollLateUnit" min="1" max="120" /></label>
           <label><span data-i18n="payrollThreshold">몇 분 넘기면 0.5시간</span> <input type="number" id="payrollThreshold" min="1" max="120" /></label>
           <label><span data-i18n="payrollStep">그 뒤 몇 분마다 0.5시간</span> <input type="number" id="payrollStep" min="1" max="120" /></label>

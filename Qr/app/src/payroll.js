@@ -44,6 +44,10 @@ const DEFAULT_RULES = {
   ot_step_min: 30, // 그 뒤 이만큼마다 0.5시간 더
   borderline_min: 10, // 기준 ±10분이면 「확인 필요」로 칠한다
   late_unit_min: 30, // 지각은 이만큼마다 0.5시간 차감(30분 미만은 세지 않는다)
+  // 봐주는 분(2026-10-04 사장님: "출퇴근에 각각 몇 분 정도 봐줄지 근무 규칙에 넣어주고 … 1분인데 차감하면
+  // 안되니까"). 이만큼까지 늦거나 일찍 간 것은 지각·조퇴가 아니다.
+  late_grace_min: 5,
+  early_grace_min: 5,
   default_hourly: 220, // 직원 시급을 비우면 이 시급(2026 사장님: "1시간 시급 220")
   work_hours: DEFAULT_WORK_HOURS,
 };
@@ -66,6 +70,11 @@ function rulesOf(raw) {
   for (const k of ["ot_threshold_min", "ot_step_min", "borderline_min", "late_unit_min"]) {
     const n = Number(raw && raw[k]);
     if (Number.isFinite(n) && n > 0 && n <= 120) r[k] = Math.round(n);
+  }
+  for (const k of ["late_grace_min", "early_grace_min"]) {
+    const v = raw && raw[k];
+    const n = Number(v);
+    if (v != null && v !== "" && Number.isFinite(n) && n >= 0 && n <= 120) r[k] = Math.round(n);
   }
   const h = Number(raw && raw.default_hourly);
   if (raw && raw.default_hourly != null && raw.default_hourly !== "" && Number.isFinite(h) && h >= 0 && h < 100000) r.default_hourly = Math.round(h * 100) / 100;
@@ -149,11 +158,11 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null, info = null) {
     //  · 지각: 30분 늦으면 0.5시간, 60분이면 1시간 … (30분 미만은 지각이 아니다)
     //  · 조퇴: 비운 분 그대로(13:50 퇴근 → 10분)
     // 「30분 단위로 카운트 시작」 — 30분이 안 되게 늦은 것은 지각으로 세지 않는다.
-    if (i != null && i - toMin(r.start) >= rules.late_unit_min) {
+    if (i != null && i - toMin(r.start) >= rules.late_unit_min && i - toMin(r.start) > rules.late_grace_min) {
       const min = i - toMin(r.start);
       late.push({ slot: label, min, hours: Math.floor(min / rules.late_unit_min) * 0.5 });
     }
-    if (o != null && toMin(r.end) - o > 0 && toMin(r.end) - o < 12 * 60) {
+    if (o != null && toMin(r.end) - o > rules.early_grace_min && toMin(r.end) - o < 12 * 60) {
       const min = toMin(r.end) - o;
       early.push({ slot: label, min, hours: min / 60 });
     }
@@ -172,6 +181,10 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null, info = null) {
   const extra = extraBlockHours(d.ot_in, d.ot_out);
   suggested += extra;
   const set = d.ot_hours != null && Number.isFinite(Number(d.ot_hours));
+  // 지각·조퇴 차감도 사장님이 고친다 — 초과처럼(2026-10-04 사장님: "초과 시간처럼 지각 조퇴에도 숫자를 우리가
+  // 하게 해줘. 만약에 우리가 납득할 만한 이유거나"). le_hours 가 있으면 규칙이 낸 숫자 대신 그것.
+  const suggestedDeduct = late.reduce((a, x) => a + x.hours, 0) + early.reduce((a, x) => a + x.hours, 0);
+  const leSet = d.le_hours != null && Number.isFinite(Number(d.le_hours));
   // 출근 일수 — 오전 0.5 · 오후 0.5(2026-10-03 사장님: "하나에 0.5 씩 해서 일수 채워줘.
   // 반올림하지 말고"). 영업시간이 한 구간이면 그 하루가 1.
   const dayUnits = b.single ? (am || pm ? 1 : 0) : (am ? 0.5 : 0) + (pm ? 0.5 : 0);
@@ -182,7 +195,11 @@ function dayOf(day, rules = DEFAULT_RULES, ranges = null, info = null) {
     early,
     closed,
     holiday: (info && info.holiday) || null,
-    deduct_hours: late.reduce((a, x) => a + x.hours, 0) + early.reduce((a, x) => a + x.hours, 0),
+    suggested_deduct: suggestedDeduct,
+    deduct_set: leSet,
+    deduct_hours: leSet ? Number(d.le_hours) : suggestedDeduct,
+    // 0 으로 봐준 날은 지각·조퇴 횟수에도 안 넣는다(누가 많이 했나에 안 잡힌다).
+    excused: leSet && Number(d.le_hours) === 0 && suggestedDeduct > 0,
     star: !!d.star,
     blocks: b.single ? [b.single] : [b.am, b.pm],
     regular_hours: regular,
@@ -218,6 +235,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null,
   const rows = [];
   let normalDays = 0, starDays = 0, normalHours = 0, starHours = 0, otHours = 0, unconfirmed = 0, borderlines = 0;
   const holidayHours = {}; // 배율마다 — 국가 공휴일에 일한 기본 시간
+  let deductEdited = 0;
   let lateCount = 0, lateMin = 0, lateHours = 0, earlyCount = 0, earlyMin = 0, deductStar = 0, deductNormal = 0;
   for (let i = 1; i <= n; i++) {
     const date = month ? `${month}-${String(i).padStart(2, "0")}` : null;
@@ -227,8 +245,11 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null,
     rows.push({ day: i, ...d });
     if (!d.worked) continue;
     if (d.star) { starDays += d.day_units; starHours += d.regular_hours; } else { normalDays += d.day_units; normalHours += d.regular_hours; }
-    for (const x of d.late) { lateCount++; lateMin += x.min; lateHours += x.hours; }
-    for (const x of d.early) { earlyCount++; earlyMin += x.min; }
+    if (!d.excused) {
+      for (const x of d.late) { lateCount++; lateMin += x.min; lateHours += x.hours; }
+      for (const x of d.early) { earlyCount++; earlyMin += x.min; }
+    }
+    if (d.deduct_set) deductEdited++;
     if (d.star) deductStar += d.deduct_hours;
     else deductNormal += d.deduct_hours;
     if (d.holiday) {
@@ -275,7 +296,7 @@ function computeMonth(card, staff, rawRules, hoursFor = null, baseRanges = null,
   if (bonus) lines.push({ key: "bonus", amount: bonus, note: (card && card.bonus_note) || "" });
   // 지각·조퇴 차감 — 시급으로.
   const deduct = (deductNormal + deductStar) * hourly;
-  if (deduct > 0) lines.push({ key: "deduct", late_hours: lateHours, early_min: earlyMin, rate: hourly, amount: -deduct });
+  if (deduct > 0) lines.push({ key: "deduct", hours: Math.round((deductNormal + deductStar) * 100) / 100, late_hours: lateHours, early_min: earlyMin, edited: deductEdited, rate: hourly, amount: -deduct });
   for (const l of lines) l.amount = Math.round(l.amount);
   const total = Math.max(0, lines.reduce((a, l) => a + l.amount, 0));
   const warnings = [];
@@ -328,6 +349,10 @@ function cleanDays(raw, month) {
       if (Number.isFinite(h) && h >= 0 && h <= 24) d.ot_hours = Math.round(h * 2) / 2;
     }
     if (v.ot_confirmed) d.ot_confirmed = true;
+    if (v.le_hours != null && v.le_hours !== "") {
+      const h = Number(v.le_hours);
+      if (Number.isFinite(h) && h >= 0 && h <= 24) d.le_hours = Math.round(h * 100) / 100;
+    }
     if (Object.keys(d).length) out[String(day)] = d;
   }
   return out;
