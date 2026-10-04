@@ -928,6 +928,7 @@
       items.forEach((item) => {
         const row = document.createElement("div");
         row.className = "item-row" + (item.available ? "" : " item-unavailable");
+        row.dataset.itemId = item.id;
         row.innerHTML = `
           <div class="item-row-text">
             <div class="item-name-row">

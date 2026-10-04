@@ -62,6 +62,42 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(500);
   check("메뉴를 누르면 설명이 열린다", await vis("#itemSheetBackdrop"), "");
   check("★★ 담기 버튼·수량이 없다 — 주문은 안 된다", !(await vis("#addToCartBtn")) && !(await vis("#qtyRow")), "");
+  // 2026-10-04 사장님: "설명의 글자를 크게 표시될 수 있도록 수정 요청됨. 고객이 주문시 이 부분을 제대로 보지
+  // 못해, 공기밥이 제공된다는 사실을 모른채 공기밥을 별도로 주문하는 일이 지속적으로 발생함."
+  // 예전엔 설명이 13px 로 회색 부제목과 같은 크기였다 — 크기 비율과 바탕을 잰다.
+  {
+    await page.locator("#itemSheetClose").click();
+    await page.waitForTimeout(300);
+    const boss0 = require("supertest").agent(app);
+    await boss0.post("/api/auth/login").send({ password: "ownerpass123" });
+    const cats = (await boss0.get("/api/menu/admin")).body;
+    const items = (Array.isArray(cats) ? cats : cats.categories || []).flatMap((c) => c.items || []);
+    const it = items.find((x) => x.available !== false && !x.soldout) || items[0];
+    await boss0.put(`/api/menu/admin/items/${it.id}`).send({ ...it, desc_zh: "點2人份，附白飯2碗", desc_ko: "2인분 주문 시 공기밥 2개 포함" });
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(1200);
+    await page.locator(`.item-row[data-item-id="${it.id}"]`).first().click();
+    await page.waitForTimeout(600);
+    const m = await page.evaluate(() => {
+      const px = (sel) => parseFloat(getComputedStyle(document.querySelector(sel)).fontSize);
+      const d = document.querySelector("#itemDesc");
+      const cs = getComputedStyle(d);
+      return { text: d.textContent, desc: px("#itemDesc"), title: px("#itemName"), sub: px("#itemSubNames"), weight: Number(cs.fontWeight), bg: cs.backgroundColor, shown: d.offsetHeight > 0 };
+    });
+    if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
+    check("설명이 보인다", m.shown && /附白飯2碗|공기밥/.test(m.text), JSON.stringify(m));
+    check("★★ 설명 글자는 부제목보다 확실히 크다(1.3배 이상) — 예전엔 같았다(13px)", m.desc >= m.sub * 1.3 && m.desc >= 17, JSON.stringify(m));
+    check("★ 설명은 이름(20px) 바로 다음 크기 — 이름을 넘지는 않는다", m.desc >= m.title * 0.85 && m.desc <= m.title, JSON.stringify(m));
+    check("★ 굵게, 바탕색 있는 칸", m.weight >= 600 && m.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(m));
+    await page.locator("#itemSheetClose").click();
+    await page.waitForTimeout(300);
+    const other = items.find((x) => x.id !== it.id && !x.desc_zh && !x.desc_ko && x.available !== false);
+    if (other) {
+      await page.locator(`.item-row[data-item-id="${other.id}"]`).first().click();
+      await page.waitForTimeout(500);
+      check("설명이 없는 메뉴는 빈 노란 칸이 안 보인다", (await page.locator("#itemDesc").evaluate((el) => el.offsetHeight)) === 0, "");
+    }
+  }
   check("주문이 서버로 가지 않았다", posted.length === 0, JSON.stringify(posted));
   await ctx.close();
 

@@ -420,7 +420,16 @@ button.is-closed:hover {
 }
 .sheet-body h2 { font-family: var(--font-display); margin: 0 0 4px; font-size: 20px; }
 .sheet-sub { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
-.sheet-desc { font-size: 13px; color: var(--ink); margin: 0 0 12px; }
+/* 설명은 크게, 눈에 띄는 칸으로(2026-10-04 사장님: "설명의 글자를 크게 표시될 수 있도록 … 고객이 주문시 이
+   부분을 제대로 보지 못해, 공기밥이 제공된다는 사실을 모른채 공기밥을 별도로 주문하는 일이 지속적으로 발생").
+   예전엔 13px 로 바로 위 회색 부제목과 같은 크기라 지나쳤다 — 이제 이름(20px) 다음으로 큰 글자, 굵게,
+   연한 노란 바탕에 빨간 왼쪽 띠. 설명이 없는 메뉴는 빈 칸이 안 보이게. */
+.sheet-desc {
+  font-size: 18px; line-height: 1.45; font-weight: 700; color: var(--ink);
+  margin: 4px 0 14px; padding: 10px 12px;
+  background: #fff4d6; border-left: 4px solid var(--red); border-radius: 10px;
+}
+.sheet-desc:empty { display: none; }
 .sheet-price-info { font-size: 15px; font-weight: 700; margin: 0 0 12px; color: var(--red); }
 .options-label { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
 
