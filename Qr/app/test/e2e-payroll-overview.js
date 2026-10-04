@@ -107,11 +107,40 @@ function check(name, cond, extra = "") {
   await page.locator('#prOvBars [data-payroll-ov="' + b + '"]').click();
   await page.waitForTimeout(900);
   check("★★ 막대를 누르면 라마바 카드가 열린다", (await page.inputValue("#payrollStaffName")) === "라마바" && !(await page.locator("#payrollEditor").evaluate((el) => el.hidden)), "");
+  // 2026-10-04 사장님: "위에 사람 누르면 메인인 저 요약말고 사람에 해당하는 것만 나와줘 저 밑에 나와서
+  // 나온지도 모르겠어"
+  check("★★ 사람을 고르면 한눈에 보기는 접힌다 — 그 사람 카드만", !(await page.locator("#payrollOverview").isVisible()), "");
+  const edTop = await page.locator("#payrollEditor").evaluate((el) => el.getBoundingClientRect().top);
+  const chipsBottom = await page.locator("#payrollStaffChips").evaluate((el) => el.getBoundingClientRect().bottom);
+  check("★★ 카드가 칩 줄 바로 밑에 — 화면 안에서 보인다", edTop > chipsBottom && edTop - chipsBottom < 160 && edTop < 900, `chips ${chipsBottom} → editor ${edTop}`);
+  check("「📊 전체」 칩은 꺼지고 라마바 칩이 켜진다", !(await page.locator("#payrollStaffChips [data-payroll-all]").evaluate((el) => el.classList.contains("active"))) && (await page.locator(`#payrollStaffChips [data-payroll-staff="${b}"]`).evaluate((el) => el.classList.contains("active"))), "");
+  await page.locator(`#payrollStaffChips [data-payroll-staff="${a}"]`).click();
+  await page.waitForTimeout(900);
+  check("★ 위 칩으로 가나다를 누르면 가나다 카드만", (await page.inputValue("#payrollStaffName")) === "가나다" && !(await page.locator("#payrollOverview").isVisible()), "");
+  await page.locator("#payrollStaffChips [data-payroll-all]").click();
+  await page.waitForTimeout(1200);
+  check("★★ 「📊 전체」 → 한눈에 보기로 돌아오고 카드는 닫힌다", (await page.locator("#payrollOverview").isVisible()) && (await page.locator("#payrollEditor").evaluate((el) => el.hidden)) && (await page.locator("#payrollStaffChips [data-payroll-all]").evaluate((el) => el.classList.contains("active"))), "");
   await page.locator('#prOvTable tbody tr[data-payroll-ov="' + a + '"]').click();
   await page.waitForTimeout(900);
-  check("★ 표의 줄을 누르면 가나다 카드", (await page.inputValue("#payrollStaffName")) === "가나다", "");
+  check("★ 표의 줄을 누르면 가나다 카드", (await page.inputValue("#payrollStaffName")) === "가나다" && !(await page.locator("#payrollOverview").isVisible()), "");
+  // 고치다 말고 「전체」를 누르면 묻는다
+  const g = page.locator('#payrollGrid tr[data-day="20"] input[data-slot="am_in"]');
+  await g.fill("0900");
+  await g.press("Tab");
+  await page.waitForTimeout(400);
+  await page.locator("#payrollStaffChips [data-payroll-all]").click();
+  await page.waitForTimeout(400);
+  check("★ 저장 안 한 채 「전체」 → 버릴지 묻는다", (await page.locator("#appDialogBackdrop").isVisible()) && /저장하지 않은 카드/.test(await page.locator("#appDialogMessage").innerText()), "");
+  await page.click("#appDialogCancel");
+  await page.waitForTimeout(300);
+  check("취소하면 카드 그대로", (await page.inputValue('#payrollGrid tr[data-day="20"] input[data-slot="am_in"]')) === "09:00" && !(await page.locator("#payrollEditor").evaluate((el) => el.hidden)), "");
+  await page.locator("#payrollStaffChips [data-payroll-all]").click();
+  await page.waitForTimeout(300);
+  await page.click("#appDialogOk");
+  await page.waitForTimeout(1200);
 
   out.push("\n[달을 바꾸면 따라온다]");
+  check("버리기를 고르면 한눈에 보기", await page.locator("#payrollOverview").isVisible(), "");
   await page.click("#payrollPrevMonth");
   await page.waitForTimeout(1500);
   check("★ 8월 — NT$1,900, 1명, 지각·조퇴 없음", (await page.locator("#prOvTotal").innerText()) === "NT$1,900" && /1명/.test(await page.locator("#prOvSub").innerText()) && /지각·조퇴가 없어요/.test(await page.locator("#prOvLateBars").innerText()), await page.locator("#prOvTotal").innerText());

@@ -1487,6 +1487,7 @@
       payrollHint: "출근 카드 두 장(별 없는 카드 + ★ 카드)을 보면서 한 표에 넣어요. ★ 칸을 켠 날이 별 카드 날이에요. 근무 시간은 아래 「근무 규칙」의 시간으로 세요. 초과 시간은 제안만 해요 — 확인(✓)하거나 고쳐야 확정돼요. 지각(30분마다 0.5시간)·조퇴(비운 분 그대로)는 급여에서 빠져요.",
       payrollMonth: "월",
       payrollMonthFmt: "{y}년 {m}월",
+      payrollAllChip: "📊 전체",
       payrollConflict: "다른 기기에서 {when}에 「{name} · {month}」 카드를 먼저 저장했어요. 지금 저장하면 그 내용이 이 화면 것으로 바뀝니다.",
       payrollConflictReload: "그쪽 것 불러오기",
       payrollConflictOverwrite: "내 것으로 덮어쓰기",
@@ -2573,6 +2574,7 @@
       payrollHint: "對照兩張考勤卡（無星卡 + ★卡）填入同一張表。勾選 ★ 的日期是星卡的日子。工時依下方「工作規則」的時間計算。加班時數只是建議 — 要確認（✓）或修改才算確定。遲到（每 30 分鐘 0.5 小時）·早退（離開幾分扣幾分）從薪資扣除。",
       payrollMonth: "月份",
       payrollMonthFmt: "{y}年{m}月",
+      payrollAllChip: "📊 全部",
       payrollConflict: "另一台裝置在 {when} 先儲存了「{name} · {month}」的卡。現在儲存的話，會改成這個畫面的內容。",
       payrollConflictReload: "載入那邊的",
       payrollConflictOverwrite: "用我的覆蓋",
@@ -13326,13 +13328,18 @@
       sum = await (await fetch(`/api/payroll/summary?month=${payroll.month}`)).json();
     } catch (e) {}
     const totals = new Map((sum.rows || []).map((r) => [r.staff.id, r]));
-    $("#payrollStaffChips").innerHTML = payroll.staff
+    // 맨 앞 「📊 전체」 — 한눈에 보기. 사람을 누르면 그 사람 카드만 보인다(2026-10-04 사장님: "위에 사람
+    // 누르면 메인인 저 요약말고 사람에 해당하는 것만 나와줘 저 밑에 나와서 나온지도 모르겠어").
+    const allChip = payroll.staff.length ? `<button type="button" data-payroll-all class="pr-chip-all${payroll.current ? "" : " active"}">${escapeHtml(T("payrollAllChip"))}</button>` : "";
+    $("#payrollStaffChips").innerHTML = allChip + payroll.staff
       .map((s) => {
         const r = totals.get(s.id);
         return `<button type="button" data-payroll-staff="${escapeHtml(s.id)}" class="${payroll.current && payroll.current.id === s.id ? "active" : ""}${s.active ? "" : " is-inactive"}">${escapeHtml(s.name)}${r && r.has_card ? `<small>NT$${money(r.total)}${r.unconfirmed_days ? " ⚠" : ""}</small>` : ""}</button>`;
       })
       .join("");
     $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => (b.onclick = () => openPayrollCard(b.dataset.payrollStaff)));
+    const allBtn = $("#payrollStaffChips [data-payroll-all]");
+    if (allBtn) allBtn.onclick = () => payrollShowAll();
     const withCard = (sum.rows || []).filter((r) => r.has_card);
     renderPayrollOverview(sum);
     loadPayrollTrend();
@@ -13350,7 +13357,8 @@
     const box = $("#payrollOverview");
     if (!box) return;
     const rows = (sum.rows || []).slice();
-    box.hidden = !payroll.staff.length;
+    // 사람을 고른 동안은 한눈에 보기를 숨긴다 — 그 사람 카드가 칩 바로 밑에 온다.
+    box.hidden = !payroll.staff.length || !!payroll.current;
     if (!payroll.staff.length) return;
     const withCard = rows.filter((r) => r.has_card);
     const add = (k) => withCard.reduce((a, r) => a + Number(r[k] || 0), 0);
@@ -13465,11 +13473,7 @@
       : "";
     $("#prOvTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${sorted.map(cell).join("")}</tbody>${foot}`;
     box.querySelectorAll("[data-payroll-ov]").forEach((el) => {
-      el.onclick = async () => {
-        await openPayrollCard(el.dataset.payrollOv);
-        const ed = $("#payrollEditor");
-        if (ed && !ed.hidden && ed.scrollIntoView) ed.scrollIntoView({ behavior: "smooth", block: "start" });
-      };
+      el.onclick = () => openPayrollCard(el.dataset.payrollOv);
     });
   }
   let payrollTrendChart = null;
@@ -13524,6 +13528,11 @@
     payroll.result = d.result;
     payroll.dirty = false;
     $("#payrollEditor").hidden = false;
+    // 한눈에 보기는 접고, 칩 줄로 올라간다 — 열린 카드가 바로 눈앞에.
+    if ($("#payrollOverview")) $("#payrollOverview").hidden = true;
+    $$("#payrollStaffChips [data-payroll-all]").forEach((b) => b.classList.remove("active"));
+    const head = $(".pr-head");
+    if (head && head.getBoundingClientRect().top < 0 && head.scrollIntoView) head.scrollIntoView({ block: "start" });
     $("#payrollStaffName").value = d.staff.name;
     $("#payrollPayType").value = d.staff.pay_type;
     $("#payrollMonthlySalary").value = d.staff.monthly_salary ?? "";
@@ -13590,6 +13599,16 @@
       $("#payrollHolidayNote").value = "";
       payrollHolidaysChanged();
     };
+  // 「📊 전체」 — 사람 카드를 닫고 한눈에 보기로. 저장 안 한 것이 있으면 묻는다.
+  async function payrollShowAll() {
+    if (payroll.dirty && !(await showConfirm(T("payrollDiscard")))) return;
+    payroll.current = null;
+    payroll.dirty = false;
+    payrollSetStatus();
+    $("#payrollEditor").hidden = true;
+    $$("#payrollStaffChips [data-payroll-staff]").forEach((b) => b.classList.remove("active"));
+    await loadPayrollSummary();
+  }
   function payrollSyncPayType() {
     const monthly = $("#payrollPayType").value === "monthly";
     $$(".pr-seg [data-pay-type]").forEach((b) => {

@@ -152,7 +152,7 @@ function check(name, cond, extra = "") {
   await page.dispatchEvent("#payrollMonth", "change");
   await page.waitForTimeout(800);
   check("★ 직원 칩에 이 달 금액", /NT\$5,900/.test(await page.locator("#payrollStaffChips").innerText()), await page.locator("#payrollStaffChips").innerText());
-  await page.locator("#payrollStaffChips button").first().click();
+  await page.locator("#payrollStaffChips [data-payroll-staff]").first().click();
   await page.waitForTimeout(900);
   check("★★ 다시 열어도 그대로", (await page.locator('#payrollGrid tr[data-day="7"] input[data-slot="pm_out"]').inputValue()) === "21:23" && /이 달 지급액\s*NT\$5,900/.test(await page.locator("#payrollResult").innerText()), "");
 
@@ -215,7 +215,7 @@ function check(name, cond, extra = "") {
     await page.fill("#payrollMonth", "2026-06");
     await page.dispatchEvent("#payrollMonth", "change");
     await page.waitForTimeout(700);
-    await page.locator("#payrollStaffChips button").first().click();
+    await page.locator("#payrollStaffChips [data-payroll-staff]").first().click();
     await page.waitForTimeout(900);
     check("★ 다시 열어도 보너스·초과 시급이 그대로", (await page.locator("#payrollBonus").inputValue()) === "2000" && (await page.locator("#payrollBonusNote").inputValue()) === "명절" && (await page.locator("#payrollOtRate").inputValue()) === "300", "");
     // 뒤의 시험을 위해 시급제로 돌려 둔다
