@@ -21,7 +21,7 @@ const TEXT = 'var(--fs-sm)'
 
 export default function Header() {
   const { tr } = useLanguage()
-  const { user, loading, legacyAdmin } = useAuth()
+  const { user, loading } = useAuth()
   const pathname = usePathname()
 
   // 한 번에 하나만 열린다 — 설정과 메뉴가 겹쳐 있으면 어느 것을 닫는 건지
@@ -47,11 +47,6 @@ export default function Header() {
       document.removeEventListener('mousedown', onDown)
     }
   }, [open])
-
-  // 관리자 버튼은 owner/staff 계정에만. 기존 비밀번호 로그인으로 관리자
-  // 화면에 들어가 있는 세션(legacyAdmin)도 같은 취급 — 계정 정보는 없지만
-  // 관리자인 건 맞으니 버튼은 보여준다.
-  const isAdmin = !!user?.isAdmin || legacyAdmin
 
   const accountLink = (
     <Link
@@ -201,29 +196,8 @@ export default function Header() {
 
         {/* 오른쪽 — 사장님: "헤더 오른쪽에는 설정 로그인 만 있으면 될 것 같아."
             언어와 밝기는 설정 안으로 들어갔다. 한 번 정하면 잘 안 바꾸는
-            값이라 늘 자리를 차지할 이유가 없다.
-            관리자 버튼은 관리자에게만 보이는 추가 항목이라 그 둘의 자리를
-            건드리지 않도록 묶음의 맨 앞에 둔다. */}
+            값이라 늘 자리를 차지할 이유가 없다. */}
         <div className="hg-header-right" style={{ display: 'flex', alignItems: 'center', gap: 'clamp(4px, 1.2vw, 10px)', minWidth: 0 }}>
-          {!loading && isAdmin ? (
-            <Link
-              href="/account/"
-              className="hg-cta-outline-gold"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                padding: '7px clamp(8px, 2.4vw, 13px)',
-                fontSize: TEXT,
-                letterSpacing: '0.04em',
-                whiteSpace: 'nowrap',
-                flexShrink: 0,
-                textDecoration: 'none',
-              }}
-            >
-              {tr.auth.adminPage}
-            </Link>
-          ) : null}
-
           <button
             className={open === 'settings' ? 'hg-icon-btn hg-settings-btn hg-icon-btn-on' : 'hg-icon-btn hg-settings-btn'}
             onClick={() => setOpen((v) => (v === 'settings' ? null : 'settings'))}
