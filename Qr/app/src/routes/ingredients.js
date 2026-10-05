@@ -234,6 +234,101 @@ router.post("/rows", async (req, res) => {
  * 날짜를 안 주면 역시 최근 12개월이다. 전체를 받으시려면 all=1 이고, 그건
  * 15만 줄이라 몇 MB 가 된다 — 일부러 누를 때만 그리 된다.
  */
+
+/**
+ * 영수증 사진을 **Claude 에게 읽힌다.**
+ *
+ * 2026-10-05 사장님: "그냥 클로드나 지피티 api 사용하면 어때?"
+ *
+ * 기기 안에서 읽는 길(public/js/receipt-ocr.js)은 그대로 둔다 — 키가 없거나
+ * 실패하면 화면이 그쪽으로 내려간다. 사장님 영수증은 한 달 221장이고 사진
+ * 한 장이 1,800토큰쯤이라 큰 모델로도 한 달 $2.5 다.
+ *
+ * ── 조용히 돈이 나가지 않게
+ *
+ * - **같은 사진은 다시 안 읽는다.** 사진의 지문(sha256)으로 답을 넣어 두고
+ *   다시 올리면 그걸 돌려준다. 사장님이 한 장을 두 번 올리는 일은 흔하다.
+ * - **한 달에 몇 번까지**를 막는다(`AI_MONTHLY_CAP`, 기본 1,500). 어디선가
+ *   되풀이해 부르면 알아채기 전에 돈이 나간다.
+ * - 쓴 양을 달마다 적어 둔다 — 설정 화면에서 보려고.
+ */
+router.post("/read-photo", express.json({ limit: "8mb" }), async (req, res) => {
+  const AI = require("../receiptAi");
+  const body = req.body || {};
+  if (!process.env.ANTHROPIC_API_KEY) {
+    // 화면이 「기기 안에서 읽기」로 내려갈 수 있게 분명히 말한다
+    return res.status(503).json({ error: "no_key", message: "ANTHROPIC_API_KEY 가 없습니다" });
+  }
+  const img = AI.splitDataUrl(body.image);
+  if (!img) return res.status(400).json({ error: "bad_image" });
+  if (img.bytes > AI.MAX_IMAGE_BYTES) return res.status(413).json({ error: "too_big" });
+
+  await connectDB();
+  const db = getDb();
+  const cache = db.collection("ingredient_ai");
+  const key = AI.imageKey(img.data);
+
+  // 1) 전에 읽은 사진인가
+  const had = await cache.findOne({ _id: key }).catch(() => null);
+  if (had && had.answer) return res.json({ ...had.answer, cached: true });
+
+  // 2) 이 달에 몇 번 썼나
+  const month = new Date().toISOString().slice(0, 7);
+  const cap = Number(process.env.AI_MONTHLY_CAP || 1500);
+  const usage = db.collection("ingredient_ai_usage");
+  const seen = await usage.findOne({ _id: month }).catch(() => null);
+  if (seen && seen.calls >= cap) {
+    return res.status(429).json({ error: "monthly_cap", message: `이 달에 ${cap}장을 넘었습니다`, calls: seen.calls, cap });
+  }
+
+  // 3) 그 업체에서 자주 사는 품목을 같이 준다 — 품명이 장부와 같은 글자로 온다
+  let items = [];
+  const vendor = G.canonicalVendor(body.vendor);
+  if (vendor) {
+    try {
+      const where = { vendor };
+      const store = String(body.store || "").trim();
+      if (store && store !== "all") where.store = store;
+      const rows = await (await col()).find(where, { projection: { _id: 0 } }).toArray();
+      const recentFrom = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10);
+      items = G.buildCatalog(rows, { recentFrom }).slice(0, 60).map((i) => i.name);
+    } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
+  }
+
+  const got = await AI.readReceipt(body.image, { vendor, date: body.date, items });
+  if (!got.ok) {
+    console.warn("[ingredients] 사진 읽기 실패:", got.error, got.detail || "");
+    return res.status(502).json({ error: got.error, message: "사진을 못 읽었습니다" });
+  }
+  const answer = { rows: got.rows, total: got.total, sum: got.sum, totalOk: got.totalOk, note: got.note, model: got.model };
+  await cache.updateOne(
+    { _id: key },
+    { $set: { answer, at: new Date().toISOString(), vendor: vendor || "", usage: got.usage || null } },
+    { upsert: true }
+  ).catch(() => {});
+  await usage.updateOne(
+    { _id: month },
+    { $inc: { calls: 1, in: (got.usage && got.usage.in) || 0, out: (got.usage && got.usage.out) || 0 } },
+    { upsert: true }
+  ).catch(() => {});
+  res.json({ ...answer, cached: false });
+});
+
+/** 이 달에 사진을 몇 장 읽었고 토큰을 얼마나 썼나. */
+router.get("/ai-usage", async (req, res) => {
+  await connectDB();
+  const month = new Date().toISOString().slice(0, 7);
+  const row = await getDb().collection("ingredient_ai_usage").findOne({ _id: month }).catch(() => null);
+  res.json({
+    month,
+    calls: (row && row.calls) || 0,
+    in: (row && row.in) || 0,
+    out: (row && row.out) || 0,
+    cap: Number(process.env.AI_MONTHLY_CAP || 1500),
+    on: !!process.env.ANTHROPIC_API_KEY,
+  });
+});
+
 router.get("/export", async (req, res) => {
   const c = await col();
   const rows = await c

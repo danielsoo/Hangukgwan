@@ -603,6 +603,58 @@
   //
   // 품명은 읽지 않는다(한자 손글씨다). 그 업체에서 보통 사는 것 목록으로
   // 고르시게 두고, 종이에서 잘라낸 그림을 옆에 붙인다.
+  /**
+   * 사진을 **긴 쪽 1,568점**으로 줄여 보낸다.
+   *
+   * 그 위로는 모델이 어차피 줄이고, 토큰만 더 든다(1,568 이면 약 1,800토큰).
+   * 폰 사진은 4,000점이 넘으므로 안 줄이면 통신도 느리고 돈도 더 나간다.
+   */
+  async function shrinkForAi(file, side) {
+    const max = side || 1568;
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
+    if (!bmp) return null;
+    const sc = Math.min(1, max / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * sc));
+    const h = Math.max(1, Math.round(bmp.height * sc));
+    const cv = document.createElement("canvas");
+    cv.width = w; cv.height = h;
+    cv.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    if (bmp.close) bmp.close();
+    return cv.toDataURL("image/jpeg", 0.82);
+  }
+
+  /**
+   * 사진 한 장을 **서버를 거쳐 Claude 에게** 읽힌다.
+   *
+   * 키는 서버(Vercel 환경변수)에만 있다 — 화면에 두면 누구나 가져간다.
+   * 키가 없거나(503) 실패하면 null 을 주고, 부르는 쪽이 **기기 안에서 읽는
+   * 길**로 내려간다. 화면이 멈추지 않는 것이 중요하다.
+   */
+  async function readByAi(file) {
+    const image = await shrinkForAi(file);
+    if (!image) return null;
+    let res;
+    try {
+      res = await fetch("/api/ingredients/read-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image,
+          vendor: ($("#ingEntryVendor").value || "").trim(),
+          store: $("#ingEntryStore").value || "",
+          date: $("#ingEntryDate").value || "",
+        }),
+      });
+    } catch (e) { return null; }
+    if (res.status === 503) return { off: true };
+    if (res.status === 429) {
+      const b = await res.json().catch(() => ({}));
+      return { capped: true, calls: b.calls, cap: b.cap };
+    }
+    if (!res.ok) return null;
+    return await res.json().catch(() => null);
+  }
+
   let reading = false;
 
   async function readPhotos(files) {
@@ -615,8 +667,31 @@
     const btn = $("#ingPhotoBtn");
     if (btn) { btn.disabled = true; btn.textContent = T("ingPhotoReading"); }
     try {
-      let added = 0, unsure = 0, noTable = 0;
+      let added = 0, unsure = 0, noTable = 0, byAi = 0, aiOff = false, capped = null;
       for (const f of list) {
+        // **먼저 Claude 에게 묻는다.** 기기 안에서 읽는 것보다 훨씬 잘 읽는다
+        // (2026-10-05: 기기 안 22% — tools/README.md). 키가 없거나 실패하면
+        // 아래의 기기 안 읽기로 내려간다.
+        const ai = await readByAi(f);
+        if (ai && ai.off) aiOff = true;
+        else if (ai && ai.capped) capped = ai;
+        else if (ai && Array.isArray(ai.rows) && ai.rows.length) {
+          for (const r of ai.rows) {
+            const line = blankLine();
+            line.name = r.name || "";
+            line.unit = r.unit || "";
+            line.qty = r.qty === "" ? "" : r.qty;
+            line.price = r.price === "" ? "" : r.price;
+            line.amount = r.amount === "" ? "" : r.amount;
+            line.amountEdited = true;
+            // 인쇄된 合計와 더한 값이 다르면 그 영수증은 통째로 눈여겨본다
+            line.unsure = !r.sure || ai.totalOk === false;
+            entryLines.push(line);
+            added++; byAi++;
+            if (line.unsure) unsure++;
+          }
+          continue;
+        }
         let got;
         try { got = await RR.readPhoto(f, { priceSet: priceSetOf() }); }
         catch (e) { noTable++; continue; }
@@ -641,6 +716,9 @@
       if (!entryLines.length) entryLines.push(blankLine());
       renderLines();
       if (added) logLine(esc(fmt("ingPhotoReadFmt", { n: added, unsure })));
+      if (byAi) logLine(esc(fmt("ingPhotoByAiFmt", { n: byAi })));
+      if (aiOff) logLine(esc(T("ingPhotoAiOff")));
+      if (capped) logLine(esc(fmt("ingPhotoCapFmt", { cap: capped.cap })));
       if (noTable) logLine(esc(fmt("ingPhotoNoTableFmt", { n: noTable })));
       if (!added && !noTable) logLine(esc(T("ingPhotoNothing")));
     } finally {
@@ -735,5 +813,5 @@
     await loadSummary();
   }
 
-  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf };
+  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf, readByAi, shrinkForAi };
 })();
