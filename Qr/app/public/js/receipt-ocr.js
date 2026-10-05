@@ -131,8 +131,133 @@
    * @param gray Uint8Array (w*h), 0=검정
    * @returns { threshold, hLines, vLines, box } — 못 찾으면 hLines/vLines 가 짧다
    */
+  /**
+   * 표의 줄은 **일정한 간격**이다 — 그것을 쓴다.
+   *
+   * 선을 하나하나 찾기만 하면 두 가지로 어긋난다. 옅게 인쇄된 선은 아예
+   * 못 찾고(사진 한 장에서 19줄 중 8줄만 찾았다), 손글씨 획이 길게 그어진
+   * 자리는 선으로 센다(세로선 18개 중 14개가 글씨였다).
+   *
+   * 찾은 선들이 「얼마 간격의 빗」에 가장 많이 앉는지를 보고, 그 빗에서
+   * 벗어난 것은 버리고 **빠진 칸은 채운다.** 바깥쪽으로 늘일 때는 종이에
+   * 실제로 선이 있는지 한 번 더 확인하므로(probe), 표가 끝난 자리를 넘어
+   * 가지는 않는다.
+   */
+  function combLines(lines, opts) {
+    const o = Object.assign({ minPitch: 8, tol: 0.3, minLines: 4, probe: null, probeMin: 0.2, probeSlack: 3, maxExtend: 40, holeMax: 1, extent: null, emptyCost: 0.5 }, opts || {});
+    const plain = () => ({ lines: lines.slice(), pitch: 0, kept: lines.length, added: 0, dropped: 0 });
+    if (lines.length < o.minLines) return plain();
+
+    const gaps = [];
+    for (let i = 1; i < lines.length; i++) gaps.push(lines[i] - lines[i - 1]);
+    const cands = [...new Set(gaps.filter((g) => g >= o.minPitch))].sort((a, b) => a - b);
+    if (!cands.length) return plain();
+
+    // 간격 후보 × 기준선 후보를 다 대보고 **가장 많이 앉는** 빗을 고른다.
+    // 선이 수십 개뿐이라 전부 대보는 것이 제일 확실하다.
+    let best = null;
+    for (const p of cands) {
+      for (const anchor of lines) {
+        let hit = 0, err = 0;
+        const ks = new Set();
+        let kLo = Infinity, kHi = -Infinity;
+        for (const v of lines) {
+          const k = Math.round((v - anchor) / p);
+          const d = Math.abs(v - (anchor + k * p));
+          if (d > p * o.tol) continue;
+          hit++; err += d / p; ks.add(k);
+          if (k < kLo) kLo = k;
+          if (k > kHi) kHi = k;
+        }
+        if (!hit) continue;
+        // **빈 칸이 많은 빗은 빗이 아니다.**
+        //
+        // 간격만 작게 잡으면 어떤 선이든 「거의」 그 격자에 앉는다. 간격 15
+        // 로 보면 1,400점 높이에 93줄이 생기고 그 중 5줄에만 선이 있다 —
+        // 그런 빗이 제일 많이 앉은 것으로 뽑히면 표가 아니라 모래가 된다.
+        // 그래서 **차 있는 칸**을 세고 빈 칸은 깐다.
+        const slots = kHi - kLo + 1;
+        const score = ks.size - err - (slots - ks.size) * o.emptyCost;
+        if (!best || score > best.score) best = { p, anchor, hit, score };
+      }
+    }
+    // 빗에 앉은 선이 절반도 안 되면 빗이 아니다 — 찾은 것을 그대로 쓴다.
+    if (!best || best.hit < Math.max(o.minLines, lines.length * 0.5)) return plain();
+
+    // 앉은 선들로 간격과 기준점을 다시 맞춘다(최소제곱). 빗을 멀리까지
+    // 늘일 때 간격이 조금만 틀려도 끝에서 한 칸씩 밀린다.
+    const inl = [];
+    for (const v of lines) {
+      const k = Math.round((v - best.anchor) / best.p);
+      if (Math.abs(v - (best.anchor + k * best.p)) <= best.p * o.tol) inl.push({ k, v });
+    }
+    let sk = 0, sv = 0, skk = 0, skv = 0;
+    for (const { k, v } of inl) { sk += k; sv += v; skk += k * k; skv += k * v; }
+    const n = inl.length;
+    const den = n * skk - sk * sk;
+    const pitch = den ? (n * skv - sk * sv) / den : best.p;
+    const base = den ? (sv - pitch * sk) / n : best.anchor;
+    if (!(pitch >= o.minPitch)) return plain();
+
+    const kMin = inl[0].k, kMax = inl[inl.length - 1].k;
+    const tolPx = Math.max(2, pitch * o.tol);
+    // 그 칸에 선이 있나. real=찾은 선 그대로, else=종이를 느슨하게 다시 본 것.
+    const at = (k) => {
+      const want = base + k * pitch;
+      let near = null, bd = tolPx;
+      for (const v of lines) { const d = Math.abs(v - want); if (d <= bd) { bd = d; near = v; } }
+      if (near != null) return { v: near, real: true };
+      if (!o.probe) return null;
+      let bv = null, bs = o.probeMin;
+      for (let d = -o.probeSlack; d <= o.probeSlack; d++) {
+        const s = o.probe(Math.round(want) + d);
+        if (s >= bs) { bs = s; bv = Math.round(want) + d; }
+      }
+      return bv == null ? null : { v: bv, real: false };
+    };
+
+    // 빗을 사진 끝까지 깔아 두고 **선이 이어지는 가장 긴 구간**만 표로 삼는다.
+    //
+    // 처음에는 찾은 선의 처음~끝을 전부 표로 보고 안쪽을 채웠다. 그런데
+    // **종이의 위아래 끝선**이 우연히 빗에 앉으면(100%·63%) 머리글과 아래
+    // 여백까지 통째로 표가 돼서, 9줄 영수증이 28줄로 세어졌다.
+    //
+    // 표의 줄은 끊기지 않고 이어진다. 머리글의 글자는 한두 자리에만 걸린다.
+    // 그래서 「이어지는가」로 가른다 — 글씨가 선을 덮어 한 칸 빠지는 것은
+    // 흔하므로 한 칸까지는 끊긴 것으로 보지 않는다.
+    const span = o.extent == null ? Math.max(Math.abs(kMin), Math.abs(kMax)) + o.maxExtend : Math.ceil(o.extent / pitch) + 2;
+    const k0 = Math.min(kMin, -span), k1 = Math.max(kMax, span);
+    let run = null, cur = null, miss = 0;
+    for (let k = k0; k <= k1; k++) {
+      const r = at(k);
+      if (r) {
+        if (!cur) cur = { a: k, b: k, hit: 1 };
+        else { cur.b = k; cur.hit++; }
+        miss = 0;
+      } else if (cur) {
+        miss++;
+        // 한 칸 빠진 것은 글씨가 선을 덮은 것으로 본다
+        if (miss > o.holeMax) {
+          if (!run || cur.hit > run.hit) run = cur;
+          cur = null; miss = 0;
+        }
+      }
+    }
+    if (cur && (!run || cur.hit > run.hit)) run = cur;
+    if (!run) return plain();
+
+    const out = [];
+    let kept = 0, added = 0;
+    for (let k = run.a; k <= run.b; k++) {
+      const r = at(k);
+      out.push(r ? r.v : Math.round(base + k * pitch));
+      if (r && r.real) kept++; else added++;
+    }
+    return { lines: out, pitch, kept, added, dropped: lines.length - kept };
+  }
+
   function findGrid(gray, w, h, opts) {
-    const o = Object.assign({ hMin: 0.45, vMin: 0.35, gap: 0.01, skew: null }, opts || {});
+    const o = Object.assign({ hMin: 0.45, vMin: 0.35, gap: 0.01, skew: null, colMinFrac: 0.03, probeFrac: 0.55 }, opts || {});
     const th = otsu(gray);
     // 선을 찾을 때만 쓰는 **느슨한 문턱값.**
     //
@@ -165,7 +290,17 @@
       const run = longestRun((x) => dark(x, y), w, hGap);
       if (run >= w * o.hMin) hHits.push(y);
     }
-    const hLines = mergeBands(hHits, Math.max(2, Math.round(h * 0.004)));
+    const hRaw = mergeBands(hHits, Math.max(2, Math.round(h * 0.004)));
+    // 줄 간격이 일정하다는 것을 쓴다(combLines). 늘일 때 보는 눈은 느슨하게 —
+    // 이미 「빗의 그 자리」라는 큰 단서가 있으므로 선이 반만 보여도 줄이다.
+    const hComb = combLines(hRaw, {
+      minPitch: Math.max(8, Math.round(h * 0.008)),
+      probe: (y) => (y < 0 || y >= h ? 0 : longestRun((x) => dark(x, y), w, hGap) / w),
+      probeMin: o.hMin * o.probeFrac,
+      extent: h,
+      probeSlack: Math.max(2, Math.round(h * 0.003)),
+    });
+    const hLines = hComb.lines;
 
     // 세로선은 **표 안에서만** 찾는다. 표 밖의 글(상호·전화번호)이 섞이면
     // 세로선이 엉뚱한 데 생긴다.
@@ -189,7 +324,20 @@
       const run = longestRun((i) => darkV(x, top + i), band, vGap);
       if (run >= band * o.vMin) vHits.push(x);
     }
-    const vLines = mergeBands(vHits, Math.max(2, Math.round(w * 0.004)));
+    const vRaw = mergeBands(vHits, Math.max(2, Math.round(w * 0.004)));
+    // 칸 너비는 일정하지 않다(品名 은 넓고 數量 은 좁다) — 빗을 쓸 수 없다.
+    // 대신 **칸이 될 수 없는 너비**를 버린다. 손글씨 획이 세로선으로 세어져
+    // 한 장에서 18개가 나오고 그 중 14개가 글씨였다.
+    const vMinGap = Math.max(3, Math.round(w * o.colMinFrac));
+    const vLines = [];
+    for (const x of vRaw) {
+      const prev = vLines.length ? vLines[vLines.length - 1] : null;
+      if (prev == null) { vLines.push(x); continue; }
+      if (x - prev >= vMinGap) { vLines.push(x); continue; }
+      // 붙어 있으면 **더 길게 이어지는** 쪽만 남긴다
+      const len = (c) => longestRun((i) => darkV(c, top + i), band, vGap);
+      if (len(x) > len(prev)) vLines[vLines.length - 1] = x;
+    }
 
     return {
       threshold: th,
@@ -199,6 +347,9 @@
       xAt,
       hLines,
       vLines,
+      pitch: hComb.pitch,
+      hAdded: hComb.added,
+      hDropped: hComb.dropped,
       box: hLines.length && vLines.length
         ? { x0: vLines[0], y0: top, x1: vLines[vLines.length - 1], y1: bottom }
         : null,
@@ -232,6 +383,134 @@
     return out;
   }
 
+  /**
+   * 칸 하나에서 **숫자 글자를 하나씩 떼어낸다.**
+   *
+   * 붙어 있는 잉크 덩어리를 하나의 글자로 본다. 손으로 쓴 숫자는 보통 서로
+   * 떨어져 있고, 붙었더라도 「18」처럼 가로로 나란하다. 그래서 덩어리를
+   * 찾은 뒤 **왼쪽부터** 차례로 내놓는다.
+   *
+   * 너무 작은 덩어리는 버린다 — 스캔 잡티와 펜이 스친 자국이 숫자로 읽히면
+   * 금액에 없는 자리가 하나 붙는다.
+   */
+  function glyphs(gray, w, cell, threshold, opts) {
+    const o = Object.assign({ minInk: 0.05, minPx: 6, minH: 0.25, joinGap: 0.06 }, opts || {});
+    const cw = cell.x1 - cell.x0;
+    const ch = cell.y1 - cell.y0;
+    if (cw < 6 || ch < 6) return [];
+    // 세로로 잉크를 세어 **글자 사이의 틈**을 찾는다. 가로로 나란한 숫자라
+    // 이것만으로 거의 갈린다.
+    const col = new Int32Array(cw);
+    for (let y = cell.y0; y < cell.y1; y++) {
+      const row = y * w;
+      for (let x = 0; x < cw; x++) if (gray[row + cell.x0 + x] < threshold) col[x]++;
+    }
+    const gap = Math.max(1, Math.round(cw * o.joinGap));
+    const spans = [];
+    let s = -1, blank = 0;
+    for (let x = 0; x <= cw; x++) {
+      const ink = x < cw && col[x] > 0;
+      if (ink) { if (s < 0) s = x; blank = 0; }
+      else if (s >= 0) {
+        blank++;
+        if (blank >= gap || x === cw) { spans.push([s, x - blank + 1]); s = -1; blank = 0; }
+      }
+    }
+    const out = [];
+    for (const [a, b] of spans) {
+      // 그 조각의 위아래 끝을 찾는다
+      let top = ch, bot = -1, n = 0;
+      for (let y = 0; y < ch; y++) {
+        const row = (cell.y0 + y) * w;
+        for (let x = a; x < b; x++) {
+          if (gray[row + cell.x0 + x] >= threshold) continue;
+          n++;
+          if (y < top) top = y;
+          if (y > bot) bot = y;
+        }
+      }
+      if (bot < 0) continue;
+      const gh = bot - top + 1;
+      // 너무 옅거나 너무 납작한 것은 글자가 아니다(밑줄·잡티).
+      //
+      // 얼마나 옅은지는 **그 덩이 자신의 크기**로 잰다. 처음에는 칸 전체
+      // 넓이로 쟀는데, 품명 칸처럼 넓은 칸에서는 멀쩡한 숫자도 「너무
+      // 옅다」로 버려졌다 — 「70」이 한 글자도 안 남았다.
+      if (n < Math.max(o.minPx, (b - a) * gh * o.minInk)) continue;
+      if (gh < ch * o.minH) continue;
+      out.push({ x0: cell.x0 + a, x1: cell.x0 + b, y0: cell.y0 + top, y1: cell.y0 + bot + 1 });
+    }
+    return out;
+  }
+
+  /**
+   * 글자 하나를 28×28 로 만든다 — 손글씨 숫자 판별기가 받는 모양
+   * (public/js/timecard-handdigits.js). 급여 카드 머리의 민국 연도를 읽는
+   * 그 망을 그대로 쓴다.
+   *
+   * 긴 쪽을 20점에 맞춰 넣고 **무게중심을 가운데**로 옮긴다 — 학습할 때
+   * 그렇게 맞춘 자료로 배웠으므로, 여기서 안 맞추면 엉뚱한 숫자가 나온다.
+   */
+  function toGlyphImage(gray, w, box, threshold) {
+    const bw = box.x1 - box.x0;
+    const bh = box.y1 - box.y0;
+    const scale = 20 / Math.max(bw, bh);
+    const tw = Math.max(1, Math.round(bw * scale));
+    const thh = Math.max(1, Math.round(bh * scale));
+    const small = new Float32Array(tw * thh);
+    for (let y = 0; y < thh; y++) {
+      for (let x = 0; x < tw; x++) {
+        // 원본에서 그 자리에 해당하는 네모를 평균낸다
+        const sx0 = box.x0 + Math.floor((x * bw) / tw);
+        const sx1 = Math.max(sx0 + 1, box.x0 + Math.floor(((x + 1) * bw) / tw));
+        const sy0 = box.y0 + Math.floor((y * bh) / thh);
+        const sy1 = Math.max(sy0 + 1, box.y0 + Math.floor(((y + 1) * bh) / thh));
+        let n = 0, hit = 0;
+        for (let yy = sy0; yy < sy1; yy++) for (let xx = sx0; xx < sx1; xx++) { n++; if (gray[yy * w + xx] < threshold) hit++; }
+        small[y * tw + x] = n ? hit / n : 0;
+      }
+    }
+    // 무게중심
+    let sx = 0, sy = 0, m = 0;
+    for (let y = 0; y < thh; y++) for (let x = 0; x < tw; x++) { const v = small[y * tw + x]; sx += x * v; sy += y * v; m += v; }
+    const cx = m ? sx / m : tw / 2;
+    const cy = m ? sy / m : thh / 2;
+    const img = new Float32Array(28 * 28);
+    const offX = Math.round(14 - cx);
+    const offY = Math.round(14 - cy);
+    for (let y = 0; y < thh; y++) {
+      const ty = y + offY;
+      if (ty < 0 || ty >= 28) continue;
+      for (let x = 0; x < tw; x++) {
+        const tx = x + offX;
+        if (tx < 0 || tx >= 28) continue;
+        img[ty * 28 + tx] = small[y * tw + x];
+      }
+    }
+    return img;
+  }
+
+  /**
+   * 칸 하나를 숫자로 읽는다. 못 읽겠으면 null.
+   *
+   * 글자마다 확률이 돌아오는데, **제일 낮은 글자의 확률**을 그 칸의 확신으로
+   * 삼는다 — 네 자리 중 하나만 흐려도 금액은 통째로 틀리기 때문이다.
+   */
+  function readNumber(gray, w, cell, threshold, classify, opts) {
+    const o = Object.assign({ maxDigits: 7 }, opts || {});
+    const gs = glyphs(gray, w, cell, threshold);
+    if (!gs.length || gs.length > o.maxDigits) return null;
+    let text = "";
+    let worst = 1;
+    for (const g of gs) {
+      const r = classify(toGlyphImage(gray, w, g, threshold));
+      if (!r) return null;
+      text += String(r.digit);
+      if (r.p < worst) worst = r.p;
+    }
+    return { text, value: Number(text), digits: gs.length, p: worst };
+  }
+
   /** 그 칸에 뭔가 적혀 있나. 빈 칸에 대고 읽으면 없는 숫자가 생긴다. */
   function inkOf(gray, w, cell, threshold) {
     let n = 0;
@@ -254,8 +533,20 @@
    * 그 칸에는 잉크가 거의 없다. 그런 칸이 길게 이어지면 거기가 경계다.
    */
   function splitPanels(gray, w, h, opts) {
-    const o = Object.assign({ minFrac: 0.12, inkMax: 0.012, bandMin: 0.012 }, opts || {});
-    const th = otsu(gray);
+    const o = Object.assign({ minFrac: 0.12, inkMax: 0.004, bandMin: 0.016 }, opts || {});
+    // **글자용 문턱값으로 가르면 영수증 한 장이 토막난다.**
+    //
+    // 아무것도 안 쓴 표 줄은 글자 기준으로는 「비어 있다」(잉크 1.2% 밑). 그
+    // 줄이 20~26개씩 이어지니 빈 칸이 많은 영수증은 아래쪽이 통째로 잘려
+    // 나갔다 — 사진 하나에서 19줄 중 8줄만 남았다.
+    //
+    // 선이 보이는 느슨한 문턱값으로 보면 그 줄들에도 **세로 칸선이 남아**
+    // 1.5~3% 가 어둡다. 진짜 영수증 사이의 틈은 0% 다. 그래서 문턱값을
+    // 느슨하게 하고 「빈 것」의 기준은 반대로 더 좁힌다(0.4%).
+    const th0 = otsu(gray);
+    let paper = 0, nPaper = 0;
+    for (let i = 0; i < gray.length; i += 7) if (gray[i] >= th0) { paper += gray[i]; nPaper++; }
+    const th = Math.min(254, Math.round(th0 + ((nPaper ? paper / nPaper : 255) - th0) * 0.45));
 
     // 한 방향으로 갈라 본다. vertical=true 면 세로로 잘라 좌우로 나눈다.
     function cuts(vertical) {
@@ -406,7 +697,7 @@
     return out;
   }
 
-  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf };
+  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, glyphs, toGlyphImage, readNumber };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.HG_RECEIPT = api;
 })();

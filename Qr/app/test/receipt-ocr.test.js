@@ -217,6 +217,116 @@ out.push("\n[누워서 스캔된 것]");
   check("★ 돌렸다고 알려준다", !!grid && grid.rot === 90, grid ? `${grid.rot}` : "");
 }
 
+
+out.push("\n[줄 간격이 일정하다는 것을 쓴다]");
+{
+  // 2026-10-05: 선을 하나하나 찾기만 하니 두 가지로 어긋났다. 옅게 인쇄된
+  // 선은 못 찾고(한 사진에서 19줄 중 8줄), 손글씨 획이 길게 그어진 자리는
+  // 선으로 셌다(세로선 18개 중 14개가 글씨). 줄 간격은 일정하므로 그걸 쓴다.
+  const even = [100, 150, 200, 250, 300, 350];
+  const r0 = R.combLines(even);
+  check("고른 간격은 그대로 둔다", r0.lines.length === 6 && Math.round(r0.pitch) === 50, `${r0.lines.length}줄 간격 ${r0.pitch}`);
+
+  // 가운데 한 줄이 글씨에 덮여 안 보인 경우 — 채워 넣는다
+  const hole = [100, 150, 250, 300, 350];
+  const r1 = R.combLines(hole);
+  check("★ 빠진 줄을 채운다", r1.lines.length === 6 && r1.lines.includes(200), r1.lines.join(" "));
+  check("★ 채운 줄 수를 알려준다", r1.added === 1 && r1.kept === 5, `채움 ${r1.added} 그대로 ${r1.kept}`);
+
+  // 빗에서 벗어난 것 — 글씨 획이 선으로 세어진 경우
+  const stray = [100, 150, 177, 200, 250, 300, 350];
+  const r2 = R.combLines(stray);
+  check("★ 빗에서 벗어난 선은 버린다", !r2.lines.includes(177) && r2.lines.length === 6, r2.lines.join(" "));
+
+  // 선이 절반도 안 앉으면 빗이 아니다 — 함부로 고치지 않는다
+  // 간격을 작게 잡으면 어떤 선이든 「거의」 격자에 앉는다. 그런 빗으로
+  // 표를 지어내면 안 된다 — 빈 칸이 많은 빗은 버린다.
+  const messy = [100, 115, 131, 299, 712, 1501];
+  const r3 = R.combLines(messy);
+  check("★ 빗이 아닌 것은 손대지 않는다", r3.lines.length === messy.length && r3.pitch === 0, `${r3.lines.length}줄`);
+}
+
+out.push("\n[종이 끝과 머리글을 표로 보지 않는다]");
+{
+  // 2026-10-05: **종이의 위아래 끝선**이 우연히 빗에 앉아서(100%·63%)
+  // 머리글과 아래 여백까지 표가 됐다 — 9줄 영수증이 28줄로 세어졌다.
+  // 표의 줄은 끊기지 않고 이어진다는 것으로 가른다.
+  //
+  // 아래 그림: 종이 끝(k=0) · 머리글 두 줄(k=1,2) · 빈 자리(k=3,4) ·
+  // 표 여섯 줄(k=5~10) · 빈 자리 · 종이 아래 끝.
+  const pitch = 50;
+  const strength = { 0: 1.0, 1: 0.3, 2: 0.28, 5: 0.9, 6: 0.9, 7: 0.9, 8: 0.9, 9: 0.9, 10: 0.9, 14: 0.7 };
+  const at = (y) => {
+    const k = Math.round((y - 100) / pitch);
+    return Math.abs(y - (100 + k * pitch)) <= 1 ? strength[k] || 0 : 0;
+  };
+  const seen = Object.keys(strength).filter((k) => strength[k] >= 0.45).map((k) => 100 + +k * pitch).sort((a, b) => a - b);
+  const r = R.combLines(seen, { probe: at, probeMin: 0.45, probeSlack: 2, extent: 900 });
+  check("★★ 이어지는 여섯 줄만 표로 본다", r.lines.length === 6, r.lines.join(" "));
+  check("★ 종이 위 끝선을 표에 넣지 않는다", !r.lines.includes(100), r.lines.join(" "));
+  check("★ 종이 아래 끝선을 표에 넣지 않는다", !r.lines.includes(800), r.lines.join(" "));
+}
+
+out.push("\n[빈 줄만 있는 영수증을 토막내지 않는다]");
+{
+  // 2026-10-05: **아무것도 안 쓴 표 줄**은 글자 기준으로 「비어 있다」(잉크
+  // 1.2% 밑). 그 줄이 20~26개씩 이어지니, 아래가 빈 영수증은 통째로 잘려
+  // 나갔다 — 19줄 중 8줄만 남았다. 선이 보이는 느슨한 문턱값으로 보면
+  // 빈 줄에도 **세로 칸선이 남아** 어둡다. 진짜 틈은 0% 다.
+  const w = 700, h = 1200;
+  // 아래 7줄은 아무것도 안 쓴 영수증
+  const g = drawReceipt({ w, h, rows: 12, cols: 4, ink: false });
+  const m = Math.round(w * 0.06);
+  const x0 = m, x1 = w - m, y0 = Math.round(h * 0.25), y1 = h - m;
+  for (let r = 0; r < 5; r++) {
+    for (let c = 0; c < 4; c++) {
+      const cx = Math.round(x0 + ((x1 - x0) * (c + 0.4)) / 4);
+      const cy = Math.round(y0 + ((y1 - y0) * (r + 0.5)) / 12);
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -6; dx <= 6; dx++) g[(cy + dy) * w + cx + dx] = PEN;
+    }
+  }
+  const panels = R.splitPanels(g, w, h);
+  check("★★ 빈 줄에서 가르지 않는다 (한 장이다)", panels.length === 1, `${panels.length}조각`);
+  const grid = R.findGridAuto(g, w, h);
+  check("★★ 표의 아래까지 다 찾는다 (13줄)", !!grid && grid.hLines.length === 13, grid ? `${grid.hLines.length}` : "못 찾음");
+}
+
+out.push("\n[칸에서 숫자를 떼어낸다]");
+{
+  // 손글씨 숫자 판별기(timecard-handdigits.js)는 **28×28 한 글자**를 받는다.
+  // 칸 하나에 「70」이 적혀 있으면 두 글자로 갈라 줘야 한다.
+  const w = 200, h = 80;
+  const g = new Uint8Array(w * h).fill(PAPER);
+  // 7 과 0 을 대충 그린다 — 두 덩이로 떨어져 있다
+  for (let x = 30; x < 60; x++) g[20 * w + x] = PEN;
+  for (let i = 0; i < 30; i++) g[(20 + i) * w + (58 - i)] = PEN;
+  for (let i = 0; i < 28; i++) { g[(20 + i) * w + 90] = PEN; g[(20 + i) * w + 115] = PEN; }
+  for (let x = 90; x <= 115; x++) { g[20 * w + x] = PEN; g[48 * w + x] = PEN; }
+  const cell = { x0: 10, y0: 5, x1: 190, y1: 75, w: 180, h: 70, row: 0, col: 0 };
+  const th = R.otsu(g);
+  const gs = R.glyphs(g, w, cell, th);
+  check("★★ 「70」을 두 글자로 가른다", gs.length === 2, `${gs.length}개`);
+  check("★ 왼쪽 글자가 먼저 나온다", gs.length === 2 && gs[0].x0 < gs[1].x0, "");
+
+  // 스캔 잡티 한 점은 글자가 아니다 — 금액에 없는 자리가 붙으면 안 된다
+  g[60 * w + 150] = PEN;
+  g[61 * w + 150] = PEN;
+  check("★★ 잡티를 글자로 세지 않는다", R.glyphs(g, w, cell, th).length === 2, `${R.glyphs(g, w, cell, th).length}개`);
+
+  const img = R.toGlyphImage(g, w, gs[1], th);
+  check("28×28 로 만든다", img.length === 28 * 28, `${img.length}`);
+  let sx = 0, sy = 0, m2 = 0;
+  for (let y = 0; y < 28; y++) for (let x = 0; x < 28; x++) { const v = img[y * 28 + x]; sx += x * v; sy += y * v; m2 += v; }
+  check("★ 무게중심을 가운데로 옮긴다 (판별기가 그렇게 배웠다)", m2 > 0 && Math.abs(sx / m2 - 13.5) < 2.5 && Math.abs(sy / m2 - 13.5) < 2.5, `${(sx / m2).toFixed(1)},${(sy / m2).toFixed(1)}`);
+
+  // 자리 수가 너무 많으면 읽지 않는다 — 품명 칸을 금액으로 읽으면 장부가 틀어진다
+  const many = R.readNumber(g, w, cell, th, () => ({ digit: 1, p: 0.9 }), { maxDigits: 1 });
+  check("★★ 자리 수가 너무 많으면 안 읽는다", many === null, `${many && many.text}`);
+  const two = R.readNumber(g, w, cell, th, (im) => ({ digit: im === null ? 0 : 7, p: 0.8 }));
+  check("★ 글자마다 판별기에 넘긴다", two && two.text === "77" && two.digits === 2, two ? two.text : "null");
+  check("★ 제일 흐린 글자의 확신을 쓴다", two && two.p === 0.8, two ? `${two.p}` : "");
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
