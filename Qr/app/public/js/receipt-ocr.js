@@ -290,6 +290,28 @@
       const run = longestRun((x) => dark(x, y), w, hGap);
       if (run >= w * o.hMin) hHits.push(y);
     }
+    /**
+     * 가로선 하나가 어디서 시작해 어디서 끝나는가. 가장 긴 어두운 구간의
+     * 양 끝을 돌려준다.
+     */
+    function runSpan(y) {
+      const g = hGap;
+      let bs = -1, bl = 0, s = -1, blank = 0;
+      for (let x = 0; x <= w; x++) {
+        const on = x < w && dark(x, y);
+        if (on) { if (s < 0) s = x; blank = 0; }
+        else if (s >= 0) {
+          blank++;
+          if (blank > g || x === w) {
+            const len = x - blank + 1 - s;
+            if (len > bl) { bl = len; bs = s; }
+            s = -1; blank = 0;
+          }
+        }
+      }
+      return bl ? { x0: bs, x1: bs + bl - 1, len: bl } : null;
+    }
+
     const hRaw = mergeBands(hHits, Math.max(2, Math.round(h * 0.004)));
     // 줄 간격이 일정하다는 것을 쓴다(combLines). 늘일 때 보는 눈은 느슨하게 —
     // 이미 「빗의 그 자리」라는 큰 단서가 있으므로 선이 반만 보여도 줄이다.
@@ -337,6 +359,29 @@
       // 붙어 있으면 **더 길게 이어지는** 쪽만 남긴다
       const len = (c) => longestRun((i) => darkV(c, top + i), band, vGap);
       if (len(x) > len(prev)) vLines[vLines.length - 1] = x;
+    }
+
+    // **표의 양 끝 테두리는 가로선의 끝으로 찾는다.**
+    //
+    // 영수증의 맨 왼쪽·맨 오른쪽 테두리는 종이 접힌 자리나 스캔 여백에
+    // 묻혀 「길게 이어지는 세로선」으로 안 잡히는 일이 많다. 그러면 가장
+    // 넓은 품명 칸이 통째로 사라진다 — 한 사진에서 칸이 4개여야 하는데
+    // 3개만 나왔고, 품명 칸이 없어서 품목을 아예 못 집었다.
+    //
+    // 가로선은 표의 왼쪽 끝에서 오른쪽 끝까지 그어져 있다. 그 **끝**을
+    // 가운뎃값으로 모으면 그게 테두리다.
+    if (hLines.length >= 3) {
+      const spans = hLines.map(runSpan).filter(Boolean).sort((a2, b2) => b2.len - a2.len);
+      // 긴 선들만 본다 — 짧게 끊긴 선의 끝은 테두리가 아니다
+      const long = spans.filter((sp) => sp.len >= spans[0].len * 0.8);
+      if (long.length) {
+        const mid = (arr) => arr.slice().sort((p1, p2) => p1 - p2)[Math.floor(arr.length / 2)];
+        const edgeTol = Math.max(4, Math.round(w * 0.02));
+        for (const e of [mid(long.map((sp) => sp.x0)), mid(long.map((sp) => sp.x1))]) {
+          if (!vLines.some((x) => Math.abs(x - e) <= edgeTol)) vLines.push(e);
+        }
+        vLines.sort((p1, p2) => p1 - p2);
+      }
     }
 
     return {

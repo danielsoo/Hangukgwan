@@ -327,6 +327,33 @@ out.push("\n[칸에서 숫자를 떼어낸다]");
   check("★ 제일 흐린 글자의 확신을 쓴다", two && two.p === 0.8, two ? `${two.p}` : "");
 }
 
+
+out.push("\n[표의 양 끝 테두리가 안 보여도 칸을 잃지 않는다]");
+{
+  // 2026-10-05: 영수증의 맨 왼쪽·맨 오른쪽 테두리는 종이 접힌 자리나 스캔
+  // 여백에 묻혀 「길게 이어지는 세로선」으로 안 잡히는 일이 많다. 그러면
+  // **제일 넓은 품명 칸이 통째로 사라진다** — 진짜 사진에서 칸이 5개여야
+  // 하는데 3개만 나왔고, 품명 칸이 없어서 품목을 아예 못 집었다.
+  //
+  // 가로선은 표의 왼쪽 끝에서 오른쪽 끝까지 그어져 있다. 그 끝으로 찾는다.
+  const w = 700, h = 1200, cols = 5;
+  const g = drawReceipt({ w, h, rows: 12, cols });
+  const m = Math.round(w * 0.06);
+  const y0 = Math.round(h * 0.25), y1 = h - m;
+  // 양쪽 테두리 세로선만 지운다 (가로선은 그대로 둔다)
+  for (let y = y0 + 4; y <= y1 - 4; y++) {
+    for (const bx of [m, w - m]) {
+      for (let d = -1; d <= 2; d++) if (bx + d >= 0 && bx + d < w) g[y * w + bx + d] = PAPER;
+    }
+  }
+  const grid = R.findGrid(g, w, h);
+  check("★★ 테두리가 없어도 칸 수는 그대로다 (6줄)", grid.vLines.length === cols + 1, `${grid.vLines.length} → ${grid.vLines.join(" ")}`);
+  check("★ 제일 왼쪽 칸(품명)을 되살린다", grid.vLines.length >= 2 && Math.abs(grid.vLines[0] - m) <= 6, `${grid.vLines[0]} (${m} 이어야)`);
+  check("★ 제일 오른쪽 테두리도 찾는다", grid.vLines.length >= 2 && Math.abs(grid.vLines[grid.vLines.length - 1] - (w - m)) <= 6, `${grid.vLines[grid.vLines.length - 1]}`);
+  const cs = R.cells(grid);
+  check("★ 칸이 12×5 = 60개", cs.length === 60, `${cs.length}`);
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
