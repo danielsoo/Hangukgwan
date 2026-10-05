@@ -30,7 +30,36 @@ const CANDIDATES = [
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
   "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+  // 4) 윈도우에 흔히 있는 것들.
+  //
+  // 2026-10-05: **메인 사본이 윈도우 PC 인데 여기 경로가 없었다**(CLAUDE.md
+  // 「세 곳에서 일한다」). PC 에서 e2e 를 돌리면 크롬이 깔려 있는데도
+  // 「못 찾았습니다」로 죽었다. 그래서 유닛만 돌리고 e2e 는 한 번도 PC 에서
+  // 못 돌렸다.
+  //
+  // 경로는 환경변수(ProgramFiles 등)로 만든다 — 한국어판 윈도우도 이 값은
+  // 영어 경로지만 드라이브가 C: 가 아닌 컴퓨터가 있다.
+  ...winPaths(),
 ];
+
+/** 윈도우에 크롬·엣지가 깔리는 자리들. 윈도우가 아니면 빈 목록. */
+function winPaths() {
+  if (process.platform !== "win32") return [];
+  const roots = [
+    process.env.PROGRAMFILES,
+    process.env["PROGRAMFILES(X86)"],
+    process.env.LOCALAPPDATA,
+  ].filter(Boolean);
+  const rel = [
+    "Google\\Chrome\\Application\\chrome.exe",
+    "Google\\Chrome Beta\\Application\\chrome.exe",
+    "Chromium\\Application\\chrome.exe",
+    "Microsoft\\Edge\\Application\\msedge.exe",
+  ];
+  const out = [];
+  for (const r of roots) for (const f of rel) out.push(r + "\\" + f);
+  return out;
+}
 
 // 4) 리눅스는 PATH 에서 찾는다.
 function fromPath() {
@@ -57,6 +86,7 @@ function chromiumPath() {
       "",
       "  · 맥이면 Google Chrome 을 깔거나, 아래처럼 경로를 직접 주세요:",
       '      PLAYWRIGHT_CHROMIUM="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" npm run test:e2e',
+      "  · 윈도우면 Chrome 을 깔거나, 경로를 PLAYWRIGHT_CHROMIUM 으로 주세요.",
       "  · 클라우드 컨테이너면 /opt/pw-browsers/chromium 이 있어야 합니다.",
       "",
       "찾아본 곳:",

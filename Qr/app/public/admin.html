@@ -464,10 +464,13 @@
               <input list="ingVendorList" id="ingEntryVendor" data-i18n-placeholder="ingEntryVendorPh" placeholder="업체를 고르거나 적으세요" />
               <datalist id="ingVendorList"></datalist>
             </label>
+            <button type="button" id="ingPhotoBtn" data-i18n="ingPhotoBtn">📷 영수증 사진</button>
+            <input type="file" id="ingPhotoFile" accept="image/*" multiple hidden />
             <button type="button" id="ingEntrySave" class="primary" data-i18n="ingEntrySave">저장</button>
             <button type="button" id="ingEntryClear" data-i18n="ingEntryClear">비우기</button>
           </div>
           <p class="ing-note" id="ingEntryHint"></p>
+          <p class="ing-note" data-i18n="ingPhotoHint">📷 로 고르거나 영수증 사진을 이 탭에 끌어다 놓으세요. 읽은 숫자 밑에 종이에서 잘라낸 그림이 같이 뜹니다 — 눈으로 맞춰 보고 고치세요. 확실치 않은 줄은 노랗습니다. 사진은 기기 밖으로 나가지 않습니다.</p>
           <div class="ing-lines" id="ingEntryLines"></div>
           <button type="button" id="ingEntryAdd" class="ing-add-line" data-i18n="ingEntryAdd">+ 줄 추가</button>
           <div class="ing-entry-foot">
@@ -2195,6 +2198,9 @@
 <script src="/js/xlsx-write.js"></script>
 <script src="/js/admin.js"></script>
 <!-- 식자재 탭. admin.js 가 만든 T()/money() 를 쓰므로 뒤에 온다. -->
-<script src="/js/ingredients.js"></script>
+<script src="/js/receipt-ocr.js"></script>
+    <script src="/js/receipt-digits.js"></script>
+    <script src="/js/receipt-read.js"></script>
+    <script src="/js/ingredients.js"></script>
 </body>
 </html>

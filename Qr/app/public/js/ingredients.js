@@ -401,7 +401,7 @@
   let entryLines = [];
   let catalog = { vendor: "", items: [] };
 
-  const blankLine = () => ({ name: "", name_ko: "", qty: "", unit: "", price: "", amount: "", amountEdited: false });
+  const blankLine = () => ({ name: "", name_ko: "", qty: "", unit: "", price: "", amount: "", amountEdited: false, pic: null, unsure: false });
   const knownOf = (name) => catalog.items.find((i) => i.name === String(name || "").trim()) || null;
 
   function recalc(line) {
@@ -432,6 +432,19 @@
     return bits.join(" ");
   }
 
+  /**
+   * 그 칸을 종이에서 잘라낸 그림. **숫자 바로 밑에** 붙인다.
+   *
+   * 숫자 하나를 88% 로 읽으니 세 자리 금액은 68% 다. 그림이 옆에 있으면
+   * 사장님이 종이를 다시 찾지 않고 눈으로 맞춰 보실 수 있다 — 하실 일이
+   * 「치기」에서 「보기」로 바뀐다. 「틀린 값을 표시 없이 넣지 않는다」.
+   */
+  function pic(line, key) {
+    const src = line.pic && line.pic[key];
+    if (!src) return "";
+    return `<img class="ing-pic" src="${esc(src)}" alt="" />`;
+  }
+
   function renderLines() {
     const box = $("#ingEntryLines");
     if (!box) return;
@@ -443,12 +456,12 @@
       ${entryLines
         .map(
           (l, i) => `
-        <div class="ing-line" data-i="${i}">
-          <span><input list="ingItemList" class="ing-in-name" value="${esc(l.name)}" placeholder="${esc(T("ingItemPh"))}" /></span>
-          <span><input type="number" step="any" class="ing-in-qty" value="${esc(l.qty)}" /></span>
+        <div class="ing-line${l.unsure ? " ing-line-unsure" : ""}" data-i="${i}">
+          <span><input list="ingItemList" class="ing-in-name" value="${esc(l.name)}" placeholder="${esc(T("ingItemPh"))}" />${pic(l, "name")}</span>
+          <span><input type="number" step="any" class="ing-in-qty" value="${esc(l.qty)}" />${pic(l, "qty")}</span>
           <span><input class="ing-in-unit" value="${esc(l.unit)}" /></span>
-          <span><input type="number" step="any" class="ing-in-price" value="${esc(l.price)}" /></span>
-          <span><input type="number" step="any" class="ing-in-amount" value="${esc(l.amount)}" /></span>
+          <span><input type="number" step="any" class="ing-in-price" value="${esc(l.price)}" />${pic(l, "price")}</span>
+          <span><input type="number" step="any" class="ing-in-amount" value="${esc(l.amount)}" />${pic(l, "amount")}</span>
           <span><button type="button" class="ing-x" title="${esc(T("ingRemoveLine"))}">✕</button></span>
           <div class="ing-line-warn">${warnHtml(l)}</div>
         </div>`
@@ -574,6 +587,79 @@
     }
   }
 
+  // ───────── 사진으로 넣기 ─────────
+  //
+  // 2026-10-05 사장님: "영수증을 올리면 가격 품목 어디서 언제 샀는지를 내가
+  // 직접 타자로 쳐서 하나하나 입력하는 게 아니라 적용되도록."
+  //
+  // 급여의 출근 카드와 같은 길이다 — 📷 로 고르거나 **탭 아무 데나 끌어다
+  // 놓아도** 된다(2026-10-04 사장님: "급여에서 사진 선택 말고도 드래그로 할
+  // 수 있게 해줘"). 사진은 기기 밖으로 나가지 않는다.
+  //
+  // 읽은 값을 그냥 채우고 끝내지 않는다. **칸을 잘라낸 그림을 숫자 밑에**
+  // 붙이고, 확실치 않은 줄은 노란 줄로 둔다. 숫자 하나를 88% 로 읽으니 세
+  // 자리 금액은 68% 다 — 멀쩡해 보이는 채로 틀린 줄을 장부에 넣는 것이 제일
+  // 나쁘다.
+  //
+  // 품명은 읽지 않는다(한자 손글씨다). 그 업체에서 보통 사는 것 목록으로
+  // 고르시게 두고, 종이에서 잘라낸 그림을 옆에 붙인다.
+  let reading = false;
+
+  async function readPhotos(files) {
+    const list = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
+    if (!list.length) return;
+    if (reading) return;
+    const RR = window.HG_RECEIPT_READ;
+    if (!RR) return logLine(esc(T("ingPhotoNoReader")));
+    reading = true;
+    const btn = $("#ingPhotoBtn");
+    if (btn) { btn.disabled = true; btn.textContent = T("ingPhotoReading"); }
+    try {
+      let added = 0, unsure = 0, noTable = 0;
+      for (const f of list) {
+        let got;
+        try { got = await RR.readPhoto(f, { priceSet: priceSetOf() }); }
+        catch (e) { noTable++; continue; }
+        if (!got.receipts.length) { noTable++; continue; }
+        for (const rec of got.receipts) {
+          for (const r of rec.rows) {
+            const line = blankLine();
+            line.qty = r.qty == null ? "" : Math.round(r.qty * 1000) / 1000;
+            line.price = r.price == null ? "" : r.price;
+            line.amount = r.amount == null ? "" : r.amount;
+            line.amountEdited = true;   // 종이에 적힌 금액이다 — 다시 셈하지 않는다
+            line.pic = r.pic || null;
+            line.unsure = !r.ok;
+            entryLines.push(line);
+            added++;
+            if (!r.ok) unsure++;
+          }
+        }
+      }
+      // 빈 줄이 맨 앞에 남아 있으면 치운다
+      entryLines = entryLines.filter((l, i) => i > 0 || String(l.name || "") !== "" || l.qty !== "" || l.amount !== "");
+      if (!entryLines.length) entryLines.push(blankLine());
+      renderLines();
+      if (added) logLine(esc(fmt("ingPhotoReadFmt", { n: added, unsure })));
+      if (noTable) logLine(esc(fmt("ingPhotoNoTableFmt", { n: noTable })));
+      if (!added && !noTable) logLine(esc(T("ingPhotoNothing")));
+    } finally {
+      reading = false;
+      if (btn) { btn.disabled = false; btn.textContent = T("ingPhotoBtn"); }
+    }
+  }
+
+  /** 그 업체가 전에 받은 단가들. 숫자가 흐릴 때 엉뚱한 값으로 가는 것을 막는다. */
+  function priceSetOf() {
+    if (!catalog.items || !catalog.items.length) return null;
+    const out = new Set();
+    for (const i of catalog.items) {
+      if (i.last_price != null) out.add(Math.round(i.last_price));
+      for (const p of i.prices || []) if (p != null) out.add(Math.round(p));
+    }
+    return out.size ? out : null;
+  }
+
   async function loadVendorList() {
     const res = await fetch(`/api/ingredients/catalog?store=${encodeURIComponent($("#ingEntryStore").value || "")}`);
     if (!res.ok) return;
@@ -615,6 +701,26 @@
         entryLines = [blankLine()];
         renderLines();
       };
+      $("#ingPhotoBtn").onclick = () => $("#ingPhotoFile").click();
+      $("#ingPhotoFile").onchange = (e) => {
+        // **파일을 먼저 베껴 둔다.** `value = ""` 는 고른 파일 목록까지
+        // 비우므로, FileList 를 그대로 들고 있으면 빈 목록이 넘어간다 —
+        // 사진을 골라도 아무 일도 안 일어난다.
+        const picked = [...(e.target.files || [])];
+        e.target.value = "";
+        readPhotos(picked);
+      };
+      // 탭 아무 데나 끌어다 놓아도 된다 — 급여와 같은 길이다.
+      const zone = document.getElementById("tab-ingredients");
+      if (zone) {
+        zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("ing-drop"); });
+        zone.addEventListener("dragleave", () => zone.classList.remove("ing-drop"));
+        zone.addEventListener("drop", (e) => {
+          e.preventDefault();
+          zone.classList.remove("ing-drop");
+          readPhotos(e.dataTransfer && e.dataTransfer.files);
+        });
+      }
       $("#ingEntryVendor").onchange = () => loadCatalog();
       $("#ingEntryStore").onchange = () => {
         loadVendorList();
@@ -629,5 +735,5 @@
     await loadSummary();
   }
 
-  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml };
+  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf };
 })();
