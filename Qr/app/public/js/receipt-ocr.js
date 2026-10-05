@@ -385,6 +385,11 @@
     }
 
     return {
+      // 그림을 같이 들고 다닌다. 칸을 자르고 글자를 읽는 쪽(cells·readRow)이
+      // 늘 이 셋을 같이 쓰므로, 부르는 쪽이 따로 챙기게 하면 빠뜨린다.
+      gray,
+      w,
+      h,
       threshold: th,
       lineThreshold: lineTh,
       slope,
@@ -415,17 +420,66 @@
     const o = Object.assign({ padFrac: 0.1, padMin: 3, minW: 8, minH: 8 }, opts || {});
     const out = [];
     const { hLines: H, vLines: V } = grid;
+    // **기울기를 칸 자리에 반영한다.**
+    //
+    // 선을 찾을 때는 기운 만큼 되돌려 보았으므로(findGrid 의 yAt·xAt), 선
+    // 번호 V[c]·H[r] 는 「표 가운데에서의」 자리다. 칸을 그냥 네모로 자르면
+    // 가운데에서 먼 줄일수록 선이 칸 안으로 들어온다 — 기울기 1.6°, 표 높이
+    // 1,846점이면 세로선 x 가 25점 밀리는데 여백은 13점뿐이었다. 그래서 맨
+    // 위·아래 줄에서는 세로선이 통째로 칸에 들어와 **글자 하나로 세어졌고**,
+    // 수량 「3」이 글자 3개로 읽혔다.
+    //
+    // 칸마다 그 칸 가운데에서의 밀림만큼 옮긴다. 칸 안에서 남는 어긋남은
+    // 기울기 × 칸 크기(3~4점)라 여백에 들어간다.
+    const s = grid.slope || 0;
+    const cx = (grid.w || 0) / 2, cy = (grid.h || 0) / 2;
     for (let r = 0; r + 1 < H.length; r++) {
       const padY = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((H[r + 1] - H[r]) * o.padFrac));
+      const yMid = (H[r] + H[r + 1]) / 2;
       for (let c = 0; c + 1 < V.length; c++) {
         const padX = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((V[c + 1] - V[c]) * o.padFrac));
-        const x0 = V[c] + padX, x1 = V[c + 1] - padX;
-        const y0 = H[r] + padY, y1 = H[r + 1] - padY;
+        const xMid = (V[c] + V[c + 1]) / 2;
+        const dx = -Math.round(s * (yMid - cy));
+        const dy = Math.round(s * (xMid - cx));
+        const x0 = V[c] + dx + padX, x1 = V[c + 1] + dx - padX;
+        const y0 = H[r] + dy + padY, y1 = H[r + 1] + dy - padY;
         if (x1 - x0 < o.minW || y1 - y0 < o.minH) continue;
+        if (x0 < 0 || y0 < 0 || x1 > grid.w || y1 > grid.h) continue;
         out.push({ row: r, col: c, x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 });
       }
     }
     return out;
+  }
+
+  /**
+   * 어느 칸이 품명·수량·단가·금액인지 **너비로** 가린다.
+   *
+   * 글자를 읽어서 가리는 길도 있지만(머리글에 品名·數量·單價·金額 이
+   * 인쇄돼 있다) 한자를 읽어야 한다. 진짜 사진에서 재보니 양식이 늘 같은
+   * 비율로 나온다 — 房信菓菜行 전표는 374 · 131 · 131 · 205 · 113.
+   *
+   * 품명이 제일 넓고, 금액이 그 다음이다. 그 사이에 수량·단가가 있고
+   * 금액 뒤는 비고다. 이 규칙은 「품명은 글씨가 길고 금액은 자리 수가
+   * 많다」는 양식의 성질이라, 업체가 달라도 대체로 맞는다.
+   *
+   * 못 가리겠으면 null — **틀린 칸을 금액으로 읽는 것보다 안 읽는 것이
+   * 낫다**(품명 칸의 글씨를 금액으로 읽으면 장부가 조용히 틀어진다).
+   */
+  function labelColumns(cells) {
+    if (!cells || !cells.length) return null;
+    const cols = [...new Set(cells.map((c) => c.col))].sort((a, b) => a - b);
+    if (cols.length < 4) return null;
+    const widthOf = (c) => Math.max(...cells.filter((x) => x.col === c).map((x) => x.w));
+    const wid = new Map(cols.map((c) => [c, widthOf(c)]));
+    const pickWidest = (pool) => pool.reduce((a, b) => (wid.get(b) > wid.get(a) ? b : a), pool[0]);
+
+    const name = pickWidest(cols);
+    const right = cols.filter((c) => c > name);
+    if (right.length < 3) return null;        // 수량·단가·금액이 들어갈 자리가 없다
+    const amount = pickWidest(right);
+    const mid = cols.filter((c) => c > name && c < amount);
+    if (mid.length !== 2) return null;        // 사이가 두 칸이어야 수량·단가다
+    return { name, qty: mid[0], price: mid[1], amount, note: cols.filter((c) => c > amount) };
   }
 
   /**
@@ -439,7 +493,7 @@
    * 금액에 없는 자리가 하나 붙는다.
    */
   function glyphs(gray, w, cell, threshold, opts) {
-    const o = Object.assign({ minInk: 0.05, minPx: 6, minH: 0.25, joinGap: 0.06 }, opts || {});
+    const o = Object.assign({ minInk: 0.05, minPx: 6, minH: 0.25, joinGap: 0.025, aspect: 0.9, maxSplit: 7 }, opts || {});
     const cw = cell.x1 - cell.x0;
     const ch = cell.y1 - cell.y0;
     if (cw < 6 || ch < 6) return [];
@@ -461,8 +515,50 @@
         if (blank >= gap || x === cw) { spans.push([s, x - blank + 1]); s = -1; blank = 0; }
       }
     }
-    const out = [];
+    // **붙어 쓴 숫자를 갈라낸다.**
+    //
+    // 빈 틈만으로 가르면 모자란다 — 진짜 사진에서 자리 수가 맞은 칸이
+    // 46% 였고, 틀린 것의 대부분(282칸)이 두 자리를 한 글자로 본 것이었다.
+    // 손으로 쓰면 「10」의 1 과 0 이 붙는다.
+    //
+    // 숫자는 높이에 비해 너비가 정해져 있다(대략 0.6배). 덩이가 그보다
+    // 훨씬 넓으면 **몇 자리가 붙은 것**이므로, 세로 잉크가 가장 얕은 곳을
+    // 끊는다. 한자(품명 칸)는 이 규칙에 안 맞지만 품명은 읽지 않는다.
+    const pieces = [];
     for (const [a, b] of spans) {
+      let top = ch, bot = -1;
+      for (let y = 0; y < ch; y++) {
+        const row = (cell.y0 + y) * w;
+        for (let x = a; x < b; x++) {
+          if (gray[row + cell.x0 + x] >= threshold) continue;
+          if (y < top) top = y;
+          if (y > bot) bot = y;
+        }
+      }
+      if (bot < 0) continue;
+      const gh = bot - top + 1;
+      const est = Math.max(3, gh * o.aspect);
+      const n = Math.max(1, Math.min(o.maxSplit, Math.round((b - a) / est)));
+      if (n === 1) { pieces.push([a, b]); continue; }
+      // 세로 잉크가 얕은 곳 n-1 군데를 끊는다. 서로 너무 가까운 자리는 안 쓴다.
+      const keepOut = Math.max(2, Math.round(est * 0.45));
+      const order = [];
+      for (let x = a + keepOut; x < b - keepOut; x++) order.push(x);
+      order.sort((p, q) => col[p] - col[q] || Math.abs(p - (a + b) / 2) - Math.abs(q - (a + b) / 2));
+      const cutsAt = [];
+      for (const x of order) {
+        if (cutsAt.length >= n - 1) break;
+        if (cutsAt.some((c) => Math.abs(c - x) < keepOut)) continue;
+        cutsAt.push(x);
+      }
+      cutsAt.sort((p, q) => p - q);
+      let prev = a;
+      for (const c of cutsAt) { pieces.push([prev, c]); prev = c; }
+      pieces.push([prev, b]);
+    }
+
+    const out = [];
+    for (const [a, b] of pieces) {
       // 그 조각의 위아래 끝을 찾는다
       let top = ch, bot = -1, n = 0;
       for (let y = 0; y < ch; y++) {
@@ -541,19 +637,45 @@
    * 글자마다 확률이 돌아오는데, **제일 낮은 글자의 확률**을 그 칸의 확신으로
    * 삼는다 — 네 자리 중 하나만 흐려도 금액은 통째로 틀리기 때문이다.
    */
+  /**
+   * 숫자 판별기. 부르는 쪽이 안 주면 **영수증 글씨로 만든 것**을 쓴다
+   * (receipt-digits.js). 급여 카드용 MNIST 망은 영수증 숫자를 66% 밖에 못
+   * 읽는다 — 그 파일 머리에 재본 것이 적혀 있다.
+   */
+  function pickClassifier(given) {
+    if (given) return given;
+    const host = typeof window !== "undefined" ? window : typeof globalThis !== "undefined" ? globalThis : null;
+    if (host && host.HG_RECEIPT_DIGITS && host.HG_RECEIPT_DIGITS.classify) return host.HG_RECEIPT_DIGITS.classify;
+    if (typeof require === "function") {
+      try { return require("./receipt-digits").classify; } catch (e) { /* 없으면 없는 것 */ }
+    }
+    return null;
+  }
+
   function readNumber(gray, w, cell, threshold, classify, opts) {
-    const o = Object.assign({ maxDigits: 7 }, opts || {});
-    const gs = glyphs(gray, w, cell, threshold);
-    if (!gs.length || gs.length > o.maxDigits) return null;
+    const o = Object.assign({ maxDigits: 7, leading: 0 }, opts || {});
+    // 부르는 쪽이 판별기를 안 주면 **영수증 글씨로 만든 것**을 쓴다
+    // (receipt-digits.js). 급여 카드용 MNIST 망은 영수증 숫자를 66% 밖에
+    // 못 읽는다 — 그 파일 머리에 재본 것이 적혀 있다.
+    const cls = pickClassifier(classify);
+    if (!cls) return null;
+    let gs = glyphs(gray, w, cell, threshold, opts);
+    if (!gs.length) return null;
+    // 수량 칸에는 단위(斤·把)가 같이 적혀 있다. 앞에서 몇 자만 읽으라고
+    // 할 수 있다 — 단위 글자를 숫자로 읽으면 수량이 10배가 된다.
+    if (o.leading > 0) gs = gs.slice(0, o.leading);
+    if (gs.length > o.maxDigits) return null;
     let text = "";
     let worst = 1;
+    const each = [];
     for (const g of gs) {
-      const r = classify(toGlyphImage(gray, w, g, threshold));
+      const r = cls(toGlyphImage(gray, w, g, threshold));
       if (!r) return null;
       text += String(r.digit);
+      each.push({ digit: r.digit, p: r.p, box: g });
       if (r.p < worst) worst = r.p;
     }
-    return { text, value: Number(text), digits: gs.length, p: worst };
+    return { text, value: Number(text), digits: gs.length, p: worst, each };
   }
 
   /** 그 칸에 뭔가 적혀 있나. 빈 칸에 대고 읽으면 없는 숫자가 생긴다. */
@@ -742,7 +864,187 @@
     return out;
   }
 
-  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, glyphs, toGlyphImage, readNumber };
+  /**
+   * 「이 수량이 그럴듯한가」 — 금액 ÷ 단가 로 나온 값을 점수로 잰다.
+   *
+   * 사장님 장부 15만 줄에서 수량은 정수 87.2% · 반(0.5) 5.2% · 4분의1 0.6% ·
+   * 소수 둘째 자리 2.8% 였다. 그래서 「3」이 나오는 읽기와 「2.73」이 나오는
+   * 읽기가 있으면 앞엣것이 맞을 가망이 훨씬 크다.
+   */
+  function qtyPlausibility(q) {
+    if (!(q > 0) || q > 30000) return -9;
+    const nice = (x) => Math.abs(q * x - Math.round(q * x)) < 1e-6;
+    if (nice(1)) return 1.2;
+    if (nice(2)) return 0.3;
+    if (nice(4)) return -0.6;
+    if (nice(100)) return -1.1;
+    return -2.6;
+  }
+
+  /**
+   * 한 줄을 읽는다 — **금액과 단가가 서로를 검사한다.**
+   *
+   * 숫자 하나를 88% 로 읽으면 세 자리 금액은 68% 다(receipt-digits.js). 그
+   * 68% 를 그냥 장부에 넣으면 세 줄에 한 줄이 틀린 채로 들어간다. 그게 제일
+   * 나쁘다 — 틀린 줄이 멀쩡해 보이기 때문이다.
+   *
+   * 영수증에는 공짜 검사가 들어 있다: **수량 × 단가 = 금액.** 사장님 장부
+   * 154,563줄에서 99.2% 가 이 셈을 지킨다. 그래서 후보를 펼쳐 놓고 금액 ÷
+   * 단가 가 **그럴듯한 수량**이 되는 조합을 고른다. 「32 × ? = 300」은 아무
+   * 수량도 안 되고 「300 × 1 = 300」은 되니, 3 과 0 사이에서 갈리던 글자가
+   * 저절로 풀린다.
+   *
+   * 후보는 세 가지로 펼친다:
+   *  - 글자마다 2·3순위 숫자
+   *  - **글자 하나를 빼기** — 선 조각이나 쉼표가 숫자로 세어진 경우
+   *  - **제일 넓은 글자를 둘로 쪼개기** — 붙여 쓴 두 자리를 한 자로 본 경우
+   *
+   * 실제로 틀린 줄의 대부분이 숫자 모양이 아니라 **글자 수**였다. 2·3순위만
+   * 펼쳤을 때는 「단가 5(80) 금액 40」처럼 한 자리가 사라진 채 40÷5=8 이
+   * 정수라서 그냥 통과했다.
+   *
+   * ── 수량 칸은 읽지 않는다
+   *
+   * 종이에는 0.5 를 **「半斤」**이라고 한자로 쓴다(사장님 영수증, 수량의
+   * 12.7% 가 소수다). 숫자 판별기에 한자를 넣으면 「8斤」같은 값이 나와서
+   * 수량이 열여섯 배가 된다. 그래서 수량은 **금액 ÷ 단가**로 구한다 —
+   * 0.5·1.5·0.82 가 저절로 맞는다. 수량 칸은 사장님이 눈으로 맞춰 보실 때만
+   * 쓴다(`qtyRaw`).
+   *
+   * ── 흰 칸과 노란 칸
+   *
+   * 셈으로 고른 것이 두 번째보다 확실히 낫고, 글자가 하나하나 또렷하고,
+   * 수량이 정수나 반이면 흰 칸(ok:true)이다. 진짜 사진 318줄로 재보니 그런
+   * 줄이 35% 였고 그 중 91% 가 맞았다. 나머지는 노란 칸이다.
+   *
+   * 91% 는 그냥 장부에 넣기엔 모자란다. 그래서 화면은 **잘라낸 그림을 숫자
+   * 옆에 같이** 보여 준다 — 종이를 다시 찾아 짚는 것보다 눈으로 한 번
+   * 보는 것이 빠르다. 「틀린 값을 표시 없이 넣지 않는다」가 기준이다.
+   */
+  function readRow(grid, cs, L, row, opts) {
+    const o = Object.assign({
+      variants: 32, altMin: 0.02, altTop: 4, inkMin: 0.05,
+      maxDigits: 7, margin: 0.7, minBonus: 0.3, minDigitP: 0.8,
+    }, opts || {});
+    const cls = pickClassifier(o.classify);
+    const cellAt = (col) => cs.find((x) => x.row === row && x.col === col);
+    const inked = (cell) => cell && inkOf(grid.gray, grid.w, cell, grid.threshold) > o.inkMin;
+
+    /** 그 칸의 글자 묶음들 — 그대로 / 하나 빼기 / 넓은 것 쪼개기. */
+    function glyphSets(cell) {
+      const gs = glyphs(grid.gray, grid.w, cell, grid.threshold, opts);
+      if (!gs.length) return [];
+      const sets = [{ gs, cost: 0 }];
+      if (gs.length > 1) {
+        sets.push({ gs: gs.slice(0, -1), cost: o.dropCost == null ? 1.6 : o.dropCost });
+        sets.push({ gs: gs.slice(1), cost: o.dropCost == null ? 1.6 : o.dropCost });
+      }
+      // 제일 넓은 글자를 가운데서 둘로 — 붙여 쓴 두 자리
+      if (gs.length <= o.maxDigits - 1) {
+        let wi = 0;
+        for (let i = 1; i < gs.length; i++) if (gs[i].x1 - gs[i].x0 > gs[wi].x1 - gs[wi].x0) wi = i;
+        const g = gs[wi];
+        if (g.x1 - g.x0 >= 10) {
+          const mid = Math.round((g.x0 + g.x1) / 2);
+          const split = gs.slice(0, wi)
+            .concat([{ x0: g.x0, x1: mid, y0: g.y0, y1: g.y1 }, { x0: mid, x1: g.x1, y0: g.y0, y1: g.y1 }])
+            .concat(gs.slice(wi + 1));
+          sets.push({ gs: split, cost: o.splitCost == null ? 1.6 : o.splitCost });
+        }
+      }
+      return sets.filter((s) => s.gs.length && s.gs.length <= o.maxDigits);
+    }
+
+    /** 글자 묶음을 읽기 후보들로 펼친다. */
+    function variantsOf(cell) {
+      if (!cls || !inked(cell)) return [];
+      const seen = new Map();
+      for (const set of glyphSets(cell)) {
+        let list = [{ text: "", lp: 0, minP: 1 }];
+        for (const g of set.gs) {
+          const r = cls(toGlyphImage(grid.gray, grid.w, g, grid.threshold));
+          const alts = [];
+          if (r) (r.probs || []).forEach((p, d) => { if (p >= o.altMin) alts.push({ d, p }); });
+          if (!alts.length) alts.push({ d: r ? r.digit : 0, p: 1e-3 });
+          alts.sort((a, b) => b.p - a.p);
+          const next = [];
+          for (const pre of list) for (const a of alts.slice(0, o.altTop)) {
+            next.push({ text: pre.text + a.d, lp: pre.lp + Math.log(a.p), minP: Math.min(pre.minP == null ? 1 : pre.minP, a.p) });
+          }
+          next.sort((a, b) => b.lp - a.lp);
+          list = next.slice(0, o.variants);
+        }
+        for (const v of list) {
+          const value = Number(v.text);
+          if (!(value > 0)) continue;
+          const lp = v.lp - set.cost;
+          const had = seen.get(v.text);
+          if (!had || lp > had.lp) seen.set(v.text, { text: v.text, value, lp, minP: v.minP });
+        }
+      }
+      return [...seen.values()].sort((a, b) => b.lp - a.lp).slice(0, o.variants * 2);
+    }
+
+    const priceCell = cellAt(L.price), amountCell = cellAt(L.amount);
+    const price = inked(priceCell) ? readNumber(grid.gray, grid.w, priceCell, grid.threshold, o.classify || null, opts) : null;
+    const amount = inked(amountCell) ? readNumber(grid.gray, grid.w, amountCell, grid.threshold, o.classify || null, opts) : null;
+    const qtyRaw = L.qty == null ? null : (inked(cellAt(L.qty)) ? readNumber(grid.gray, grid.w, cellAt(L.qty), grid.threshold, o.classify || null, opts) : null);
+
+    const out = {
+      price, amount, qtyRaw, ok: false, fixed: false,
+      value: { qty: null, price: price && price.value, amount: amount && amount.value },
+      text: { price: price && price.text, amount: amount && amount.text },
+    };
+    const pv = variantsOf(priceCell), av = variantsOf(amountCell);
+    if (!pv.length || !av.length) return out;
+
+    // 두 번째는 **값이 다른** 후보 중에서 고른다. 같은 값이 글자 묶음만
+    // 달라 여러 번 나오는데, 그걸 두 번째로 치면 늘 아슬아슬해 보인다.
+    // **그 업체가 전에 받은 적 있는 단가**인지 본다.
+    //
+    // 사장님 장부 18년치에서, 어떤 단가가 그 업체에서 처음 나오는 경우는
+    // 1.5% 뿐이었다(153,964개 중 98.5% 가 이미 받은 값, 업체마다 평균
+    // 114가지). 세 자리 수는 900가지인데 114가지로 좁는 것이라, 숫자 하나가
+    // 흐릴 때 엉뚱한 값으로 가는 것을 크게 막는다.
+    //
+    // 막지는 않는다 — 새 단가는 실제로 있다. 점수만 깐다.
+    const known = o.priceSet || null;
+    const priceBonus = (v) => (!known ? 0 : known.has(v) ? 0 : (o.newPriceCost == null ? -2.2 : -o.newPriceCost));
+
+    let best = null, second = null;
+    for (const p of pv) for (const a of av) {
+      const q = a.value / p.value;
+      const bonus = qtyPlausibility(q);
+      if (bonus <= -9) continue;
+      const lp = p.lp + a.lp + bonus + priceBonus(p.value);
+      if (!best || lp > best.lp) {
+        if (best && (best.p.value !== p.value || best.a.value !== a.value)) second = best;
+        best = { p, a, q, bonus, lp };
+      } else if (best.p.value !== p.value || best.a.value !== a.value) {
+        if (!second || lp > second.lp) second = { p, a, q, bonus, lp };
+      }
+    }
+    if (!best) return out;
+
+    out.value = { qty: best.q, price: best.p.value, amount: best.a.value };
+    out.text = { price: best.p.text, amount: best.a.text };
+    out.fixed = !(price && amount && price.text === best.p.text && amount.text === best.a.text);
+    out.margin = second ? best.lp - second.lp : Infinity;
+    out.qty = { value: best.q, derived: true };
+    // 믿는 조건 두 가지. 수량이 정수나 반이어야 하고(4분의1·소수는 읽기를
+    // 잘못한 것이 대부분이다), 두 번째 후보보다 **확실히** 나아야 한다.
+    // 믿는 조건 셋. 수량이 정수나 반이어야 하고(4분의1·소수는 읽기를
+    // 잘못한 것이 대부분이다), 두 번째 후보보다 확실히 나아야 하고,
+    // **고른 글자들이 하나하나 또렷해야** 한다.
+    //
+    // 셋 다 걸어야 한다. 셈만으로 고르면 「단가 5 · 금액 40」처럼 한 자리가
+    // 사라진 읽기도 40÷5=8 이 정수라서 그냥 통과한다.
+    out.certainty = Math.min(best.p.minP == null ? 1 : best.p.minP, best.a.minP == null ? 1 : best.a.minP);
+    out.ok = best.bonus >= o.minBonus && out.margin >= o.margin && out.certainty >= o.minDigitP;
+    return out;
+  }
+
+  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, labelColumns, glyphs, toGlyphImage, readNumber, readRow, qtyPlausibility, pickClassifier };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.HG_RECEIPT = api;
 })();

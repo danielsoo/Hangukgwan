@@ -56,8 +56,19 @@ function drawReceipt(o) {
     for (let x = x0; x <= x1; x++) { put(x, y - 1, HALO); put(x, y, LINE); put(x, y + 1, LINE); put(x, y + 2, HALO); }
   }
   // 세로선 — 기운 종이에서는 x 가 아래로 갈수록 밀린다
+  //
+  // 칸 너비를 따로 줄 수 있다. 진짜 영수증은 품명 칸이 훨씬 넓고(房信 전표는
+  // 374 · 131 · 131 · 205 · 113), 어느 칸이 금액인지는 그 비율로 가린다
+  // (labelColumns). 다 같은 너비로 그리면 그 함수를 잴 수가 없다.
+  const rel = o.widths && o.widths.length === o.cols ? o.widths : new Array(o.cols).fill(1);
+  const relSum = rel.reduce((a2, b2) => a2 + b2, 0);
+  const edgeAt = (c) => {
+    let acc = 0;
+    for (let i = 0; i < c; i++) acc += rel[i];
+    return Math.round(x0 + ((x1 - x0) * acc) / relSum);
+  };
   for (let c = 0; c <= o.cols; c++) {
-    const bx = Math.round(x0 + ((x1 - x0) * c) / o.cols);
+    const bx = edgeAt(c);
     for (let y = y0; y <= y1; y++) {
       const x = bx - Math.round(skew * (y - h / 2));
       if (x >= 0 && x < w) {
@@ -75,7 +86,7 @@ function drawReceipt(o) {
   if (o.ink !== false) {
     for (let r = 0; r < o.rows; r++) {
       for (let c = 0; c < o.cols; c++) {
-        const cx = Math.round(x0 + ((x1 - x0) * (c + 0.4)) / o.cols);
+        const cx = Math.round(edgeAt(c) + (edgeAt(c + 1) - edgeAt(c)) * 0.4);
         const cy = Math.round(y0 + ((y1 - y0) * (r + 0.5)) / o.rows);
         for (let dy = -3; dy <= 3; dy++) for (let dx = -6; dx <= 6; dx++) put(cx + dx, cy + dy, PEN);
       }
@@ -353,6 +364,110 @@ out.push("\n[표의 양 끝 테두리가 안 보여도 칸을 잃지 않는다]"
   const cs = R.cells(grid);
   check("★ 칸이 12×5 = 60개", cs.length === 60, `${cs.length}`);
 }
+
+
+out.push("\n[기울기를 칸 자리에 반영한다]");
+{
+  // 2026-10-05: **이것 하나가 숫자 읽기를 통째로 막고 있었다.**
+  //
+  // 선을 찾을 때는 기운 만큼 되돌려 보므로 선 번호는 「표 가운데에서의」
+  // 자리다. 칸을 그냥 네모로 자르면 가운데에서 먼 줄일수록 선이 칸 안으로
+  // 들어온다 — 기울기 1.6°, 표 높이 1,846점이면 세로선 x 가 25점 밀리는데
+  // 여백은 13점뿐이었다. 맨 위·아래 줄에서는 세로선이 통째로 칸에 들어와
+  // **글자 하나로 세어졌고**, 수량 「3」이 글자 3개로 읽혔다.
+  const w = 700, h = 1400, rows = 14, cols = 5;
+  const g = drawReceipt({ w, h, rows, cols, skew: 0.028, ink: false });
+  const grid = R.findGrid(g, w, h);
+  const cs = R.cells(grid);
+  check("기운 종이에서도 칸이 다 나온다", cs.length === rows * cols, `${cs.length}`);
+  // 아무것도 안 썼으니 **어느 칸에도 잉크가 없어야** 한다. 선이 들어오면
+  // 거기서 잉크가 나온다.
+  let worst = 0, worstAt = "";
+  for (const c of cs) {
+    const ink = R.inkOf(g, w, c, grid.threshold);
+    if (ink > worst) { worst = ink; worstAt = `줄${c.row} 칸${c.col}`; }
+  }
+  check("★★ 빈 칸에 선이 안 들어온다 (잉크 3% 밑)", worst < 0.03, `제일 심한 곳 ${worstAt} ${(worst * 100).toFixed(1)}%`);
+  let glyphy = 0;
+  for (const c of cs) glyphy += R.glyphs(g, w, c, grid.threshold).length;
+  check("★★ 빈 칸에서 글자를 찾지 않는다", glyphy === 0, `${glyphy}개`);
+}
+
+out.push("\n[수량 × 단가 = 금액 으로 서로 고친다]");
+{
+  // 사장님 장부 154,563줄에서 99.2% 가 이 셈을 지킨다. 숫자 하나를 88% 로
+  // 읽으면 세 자리 금액은 68% 뿐이라, 이 셈이 없으면 세 줄에 한 줄이 틀린
+  // 채로 장부에 들어간다.
+  //
+  // 수량은 **종이에서 읽지 않는다** — 0.5 를 「半斤」이라고 한자로 쓴다
+  // (사장님 영수증, 수량의 12.7% 가 소수다). 금액 ÷ 단가 로 구한다.
+  check("정수 수량을 제일 그럴듯하게 본다", R.qtyPlausibility(3) > R.qtyPlausibility(0.5), "");
+  check("★ 반(0.5)도 흔하다 — 4분의1보다 그럴듯하다", R.qtyPlausibility(0.5) > R.qtyPlausibility(0.25), "");
+  check("★ 2.73 같은 수량은 읽기를 잘못한 쪽으로 본다", R.qtyPlausibility(2.73) < R.qtyPlausibility(0.25), `${R.qtyPlausibility(2.73)}`);
+  check("★ 말이 안 되는 수량은 아예 뺀다", R.qtyPlausibility(40000) <= -9 && R.qtyPlausibility(0) <= -9, "");
+
+  // 셈이 서로를 고치는지 잰다.
+  //
+  // 종이에 단가 ?00 · 금액 900 이 적혀 있고, 단가 첫 글자가 2 와 3 사이에서
+  // 갈린다고 하자(2 쪽이 조금 더 그럴듯하다고 나왔다 치자). 글자만 보면
+  // 「200」을 고르지만, 900 ÷ 200 = 4.5 이고 900 ÷ 300 = 3 이다. 정수 수량이
+  // 훨씬 흔하므로(87.2%) 3 으로 풀려야 한다.
+  const w = 700, h = 1200, cols = 5;
+  // 房信 전표 비율로 그린다 — 품명이 넓고 금액이 그 다음이다
+  const g = drawReceipt({ w, h, rows: 12, cols, ink: false, widths: [37, 13, 13, 21, 11] });
+  const grid = R.findGrid(g, w, h);
+  const cs = R.cells(grid);
+  const L = R.labelColumns(cs);
+  check("칸을 너비로 가린다 (품명 0 · 수량 1 · 단가 2 · 금액 3)",
+    !!L && L.name === 0 && L.qty === 1 && L.price === 2 && L.amount === 3,
+    L ? JSON.stringify(L) : "못 가림");
+  const row = 3;
+  // 칸에 글자 세 개씩 그린다. 모양(가로세로 비)으로 어느 글자인지 알아보게.
+  function paint(col, shapes) {
+    const cell = cs.find((c) => c.row === row && c.col === col);
+    const step = Math.floor(cell.w / shapes.length);
+    shapes.forEach((kind, i) => {
+      const cx = cell.x0 + step * i + Math.floor(step / 2);
+      const cy = Math.floor((cell.y0 + cell.y1) / 2);
+      const halfW = kind === "wide" ? 9 : kind === "mid" ? 5 : 2;
+      const halfH = Math.min(11, Math.floor(cell.h / 2) - 3);
+      for (let dy = -halfH; dy <= halfH; dy++) {
+        for (let dx = -halfW; dx <= halfW; dx++) {
+          const x = cx + dx, y = cy + dy;
+          if (x > cell.x0 && x < cell.x1 - 1 && y > cell.y0 && y < cell.y1 - 1) g[y * w + x] = PEN;
+        }
+      }
+    });
+  }
+  paint(L.price, ["mid", "wide", "wide"]);     // ?00
+  paint(L.amount, ["thin", "wide", "wide"]);   // 900
+  const probsOf = (m) => { const p = new Array(10).fill(0.0002); for (const k of Object.keys(m)) p[+k] = m[k]; return p; };
+  // 28×28 에 잉크가 얼마나 차 있나로 모양을 가린다
+  function fakeClassify(img) {
+    let ink = 0;
+    for (let i = 0; i < img.length; i++) ink += img[i];
+    if (ink > 230) return { digit: 0, p: 0.97, probs: probsOf({ 0: 0.97 }) };          // 넓적한 것 = 0
+    if (ink < 110) return { digit: 9, p: 0.96, probs: probsOf({ 9: 0.96 }) };          // 가는 것 = 9
+    return { digit: 2, p: 0.5, probs: probsOf({ 2: 0.5, 3: 0.45 }) };                  // 가운데 = 2 나 3
+  }
+  const naivePrice = R.readNumber(g, w, cs.find((c) => c.row === row && c.col === L.price), grid.threshold, fakeClassify);
+  check("글자만 보면 단가를 200 으로 읽는다", naivePrice && naivePrice.text === "200", naivePrice ? naivePrice.text : "null");
+  const rr = R.readRow(grid, cs, L, row, { classify: fakeClassify });
+  check("★★ 셈에 맞춰 단가를 300 으로 고친다", rr.value.price === 300, `${rr.value.price}`);
+  check("★★ 금액은 900 그대로", rr.value.amount === 900, `${rr.value.amount}`);
+  check("★★ 수량은 금액 ÷ 단가 = 3", rr.value.qty === 3, `${rr.value.qty}`);
+  check("★ 고쳤다고 알려준다", rr.fixed === true, `${rr.fixed}`);
+  // **고쳐 넣었어도 흰 칸은 아니다.** 저 3 은 글자만 보면 2 와 거의 반반
+  // (0.45 대 0.5)이었다. 셈으로 풀었다는 것은 「아마 300」이라는 뜻이고,
+  // 그걸 흰 칸으로 내보내면 사장님이 안 보고 넘긴다. 진짜 사진 318줄로
+  // 재보니 글자 또렷함을 안 보면 흰 칸의 맞는 비율이 91% → 75% 로 떨어졌다.
+  check("★★ 글자가 반반이었으면 고쳐 넣되 노란 칸으로 둔다",
+    rr.ok === false && rr.value.price === 300, `ok=${rr.ok} 또렷함=${rr.certainty}`);
+  // 글자가 또렷했다면 흰 칸이다
+  const clear = R.readRow(grid, cs, L, row, { classify: fakeClassify, minDigitP: 0.4 });
+  check("★ 글자가 또렷하면 흰 칸", clear.ok === true, `ok=${clear.ok} 여유=${clear.margin}`);
+}
+
 
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
