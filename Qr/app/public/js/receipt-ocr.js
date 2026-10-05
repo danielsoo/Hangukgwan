@@ -417,7 +417,7 @@
     // 딸려 들어와서, 아무것도 안 쓴 줄에도 잉크가 4~7% 나왔다 — 칸 높이 73점에
     // 위아래 선 2점씩이면 꼭 그만큼이다. 그래서 「이 줄은 썼나」를 가릴 수가
     // 없었다(2026-10-05).
-    const o = Object.assign({ padFrac: 0.1, padMin: 3, minW: 8, minH: 8 }, opts || {});
+    const o = Object.assign({ padFrac: 0.1, padMin: 3, padMax: 999, minW: 8, minH: 8 }, opts || {});
     const out = [];
     const { hLines: H, vLines: V } = grid;
     // **기울기를 칸 자리에 반영한다.**
@@ -434,10 +434,10 @@
     const s = grid.slope || 0;
     const cx = (grid.w || 0) / 2, cy = (grid.h || 0) / 2;
     for (let r = 0; r + 1 < H.length; r++) {
-      const padY = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((H[r + 1] - H[r]) * o.padFrac));
+      const padY = o.pad != null ? o.pad : Math.min(o.padMax, Math.max(o.padMin, Math.round((H[r + 1] - H[r]) * o.padFrac)));
       const yMid = (H[r] + H[r + 1]) / 2;
       for (let c = 0; c + 1 < V.length; c++) {
-        const padX = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((V[c + 1] - V[c]) * o.padFrac));
+        const padX = o.pad != null ? o.pad : Math.min(o.padMax, Math.max(o.padMin, Math.round((V[c + 1] - V[c]) * o.padFrac)));
         const xMid = (V[c] + V[c + 1]) / 2;
         const dx = -Math.round(s * (yMid - cy));
         const dy = Math.round(s * (xMid - cx));
@@ -493,7 +493,7 @@
    * 금액에 없는 자리가 하나 붙는다.
    */
   function glyphs(gray, w, cell, threshold, opts) {
-    const o = Object.assign({ minInk: 0.05, minPx: 6, minH: 0.25, joinGap: 0.025, aspect: 0.9, maxSplit: 7 }, opts || {});
+    const o = Object.assign({ minInk: 0.05, minPx: 6, minH: 0.25, joinGap: 0.025, aspect: 0.75, maxSplit: 7 }, opts || {});
     const cw = cell.x1 - cell.x0;
     const ch = cell.y1 - cell.y0;
     if (cw < 6 || ch < 6) return [];
@@ -537,7 +537,16 @@
       }
       if (bot < 0) continue;
       const gh = bot - top + 1;
-      const est = Math.max(3, gh * o.aspect);
+      // 글자 너비는 **칸 높이**로 짐작한다.
+      //
+      // 처음에는 덩이 자신의 높이로 쟀는데, 그러면 「25」가 붙어 한 덩이가
+      // 됐을 때 그 덩이의 높이(두 글자를 합친 위아래 끝)로 재게 되어 너비를
+      // 과하게 잡고 안 쪼갠다. 같은 사진을 조금 다른 크기로 읽으면 쪼개는지
+      // 마는지가 바뀌었다 — 단가 25 가 3 으로.
+      //
+      // 칸 높이는 인쇄된 값이라 줄마다 같다. 손으로 쓰는 숫자는 칸 높이에
+      // 맞춰 쓰므로 그것으로 재는 편이 흔들리지 않는다.
+      const est = Math.max(3, ch * o.aspect);
       const n = Math.max(1, Math.min(o.maxSplit, Math.round((b - a) / est)));
       if (n === 1) { pieces.push([a, b]); continue; }
       // 세로 잉크가 얕은 곳 n-1 군데를 끊는다. 서로 너무 가까운 자리는 안 쓴다.
@@ -915,16 +924,25 @@
    *
    * 셈으로 고른 것이 두 번째보다 확실히 낫고, 글자가 하나하나 또렷하고,
    * 수량이 정수나 반이면 흰 칸(ok:true)이다. 진짜 사진 318줄로 재보니 그런
-   * 줄이 35% 였고 그 중 91% 가 맞았다. 나머지는 노란 칸이다.
+   * 줄이 **100줄(31%)이고 그 중 98줄이 맞았다.** 나머지는 노란 칸이다.
    *
-   * 91% 는 그냥 장부에 넣기엔 모자란다. 그래서 화면은 **잘라낸 그림을 숫자
-   * 옆에 같이** 보여 준다 — 종이를 다시 찾아 짚는 것보다 눈으로 한 번
-   * 보는 것이 빠르다. 「틀린 값을 표시 없이 넣지 않는다」가 기준이다.
+   * 그래도 화면은 **잘라낸 그림을 숫자 옆에 같이** 보여 준다 — 종이를 다시
+   * 찾아 짚는 것보다 눈으로 한 번 보는 것이 빠르고, 노란 칸이 69% 라 거기서
+   * 시간이 걸린다. 「틀린 값을 표시 없이 넣지 않는다」가 기준이다.
    */
   function readRow(grid, cs, L, row, opts) {
     const o = Object.assign({
       variants: 32, altMin: 0.02, altTop: 4, inkMin: 0.05,
       maxDigits: 7, margin: 0.7, minBonus: 0.3, minDigitP: 0.8,
+      // **글자 하나를 빼는 것은 비싸게 매긴다.**
+      //
+      // 금액 ÷ 단가 로 수량을 구하면 「단가 25 · 수량 3」과 「단가 3 · 수량
+      // 25」가 **둘 다 정수**다. 셈으로는 못 가린다. 빼는 값을 1.6 으로 두니
+      // 자리를 하나 잃은 읽기가 자꾸 이겼다 — 25 를 3, 300 을 30, 80 을 8 로.
+      //
+      // 4 로 올리니 단가 65% → 75% 가 됐고, 흰 칸이 100줄(31%) 중 98줄
+      // 맞았다(91% → 98%). 쪼개는 쪽은 올려도 나아지지 않아 1.6 그대로다.
+      dropCost: 4, splitCost: 1.6, newPriceCost: 2.2,
     }, opts || {});
     const cls = pickClassifier(o.classify);
     const cellAt = (col) => cs.find((x) => x.row === row && x.col === col);

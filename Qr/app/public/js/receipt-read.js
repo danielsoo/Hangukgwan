@@ -24,13 +24,16 @@
   /**
    * 사진을 회색 점으로 바꾼다.
    *
-   * 긴 쪽을 1,600점으로 줄인다. 요즘 폰은 4,000점이 넘는데 표 찾기는 그만한
-   * 해상도가 필요 없고(사장님 스캔이 720~1,100점이다), 큰 사진은 기울기를
-   * 재는 데만 몇 초씩 걸린다. 너무 줄이면 한 점 굵기 선이 사라지므로 1,600
-   * 아래로는 내리지 않는다.
+   * 긴 쪽을 2,400점까지만 줄인다. 요즘 폰은 4,000점이 넘고 큰 사진은 기울기를
+   * 재는 데만 몇 초씩 걸린다.
+   *
+   * **1,600 으로 줄였더니 붙여 쓴 숫자가 한 글자가 됐다.** 사장님 스캔은
+   * 1,100~1,957점인데 1,600 으로 맞추면 0.82배가 되고, 그만큼 줄어든 「25」는
+   * 2 와 5 사이의 흰 틈이 사라져 한 덩이로 읽혔다(단가 25 → 3). 사장님 스캔이
+   * 안 줄어드는 자리까지 올린다.
    */
   async function toGray(file, opts) {
-    const o = Object.assign({ maxSide: 1600 }, opts || {});
+    const o = Object.assign({ maxSide: 2400 }, opts || {});
     const bmp = await loadBitmap(file);
     const scale = Math.min(1, o.maxSide / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
