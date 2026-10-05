@@ -505,6 +505,36 @@
   }
 
   /**
+   * **그 전표에서 실제로 적은 줄**이 어디인가.
+   *
+   * 「금액 칸에 잉크가 있나」만 보면 모자란다. 전표 위쪽에는 인쇄된 머리글
+   * 띠가 있고(品名 數量 單價 金額 / DESCRIPTION QUANTITY UN AMOUNT), 그 띠도
+   * 잉크가 가득하다. 阿麵製麵 전표는 머리글이 **까맣게 칠한 띠**여서 줄로
+   * 세어졌고, 그 줄의 칸을 숫자로 읽으려다 글자가 일곱 개를 넘어 통째로
+   * 실패했다 — 한 장에서 읽은 값이 하나도 없었다.
+   *
+   * 숫자 칸은 글자가 한두 개에서 많아야 예닐곱이다. 그보다 많으면 글씨가
+   * 아니라 인쇄된 말이다.
+   */
+  function usedRows(grid, cs, amountCol, opts) {
+    const o = Object.assign({ inkMin: 0.05, maxDigits: 7 }, opts || {});
+    const rowNos = [...new Set(cs.map((c) => c.row))].sort((a, b) => a - b);
+    const out = [];
+    // 맨 윗줄은 인쇄된 머리글이다. 이것을 빠뜨리면 **종이 줄과 장부 줄이
+    // 하나씩 밀려** 모든 값이 엉뚱한 줄에 들어간다(2026-10-05 에 그렇게
+    // 만들어서 房信 39% → 30%, 韓濟 34% → 4% 가 됐다).
+    for (const r of rowNos.slice(1)) {
+      const cell = cs.find((x) => x.row === r && x.col === amountCol);
+      if (!cell) continue;
+      if (inkOf(grid.gray, grid.w, cell, grid.threshold) <= o.inkMin) continue;
+      const n = glyphs(grid.gray, grid.w, cell, grid.threshold, opts).length;
+      if (!n || n > o.maxDigits) continue;
+      out.push(r);
+    }
+    return out;
+  }
+
+  /**
    * 어느 칸이 수량·단가·금액인지 — **셈이 맞는 조합을 영수증마다 찾는다.**
    *
    * 너비로 가리던 규칙(labelColumns)은 房信菓菜行 전표에 맞춘 것이었다.
@@ -526,13 +556,15 @@
     if (!cs || !cs.length) return null;
     const cols = [...new Set(cs.map((c) => c.col))].sort((a, b) => a - b);
     if (cols.length < 3) return null;
+    // 머리글 띠를 줄로 세지 않는다 — 글자가 너무 많은 칸은 인쇄된 말이다.
     const rowNos = [...new Set(cs.map((c) => c.row))].sort((a, b) => a - b);
-    const body = rowNos.slice(1);      // 맨 윗줄은 인쇄된 머리글
+    const body = rowNos.slice(1);
     if (!body.length) return null;
 
     // 칸마다 줄마다 한 번씩만 읽어 둔다
     const val = new Map();
     const fill = new Map();
+    const bad = new Map();   // 칸을 숫자로 못 읽은 횟수 — 머리글 띠 가리기
     for (const c of cols) {
       let n = 0;
       for (const r of body) {
@@ -542,6 +574,7 @@
         n++;
         const rd = readNumber(grid.gray, grid.w, cell, grid.threshold, o.classify, opts);
         if (rd && rd.value > 0) val.set(`${r}|${c}`, rd.value);
+        else bad.set(r, (bad.get(r) || 0) + 1);
       }
       fill.set(c, n);
     }
@@ -1030,11 +1063,11 @@
    * ── 흰 칸과 노란 칸
    *
    * 셈으로 고른 것이 두 번째보다 확실히 낫고, 글자가 하나하나 또렷하고,
-   * 수량이 정수나 반이면 흰 칸(ok:true)이다. 진짜 사진(房信菓菜行 200장,
-   * 393줄)으로 재보니 흰 칸이 **19%** 고 그 중 **93%** 가 맞았다. 한 줄이
-   * 통째로 맞는 비율은 **53%** 다.
+   * 수량이 정수나 반이면 흰 칸(ok:true)이다. 진짜 사진(업체 20곳 487줄)으로
+   * 재보니 흰 칸의 **81%** 가 맞는다(房信菓菜行 만 보면 93%). 한 줄이 통째로 맞는 비율은 업체마다
+   * 크게 다르다 — 房信菓菜行 30~40%, 전체 **22%**.
    *
-   * 53% 를 그냥 장부에 넣을 수는 없다. 그래서 화면은 **잘라낸 그림을 숫자
+   * 그 비율을 그냥 장부에 넣을 수는 없다. 그래서 화면은 **잘라낸 그림을 숫자
    * 옆에 같이** 보여 준다 — 종이를 다시 찾아 짚는 것보다 눈으로 한 번 보는
    * 것이 빠르다. 「틀린 값을 표시 없이 넣지 않는다」가 기준이다.
    */
@@ -1044,7 +1077,12 @@
       // 흰 칸으로 내보낼 기준. **판별기를 바꾸면 다시 재야 한다** — 신경망의
       // 확신은 가까운 이웃의 표보다 훨씬 또렷해서, 예전 기준(0.8)으로 두면
       // 흰 칸이 세 배로 늘고 맞는 비율이 93% → 80% 로 떨어졌다.
-      // 진짜 사진 393줄로 재서 고른 값이다(흰 칸 19%, 그 중 93% 맞음).
+      // 업체 20곳 487줄로 재서 고른 값이다. 흰 칸의 **81%** 가 맞는다 —
+      // 房信菓菜行 만 보면 93% 고, 아직 잘 안 읽히는 업체가 섞여서 내려간다.
+      //
+      // 0.99 로 올리면 흰 칸이 91% 맞지만 **열두 줄에 열한 줄이 노랗게** 돼서
+      // 사장님께 아무 도움이 안 된다. 어차피 숫자 옆에 종이 그림이 같이
+      // 뜨므로, 「눈여겨볼 줄」을 가려 주는 쪽이 낫다.
       maxDigits: 7, margin: 2, minBonus: 0.3, minDigitP: 0.95,
       // **글자 하나를 빼는 것은 비싸게 매긴다.**
       //
@@ -1174,7 +1212,7 @@
     return out;
   }
 
-  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, labelColumns, pickColumns, glyphs, toGlyphImage, readNumber, readRow, qtyPlausibility, pickClassifier };
+  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, labelColumns, pickColumns, usedRows, glyphs, toGlyphImage, readNumber, readRow, qtyPlausibility, pickClassifier };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.HG_RECEIPT = api;
 })();

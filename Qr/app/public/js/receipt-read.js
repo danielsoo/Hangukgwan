@@ -126,14 +126,10 @@
       // 못 고르면 너비로 가리는 옛 규칙(labelColumns)으로 내려간다.
       const L = R.pickColumns(grid, cs, o) || R.labelColumns(cs);
       if (!L) { out.push({ rows: [], warn: "no-columns" }); continue; }
-      const rowNos = [...new Set(cs.map((c) => c.row))].sort((a, b) => a - b);
       const at = (r, col) => cs.find((x) => x.row === r && x.col === col);
       const rows = [];
-      for (const r of rowNos) {
-        // 맨 윗줄은 인쇄된 머리글(品名 數量 單價 金額)이다.
-        if (r === rowNos[0]) continue;
-        const am = at(r, L.amount);
-        if (!am || R.inkOf(grid.gray, grid.w, am, grid.threshold) <= 0.05) continue;
+      // **실제로 적은 줄**만 — 인쇄된 머리글 띠는 글자가 너무 많아 빠진다.
+      for (const r of R.usedRows(grid, cs, L.amount, o)) {
         const rr = R.readRow(grid, cs, L, r, o);
         rows.push({
           row: r,
