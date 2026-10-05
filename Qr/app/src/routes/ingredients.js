@@ -221,6 +221,29 @@ router.post("/rows", async (req, res) => {
 });
 
 /**
+ * 엑셀로 다시 받기 위한 줄 전부. 「보기」의 /rows 와 달리 **자르지 않는다.**
+ *
+ * 2026-10-05 사장님: "사진들을 급여처럼 올리면 인식해서 **엑셀에 기입하고**
+ * 우리 시스템에도 기입해서."
+ *
+ * 시스템에 쌓는 것만으로는 사장님의 엑셀이 멈춘다. 18년을 그 파일로 해
+ * 오셨고 세무·거래처에 보낼 일도 그 모양이다. 엑셀을 **만드는 것은 화면이
+ * 한다**(public/js/xlsx-write.js) — 서버에 엑셀 라이브러리를 들이지 않고,
+ * 사장님 장부가 서버 디스크에 파일로 남지도 않는다.
+ *
+ * 날짜를 안 주면 역시 최근 12개월이다. 전체를 받으시려면 all=1 이고, 그건
+ * 15만 줄이라 몇 MB 가 된다 — 일부러 누를 때만 그리 된다.
+ */
+router.get("/export", async (req, res) => {
+  const c = await col();
+  const rows = await c
+    .find(rangeQuery(req.query), { projection: { _id: 0 } })
+    .sort({ store: 1, date: 1, vendor: 1 })
+    .toArray();
+  res.json({ rows, stores: G.STORES });
+});
+
+/**
  * 전부 지운다. 가져오기를 처음부터 다시 할 때만.
  *
  * 2만 줄을 되돌릴 방법이 없으므로 화면이 한 번 더 묻고, 여기서도 지점을

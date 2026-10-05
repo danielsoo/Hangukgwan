@@ -436,6 +436,7 @@
           <button type="button" id="ingAllPeriod" data-i18n="ingAllPeriod">전체 기간</button>
           <button type="button" id="ingReload" class="primary" data-i18n="ingReload">보기</button>
           <span class="ing-spacer"></span>
+          <button type="button" id="ingExportBtn" data-i18n="ingExportBtn">⬇️ 엑셀 받기</button>
           <button type="button" id="ingImportBtn" data-i18n="ingImportBtn">⬆️ 엑셀 가져오기</button>
           <input type="file" id="ingImportFile" accept=".xlsx" hidden />
         </div>
@@ -2191,6 +2192,7 @@
 <!-- 엑셀을 기기 안에서 읽는다(식자재 가져오기). admin.js 보다 먼저 와야
      window.HG_XLSX 가 준비된다. -->
 <script src="/js/xlsx-lite.js"></script>
+<script src="/js/xlsx-write.js"></script>
 <script src="/js/admin.js"></script>
 <!-- 식자재 탭. admin.js 가 만든 T()/money() 를 쓰므로 뒤에 온다. -->
 <script src="/js/ingredients.js"></script>

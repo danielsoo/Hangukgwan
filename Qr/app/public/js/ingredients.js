@@ -332,6 +332,57 @@
     return m;
   }
 
+  // ───────── 엑셀로 다시 받기 ─────────
+  //
+  // 2026-10-05 사장님: "인식해서 **엑셀에 기입하고** 우리 시스템에도 기입해서."
+  //
+  // 시스템에 쌓는 것만으로는 18년 써 오신 엑셀이 멈춘다. 같은 모양으로
+  // 언제든 다시 받을 수 있어야 세무·거래처에 보내는 일이 안 끊긴다.
+  //
+  // 칸 차례는 **사장님 파일 그대로**다 — 받아서 열었을 때 쓰던 것과 같아야
+  // 한다. 날짜는 글자("2026-10-05")로 적는다. 엑셀 일련번호로 적으면 서식을
+  // 같이 넣어야 하고, 서식이 빠지면 「45658」로 보인다.
+  const EXPORT_HEAD = ["날짜", "내  용", "수량", "단위", "단가", "금액", "업체명", "비  고", "월"];
+
+  async function exportXlsx() {
+    if (!window.HG_XLSX_WRITE) return logLine(esc(T("ingExportNoSupport")));
+    logLine(esc(T("ingExportWorking")));
+    let data;
+    try {
+      const res = await fetch(`/api/ingredients/export?${query()}`);
+      if (!res.ok) throw new Error(`${res.status}`);
+      data = await res.json();
+    } catch (e) {
+      return logLine(esc(T("ingExportFailed") + (e && e.message)));
+    }
+    const rows = data.rows || [];
+    if (!rows.length) return logLine(esc(T("ingExportEmpty")));
+
+    const sheets = (data.stores || []).map((s) => ({
+      name: s.name_zh || s.name_ko,
+      rows: [EXPORT_HEAD].concat(
+        rows
+          .filter((r) => r.store === s.key)
+          .map((r) => [r.date, r.name, r.qty, r.unit, r.price, r.amount, r.vendor, r.name_ko, Number(String(r.month).slice(5, 7))])
+      ),
+    }));
+    try {
+      const bytes = await window.HG_XLSX_WRITE.writeXlsx(sheets);
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+      const a = document.createElement("a");
+      a.href = url;
+      const first = rows[0].date;
+      const last = rows[rows.length - 1].date;
+      a.download = `한국관 식자재 ${first} ~ ${last}.xlsx`;
+      a.click();
+      // 바로 거두면 큰 파일에서 내려받기가 끊긴다.
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      logLine(esc(fmt("ingExportDoneFmt", { n: rows.length })));
+    } catch (e) {
+      logLine(esc(T("ingExportFailed") + (e && e.message)));
+    }
+  }
+
   // ───────── 영수증 넣기 ─────────
   //
   // 2026-10-04 사장님: "지금은 계속 종이를 보면서 엑셀에 기입하고 하는 과정이
@@ -535,6 +586,7 @@
     if (!wired) {
       wired = true;
       $("#ingImportBtn").onclick = () => $("#ingImportFile").click();
+      $("#ingExportBtn").onclick = () => exportXlsx();
       $("#ingImportFile").onchange = (e) => {
         const f = e.target.files && e.target.files[0];
         e.target.value = "";
