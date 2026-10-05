@@ -54,7 +54,23 @@
     return null;
   }
 
-  const storeOfSheet = (name) => (String(name).includes("總店") ? "main" : String(name).includes("台元") ? "branch3" : null);
+  // 엑셀 시트 이름 → 지점.
+  //
+  // 사장님 엑셀이 두 벌이고 시트 이름이 서로 다르다:
+  //   「… 2025부터」  韓國館總店 / 韓國館台元三店
+  //   「… -2025」     한국관본점 / 한국관2호점
+  // 2025년 줄이 두 파일에서 100% 일치해 **2호점 = 台元三店** 임을 확인했다.
+  //
+  // 서버의 같은 규칙(src/ingredients.js storeOfSheetName)과 **글자 하나까지
+  // 맞춰 둔다** — 어긋나면 한쪽은 넣고 한쪽은 못 읽는 시트가 생긴다.
+  // test/ingredients.test.js 가 둘이 같은 답을 내는지 잰다.
+  const storeOfSheet = (name) => {
+    const s = String(name == null ? "" : name).normalize("NFC").trim();
+    if (!s) return null;
+    if (s.includes("總店") || s.includes("본점")) return "main";
+    if (s.includes("台元") || s.includes("2호점") || s.includes("２호점")) return "branch3";
+    return null;
+  };
 
   // ───────── 가져오기 ─────────
 
@@ -178,12 +194,17 @@
       : `<p class="ing-note">${esc(T("ingEmpty"))}</p>`;
   }
 
+  // 「전체 기간」을 누르셨나. 2007년부터 15만 줄이라 일부러 누를 때만 본다
+  // (src/routes/ingredients.js rangeQuery).
+  let wantAll = false;
+
   function query() {
     const p = new URLSearchParams();
     const store = $("#ingStore") && $("#ingStore").value;
     if (store && store !== "all") p.set("store", store);
     if ($("#ingStart") && $("#ingStart").value) p.set("start", $("#ingStart").value);
     if ($("#ingEnd") && $("#ingEnd").value) p.set("end", $("#ingEnd").value);
+    if (wantAll && !($("#ingStart") || {}).value && !($("#ingEnd") || {}).value) p.set("all", "1");
     return p.toString();
   }
 
@@ -503,10 +524,14 @@
         e.target.value = "";
         importFile(f);
       };
-      $("#ingReload").onclick = () => loadSummary();
+      $("#ingReload").onclick = () => {
+        wantAll = false;
+        loadSummary();
+      };
       $("#ingAllPeriod").onclick = () => {
         $("#ingStart").value = "";
         $("#ingEnd").value = "";
+        wantAll = true;
         loadSummary();
       };
       $("#ingStore").onchange = () => loadSummary();

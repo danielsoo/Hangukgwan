@@ -17,12 +17,40 @@
 // 있다. 따로 만들지 않는다.
 const PURCHASES = "ingredient_purchases";
 
-// 지점. 엑셀 시트 이름이 그대로 두 지점이다.
+// 지점.
+//
+// 엑셀이 두 벌이고 시트 이름이 서로 다르다:
+//   「… 2025부터」  韓國館總店 / 韓國館台元三店
+//   「… -2025」     한국관본점 / 한국관2호점
+// 2025년 줄이 두 파일에서 100% 일치하는 것으로 **2호점 = 台元三店** 임을
+// 확인했다(2026-10-05).
+//
+// opened: 그 지점의 기록이 **실제로 따로 적히기 시작한** 날.
+//
+// 2호점 시트는 2019-11 까지 본점 시트를 통째로 복사해 둔 것이다 — 줄 수도
+// 금액도 글자 하나까지 같다(2007~2019-11, 69,793줄 · NT$33,864,883).
+// 2019-12 부터 따로 적히기 시작한다(그 달 겹침 5%).
+//
+// 사장님(2026-10-05): "2호점은 2019년 11월부터인가 시작했으니까." 가게는
+// 11월에 여셨을 수 있지만 **11월 줄은 아직 복사본**이라, 장부 기준은
+// 12월이다. 그 앞을 넣으면 없던 지출 3천만 원이 생긴다.
 const STORES = [
-  { key: "main", name_zh: "韓國館總店", name_ko: "본점" },
-  { key: "branch3", name_zh: "韓國館台元三店", name_ko: "台元三店" },
+  { key: "main", name_zh: "韓國館總店", name_ko: "본점", opened: null },
+  { key: "branch3", name_zh: "韓國館台元三店", name_ko: "2호점(台元三店)", opened: "2019-12-01" },
 ];
 const storeByKey = (k) => STORES.find((s) => s.key === k) || null;
+
+/**
+ * 엑셀 시트 이름 → 지점. 두 파일의 이름이 다르므로 둘 다 받는다.
+ * 모르는 시트는 null — 짐작해서 넣지 않는다(엉뚱한 지점에 쌓인다).
+ */
+function storeOfSheetName(name) {
+  const s = normName(name);
+  if (!s) return null;
+  if (s.includes("總店") || s.includes("본점")) return "main";
+  if (s.includes("台元") || s.includes("2호점") || s.includes("２호점")) return "branch3";
+  return null;
+}
 
 // 같은 회사인데 종이에 찍힌 상호가 다른 것.
 //
@@ -95,10 +123,15 @@ const num = (v) => {
  * 합계 줄, 메모 줄이 섞여 있는데 그것들은 둘 중 하나가 없다.
  */
 function normalizeRow(raw, storeKey) {
-  if (!raw || !storeByKey(storeKey)) return null;
+  const store = storeByKey(storeKey);
+  if (!raw || !store) return null;
   const date = anyDate(raw.date);
   const name = normName(raw.name);
   if (!date || !name) return null;
+  // 그 지점이 따로 적히기 전의 줄은 **버린다.** 2호점 시트의 2019-11 이전은
+  // 본점 시트의 복사본이라, 넣으면 없던 지출 NT$33,864,883 이 생긴다
+  // (위 STORES 주석). 눈으로는 멀쩡한 줄이라 나중에 절대 못 찾는다.
+  if (store.opened && date < store.opened) return null;
   const qty = num(raw.qty);
   const price = num(raw.price);
   const amountRaw = num(raw.amount);
@@ -294,6 +327,7 @@ module.exports = {
   lineWarnings,
   STORES,
   storeByKey,
+  storeOfSheetName,
   VENDOR_ALIASES,
   normName,
   canonicalVendor,

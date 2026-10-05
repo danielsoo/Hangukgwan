@@ -36,7 +36,19 @@ async function col() {
   return c;
 }
 
-/** 조회 범위. 날짜가 없으면 전체 기간. */
+/**
+ * 조회 범위.
+ *
+ * 날짜를 안 주면 **최근 12개월**이다. 전체가 아니다.
+ *
+ * 2026-10-05: 사장님 엑셀 두 벌을 합치니 154,563줄(2007~2026)이 됐다. 집계가
+ * 그걸 통째로 읽으면 한 번 누를 때마다 Atlas 에서 수십 MB 를 끌어온다. 거의
+ * 늘 보시는 것은 이번 달·올해이므로 기본을 좁혀 둔다.
+ *
+ * 정말 전체를 보시려면 화면이 `all=1` 을 붙인다 — 그때는 느린 것이 당연하고,
+ * 누가 모르고 부른 것이 아니라 일부러 부른 것이다.
+ */
+const MONTHS_DEFAULT = 12;
 function rangeQuery(q) {
   const where = {};
   const store = String(q.store || "").trim();
@@ -47,7 +59,12 @@ function rangeQuery(q) {
     where.date = {};
     if (start) where.date.$gte = start;
     if (end) where.date.$lte = end;
+    return where;
   }
+  if (String(q.all || "") === "1") return where;
+  const d = new Date();
+  d.setMonth(d.getMonth() - MONTHS_DEFAULT);
+  where.date = { $gte: d.toISOString().slice(0, 10) };
   return where;
 }
 

@@ -131,6 +131,54 @@ out.push("\n[단가 추이]");
   check("단가가 따라온다", pts[1].price === 30, "");
 }
 
+out.push("\n[시트 이름 → 지점]");
+{
+  // 사장님 엑셀이 두 벌이고 이름이 다르다. 2025년 줄이 두 파일에서 100%
+  // 일치해 2호점 = 台元三店 임을 확인했다(2026-10-05).
+  const cases = [
+    ["韓國館總店", "main"],
+    ["한국관본점 -2025", "main"],
+    ["韓國館台元三店", "branch3"],
+    ["한국관2호점 -2025", "branch3"],
+    ["주문서", null],
+    ["", null],
+  ];
+  for (const [name, want] of cases) {
+    check(`「${name || "(빈칸)"}」 → ${want || "모름"}`, G.storeOfSheetName(name) === want, `${G.storeOfSheetName(name)}`);
+  }
+  // 화면 쪽에도 같은 규칙이 있다. 어긋나면 한쪽은 넣고 한쪽은 못 읽는다.
+  const client = require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/ingredients.js"), "utf8");
+  const m = /const storeOfSheet = \(name\) => \{[\s\S]*?\n  \};/.exec(client);
+  check("화면에도 같은 규칙이 있다", !!m);
+  if (m) {
+    const fn = new Function(`${m[0]} return storeOfSheet;`)();
+    let same = true;
+    for (const [name, want] of cases) if (fn(name) !== want) same = false;
+    check("★★ 서버와 화면이 같은 답을 낸다", same, cases.map(([n]) => `${n}:${fn(n)}`).join(" "));
+  }
+}
+
+out.push("\n[2호점이 열리기 전의 줄은 버린다]");
+{
+  // 2호점 시트는 2019-11 까지 본점 시트의 **복사본**이다 — 줄 수도 금액도
+  // 글자 하나까지 같다(69,793줄 · NT$33,864,883). 넣으면 없던 지출이 생기고,
+  // 눈으로는 멀쩡한 줄이라 나중에 절대 못 찾는다.
+  const b = G.storeByKey("branch3");
+  check("2호점에 개점일이 적혀 있다", b.opened === "2019-12-01", `${b.opened}`);
+  check("본점에는 없다", G.storeByKey("main").opened === null, "");
+  check(
+    "★★ 2019-11-30 2호점 줄은 안 들어간다 — 복사본이다",
+    G.normalizeRow(row({ date: "2019-11-30" }), "branch3") === null,
+    ""
+  );
+  check("★ 2019-12-01 부터는 들어간다", !!G.normalizeRow(row({ date: "2019-12-01" }), "branch3"), "");
+  check(
+    "★ 본점은 2007년 것도 들어간다 — 거기는 복사본이 아니다",
+    !!G.normalizeRow(row({ date: "2007-10-13" }), "main"),
+    ""
+  );
+}
+
 out.push("\n[그 업체에서 보통 사는 것 — 치는 것을 줄이는 목록]");
 {
   const rows = [
@@ -208,6 +256,21 @@ out.push("\n[넣는 길이 막지 않는가]");
     !/amount|price|qty|math/.test(rejects),
     rejects
   );
+}
+
+out.push("\n[15만 줄을 통째로 끌어오지 않는다]");
+{
+  // 2026-10-05: 엑셀 두 벌을 합치니 154,563줄(2007~2026)이 됐다. 집계가 날짜
+  // 없이 전부 읽으면 한 번 누를 때마다 수십 MB 가 오간다.
+  const src = require("fs").readFileSync(require("path").join(__dirname, "..", "src/routes/ingredients.js"), "utf8");
+  check("★ 날짜를 안 주면 기본 범위가 걸린다", /MONTHS_DEFAULT/.test(src), "");
+  check(
+    "★★ 전체는 일부러 부를 때만 (all=1)",
+    /q\.all \|\| ""\) === "1"\) return where/.test(src),
+    "기본이 전체면 15만 줄을 매번 끌어온다"
+  );
+  const client = require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/ingredients.js"), "utf8");
+  check("★ 화면은 「전체 기간」을 누를 때만 그 깃발을 보낸다", /wantAll = true/.test(client) && /p\.set\("all", "1"\)/.test(client), "");
 }
 
 out.push("\n[사장님만 보는 자리]");
