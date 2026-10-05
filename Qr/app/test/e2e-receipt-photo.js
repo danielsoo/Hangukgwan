@@ -63,11 +63,15 @@ const tinyFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(T
     const got = await page.evaluate(() => ({
       ocr: !!(window.HG_RECEIPT && window.HG_RECEIPT.readRow && window.HG_RECEIPT.labelColumns),
       digits: !!(window.HG_RECEIPT_DIGITS && window.HG_RECEIPT_DIGITS.classify),
-      count: window.HG_RECEIPT_DIGITS ? window.HG_RECEIPT_DIGITS.count : 0,
+      kind: window.HG_RECEIPT_DIGITS ? window.HG_RECEIPT_DIGITS.kind : "",
+      held: window.HG_RECEIPT_DIGITS ? window.HG_RECEIPT_DIGITS.heldOut : 0,
       read: !!(window.HG_RECEIPT_READ && window.HG_RECEIPT_READ.readPhoto),
     }));
     check("표 찾는 코드가 실려 있다", got.ocr, JSON.stringify(got));
-    check("★ 영수증 글씨 판별기가 실려 있다 (견본 400개)", got.digits && got.count === 400, `${got.count}`);
+    // 사장님 영수증 글씨로 학습한 망이다(MNIST 망은 66% 밖에 못 읽었다).
+    // 떼어 둔 사진에서 몇 % 였는지를 파일이 들고 있다 — 바꿀 때 눈에 띄게.
+    check("★ 영수증 글씨로 학습한 망이 실려 있다", got.digits && /^cnn|^mlp/.test(got.kind || ""), `${got.kind}`);
+    check("★ 얼마나 맞는지 파일에 적혀 있다 (0.85 이상)", got.held >= 0.85, `${got.held}`);
     check("사진 읽는 코드가 실려 있다", got.read, "");
   }
 

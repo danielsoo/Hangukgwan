@@ -463,9 +463,17 @@ out.push("\n[수량 × 단가 = 금액 으로 서로 고친다]");
   // 재보니 글자 또렷함을 안 보면 흰 칸의 맞는 비율이 91% → 75% 로 떨어졌다.
   check("★★ 글자가 반반이었으면 고쳐 넣되 노란 칸으로 둔다",
     rr.ok === false && rr.value.price === 300, `ok=${rr.ok} 또렷함=${rr.certainty}`);
-  // 글자가 또렷했다면 흰 칸이다
-  const clear = R.readRow(grid, cs, L, row, { classify: fakeClassify, minDigitP: 0.4 });
+  // 글자가 또렷하고 두 번째 후보와 벌어졌으면 흰 칸이다.
+  //
+  // 기준값은 **판별기에 딸려 있다**(2026-10-05). 신경망의 확신은 가까운
+  // 이웃의 표보다 또렷해서, 예전 기준(0.8)을 그대로 두면 흰 칸이 세 배로
+  // 늘고 맞는 비율이 93% → 80% 로 떨어졌다. 그래서 이 시험은 **기준을
+  // 넘겼을 때 흰 칸이 되는가**만 잰다 — 기준값 자체는 진짜 사진으로 잰다.
+  const clear = R.readRow(grid, cs, L, row, { classify: fakeClassify, minDigitP: 0.4, margin: 0.5 });
   check("★ 글자가 또렷하면 흰 칸", clear.ok === true, `ok=${clear.ok} 여유=${clear.margin}`);
+  check("★★ 기준은 판별기에 맞춰 둔다 (기본은 또렷함 0.95 · 여유 2)",
+    /minDigitP: 0.95/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/receipt-ocr.js"), "utf8"))
+    && /margin: 2,/.test(require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/receipt-ocr.js"), "utf8")), "");
 }
 
 
