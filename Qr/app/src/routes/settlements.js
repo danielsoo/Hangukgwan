@@ -23,6 +23,9 @@ const router = express.Router();
 // 직원들이나 다른 사람한테 엑세스가 될까봐"). 탭이 쓰는 길만 잠근다 — 실시간 주문 화면의
 // 「오전/오후 정산」(shift-close)·밤 마감(cron-close)·LINE 시험은 결산 탭이 아니라 그대로 둔다.
 const settlementUnlocked = require("../sensitiveLock").requireUnlocked("settlement");
+// 직원 결산(오늘 하루만 — requireTodayForStaff)은 비밀번호 없이(2026-10-05 사장님: "직원용 결산 페이지는
+// 비번 없이 해줘 어짜피 하루 밖에안나와서"). 사장님 세션은 그대로 잠근다.
+const settlementUnlockedOwner = (req, res, next) => (req.session && req.session.role === "owner" ? settlementUnlocked(req, res, next) : next());
 
 // 마감 스냅샷도 자기 컬렉션에 산다(src/db.js) — 하루에 한 줄씩 영원히
 // 쌓이는 것이라 store 문서에 두면 계속 커진다. 같은 날짜를 다시 닫으면
@@ -115,7 +118,7 @@ async function saveSettlementSnapshot(snapshot, testId) {
  *
  * 지난 정산 기록(/history)과 기록 저장(/close)은 아래에서 사장님 전용 그대로다.
  */
-router.get("/", requireAdmin, requireTodayForStaff, settlementUnlocked, async (req, res) => {
+router.get("/", requireAdmin, requireTodayForStaff, settlementUnlockedOwner, async (req, res) => {
   const today = taipeiDateString();
   const isOwner = !!(req.session && req.session.role === "owner");
   const start = isOwner ? req.query.start || req.query.date || today : today;

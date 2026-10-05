@@ -138,23 +138,17 @@ function check(name, cond, extra = "") {
     await p2.request.post(`${base}/api/auth/login`, { data: { password: "staffpass123" } });
     await p2.reload({ waitUntil: "networkidle" });
     await p2.waitForTimeout(900);
-    check("★ 직원도 결산 서버 길은 잠겨 있다(423)", (await p2.request.get(`${base}/api/settlements`)).status() === 423, "");
+    // 2026-10-05 사장님: "직원용 결산 페이지는 비번 없이 해줘 어짜피 하루 밖에안나와서"
+    check("★★ 직원 결산(오늘)은 비밀번호 없이 열린다(200)", (await p2.request.get(`${base}/api/settlements`)).status() === 200, "");
+    check("★ 직원은 여전히 오늘만 — 다른 날은 403", (await p2.request.get(`${base}/api/settlements?start=2026-01-01&end=2026-01-01`)).status() === 403, "");
+    check("★ 직원 세션도 급여는 못 본다", (await p2.request.get(`${base}/api/payroll/staff`)).status() !== 200, "");
     await p2.locator('.admin-tabs button[data-tab="settlement"]').click();
-    await p2.waitForTimeout(400);
-    check("★★ 직원이 결산을 누르면 비밀번호 창", await p2.locator("#pinGateBackdrop").isVisible(), "");
-    await p2.fill("#pinGateInput", "staffpass123");
-    await p2.click("#pinGateOk");
     await p2.waitForTimeout(600);
-    check("★★ 직원 로그인 비밀번호로는 안 열린다", await p2.locator("#pinGateBackdrop").isVisible(), "");
-    // 다섯 번 틀리면 5분
-    for (let i = 0; i < 4; i++) {
-      await p2.fill("#pinGateInput", "x" + i);
-      await p2.click("#pinGateOk");
-      await p2.waitForTimeout(400);
-    }
-    check("★ 다섯 번 틀리면 잠시 못 친다", /너무 많이 틀렸어요/.test(await p2.locator("#pinGateError").innerText()), await p2.locator("#pinGateError").innerText());
+    check("★★ 직원이 결산을 누르면 비밀번호 창 없이 바로", !(await p2.locator("#pinGateBackdrop").isVisible()) && !(await p2.locator("#tab-settlement").evaluate((el) => el.hidden)), "");
+    // 다섯 번 틀리면 5분 — 비밀번호 길 자체는 그대로
+    for (let i = 0; i < 5; i++) await p2.request.post(`${base}/api/auth/sensitive-unlock`, { data: { area: "settlement", pin: "x" + i } });
     const r = await p2.request.post(`${base}/api/auth/sensitive-unlock`, { data: { area: "settlement", pin: "135799" } });
-    check("★ 그 동안은 맞는 비밀번호도 안 받는다(429)", r.status() === 429, String(r.status()));
+    check("★ 다섯 번 틀리면 맞는 비밀번호도 안 받는다(429)", r.status() === 429, String(r.status()));
     await c2.close();
   }
 

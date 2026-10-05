@@ -4215,7 +4215,9 @@
       // 급여·결산 — 들어갈 때마다 따로 비밀번호(2026-10-04). 떠날 때는 서버에서도 다시 잠근다.
       const prev = $(".admin-tabs button.active");
       const prevTab = prev && prev.dataset.tab;
-      if (LOCKED_TABS[btn.dataset.tab] && prevTab !== btn.dataset.tab && sensitivePinSet) {
+      // 직원 결산은 오늘 하루만 보이므로 묻지 않는다(2026-10-05 사장님: "직원용 결산 페이지는 비번 없이 해줘").
+      const needPin = LOCKED_TABS[btn.dataset.tab] && !(btn.dataset.tab === "settlement" && currentRole !== "owner");
+      if (needPin && prevTab !== btn.dataset.tab && sensitivePinSet) {
         if (!(await askSensitivePin(btn.dataset.tab, btn.textContent.trim()))) return;
       }
       if (prevTab && LOCKED_TABS[prevTab] && prevTab !== btn.dataset.tab) lockSensitive(prevTab);
