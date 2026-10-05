@@ -604,23 +604,85 @@
   // 품명은 읽지 않는다(한자 손글씨다). 그 업체에서 보통 사는 것 목록으로
   // 고르시게 두고, 종이에서 잘라낸 그림을 옆에 붙인다.
   /**
-   * 사진을 **긴 쪽 1,568점**으로 줄여 보낸다.
+   * 사진을 **표만 잘라 큼직하게** 만들어 보낸다.
    *
-   * 그 위로는 모델이 어차피 줄이고, 토큰만 더 든다(1,568 이면 약 1,800토큰).
-   * 폰 사진은 4,000점이 넘으므로 안 줄이면 통신도 느리고 돈도 더 나간다.
+   * ── 왜 이렇게까지 하는가
+   *
+   * 2026-10-05 눈가림 시험에서 32줄 중 6줄을 틀렸다(81%). 그 여섯 줄을
+   * **확대해서 다시 보니 다섯 줄이 읽혔다** — 단가 「90」을 80 으로, 금액
+   * 「650」을 610 으로 본 것이 전부 해상도 탓이었다.
+   *
+   * 모델에 보내는 사진은 긴 쪽 1,568점이 한도다(그 위로는 저쪽에서 어차피
+   * 줄인다). 그러니 **사진을 키울 수는 없고, 쓸데없는 데를 버려야** 한다:
+   *
+   *  1. 책상·스티로폼 같은 배경을 버리고 **표만** 남긴다. 사진에서 종이가
+   *     60% 쯤 차지하므로 이것만으로 1.5배쯤 커진다.
+   *  2. 줄이 많은 전표는 **위아래로 갈라** 두 장으로 보낸다. 각각 1,568점을
+   *     쓰므로 글씨가 두 배로 커진다. 房信 전표는 17줄이라 이게 크다.
+   *
+   * 표를 못 찾으면 사진 전체를 그냥 보낸다 — 아무것도 안 보내는 것보다 낫다.
    */
-  async function shrinkForAi(file, side) {
-    const max = side || 1568;
+  async function cropsForAi(file, opts) {
+    const o = Object.assign({ side: 1568, pad: 0.03, splitRows: 9, minRows: 6, minCover: 0.25 }, opts || {});
     const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
-    if (!bmp) return null;
-    const sc = Math.min(1, max / Math.max(bmp.width, bmp.height));
-    const w = Math.max(1, Math.round(bmp.width * sc));
-    const h = Math.max(1, Math.round(bmp.height * sc));
-    const cv = document.createElement("canvas");
-    cv.width = w; cv.height = h;
-    cv.getContext("2d").drawImage(bmp, 0, 0, w, h);
+    if (!bmp) return [];
+
+    // 표가 어디인지는 **기기 안에서 찾는다**(receipt-ocr.js). 사진 1,462장에서
+    // 73% 를 찾는다 — 읽기는 못 해도 자리는 잘 찾는다.
+    let box = null, rows = 0;
+    try {
+      const g = await window.HG_RECEIPT_READ.toGray(file, { maxSide: 1600 });
+      const found = window.HG_RECEIPT.findReceipts(g.gray, g.w, g.h);
+      if (found.length === 1 && found[0].grid.box) {
+        const bx = found[0].grid.box;
+        const grid = found[0].grid;
+        // **자르기가 품목을 통째로 날릴 수 있다.** 大川食品行 처럼 가로로 긴
+        // 전표에서 표를 네 줄로만 찾으면, 그 네 줄이 전표 **아래쪽 합계 칸**인
+        // 경우가 있다 — 잘라 보내면 품목이 하나도 안 간다(12장 중 2장).
+        //
+        // 그래서 「표를 제대로 찾았다」고 볼 수 있을 때만 자른다: 줄이 넉넉하고
+        // 사진의 꽤 넓은 자리를 차지해야 한다. 아니면 사진 전체를 보낸다 —
+        // 조금 작게 보이는 것이 아예 안 보이는 것보다 낫다.
+        const covers = ((bx.x1 - bx.x0) * (bx.y1 - bx.y0)) / (g.w * g.h);
+        const n = grid.hLines.length - 1;
+        if (n >= o.minRows && covers >= o.minCover) {
+          const sc = bmp.width / g.w;     // 줄여서 찾았으니 원본 크기로 되돌린다
+          box = { x0: bx.x0 * sc, y0: bx.y0 * sc, x1: bx.x1 * sc, y1: bx.y1 * sc };
+          rows = n;
+        }
+      }
+    } catch (e) { /* 못 찾으면 사진 전체를 쓴다 */ }
+
+    const padX = bmp.width * o.pad, padY = bmp.height * o.pad;
+    const area = box
+      ? {
+          x0: Math.max(0, box.x0 - padX), y0: Math.max(0, box.y0 - padY),
+          x1: Math.min(bmp.width, box.x1 + padX), y1: Math.min(bmp.height, box.y1 + padY),
+        }
+      : { x0: 0, y0: 0, x1: bmp.width, y1: bmp.height };
+
+    const pieces = [];
+    const aw = area.x1 - area.x0, ah = area.y1 - area.y0;
+    // 줄이 많으면 위아래로 가른다. 가운데를 조금 겹쳐 자른다 — 경계에 걸친
+    // 줄이 양쪽에서 반씩 잘리면 아무 데서도 못 읽는다.
+    const split = rows >= o.splitRows && ah > aw;
+    const cuts = split
+      ? [[0, 0.56], [0.44, 1]]
+      : [[0, 1]];
+    for (const [a, b] of cuts) {
+      const sy = area.y0 + ah * a, sh = ah * (b - a);
+      const sc = Math.min(1, o.side / Math.max(aw, sh));
+      const w = Math.max(1, Math.round(aw * sc));
+      const h = Math.max(1, Math.round(sh * sc));
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, area.x0, sy, aw, sh, 0, 0, w, h);
+      pieces.push(cv.toDataURL("image/jpeg", 0.85));
+    }
     if (bmp.close) bmp.close();
-    return cv.toDataURL("image/jpeg", 0.82);
+    return pieces;
   }
 
   /**
@@ -631,15 +693,15 @@
    * 길**로 내려간다. 화면이 멈추지 않는 것이 중요하다.
    */
   async function readByAi(file) {
-    const image = await shrinkForAi(file);
-    if (!image) return null;
+    const images = await cropsForAi(file);
+    if (!images.length) return null;
     let res;
     try {
       res = await fetch("/api/ingredients/read-photo", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          image,
+          images,
           vendor: ($("#ingEntryVendor").value || "").trim(),
           store: $("#ingEntryStore").value || "",
           date: $("#ingEntryDate").value || "",
@@ -813,5 +875,5 @@
     await loadSummary();
   }
 
-  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf, readByAi, shrinkForAi };
+  window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf, readByAi, cropsForAi };
 })();

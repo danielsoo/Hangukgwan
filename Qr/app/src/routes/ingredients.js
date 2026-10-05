@@ -259,14 +259,16 @@ router.post("/read-photo", express.json({ limit: "8mb" }), async (req, res) => {
     // 화면이 「기기 안에서 읽기」로 내려갈 수 있게 분명히 말한다
     return res.status(503).json({ error: "no_key", message: "ANTHROPIC_API_KEY 가 없습니다" });
   }
-  const img = AI.splitDataUrl(body.image);
-  if (!img) return res.status(400).json({ error: "bad_image" });
-  if (img.bytes > AI.MAX_IMAGE_BYTES) return res.status(413).json({ error: "too_big" });
+  // 화면이 표만 잘라 **여러 조각**으로 보낼 수 있다(줄이 많은 전표는 위아래로).
+  const list = Array.isArray(body.images) ? body.images : [body.image];
+  const imgs = list.map(AI.splitDataUrl);
+  if (!imgs.length || imgs.some((x) => !x)) return res.status(400).json({ error: "bad_image" });
+  if (imgs.reduce((a, x) => a + x.bytes, 0) > AI.MAX_IMAGE_BYTES) return res.status(413).json({ error: "too_big" });
 
   await connectDB();
   const db = getDb();
   const cache = db.collection("ingredient_ai");
-  const key = AI.imageKey(img.data);
+  const key = AI.imageKey(imgs.map((x) => x.data).join("|"));
 
   // 1) 전에 읽은 사진인가
   const had = await cache.findOne({ _id: key }).catch(() => null);
@@ -283,6 +285,7 @@ router.post("/read-photo", express.json({ limit: "8mb" }), async (req, res) => {
 
   // 3) 그 업체에서 자주 사는 품목을 같이 준다 — 품명이 장부와 같은 글자로 온다
   let items = [];
+  let known = null;
   const vendor = G.canonicalVendor(body.vendor);
   if (vendor) {
     try {
@@ -291,11 +294,21 @@ router.post("/read-photo", express.json({ limit: "8mb" }), async (req, res) => {
       if (store && store !== "all") where.store = store;
       const rows = await (await col()).find(where, { projection: { _id: 0 } }).toArray();
       const recentFrom = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10);
-      items = G.buildCatalog(rows, { recentFrom }).slice(0, 60).map((i) => i.name);
+      const cat = G.buildCatalog(rows, { recentFrom }).slice(0, 60);
+      items = cat.map((i) => i.name);
+      // 그 품목의 단가가 **늘 같았나**. 들쭉날쭉하면 메우지 않는다.
+      const byName = new Map();
+      for (const r of rows) {
+        if (!(r.price > 0)) continue;
+        const n = String(r.name || "").normalize("NFC").trim();
+        if (!byName.has(n)) byName.set(n, new Set());
+        byName.get(n).add(Math.round(r.price));
+      }
+      known = cat.map((i) => ({ name: i.name, last_price: i.last_price, steady: (byName.get(i.name) || new Set()).size === 1 }));
     } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
   }
 
-  const got = await AI.readReceipt(body.image, { vendor, date: body.date, items });
+  const got = await AI.readReceipt(list, { vendor, date: body.date, items, known });
   if (!got.ok) {
     console.warn("[ingredients] 사진 읽기 실패:", got.error, got.detail || "");
     return res.status(502).json({ error: got.error, message: "사진을 못 읽었습니다" });

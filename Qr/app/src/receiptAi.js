@@ -77,6 +77,10 @@ function buildPrompt(opts) {
     "- 합계·소계·세금 줄은 rows 에 넣지 말고 total 에 넣으세요.",
     "- 빈 줄, 줄 번호만 있는 줄은 넣지 마세요.",
   ];
+  if (o.pieces > 1) {
+    lines.push(`- 사진 ${o.pieces}장은 **같은 전표의 위쪽과 아래쪽**입니다. 가운데가 조금 겹칩니다 —`);
+    lines.push("  겹친 줄을 두 번 넣지 마세요.");
+  }
   if (o.vendor) lines.push(`- 이 전표는 「${o.vendor}」 것입니다.`);
   if (o.date) lines.push(`- 날짜는 ${o.date} 로 알고 있습니다.`);
   if (items.length) {
@@ -117,8 +121,39 @@ const num = (v) => {
  * 모델이 셈을 지키라고 해도 가끔 어긋난다. 어긋난 줄은 고치지 않고
  * **확실치 않음**으로 넘긴다 — 화면이 노란 줄로 보여 주고 사장님이 정한다.
  */
+/**
+ * 종이에 **단가가 아예 안 적힌** 줄을 장부로 메운다.
+ *
+ * 阿麵製麵 전표는 품명과 수량만 적고 단가·금액을 안 쓴다 — 사장님이 외워서
+ * 적으신다(拉麵은 늘 120). 읽어서는 나올 수가 없다. 2026-10-05 눈가림 시험
+ * 40줄 중 2줄이 이것이었다.
+ *
+ * 그 업체·그 품목의 단가가 **늘 같았을 때만** 메운다. 값이 들쭉날쭉한 품목을
+ * 메우면 틀린 금액이 조용히 들어간다. 메운 줄은 **sure 를 false** 로 둬서
+ * 화면이 노란 줄로 보여 준다.
+ */
+function fillFromLedger(rows, known) {
+  if (!known || !known.length) return rows;
+  const by = new Map();
+  for (const k of known) {
+    const name = String(k.name || "").normalize("NFC").trim();
+    if (name) by.set(name, k);
+  }
+  for (const r of rows) {
+    if (r.price !== "" || !r.name) continue;
+    const k = by.get(r.name);
+    // last_price 만 있고 늘 같았는지 모르면 메우지 않는다
+    if (!k || k.last_price == null || k.steady === false) continue;
+    r.price = k.last_price;
+    r.filled = true;
+    r.sure = false;
+    if (r.amount === "" && r.qty !== "") r.amount = Math.round(Number(r.qty) * k.last_price * 100) / 100;
+  }
+  return rows;
+}
+
 function checkRows(obj, opts) {
-  const o = Object.assign({ maxRows: 60 }, opts || {});
+  const o = Object.assign({ maxRows: 60, known: null }, opts || {});
   const rows = [];
   for (const r of (obj.rows || []).slice(0, o.maxRows)) {
     const qty = num(r && r.qty);
@@ -145,6 +180,7 @@ function checkRows(obj, opts) {
       warn,
     });
   }
+  fillFromLedger(rows, o.known);
   const total = num(obj.total);
   // 인쇄된 合計가 있으면 더해 본다 — 영수증 한 장을 통째로 검사한다
   let sum = 0, haveAll = rows.length > 0;
@@ -162,6 +198,10 @@ function checkRows(obj, opts) {
  * @returns {{ok, rows, total, totalOk, usage, cached}|{ok:false, error}}
  */
 async function readReceipt(image, opts) {
+  // 한 장이든 여러 장이든 받는다. 줄이 많은 전표는 화면이 위아래로 갈라
+  // 보내므로(cropsForAi), 두 조각을 **한 번에** 물어본다 — 따로 물으면
+  // 겹친 줄이 두 번 들어온다.
+  const list = Array.isArray(image) ? image : [image];
   const o = Object.assign({
     key: process.env.ANTHROPIC_API_KEY,
     model: process.env.AI_MODEL || DEFAULT_MODEL,
@@ -169,21 +209,14 @@ async function readReceipt(image, opts) {
     fetch: global.fetch,
   }, opts || {});
   if (!o.key) return { ok: false, error: "no_key" };
-  const img = splitDataUrl(image);
-  if (!img) return { ok: false, error: "bad_image" };
-  if (img.bytes > MAX_IMAGE_BYTES) return { ok: false, error: "too_big" };
+  const imgs = list.map(splitDataUrl);
+  if (!imgs.length || imgs.some((x) => !x)) return { ok: false, error: "bad_image" };
+  const bytes = imgs.reduce((a, x) => a + x.bytes, 0);
+  if (bytes > MAX_IMAGE_BYTES) return { ok: false, error: "too_big" };
 
-  const body = {
-    model: o.model,
-    max_tokens: 2000,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "image", source: { type: "base64", media_type: img.media, data: img.data } },
-        { type: "text", text: buildPrompt(o) },
-      ],
-    }],
-  };
+  const content = imgs.map((x) => ({ type: "image", source: { type: "base64", media_type: x.media, data: x.data } }));
+  content.push({ type: "text", text: buildPrompt(Object.assign({ pieces: imgs.length }, o)) });
+  const body = { model: o.model, max_tokens: 2000, messages: [{ role: "user", content }] };
   const ctrl = typeof AbortController === "function" ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), o.timeoutMs) : null;
   let res;
@@ -213,7 +246,7 @@ async function readReceipt(image, opts) {
     : "";
   const parsed = parseAnswer(text);
   if (!parsed) return { ok: false, error: "bad_answer", detail: text.slice(0, 200) };
-  const checked = checkRows(parsed);
+  const checked = checkRows(parsed, { known: o.known });
   return {
     ok: true,
     ...checked,
@@ -223,6 +256,6 @@ async function readReceipt(image, opts) {
 }
 
 module.exports = {
-  readReceipt, buildPrompt, parseAnswer, checkRows, splitDataUrl, imageKey,
+  readReceipt, buildPrompt, parseAnswer, checkRows, fillFromLedger, splitDataUrl, imageKey,
   API, DEFAULT_MODEL, MAX_IMAGE_BYTES,
 };
