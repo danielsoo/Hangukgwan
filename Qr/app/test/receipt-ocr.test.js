@@ -477,6 +477,23 @@ out.push("\n[수량 × 단가 = 금액 으로 서로 고친다]");
 }
 
 
+
+out.push("\n[많이 기운 사진 — 손으로 찍으면 3~6° 가 예사다]");
+{
+  // 2026-10-05: 기울기 찾는 범위가 ±0.035(2°)뿐이어서, 그보다 더 기운 사진은
+  // 어림이 **범위 끝에 붙어** 버리고 가로선이 통째로 사라졌다. 진짜 사진에서
+  // 선 후보가 29개에서 **1개**가 됐다. 그런 사진은 「표 못 찾음」이 된다.
+  for (const skew of [0.05, -0.05, 0.09, -0.09]) {
+    const w = 700, h = 1200, rows = 12, cols = 5;
+    const g = drawReceipt({ w, h, rows, cols, skew, widths: [37, 13, 13, 21, 11] });
+    const got = R.estimateSkew(g, w, h, R.otsu(g));
+    check(`★★ 기울기 ${skew} 를 비슷하게 잰다`, Math.abs(got - skew) < 0.012, `${got.toFixed(4)}`);
+    const grid = R.findGrid(g, w, h);
+    check(`★★ 기울기 ${skew} 에서도 가로선을 다 찾는다 (13줄)`, grid.hLines.length === rows + 1, `${grid.hLines.length}`);
+    check(`★ 기울기 ${skew} 에서도 칸을 가린다`, !!R.labelColumns(R.cells(grid)), "");
+  }
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

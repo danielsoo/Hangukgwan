@@ -99,13 +99,22 @@
    * 모이면 그 줄만 값이 크게 튀기 때문이다.
    */
   function estimateSkew(gray, w, h, th, opts) {
-    const o = Object.assign({ max: 0.035, steps: 29 }, opts || {});
-    let best = 0, bestScore = -1;
-    // 가로로 듬성듬성 본다 — 기울기를 재는 데 모든 점이 필요하지는 않다.
+    // **넓게 한 번, 그 자리를 촘촘히 한 번.**
+    //
+    // 2026-10-05: 범위를 ±0.035(2°)로 두었더니, 그보다 더 기운 사진에서
+    // 어림이 끝에 붙어 버리고(정확히 -0.035) 가로선이 통째로 사라졌다 —
+    // 한 사진에서 선 후보가 29개에서 **1개**가 됐다. 손으로 찍거나 비뚤게
+    // 올려놓은 사진은 3~6° 가 예사다.
+    //
+    // 넓게만 보면 걸음이 성겨서(0.01 = 0.6°) 제대로 못 맞추고, 촘촘하게만
+    // 보면 느리다. 그래서 두 번 본다.
+    const o = Object.assign({ max: 0.14, coarse: 29, fine: 17 }, opts || {});
     const xStep = Math.max(1, Math.round(w / 400));
-    for (let s = 0; s < o.steps; s++) {
-      const slope = -o.max + (2 * o.max * s) / (o.steps - 1);
-      const prof = new Float64Array(h);
+    const prof = new Float64Array(h);
+
+    /** 그 기울기로 되돌려 놓았을 때 가로선이 얼마나 또렷하게 모이나. */
+    function sharpness(slope) {
+      prof.fill(0);
       for (let x = 0; x < w; x += xStep) {
         const shift = Math.round(slope * (x - w / 2));
         for (let y = 0; y < h; y++) {
@@ -120,9 +129,22 @@
         const d = prof[y] - prof[y - 1];
         score += d * d;
       }
-      if (score > bestScore) { bestScore = score; best = slope; }
+      return score;
     }
-    return best;
+
+    function scan(lo, hi, steps) {
+      let best = (lo + hi) / 2, bestScore = -1;
+      for (let i = 0; i < steps; i++) {
+        const slope = lo + ((hi - lo) * i) / (steps - 1);
+        const sc = sharpness(slope);
+        if (sc > bestScore) { bestScore = sc; best = slope; }
+      }
+      return best;
+    }
+
+    const step = (2 * o.max) / (o.coarse - 1);
+    const rough = scan(-o.max, o.max, o.coarse);
+    return scan(rough - step, rough + step, o.fine);
   }
 
   /**
