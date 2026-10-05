@@ -258,6 +258,19 @@ out.push("\n[넣는 길이 막지 않는가]");
   );
 }
 
+out.push("\n[15만 줄을 보내다 한 번 걸려도 처음부터 다시 하지 않는다]");
+{
+  const client = require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/ingredients.js"), "utf8");
+  check("★ 덩이 보내기를 다시 시도한다", /for \(let attempt = 0; attempt < 3; attempt\+\+\)/.test(client), "");
+  check(
+    "★★ 다시 보내도 안전한 이유가 적혀 있다 — 날짜를 통째로 갈아끼우므로",
+    /갈아끼우기[\s\S]{0,120}두 배가 되지 않는다/.test(client),
+    "왜 안전한지 안 적어두면 다음 사람이 이 되풀이를 지운다"
+  );
+  // 한 날짜가 두 덩이로 쪼개지면 뒤 덩이가 앞 덩이를 지운다.
+  check("★★ 한 날짜를 쪼개 보내지 않는다", /chunk\.length \+ rows\.length > 800/.test(client), "");
+}
+
 out.push("\n[15만 줄을 통째로 끌어오지 않는다]");
 {
   // 2026-10-05: 엑셀 두 벌을 합치니 154,563줄(2007~2026)이 됐다. 집계가 날짜

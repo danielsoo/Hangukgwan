@@ -145,20 +145,36 @@
         byDate.get(d).push(r);
       }
       let chunk = [];
+      // 15만 줄이면 덩이가 200개 가까이 된다. 그중 하나가 네트워크 때문에
+      // 한 번 실패했다고 3분짜리 작업을 처음부터 다시 하게 하지 않는다.
+      //
+      // 다시 보내도 안전하다 — 서버가 **그 날짜를 통째로 갈아끼우기** 때문에
+      // 같은 덩이를 두 번 보내도 줄이 두 배가 되지 않는다.
       const send = async () => {
         if (!chunk.length) return;
-        const res = await fetch("/api/ingredients/import", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ store: b.store, rows: chunk }),
-        });
-        if (!res.ok) throw new Error(`${res.status}`);
-        const got = await res.json();
-        inserted += got.inserted || 0;
-        skipped += got.skipped || 0;
-        done += chunk.length;
-        logLine(esc(fmt("ingImportSendingFmt", { done, total: totalLines })));
-        chunk = [];
+        let lastErr = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await fetch("/api/ingredients/import", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ store: b.store, rows: chunk }),
+            });
+            if (!res.ok) throw new Error(`${res.status}`);
+            const got = await res.json();
+            inserted += got.inserted || 0;
+            skipped += got.skipped || 0;
+            done += chunk.length;
+            logLine(esc(fmt("ingImportSendingFmt", { done, total: totalLines })));
+            chunk = [];
+            return;
+          } catch (e) {
+            lastErr = e;
+            // 잠깐 쉬고 다시. 서버가 숨 돌릴 틈을 준다.
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+          }
+        }
+        throw lastErr || new Error("send_failed");
       };
       try {
         for (const [, rows] of byDate) {
