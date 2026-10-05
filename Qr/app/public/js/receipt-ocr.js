@@ -212,13 +212,19 @@
    * 숫자 하나가 통째로 달라진다.
    */
   function cells(grid, opts) {
-    const o = Object.assign({ pad: 2, minW: 8, minH: 8 }, opts || {});
+    // 여백은 **칸 크기에 맞춰** 잡는다. 고정 2점으로 잘랐더니 칸마다 선이
+    // 딸려 들어와서, 아무것도 안 쓴 줄에도 잉크가 4~7% 나왔다 — 칸 높이 73점에
+    // 위아래 선 2점씩이면 꼭 그만큼이다. 그래서 「이 줄은 썼나」를 가릴 수가
+    // 없었다(2026-10-05).
+    const o = Object.assign({ padFrac: 0.1, padMin: 3, minW: 8, minH: 8 }, opts || {});
     const out = [];
     const { hLines: H, vLines: V } = grid;
     for (let r = 0; r + 1 < H.length; r++) {
+      const padY = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((H[r + 1] - H[r]) * o.padFrac));
       for (let c = 0; c + 1 < V.length; c++) {
-        const x0 = V[c] + o.pad, x1 = V[c + 1] - o.pad;
-        const y0 = H[r] + o.pad, y1 = H[r + 1] - o.pad;
+        const padX = o.pad != null ? o.pad : Math.max(o.padMin, Math.round((V[c + 1] - V[c]) * o.padFrac));
+        const x0 = V[c] + padX, x1 = V[c + 1] - padX;
+        const y0 = H[r] + padY, y1 = H[r + 1] - padY;
         if (x1 - x0 < o.minW || y1 - y0 < o.minH) continue;
         out.push({ row: r, col: c, x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 });
       }

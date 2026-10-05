@@ -31,6 +31,8 @@ function check(name, cond, extra = "") {
 const PAPER = 232; // 노란 전표도 회색으로 바꾸면 이쯤 밝다
 const LINE = 96;   // 인쇄된 파란 선
 const PEN = 70;    // 손글씨
+const HALO = 150;  // 선 가장자리. 스캔하면 선이 칼같지 않고 번진다 —
+                   // 이 번짐 때문에 칸을 자를 때 여백을 넉넉히 둬야 한다.
 
 /**
  * 영수증 한 장을 그린다.
@@ -51,7 +53,7 @@ function drawReceipt(o) {
   // 가로선
   for (let r = 0; r <= o.rows; r++) {
     const y = Math.round(y0 + ((y1 - y0) * r) / o.rows);
-    for (let x = x0; x <= x1; x++) { put(x, y, LINE); put(x, y + 1, LINE); }
+    for (let x = x0; x <= x1; x++) { put(x, y - 1, HALO); put(x, y, LINE); put(x, y + 1, LINE); put(x, y + 2, HALO); }
   }
   // 세로선 — 기운 종이에서는 x 가 아래로 갈수록 밀린다
   for (let c = 0; c <= o.cols; c++) {
@@ -60,7 +62,12 @@ function drawReceipt(o) {
       const x = bx - Math.round(skew * (y - h / 2));
       if (x >= 0 && x < w) {
         const yy = y + Math.round(skew * (x - w / 2));
-        if (yy >= 0 && yy < h) { g[yy * w + x] = LINE; if (x + 1 < w) g[yy * w + x + 1] = LINE; }
+        if (yy >= 0 && yy < h) {
+          if (x - 1 >= 0) g[yy * w + x - 1] = HALO;
+          g[yy * w + x] = LINE;
+          if (x + 1 < w) g[yy * w + x + 1] = LINE;
+          if (x + 2 < w) g[yy * w + x + 2] = HALO;
+        }
       }
     }
   }
@@ -108,10 +115,54 @@ out.push("\n[반듯한 영수증]");
   check("★ 글씨 있는 칸을 알아본다", withInk >= 55, `${withInk}`);
 }
 
+out.push("\n[쓴 줄과 빈 줄을 가린다]");
+{
+  // 2026-10-05: 칸을 자를 때 여백을 **2점으로 못 박았더니** 칸마다 선이
+  // 딸려 들어와서, 아무것도 안 쓴 줄에도 잉크가 4~7% 나왔다 — 칸 높이 73점에
+  // 위아래 선이 2점씩이면 꼭 그만큼이다. 그래서 「이 줄은 썼나」를 가릴 수가
+  // 없었고, 영수증마다 종이 줄 수가 엑셀보다 5~11줄 많게 세어졌다.
+  //
+  // 여백을 칸 크기에 맞춰 잡으니 빈 줄 0~3%, 쓴 줄 5~27% 로 갈렸다.
+  const w = 700, h = 1200, rows = 12, cols = 4;
+  // 위 6줄만 쓴 영수증을 그린다
+  const g = drawReceipt({ w, h, rows, cols, ink: false });
+  const m = Math.round(w * 0.06);
+  const x0 = m, x1 = w - m, y0 = Math.round(h * 0.25), y1 = h - m;
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cx = Math.round(x0 + ((x1 - x0) * (c + 0.4)) / cols);
+      const cy = Math.round(y0 + ((y1 - y0) * (r + 0.5)) / rows);
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -14; dx <= 14; dx++) {
+        const yy = cy + dy, xx = cx + dx;
+        if (xx >= 0 && xx < w && yy >= 0 && yy < h) g[yy * w + xx] = PEN;
+      }
+    }
+  }
+  const grid = R.findGrid(g, w, h);
+  const cs = R.cells(grid);
+  const inked = new Set();
+  for (const c of cs) if (R.inkOf(g, w, c, grid.threshold) > 0.05) inked.add(c.row);
+  check("★★ 쓴 줄만 센다 (6줄)", inked.size === 6, `${inked.size}: ${[...inked].sort((a, b) => a - b).join(",")}`);
+  check("★ 위 6줄이다", [...inked].sort((a, b) => a - b).join(",") === "0,1,2,3,4,5", [...inked].sort((a, b) => a - b).join(","));
+
+  // 여백이 좁으면 **빈 칸에 선 번짐이 남는다.** 그게 실제로 났던 일이다 —
+  // 빈 줄에도 잉크가 4~7% 나와서 「이 줄은 썼나」를 가릴 수가 없었다.
+  const emptyCell = (list) => list.find((c) => c.row === 10 && c.col === 1);
+  const inkWide = R.inkOf(g, w, emptyCell(cs), grid.threshold);
+  const inkTight = R.inkOf(g, w, emptyCell(R.cells(grid, { pad: 1 })), grid.threshold);
+  check("★★ 빈 칸은 거의 깨끗하다", inkWide < 0.01, `${(inkWide * 100).toFixed(1)}%`);
+  check(
+    "★★ 여백을 좁히면 선 번짐이 남는다 — 그래서 칸 크기에 맞춰 잡는다",
+    inkTight > inkWide * 3,
+    `좁게 ${(inkTight * 100).toFixed(1)}% vs 넉넉히 ${(inkWide * 100).toFixed(1)}%`
+  );
+}
+
+
 out.push("\n[기울어진 영수증 — 여기서 제일 많이 깨졌다]");
 {
   // 2026-10-05: 처음에는 y 만 되돌려서 가로선은 찾는데 세로선이 0~2개였다.
-  // 기울기 1.6°, 표 높이 1,300점이면 세로선의 x 가 36점 밀린다.
+  // 기울기 1.6°, 표 높이 1,324점이면 세로선의 x 가 36점 밀린다.
   const w = 700, h = 1200;
   for (const skew of [0.012, -0.012, 0.028]) {
     const g = drawReceipt({ w, h, rows: 12, cols: 5, skew });
@@ -136,13 +187,12 @@ out.push("\n[한 장에 두 장 — 사장님 스캔에 많다]");
     for (let y = 0; y < ph; y++) for (let x = 0; x < pw; x++) g[y * w + (ox + x)] = one[y * pw + x];
   }
   const panels = R.splitPanels(g, w, h);
-  check("★★ 두 조각으로 가른다", panels.length === 2, `${panels.length}  ${JSON.stringify(panels)}`);
+  check("★★ 두 조각으로 가른다", panels.length === 2, `${panels.length}`);
   const found = R.findReceipts(g, w, h);
   check("★★ 영수증 둘을 따로 찾는다", found.length === 2, `${found.length}`);
   if (found.length === 2) {
-    const a = found[0].grid, b = found[1].grid;
-    check("★ 왼쪽은 세로선 6줄", a.vLines.length === 6, `${a.vLines.length}`);
-    check("★ 오른쪽은 세로선 5줄 — 따로 본 것이다", b.vLines.length === 5, `${b.vLines.length}`);
+    check("★ 왼쪽은 세로선 6줄", found[0].grid.vLines.length === 6, `${found[0].grid.vLines.length}`);
+    check("★ 오른쪽은 세로선 5줄 — 따로 본 것이다", found[1].grid.vLines.length === 5, `${found[1].grid.vLines.length}`);
   }
 }
 
@@ -150,13 +200,10 @@ out.push("\n[없는 표를 지어내지 않는다]");
 {
   const w = 500, h = 800;
   const blank = new Uint8Array(w * h).fill(PAPER);
-  const g1 = R.findGridAuto(blank, w, h);
-  check("★★ 빈 종이에서는 표를 못 찾았다고 한다", !g1, JSON.stringify(g1 && { h: g1.hLines.length, v: g1.vLines.length }));
-  // 글씨만 잔뜩 있고 선은 없는 종이
+  check("★★ 빈 종이에서는 표를 못 찾았다고 한다", !R.findGridAuto(blank, w, h), "");
   const noisy = new Uint8Array(w * h).fill(PAPER);
   for (let i = 0; i < 4000; i++) noisy[Math.floor(Math.random() * noisy.length)] = PEN;
-  const g2 = R.findGridAuto(noisy, w, h);
-  check("★★ 글씨만 있는 종이에서도 표를 지어내지 않는다", !g2, JSON.stringify(g2 && { h: g2.hLines.length, v: g2.vLines.length }));
+  check("★★ 글씨만 있는 종이에서도 표를 지어내지 않는다", !R.findGridAuto(noisy, w, h), "");
 }
 
 out.push("\n[누워서 스캔된 것]");
