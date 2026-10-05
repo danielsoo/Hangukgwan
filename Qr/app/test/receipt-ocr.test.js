@@ -494,6 +494,50 @@ out.push("\n[많이 기운 사진 — 손으로 찍으면 3~6° 가 예사다]")
   }
 }
 
+
+out.push("\n[칸을 셈으로 가린다 — 업체마다 전표가 다르다]");
+{
+  // 2026-10-05: 너비로 가리던 규칙은 房信菓菜行 전표에 맞춘 것이었다. 업체
+  // 20곳을 재보니 房信 만 맞았다 — 칸 차례도 개수도 업체마다 다르고, 표를
+  // 4칸으로 찾을 때와 6칸으로 찾을 때 번호가 통째로 밀린다.
+  //
+  // 그래서 영수증 자체에 물어본다: 칸 두 개를 (단가, 금액)으로 놓고 줄마다
+  // 금액 ÷ 단가 가 그럴듯한 수량이 되는 줄을 센다.
+  //
+  // 아래는 **품명이 제일 넓지 않은** 전표다 — 품명 칸이 둘로 갈린 경우
+  // (台裕行 에서 실제로 그렇게 잡힌다). 너비 규칙은 여기서 틀린다.
+  const w = 700, h = 1200, cols = 6;
+  const g = drawReceipt({ w, h, rows: 10, cols, ink: false, widths: [14, 14, 11, 11, 24, 10] });
+  const grid = R.findGrid(g, w, h);
+  const cs = R.cells(grid);
+  // 단가 칸(3)에 2, 금액 칸(4)에 6 을 그려 둔다 — 6 ÷ 2 = 3 (정수 수량)
+  const paint = (col, row, n) => {
+    const cell = cs.find((c) => c.row === row && c.col === col);
+    if (!cell) return;
+    const step = Math.floor(cell.w / (n + 1));
+    for (let i = 0; i < n; i++) {
+      const cx = cell.x0 + step * (i + 1) - 3;
+      const cy = Math.floor((cell.y0 + cell.y1) / 2);
+      for (let dy = -14; dy <= 14; dy++) for (let dx = -6; dx <= 6; dx++) {
+        const x = cx + dx, y = cy + dy;
+        if (x > cell.x0 && x < cell.x1 - 1 && y > cell.y0 && y < cell.y1 - 1) g[y * w + x] = PEN;
+      }
+    }
+  };
+  for (let r = 1; r <= 4; r++) { paint(3, r, 1); paint(4, r, 2); }
+  // 가짜 판별기 — 무엇을 보든 2 라고 한다. 그러면 단가 칸은 「2」, 금액 칸은
+  // 「22」로 읽히고 22 ÷ 2 = 11 (정수 수량)이라 그 조합이 뽑혀야 한다.
+  const probs = (d) => { const p = new Array(10).fill(0.0002); p[d] = 0.99; return p; };
+  const fake = () => ({ digit: 2, p: 0.99, probs: probs(2) });
+  const L = R.pickColumns(grid, R.cells(R.findGrid(g, w, h)), { classify: fake });
+  check("★★ 셈이 맞는 칸 조합을 찾는다 (단가 3 · 금액 4)", !!L && L.price === 3 && L.amount === 4, L ? JSON.stringify({ p: L.price, a: L.amount }) : "못 가림");
+  check("★ 품명이 제일 넓지 않아도 가린다", !!L, "");
+  // 아무것도 안 쓴 전표에서는 지어내지 않는다
+  const blank = drawReceipt({ w, h, rows: 10, cols, ink: false, widths: [14, 14, 11, 11, 24, 10] });
+  const bg = R.findGrid(blank, w, h);
+  check("★★ 빈 전표에서는 칸을 지어내지 않는다", R.pickColumns(bg, R.cells(bg), { classify: fake }) === null, "");
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

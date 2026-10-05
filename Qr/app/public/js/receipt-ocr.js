@@ -505,6 +505,91 @@
   }
 
   /**
+   * 어느 칸이 수량·단가·금액인지 — **셈이 맞는 조합을 영수증마다 찾는다.**
+   *
+   * 너비로 가리던 규칙(labelColumns)은 房信菓菜行 전표에 맞춘 것이었다.
+   * 업체 20곳을 재보니 房信 만 맞고 나머지는 거의 다 틀렸다 — 전표마다 칸
+   * 차례와 개수가 다르고, 표를 4칸으로 찾을 때와 6칸으로 찾을 때 번호가
+   * 통째로 밀린다. 업체별 표를 따로 적어 두는 길도 재봤지만(tools/calibrate2.js)
+   * 같은 업체가 4·5·6·7·11칸으로 들쭉날쭉 잡혀서 번호를 기준 삼을 수 없었다.
+   *
+   * 그래서 **그 영수증 자체에 물어본다.** 칸 두 개를 (단가, 금액)으로 놓고
+   * 줄마다 금액 ÷ 단가 를 구해, 그 값이 그럴듯한 수량(정수 87.2% · 반 5.2%)이
+   * 되는 줄을 센다. 엉뚱한 조합은 거의 안 맞고 맞는 조합은 대부분 맞는다 —
+   * 사장님 장부 154,563줄에서 수량 × 단가 = 금액 이 99.2% 지킨다.
+   *
+   * 글자를 못 읽어도 어느 정도 쓸 수 있다. 한 줄이 틀려도 여러 줄이 같은
+   * 조합을 가리키기 때문이다.
+   */
+  function pickColumns(grid, cs, opts) {
+    const o = Object.assign({ inkMin: 0.05, minRows: 2, minHit: 0.5, classify: null }, opts || {});
+    if (!cs || !cs.length) return null;
+    const cols = [...new Set(cs.map((c) => c.col))].sort((a, b) => a - b);
+    if (cols.length < 3) return null;
+    const rowNos = [...new Set(cs.map((c) => c.row))].sort((a, b) => a - b);
+    const body = rowNos.slice(1);      // 맨 윗줄은 인쇄된 머리글
+    if (!body.length) return null;
+
+    // 칸마다 줄마다 한 번씩만 읽어 둔다
+    const val = new Map();
+    const fill = new Map();
+    for (const c of cols) {
+      let n = 0;
+      for (const r of body) {
+        const cell = cs.find((x) => x.row === r && x.col === c);
+        if (!cell) continue;
+        if (inkOf(grid.gray, grid.w, cell, grid.threshold) <= o.inkMin) continue;
+        n++;
+        const rd = readNumber(grid.gray, grid.w, cell, grid.threshold, o.classify, opts);
+        if (rd && rd.value > 0) val.set(`${r}|${c}`, rd.value);
+      }
+      fill.set(c, n);
+    }
+
+    let best = null;
+    for (const price of cols) {
+      for (const amount of cols) {
+        if (amount <= price) continue;     // 전표는 수량·단가·금액 차례다
+        let hit = 0, tot = 0, score = 0;
+        for (const r of body) {
+          const P = val.get(`${r}|${price}`), A = val.get(`${r}|${amount}`);
+          if (P == null || A == null) continue;
+          tot++;
+          const b = qtyPlausibility(A / P);
+          if (b >= 0.3) { hit++; score += b; }
+          else score += Math.max(-1, b);
+        }
+        if (tot < o.minRows) continue;
+        // 같은 점수면 **붙어 있는 칸**을 고른다. 전표는 단가 바로 옆이 금액이다.
+        const adj = amount === price + 1 ? 0.3 : 0;
+        const s2 = score / tot + adj;
+        if (!best || s2 > best.s2 || (s2 === best.s2 && tot > best.tot)) best = { price, amount, hit, tot, s2 };
+      }
+    }
+    if (!best || best.hit < best.tot * o.minHit) return null;
+
+    // 수량은 단가 왼쪽에서 **글씨가 있는** 제일 가까운 칸. 못 찾으면 null —
+    // 어차피 금액 ÷ 단가 로 구하므로 없어도 된다.
+    let qty = null;
+    for (let c = best.price - 1; c >= 0; c--) {
+      if ((fill.get(c) || 0) >= body.length * 0.1) { qty = c; break; }
+    }
+    // 품명은 수량(없으면 단가) 왼쪽에서 제일 넓은 칸
+    const leftOf = qty == null ? best.price : qty;
+    let name = null, nw = -1;
+    for (const c of cols) {
+      if (c >= leftOf) continue;
+      const w = Math.max(...cs.filter((x) => x.col === c).map((x) => x.w));
+      if (w > nw) { nw = w; name = c; }
+    }
+    return {
+      name, qty, price: best.price, amount: best.amount,
+      note: cols.filter((c) => c > best.amount),
+      hit: best.hit, rows: best.tot,
+    };
+  }
+
+  /**
    * 칸 하나에서 **숫자 글자를 하나씩 떼어낸다.**
    *
    * 붙어 있는 잉크 덩어리를 하나의 글자로 본다. 손으로 쓴 숫자는 보통 서로
@@ -1089,7 +1174,7 @@
     return out;
   }
 
-  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, labelColumns, glyphs, toGlyphImage, readNumber, readRow, qtyPlausibility, pickClassifier };
+  const api = { otsu, longestRun, mergeBands, estimateSkew, findGrid, findGridAuto, findReceipts, splitPanels, crop, rotate90, gridScore, cells, inkOf, combLines, labelColumns, pickColumns, glyphs, toGlyphImage, readNumber, readRow, qtyPlausibility, pickClassifier };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof window !== "undefined") window.HG_RECEIPT = api;
 })();

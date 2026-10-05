@@ -121,7 +121,10 @@
     const out = [];
     for (const { grid } of found) {
       const cs = R.cells(grid);
-      const L = R.labelColumns(cs);
+      // **그 영수증 자체에 물어본다** — 칸 두 개를 (단가, 금액)으로 놓고
+      // 금액 ÷ 단가 가 그럴듯한 수량이 되는 조합을 고른다(pickColumns).
+      // 못 고르면 너비로 가리는 옛 규칙(labelColumns)으로 내려간다.
+      const L = R.pickColumns(grid, cs, o) || R.labelColumns(cs);
       if (!L) { out.push({ rows: [], warn: "no-columns" }); continue; }
       const rowNos = [...new Set(cs.map((c) => c.row))].sort((a, b) => a - b);
       const at = (r, col) => cs.find((x) => x.row === r && x.col === col);
