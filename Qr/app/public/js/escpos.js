@@ -241,8 +241,16 @@
     out += divider(W) + "\n";
 
     o.items.forEach((it) => {
-      const name = truncateToWidth(itemName(it, priceCopy), W - 6);
-      out += CMD.BOLD_ON + padLine(name, `x${it.qty}`, W) + CMD.BOLD_OFF + "\n";
+      // 넘치면 다음 줄로(2026-10-06 — 잘리면 「(草莓)」·「(牛奶)」를 못 가린다).
+      let rest = itemName(it, priceCopy);
+      const first = truncateToWidth(rest, W - 6).replace(/…$/, "");
+      rest = rest.slice(first.length);
+      out += CMD.BOLD_ON + padLine(first, `x${it.qty}`, W) + CMD.BOLD_OFF + "\n";
+      while (rest) {
+        const part = truncateToWidth(rest, W - 6).replace(/…$/, "") || rest.slice(0, 1);
+        out += CMD.BOLD_ON + part + CMD.BOLD_OFF + "\n";
+        rest = rest.slice(part.length);
+      }
       // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
       // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
       if (it.option_choice) out += "  └ " + optionLine(it) + "\n";
@@ -369,6 +377,38 @@
       else hi = mid - 1;
     }
     return lo <= 0 ? "" : text.slice(0, lo) + "…";
+  }
+
+  // 넘치면 자르지 않고 다음 줄로 — 2026-10-06 사장님: "잘리지 말고 다음 줄로 넘겨줘". 「Pororo ZERO兒童飲料
+  // (草莓)」가 「…(…」로 잘려 딸기·우유를 못 가렸다. 첫 줄은 firstMax, 다음 줄부터 restMax 안에.
+  // 끊는 자리는 빈칸·「(」 앞·「)」「-」 뒤를 먼저 찾되, 줄의 40% 보다 앞이면 그냥 글자에서 끊는다.
+  function wrapText(ctx, text, firstMax, restMax) {
+    const chars = Array.from(String(text || ""));
+    const out = [];
+    let max = firstMax;
+    while (chars.length) {
+      let n = 0;
+      while (n < chars.length && ctx.measureText(chars.slice(0, n + 1).join("")).width <= max) n++;
+      if (n >= chars.length) {
+        out.push(chars.join(""));
+        break;
+      }
+      n = Math.max(1, n);
+      let cut = n;
+      for (let k = n; k > Math.floor(n * 0.4); k--) {
+        const prev = chars[k - 1];
+        const next = chars[k];
+        if (next === " " || next === "(" || next === "（" || prev === " " || prev === ")" || prev === "）" || prev === "-") {
+          cut = k;
+          break;
+        }
+      }
+      out.push(chars.slice(0, cut).join("").trimEnd());
+      chars.splice(0, cut);
+      while (chars[0] === " ") chars.shift();
+      max = restMax;
+    }
+    return out.length ? out : [""];
   }
 
   // `labelInfo` = { tableLabel, phoneLine } — precomputed by admin.js the
@@ -507,6 +547,17 @@
       mctx.font = rasterFont(px, weight);
       const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD - RP;
       const align = opts.align || "left";
+      // 왼쪽 정렬 줄(「  └ 옵션」 등)은 넘치면 다음 줄로, 「└」 뒤에 맞춰 들여서. 가운데 줄·취소선 줄은 예전처럼.
+      if (!opts.noFit && align === "left" && !opts.strike && mctx.measureText(text).width > maxWidth) {
+        const m = /^\s*└\s*/.exec(text);
+        const indent = m ? Math.round(mctx.measureText(m[0]).width) : 0;
+        wrapText(mctx, text, maxWidth, maxWidth - indent).forEach((t, k) => {
+          ops.push({ type: "text", text: t, px, weight, align, y, x: RASTER_PAD + (k ? indent : 0), strike: null });
+          y += Math.round(px * PX_TO_DOTS * 1.4);
+        });
+        y += opts.gapAfter || 0;
+        return;
+      }
       const fitted = opts.noFit ? text : fitText(mctx, text, maxWidth);
       // opts.strike = { before, text } — 줄 안의 한 토막에만 취소선을 긋는다.
       // 2026-09-16 사장님: "vip 로 할인들어가는 그거는 할인 들어간 요소마다
@@ -530,14 +581,21 @@
       const badgeSize = badge ? Math.round(px * PX_TO_DOTS * 1.35) : 0;
       const badgeGap = badge ? 14 : 0;
       const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - RP - rightWidth - 16 - badgeSize - badgeGap;
-      const fittedLeft = fitText(mctx, left, leftMax);
+      // 넘치면 다음 줄로(위 wrapText). 수량은 첫 줄 오른쪽에 그대로, 다음 줄은 이름 시작에 맞춰 수량 칸 앞까지.
+      const lines = wrapText(mctx, left, leftMax, leftMax);
+      const fittedLeft = lines[0];
       // opts.strikePrefix — 오른쪽 값의 **앞부분**에 취소선을 긋는다.
       //
       // 2026-09-16 사장님: "프린트는 빨간색이 안나와서 총 금액을 긋고 하는
       // 게 나을 거 같아." 래스터는 우리가 직접 그리는 그림이라 진짜 선을
       // 그을 수 있다(텍스트 모드에는 그런 명령이 없어 화살표를 쓴다).
       ops.push({ type: "row", left: fittedLeft, right, px, weight, y, badge, badgeSize, badgeGap, strikePrefix: opts.strikePrefix || null });
-      y += Math.round(px * PX_TO_DOTS * 1.4) + (opts.gapAfter || 0);
+      y += Math.round(px * PX_TO_DOTS * 1.4);
+      for (const t of lines.slice(1)) {
+        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: RASTER_PAD + (badge ? badgeSize + badgeGap : 0), strike: null });
+        y += Math.round(px * PX_TO_DOTS * 1.4);
+      }
+      y += opts.gapAfter || 0;
     }
     function divider() {
       ops.push({ type: "divider", y });
@@ -734,7 +792,7 @@
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
-      ctx.fillText(op.text, op.align === "center" ? CX : RASTER_PAD, op.y);
+      ctx.fillText(op.text, op.align === "center" ? CX : op.x || RASTER_PAD, op.y);
       if (op.strike && op.align !== "center") {
         // 왼쪽 정렬이라 앞 토막의 폭만큼 밀어서 긋는다.
         const x0 = RASTER_PAD + ctx.measureText(op.strike.before || "").width;

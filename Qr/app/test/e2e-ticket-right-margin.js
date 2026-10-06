@@ -107,6 +107,41 @@ function check(name, cond, extra = "") {
   });
   check("글자 빌지(QZ)도 수량이 안쪽으로(8mm ≈ 5칸)", txt[0] - txt[1] === 5, JSON.stringify(txt));
 
+  // 2026-10-06 사장님: "잘리지 말고 다음 줄로 넘겨줘" — 가장 긴 메뉴 「Pororo ZERO兒童飲料(草莓)」가
+  // 여백 8mm 에서 「…」로 잘려 딸기·우유를 못 가렸다. 그리는 글자를 그대로 받아 본다.
+  out.push("\n[긴 메뉴 이름 — 자르지 않고 다음 줄로]");
+  const drawn = await page.evaluate(() => {
+    const seen = [];
+    const orig = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (t, x, y) {
+      if (this.canvas.height > 0 && this.canvas.width === 576) seen.push({ t: String(t), x: Math.round(x), y: Math.round(y) });
+      return orig.apply(this, arguments);
+    };
+    const run = (fs, items) => {
+      seen.length = 0;
+      window.buildEscPosRasterTicket({ table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items, total: 100 }, "韓國館", fs, { tableLabel: "桌號 7" });
+      return seen.slice();
+    };
+    const long = [
+      { name_zh: "Pororo ZERO兒童飲料(草莓)", qty: 2, unit_price: 50 },
+      { name_zh: "泡菜(辛奇)-僅限外帶", qty: 1, unit_price: 50, order_type: "takeout", option_choice: "Pororo ZERO兒童飲料 草莓 牛奶 葡萄 蘋果 柳橙 水蜜桃" },
+    ];
+    const r = { big: run({ rightMargin: 8, itemName: 24, itemDetail: 20 }, long), small: run({ rightMargin: 0 }, [{ name_zh: "石鍋拌飯", qty: 1, unit_price: 230 }]) };
+    CanvasRenderingContext2D.prototype.fillText = orig;
+    return r;
+  });
+  const all = drawn.big.map((d) => d.t).join("|");
+  check("★★ 「…」로 자르지 않는다", !/…/.test(all), all);
+  check("★★ 「(草莓)」까지 다 찍힌다(다음 줄로)", drawn.big.some((d) => /草莓\)?$/.test(d.t)) && drawn.big.some((d) => /^Pororo/.test(d.t)), all);
+  const qty = drawn.big.find((d) => d.t === "x2");
+  const head = drawn.big.find((d) => /^Pororo/.test(d.t));
+  check("★ 수량 x2 는 이름 첫 줄 오른쪽에", qty && head && qty.y === head.y, JSON.stringify({ qty, head }));
+  const opt = drawn.big.filter((d) => /草莓|葡萄|蘋果|柳橙|水蜜桃/.test(d.t) && !/^Pororo ZERO兒童飲料\(/.test(d.t));
+  check("옵션 줄도 넘치면 다음 줄로, 「└」 뒤에 맞춰 들여서", opt.length >= 2 && opt[1].x > 24, JSON.stringify(opt));
+  check("짧은 이름은 예전 그대로 한 줄", drawn.small.filter((d) => /石鍋拌飯/.test(d.t)).length === 1, "");
+  const txt2 = await page.evaluate(() => window.buildEscPosTicket({ table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "Pororo ZERO兒童飲料(草莓)Pororo ZERO兒童飲料(草莓)", qty: 2, unit_price: 50 }], total: 100 }, "韓國館", {}));
+  check("글자 빌지(QZ)도 이름이 다 찍힌다", txt2.includes("x2") && (txt2.match(/草莓/g) || []).length === 2 && (txt2.match(/Pororo/g) || []).length === 2, "");
+
   out.push("\n[설정 화면]");
   await page.locator('.admin-tabs button[data-tab="settings"]').click();
   await page.locator('.settings-nav-btn[data-category="print"]').click();
