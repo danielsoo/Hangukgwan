@@ -40,6 +40,21 @@ function check(name, cond, extra = "") {
 const TINY = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
 const tinyFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(TINY, "base64") });
 
+/**
+ * 사진을 **그 자리에서 읽는 길**을 부른다.
+ *
+ * 2026-10-06 부터 📷 단추와 끌어다 놓기는 **대기함에 올린다**(사장님이 받아서
+ * Claude 에게 읽히고 결과를 붙여넣는 길로 바뀌었다 — test/e2e-receipt-inbox.js).
+ * 읽는 코드 자체는 그대로 남아 있으므로, 여기서는 화면 단추 대신 그 함수를
+ * 직접 불러서 **읽은 뒤에 사장님이 보시는 것**을 잰다.
+ */
+async function readOne(page, b64, name) {
+  await page.evaluate(async ({ b64, name }) => {
+    const bin = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    await window.HG_INGREDIENTS.readPhotos([new File([bin], name, { type: "image/png" })]);
+  }, { b64, name });
+}
+
 // 64×64 흰 PNG. 1×1 은 브라우저가 그림으로 못 열어서(createImageBitmap 실패)
 // **Claude 에게 보내는 길을 아예 안 탄다** — 머리를 읽는 자리를 재려면
 // 그림으로 열리는 사진이어야 한다.
@@ -88,6 +103,8 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
 
   out.push("\n[📷 로 고르거나 끌어다 놓는다]");
   check("📷 영수증 사진 단추가 있다", await page.locator("#ingPhotoBtn").isVisible(), "");
+  // 2026-10-06: 이 단추로 고른 사진은 **대기함에 올라간다**(그 자리에서 읽지 않는다).
+  check("★ 📷 로 고른 사진은 대기함으로 간다", await page.locator(".ing-inbox").isVisible(), "");
   check(
     "사진 고르는 칸은 여러 장을 받는다",
     await page.locator("#ingPhotoFile").evaluate((el) => el.multiple && /image/.test(el.accept)),
@@ -116,7 +133,7 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
       note: "",
     });
   }, `data:image/png;base64,${TINY}`);
-  await page.setInputFiles("#ingPhotoFile", tinyFile("receipt.png"));
+  await readOne(page, TINY, "receipt.png");
   await page.waitForTimeout(700);
   {
     const lines = page.locator("#ingEntryLines .ing-line[data-i]");
@@ -179,7 +196,7 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
     await page.evaluate(() => {
       window.HG_RECEIPT_READ.readPhoto = async () => ({ receipts: [], note: "no-table" });
     });
-    await page.setInputFiles("#ingPhotoFile", tinyFile("blurry.png"));
+    await readOne(page, TINY, "blurry.png");
     await page.waitForTimeout(600);
     const log = await page.locator("#ingImportLog").innerText();
     check("★★ 못 읽었다고 말한다", /표를 못 찾/.test(log), log.slice(0, 200));
@@ -210,7 +227,7 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
       };
       window.__hgRestoreFetch = () => { window.fetch = real; };
     });
-    await page.setInputFiles("#ingPhotoFile", photoFile("head.png"));
+    await readOne(page, PHOTO, "head.png");
     await page.waitForTimeout(900);
     const sent = await page.evaluate(() => window.__hgSent);
     check("★ 사진을 보낼 때 「머리 사진이 붙어 있나」도 같이 간다",
@@ -234,7 +251,7 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
     // (주문서에 4/29 인데 물건은 5/1 에 왔다).
     await page.fill("#ingEntryDate", "2026-10-02");
     await page.dispatchEvent("#ingEntryDate", "input");
-    await page.setInputFiles("#ingPhotoFile", photoFile("head2.png"));
+    await readOne(page, PHOTO, "head2.png");
     await page.waitForTimeout(900);
     const d = await page.locator("#ingEntryDate").inputValue();
     check("★★ 적어 두신 날짜가 그대로 남는다", d === "2026-10-02", d);

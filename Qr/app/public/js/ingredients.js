@@ -702,7 +702,7 @@
     if (!vendor) {
       catalog = { vendor: "", items: [] };
       $("#ingEntryHint").textContent = T("ingEntryPickVendor");
-      $("#ingItemList").innerHTML = "";
+      if ($("#ingItemList")) $("#ingItemList").innerHTML = "";
       renderLines();
       return;
     }
@@ -710,13 +710,33 @@
     catalog = res.ok ? await res.json() : { vendor, items: [] };
     $("#ingEntryHint").textContent = fmt("ingEntryHintFmt", { vendor: catalog.vendor || vendor, n: catalog.items.length });
     // 최근·자주 산 순으로 담는다 — 목록 맨 위가 손이 먼저 가는 자리다.
+    if (!$("#ingItemList")) return;
     $("#ingItemList").innerHTML = catalog.items
       .map((i) => `<option value="${esc(i.name)}">${esc(i.name_ko ? `${i.name_ko} · ${i.unit || ""} · NT$${i.last_price}` : i.name)}</option>`)
       .join("");
     renderLines();
   }
 
+  // 저장하는 동안 단추를 잠근다.
+  //
+  // 2026-10-06: 화면이 다시 그려지는 사이에 단추가 두 번 눌리는 일이 실제로
+  // 났다(시험에서 잡혔다). 두 번째가 들어가면 「이미 2줄 있어요. 바꿀까요?」가
+  // 뜨는데, 방금 자기가 넣은 것이라 **사장님은 영문을 모른다.**
+  let saving = false;
   async function saveEntry() {
+    if (saving) return;
+    saving = true;
+    const saveBtn = $("#ingEntrySave");
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      await saveEntryInner();
+    } finally {
+      saving = false;
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  async function saveEntryInner() {
     const store = $("#ingEntryStore").value;
     const date = $("#ingEntryDate").value;
     const vendor = ($("#ingEntryVendor").value || "").trim();
@@ -740,16 +760,17 @@
       const res = await fetch("/api/ingredients/rows", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ store, date, vendor, lines }),
+        // 대기함에서 온 것이면 그 줄도 마무리된다(서버가 사진을 지운다)
+        body: JSON.stringify({ store, date, vendor, lines, inbox_id: attached ? attached.id : "" }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       const got = await res.json();
       logLine(esc(fmt("ingEntrySavedFmt", { n: got.saved })));
       entryLines = [blankLine()];
       renderLines();
+      if (attached) { detachPhoto(); await loadInbox(); }
       await loadCatalog();
       await loadSummary();
-      await loadMeta();
     } catch (e) {
       logLine(esc(T("ingEntrySaveFailed") + (e && e.message)));
     }
@@ -980,6 +1001,214 @@
     return did;
   }
 
+  // ───────── 영수증 대기함 ─────────
+  //
+  // 2026-10-06 사장님: "아빠가 일단 사진을 올려주면 그걸 내가 다운받아서
+  // 여기다가 칠거야 그럼 너가 급여처럼 인식해서 확실하거나 확실하지 않는 걸로
+  // 나눠서 옆에 사진 보여주면서 맞는지 아빠가 오케이 하고 저장하게 하는거지.
+  // 그게 또 전체 내역에서 볼수 있는 거고."
+
+  let inbox = { items: [], ai_on: false };
+  let attached = null;      // 지금 영수증 넣기에 붙어 있는 대기함 줄
+
+  /**
+   * 올릴 사진을 **줄여서** 보낸다.
+   *
+   * 폰 사진은 한 장에 3~5MB 다. 긴 쪽 1,600점이면 영수증 글씨는 그대로
+   * 읽히면서 400KB 쯤으로 준다 — 한 달 221장이면 그 차이가 1GB 다.
+   * 작은 미리보기(320점)는 목록에서 쓴다.
+   */
+  async function shrink(file) {
+    const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
+    if (!bmp) return null;
+    const draw = (side, q) => {
+      const sc = Math.min(1, side / Math.max(bmp.width, bmp.height));
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(bmp.width * sc));
+      cv.height = Math.max(1, Math.round(bmp.height * sc));
+      const ctx = cv.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+      return cv.toDataURL("image/jpeg", q);
+    };
+    const out = { name: file.name || "receipt.jpg", data: draw(1600, 0.82), thumb: draw(320, 0.7) };
+    if (bmp.close) bmp.close();
+    return out;
+  }
+
+  async function uploadToInbox(files) {
+    const list = [...(files || [])].filter((f) => f && /^image\//.test(f.type));
+    if (!list.length) return;
+    const btn = $("#ingInboxAdd");
+    if (btn) { btn.disabled = true; btn.textContent = T("ingInboxUploading"); }
+    try {
+      const images = [];
+      for (const f of list) {
+        const one = await shrink(f);
+        if (one) images.push({ ...one, store: $("#ingEntryStore") ? $("#ingEntryStore").value : "" });
+      }
+      if (!images.length) return logLine(esc(T("ingInboxBadImages")));
+      // 한 번에 열 장까지 — 더 많으면 나눠 보낸다
+      for (let i = 0; i < images.length; i += 10) {
+        const res = await fetch("/api/ingredients/inbox", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ images: images.slice(i, i + 10) }),
+        });
+        if (!res.ok) {
+          const b = await res.json().catch(() => ({}));
+          return logLine(esc(b.error === "inbox_full" ? fmt("ingInboxFullFmt", { max: b.max }) : T("ingInboxFailed")));
+        }
+      }
+      logLine(esc(fmt("ingInboxAddedFmt", { n: images.length })));
+      await loadInbox();
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = T("ingInboxAdd"); }
+    }
+  }
+
+  async function loadInbox() {
+    const res = await fetch("/api/ingredients/inbox");
+    if (!res.ok) return;
+    inbox = await res.json();
+    renderInbox();
+  }
+
+  function renderInbox() {
+    const el = $("#ingInboxList");
+    if (!el) return;
+    const showSaved = $("#ingInboxShowSaved") && $("#ingInboxShowSaved").checked;
+    const items = (inbox.items || []).filter((i) => showSaved || i.status !== "saved");
+    const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
+    const cnt = $("#ingInboxCount");
+    if (cnt) cnt.textContent = pending ? fmt("ingInboxCountFmt", { n: pending }) : "";
+    if (!items.length) {
+      el.innerHTML = '<p class="ing-note">' + esc(T("ingInboxEmpty")) + "</p>";
+      return;
+    }
+    el.innerHTML = items.map((i) => {
+      const when = String(i.at || "").replace("T", " ").slice(0, 16);
+      const badge = i.status === "saved" ? T("ingInboxSaved") : i.status === "read" ? T("ingInboxRead") : T("ingInboxNew");
+      const read = i.read
+        ? '<span class="ing-inbox-read">' + esc(fmt("ingInboxReadFmt", { n: i.read.rows, unsure: i.read.unsure })) + "</span>"
+        : "";
+      return (
+        '<div class="ing-inbox-row' + (attached && attached.id === i.id ? " is-on" : "") + '" data-inbox="' + esc(i.id) + '">' +
+        (i.thumb ? '<img class="ing-inbox-thumb" src="' + esc(i.thumb) + '" alt="" />' : '<div class="ing-inbox-thumb is-gone"></div>') +
+        '<div class="ing-inbox-meta"><strong>' + esc(i.name || "—") + "</strong>" +
+        '<span class="ing-inbox-when">' + esc(when) + '</span>' +
+        '<span class="ing-inbox-badge is-' + esc(i.status) + '">' + esc(badge) + "</span>" + read +
+        "</div>" +
+        '<div class="ing-inbox-acts">' +
+        (i.has_image
+          ? '<a class="ing-inbox-btn" href="/api/ingredients/inbox/' + esc(i.id) + '/image?download=1" download>' + esc(T("ingInboxGet")) + "</a>" +
+            '<button type="button" class="ing-inbox-btn" data-inbox-paste="' + esc(i.id) + '">' + esc(T("ingInboxPaste")) + "</button>"
+          : "") +
+        (i.read ? '<button type="button" class="ing-inbox-btn" data-inbox-use="' + esc(i.id) + '">' + esc(T("ingInboxUse")) + "</button>" : "") +
+        '<button type="button" class="ing-inbox-btn is-del" data-inbox-del="' + esc(i.id) + '">' + esc(T("ingInboxDel")) + "</button>" +
+        "</div>" +
+        '<div class="ing-inbox-paste" id="paste-' + esc(i.id) + '" hidden>' +
+        '<textarea rows="4" data-inbox-text="' + esc(i.id) + '" placeholder="' + esc(T("ingInboxPastePh")) + '"></textarea>' +
+        '<button type="button" class="primary" data-inbox-go="' + esc(i.id) + '">' + esc(T("ingInboxPasteGo")) + "</button>" +
+        "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    el.querySelectorAll("[data-inbox-paste]").forEach((b) => {
+      b.onclick = () => {
+        const box = $("#paste-" + b.dataset.inboxPaste);
+        box.hidden = !box.hidden;
+        if (!box.hidden) box.querySelector("textarea").focus();
+      };
+    });
+    el.querySelectorAll("[data-inbox-go]").forEach((b) => { b.onclick = () => sendRead(b.dataset.inboxGo); });
+    el.querySelectorAll("[data-inbox-use]").forEach((b) => { b.onclick = () => useRead(b.dataset.inboxUse); });
+    el.querySelectorAll("[data-inbox-del]").forEach((b) => { b.onclick = () => delInbox(b.dataset.inboxDel); });
+  }
+
+  /** 붙여넣은 결과를 서버에 보내 **한 번 더 검사**하고, 표를 채운다. */
+  async function sendRead(id) {
+    const ta = document.querySelector('[data-inbox-text="' + id + '"]');
+    const text = ta ? ta.value : "";
+    if (!text.trim()) return;
+    const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/read", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}));
+      return logLine(esc(T(b.error === "bad_json" || b.error === "bad_shape" || b.error === "no_rows" ? "ingInboxBadPaste" : "ingInboxFailed")));
+    }
+    const got = await res.json();
+    await loadInbox();
+    fillFromRead(id, got);
+    if (got.more) logLine(esc(fmt("ingInboxMoreFmt", { n: got.more })));
+  }
+
+  /** 전에 붙여넣어 둔 결과를 다시 표에 올린다(서버가 들고 있다). */
+  async function useRead(id) {
+    const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/read");
+    if (!res.ok) return logLine(esc(T("ingInboxFailed")));
+    fillFromRead(id, await res.json());
+  }
+
+  /** 읽은 결과를 영수증 넣기 표에 올린다 — 확실치 않은 줄은 노랗게. */
+  function fillFromRead(id, got) {
+    entryLines = [];
+    for (const r of got.rows || []) {
+      const line = blankLine();
+      line.name = r.name || "";
+      line.name_ko = r.name_ko || "";
+      line.unit = r.unit || "";
+      line.qty = r.qty === "" ? "" : r.qty;
+      line.price = r.price === "" ? "" : r.price;
+      line.amount = r.amount === "" ? "" : r.amount;
+      line.amountEdited = true;              // 종이에 적힌 금액이다 — 다시 셈하지 않는다
+      line.unsure = !r.sure || got.totalOk === false;
+      entryLines.push(line);
+    }
+    if (!entryLines.length) entryLines.push(blankLine());
+    renderLines();
+    applyHead(got.head);
+    attachPhoto(id);
+    logLine(esc(fmt("ingPhotoReadFmt", { n: got.rows.length, unsure: got.unsure })));
+    if (got.totalOk === false) logLine(esc(fmt("ingInboxTotalOffFmt", { paper: money(got.total), sum: money(Math.round(got.sum || 0)) })));
+  }
+
+  /** 그 사진을 표 옆에 붙인다. */
+  function attachPhoto(id) {
+    const item = (inbox.items || []).find((i) => i.id === id);
+    attached = item || null;
+    const box = $("#ingEntryPhoto");
+    if (!box) return;
+    const url = "/api/ingredients/inbox/" + encodeURIComponent(id) + "/image";
+    box.hidden = !item || !item.has_image;
+    if (!box.hidden) {
+      $("#ingEntryPhotoImg").src = url;
+      $("#ingEntryPhotoOpen").href = url;
+    }
+    const entry = document.querySelector(".ing-entry");
+    if (entry) entry.classList.toggle("has-photo", !box.hidden);
+    renderInbox();
+  }
+
+  function detachPhoto() {
+    attached = null;
+    const box = $("#ingEntryPhoto");
+    if (box) box.hidden = true;
+    const entry = document.querySelector(".ing-entry");
+    if (entry) entry.classList.remove("has-photo");
+    renderInbox();
+  }
+
+  async function delInbox(id) {
+    const okGo = A().showConfirm ? await A().showConfirm(T("ingInboxDelAsk")) : confirm(T("ingInboxDelAsk"));
+    if (!okGo) return;
+    await fetch("/api/ingredients/inbox/" + encodeURIComponent(id), { method: "DELETE" });
+    if (attached && attached.id === id) detachPhoto();
+    await loadInbox();
+  }
+
   let reading = false;
 
   async function readPhotos(files) {
@@ -1113,7 +1342,7 @@
         // 사진을 골라도 아무 일도 안 일어난다.
         const picked = [...(e.target.files || [])];
         e.target.value = "";
-        readPhotos(picked);
+        uploadToInbox(picked);
       };
       // 탭 아무 데나 끌어다 놓아도 된다 — 급여와 같은 길이다.
       const zone = document.getElementById("tab-ingredients");
@@ -1123,10 +1352,23 @@
         zone.addEventListener("drop", (e) => {
           e.preventDefault();
           zone.classList.remove("ing-drop");
-          readPhotos(e.dataTransfer && e.dataTransfer.files);
+          // 끌어다 놓으면 **대기함에 올린다**(2026-10-06). 그 자리에서 읽지 않는다 —
+          // 키 없이 기기 안에서 읽으면 한 줄 통째로 22% 다.
+          uploadToInbox(e.dataTransfer && e.dataTransfer.files);
         });
       }
       watchEntryFields();
+      // 대기함 — 올리기·목록·사진 떼기
+      if ($("#ingInboxAdd")) {
+        $("#ingInboxAdd").onclick = () => $("#ingInboxFile").click();
+        $("#ingInboxFile").onchange = (e) => {
+          const files = [...(e.target.files || [])];   // value 를 비우면 목록도 비워진다 — 먼저 베낀다
+          e.target.value = "";
+          uploadToInbox(files);
+        };
+      }
+      if ($("#ingInboxShowSaved")) $("#ingInboxShowSaved").onchange = () => renderInbox();
+      if ($("#ingEntryPhotoClear")) $("#ingEntryPhotoClear").onclick = () => detachPhoto();
       $("#ingEntryVendor").onchange = () => loadCatalog();
       $("#ingEntryStore").onchange = () => {
         loadVendorList();
@@ -1139,6 +1381,7 @@
     await loadMeta();
     await loadVendorList();
     await loadSummary();
+    await loadInbox();
   }
 
   window.HG_INGREDIENTS = { load, findColumns, storeOfSheet, HEAD, blankLine, warnHtml, readPhotos, priceSetOf, readByAi, cropsForAi };

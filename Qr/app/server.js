@@ -194,7 +194,15 @@ function startMeasuring(req, res) {
 // X-Line-Signature header, which is an HMAC over the exact raw bytes LINE
 // sent (re-serializing req.body wouldn't byte-for-byte match). Harmless for
 // every other route, which just keep using the parsed req.body as before.
-app.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
+//
+// **사진이 오가는 길은 건너뛴다.** 기본 한도가 100KB 라, 여기서 먼저 읽어
+// 버리면 영수증 사진(한 장 400KB)이 413 으로 튕긴다 — 그 길들은 자기
+// 라우터에서 큰 한도로 다시 읽는다(src/routes/ingredients.js).
+// 2026-10-06 에 대기함을 만들며 걸렸다: 작은 시험 그림은 지나가고 진짜
+// 사진만 안 돼서, 화면에는 「대기함에 문제가 있었어요」로만 보였다.
+const jsonParser = express.json({ verify: (req, res, buf) => { req.rawBody = buf; } });
+const BIG_BODY = new RegExp("^/api/ingredients/(inbox|read-photo)");
+app.use((req, res, next) => (BIG_BODY.test(req.path) ? next() : jsonParser(req, res, next)));
 
 // Static files (css/js/images) and the two page shells right below never
 // read `store` — they're served here, before the per-request Mongo refresh

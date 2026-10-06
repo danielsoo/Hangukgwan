@@ -2933,6 +2933,51 @@ body:not(.role-staff) .staff-only { display: none !important; }
    보기로 결산 보는 것처럼"). 큰 숫자·카드·그래프·표는 결산 것을 그대로 쓰고,
    여기엔 식자재에만 있는 것(업체 칩 줄·내역 표)만 적는다. */
 .ing-overview { margin-bottom: 14px; }
+
+/* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
+.ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.ing-inbox-saved { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 14px; }
+.ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+.ing-inbox-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.ing-inbox-row {
+  display: grid; grid-template-columns: 56px 1fr auto; align-items: center; gap: 12px;
+  padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff;
+}
+.ing-inbox-row.is-on { border-color: var(--navy, #16213e); box-shadow: 0 0 0 2px rgba(22, 33, 62, 0.12); }
+.ing-inbox-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; background: #f1ece3; }
+.ing-inbox-thumb.is-gone { display: block; }
+.ing-inbox-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; min-width: 0; }
+.ing-inbox-meta strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.ing-inbox-when { color: var(--muted); font-size: 13px; }
+.ing-inbox-read { color: var(--muted); font-size: 13px; }
+.ing-inbox-badge { font-size: 12.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #f1ece3; }
+.ing-inbox-badge.is-read { background: #fdf3d6; }
+.ing-inbox-badge.is-saved { background: #e4efe4; }
+.ing-inbox-acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ing-inbox-btn {
+  height: 32px; padding: 0 10px; display: inline-flex; align-items: center; border-radius: 8px;
+  border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; font: inherit; font-size: 13.5px; text-decoration: none;
+}
+.ing-inbox-btn:hover { background: #faf6ef; }
+.ing-inbox-btn.is-del { border-color: #e8d7d7; }
+.ing-inbox-paste { grid-column: 1 / -1; display: flex; gap: 8px; align-items: flex-start; }
+.ing-inbox-paste textarea { flex: 1 1 auto; font: inherit; font-size: 13.5px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+
+/* 사진은 표 **옆에** 둔다 — 숫자만 보고는 맞는지 알 수 없다. 화면을 굴려도
+   따라오게 붙여 둔다(sticky). 좁은 화면에서는 위아래로 내려간다. */
+.ing-entry-split { display: block; }
+.ing-entry.has-photo .ing-entry-split { display: grid; grid-template-columns: minmax(240px, 0.8fr) 2fr; gap: 14px; align-items: start; }
+.ing-entry-photo { position: sticky; top: 12px; }
+.ing-entry-photo img { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: #faf7f1; }
+.ing-entry-photo-tools { display: flex; gap: 8px; margin-top: 6px; font-size: 13.5px; }
+.ing-entry-photo-tools a, .ing-entry-photo-tools button {
+  border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--ink); text-decoration: none; font: inherit; font-size: 13.5px;
+}
+@media (max-width: 900px) {
+  .ing-entry.has-photo .ing-entry-split { grid-template-columns: 1fr; }
+  .ing-entry-photo { position: static; }
+  .ing-entry-photo img { max-height: 340px; object-fit: contain; }
+}
 /* 막대 **묶음 전체가 하나의 격자**다(결산 .stl-bars 와 같은 이유) — 줄마다
    제 격자를 쓰면 이름 칸 너비가 줄마다 달라져서 막대 시작이 어긋나고,
    그러면 서로 견줄 수가 없다. 줄은 display:contents 로 칸만 내어준다. */

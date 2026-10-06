@@ -191,6 +191,129 @@ router.get("/catalog", async (req, res) => {
   res.json({ vendor, items: G.buildCatalog(rows, { recentFrom }) });
 });
 
+/* ───────── 영수증 대기함 (src/receiptInbox.js) ─────────
+ *
+ * 2026-10-06 사장님: "아빠가 일단 사진을 올려주면 그걸 내가 다운받아서 여기다가
+ * 칠거야 … 옆에 사진 보여주면서 맞는지 아빠가 오케이 하고 저장하게 하는거지."
+ *
+ * 사진은 **이 길로만** 나간다. 손님 메뉴 사진이 쓰는 /api/photo 에 두면 주소만
+ * 알면 누구나 받을 수 있다 — 영수증에는 매입 단가가 줄마다 적혀 있어서
+ * 「직원은 절대 절대 못 들어가」와 어긋난다. 이 라우터는 통째로 requireOwner +
+ * 비밀번호(잠금)이다.
+ */
+const INBOX = require("../receiptInbox");
+
+async function inboxCol() {
+  await connectDB();
+  const c = getDb().collection(INBOX.COLL);
+  try { await c.createIndex({ at: -1 }); } catch (e) { /* 없어도 된다 */ }
+  return c;
+}
+
+/** 대기함 목록. 사진 자체는 안 보낸다 — 작은 미리보기만. */
+router.get("/inbox", async (req, res) => {
+  const c = await inboxCol();
+  const docs = await c.find({}, { projection: { image: 0 } }).sort({ at: -1 }).limit(300).toArray();
+  res.json({
+    items: docs.map(INBOX.listItem),
+    // 키가 있으면 대기함에서 바로 읽을 수 있다. 없으면 화면이 그 단추를 안 띄운다.
+    ai_on: !!process.env.ANTHROPIC_API_KEY,
+    pending: docs.filter((d) => d.status !== INBOX.STATUS.SAVED).length,
+    max_pending: INBOX.MAX_PENDING,
+  });
+});
+
+/** 사진을 올린다. 여러 장 한꺼번에. */
+router.post("/inbox", express.json({ limit: "32mb" }), async (req, res) => {
+  const body = req.body || {};
+  const list = Array.isArray(body.images) ? body.images : [];
+  if (!list.length) return res.status(400).json({ error: "no_images" });
+  if (list.length > INBOX.MAX_PER_UPLOAD) return res.status(400).json({ error: "too_many", max: INBOX.MAX_PER_UPLOAD });
+  const c = await inboxCol();
+  const pending = await c.countDocuments({ status: { $ne: INBOX.STATUS.SAVED } });
+  if (pending + list.length > INBOX.MAX_PENDING) {
+    return res.status(429).json({ error: "inbox_full", pending, max: INBOX.MAX_PENDING });
+  }
+  const docs = [];
+  for (const one of list) {
+    const img = INBOX.decodeImage(one && one.data);
+    if (img.error) return res.status(413).json({ error: img.error, name: (one && one.name) || "" });
+    const thumb = String((one && one.thumb) || "");
+    docs.push({
+      name: String((one && one.name) || "").slice(0, 120),
+      store: String((one && one.store) || ""),
+      at: new Date().toISOString(),
+      mime: img.mime,
+      bytes: img.bytes,
+      image: img.buffer,
+      thumb: thumb.length <= INBOX.MAX_THUMB_BYTES ? thumb : "",
+      status: INBOX.STATUS.NEW,
+      has_image: true,
+    });
+  }
+  await c.insertMany(docs);
+  res.json({ ok: true, added: docs.length });
+});
+
+/** 그 사진 자체. 받아서 Claude 에게 보여 주실 때와, 화면 옆에 띄울 때 쓴다. */
+router.get("/inbox/:id/image", async (req, res) => {
+  const c = await inboxCol();
+  let doc = null;
+  try { doc = await c.findOne({ _id: new (require("mongodb").ObjectId)(req.params.id) }); } catch (e) { doc = null; }
+  if (!doc || !doc.image) return res.status(404).json({ error: "not_found" });
+  res.setHeader("Content-Type", doc.mime || "image/jpeg");
+  // 영수증이다 — 가운데 어디에도 담기지 않게 한다
+  res.setHeader("Cache-Control", "private, no-store");
+  if (String((req.query || {}).download || "") === "1") {
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(doc.name || "receipt.jpg")}"`);
+  }
+  // Buffer 에도 .buffer(ArrayBuffer) 가 있다 — 그걸 그대로 넘기면 **메모리 풀
+  // 전체**가 나가서 그림이 깨진다. 몽고가 주는 Binary 일 때만 안을 꺼낸다.
+  res.end(Buffer.isBuffer(doc.image) ? doc.image : Buffer.from(doc.image.buffer || doc.image));
+});
+
+/**
+ * 읽은 결과를 붙여넣는다.
+ *
+ * 사장님이 Claude 세션에서 받아 오신 JSON 이다. 받는 쪽에서 **한 번 더
+ * 검사한다** — 수량 × 단가 = 금액 이 안 맞는 줄은 확실치 않음으로 넘기고,
+ * 업체 이름은 장부에 있는 이름에 맞춘다(없으면 비워 둔다).
+ */
+router.post("/inbox/:id/read", express.json({ limit: "2mb" }), async (req, res) => {
+  const parsed = INBOX.parsePasted((req.body || {}).text);
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+  let vendors = [];
+  try {
+    const rows = await (await col()).find({}, { projection: { vendor: 1, _id: 0 } }).toArray();
+    vendors = [...new Set(rows.map((r) => r.vendor).filter(Boolean))];
+  } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
+  const read = INBOX.normalizeRead(parsed.receipt, { vendors });
+  const c = await inboxCol();
+  let id = null;
+  try { id = new (require("mongodb").ObjectId)(req.params.id); } catch (e) { return res.status(400).json({ error: "bad_id" }); }
+  const r = await c.updateOne({ _id: id }, { $set: { read, status: INBOX.STATUS.READ, read_at: new Date().toISOString() } });
+  if (!r.matchedCount) return res.status(404).json({ error: "not_found" });
+  res.json({ ok: true, ...read, more: parsed.more });
+});
+
+/** 전에 붙여넣어 둔 결과를 그대로 돌려준다 — 화면이 다시 표에 올릴 때. */
+router.get("/inbox/:id/read", async (req, res) => {
+  const c = await inboxCol();
+  let doc = null;
+  try { doc = await c.findOne({ _id: new (require("mongodb").ObjectId)(req.params.id) }, { projection: { image: 0 } }); }
+  catch (e) { return res.status(400).json({ error: "bad_id" }); }
+  if (!doc || !doc.read) return res.status(404).json({ error: "not_read" });
+  res.json(doc.read);
+});
+
+/** 대기함에서 지운다(사진도 같이). */
+router.delete("/inbox/:id", async (req, res) => {
+  const c = await inboxCol();
+  try { await c.deleteOne({ _id: new (require("mongodb").ObjectId)(req.params.id) }); }
+  catch (e) { return res.status(400).json({ error: "bad_id" }); }
+  res.json({ ok: true });
+});
+
 /**
  * 영수증 한 장을 손으로 넣는다(또는 고친다).
  *
@@ -221,7 +344,21 @@ router.post("/rows", async (req, res) => {
     const docs = G.withIds(rows);
     await c.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
   }
-  res.json({ ok: true, saved: rows.length, removed: (removed && removed.deletedCount) || 0 });
+  // 대기함에서 온 것이면 그 줄을 마무리하고 **사진을 지운다.**
+  // 한 달 221장 × 400KB 면 금방 쌓인다 — 확인이 끝난 종이는 들고 있을 이유가 없다.
+  // 줄은 남겨 둬서 「언제 올렸고 언제 저장했나」는 보인다.
+  const inboxId = String(b.inbox_id || "").trim();
+  if (inboxId) {
+    try {
+      const ic = await inboxCol();
+      await ic.updateOne(
+        { _id: new (require("mongodb").ObjectId)(inboxId) },
+        { $set: { status: INBOX.STATUS.SAVED, saved_at: new Date().toISOString(), saved_lines: rows.length, has_image: false },
+          $unset: { image: "" } }
+      );
+    } catch (e) { console.warn("[ingredients] 대기함 마무리 실패:", e && e.message); }
+  }
+  res.json({ ok: true, saved: rows.length, removed: (removed && removed.deletedCount) || 0, inbox: inboxId || null });
 });
 
 /**
