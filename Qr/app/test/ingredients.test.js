@@ -363,6 +363,11 @@ async function aggMatchesJs() {
     JSON.stringify(byDb.items.map((i) => [i.name, i.amount, i.qty, i.lines])) ===
     JSON.stringify(byJs.items.map((i) => [i.name, i.amount, i.qty, i.lines])), JSON.stringify(byDb.items));
 
+  // 막대는 끊어 줘도 **가짓수는 진짜 숫자**여야 한다(2026-10-06: 화면에 978 대신 200 이 떴다)
+  check("★★ 품목 가짓수는 막대 개수가 아니라 진짜 가짓수", byDb.items_total === byJs.items_total, byDb.items_total + " vs " + byJs.items_total);
+  const cut2 = G.shapeSummary({ items: [], itemCount: await c.aggregate(G.summaryPipelines({}, { items: 1 }).itemCount).toArray() });
+  check("★★ 200가지만 받아와도 가짓수는 그대로", cut2.items_total === byJs.items_total, String(cut2.items_total));
+
   const only = await run({ store: "main" });
   const jsOnly = G.summarize(rows.filter((r) => r.store === "main"));
   check("★★ 지점을 거른 집계도 같다", only.total === jsOnly.total && only.lines === jsOnly.lines, only.total + " vs " + jsOnly.total);

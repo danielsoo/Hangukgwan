@@ -223,6 +223,10 @@ function summaryPipelines(where, opts) {
       { $limit: o.items },
     ]),
     months: m.concat([{ $group: { _id: "$month", amount: { $sum: "$amount" } } }, { $sort: { _id: 1 } }]),
+    // 막대는 200가지까지만 받지만 **「품목」 칸에는 진짜 가짓수**를 적어야 한다.
+    // 2026-10-06: 화면에 「품목 200」이 떴는데 실제로는 978가지였다 — 받아온
+    // 개수를 그대로 세었기 때문이다.
+    itemCount: m.concat([{ $group: { _id: "$name" } }, { $count: "n" }]),
   };
 }
 
@@ -240,6 +244,8 @@ function shapeSummary(parts) {
     vendors: (parts.vendors || []).map((v) => ({ vendor: v._id, amount: round(v.amount), lines: v.lines, last_date: v.last_date || "" })),
     items: (parts.items || []).map((i) => ({ name: i._id, name_ko: i.name_ko || "", unit: i.unit || "", amount: round(i.amount), qty: round(i.qty), lines: i.lines })),
     months: (parts.months || []).map((m) => ({ month: m._id, amount: round(m.amount) })),
+    // 막대에 담긴 수가 아니라 **그 기간의 품목 가짓수**
+    items_total: ((parts.itemCount || [])[0] || {}).n || (parts.items || []).length,
   };
 }
 
@@ -294,6 +300,7 @@ function summarize(rows) {
     vendors: [...byVendor.values()].map((v) => ({ ...v, amount: round(v.amount) })).sort((a, b) => b.amount - a.amount),
     items: [...byItem.values()].map((i) => ({ ...i, amount: round(i.amount), qty: round(i.qty) })).sort((a, b) => b.amount - a.amount),
     months: [...byMonth.values()].map((m) => ({ ...m, amount: round(m.amount) })).sort((a, b) => a.month.localeCompare(b.month)),
+    items_total: byItem.size,
   };
 }
 

@@ -250,7 +250,8 @@
       { label: T("ingStatDays"), value: money(s.days || 0) },
       { label: T("ingStatPerDay"), value: `NT$${money(Math.round(perDay))}` },
       { label: T("ingStatVendors"), value: money(s.vendors.length) },
-      { label: T("ingStatItems"), value: money(s.items.length) },
+      // 막대는 200가지까지만 받아오므로 **진짜 가짓수**(items_total)를 쓴다
+      { label: T("ingStatItems"), value: money(s.items_total != null ? s.items_total : s.items.length) },
     ];
     // 결산·급여와 **같은 칸 모양**을 쓴다(.stl-stat). 제 모양을 따로 만들면
     // 글자 크기와 줄 간격이 조금씩 어긋난다.
