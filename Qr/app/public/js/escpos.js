@@ -213,6 +213,9 @@
 
   function buildEscPosTicket(o, storeName, opts) {
     const priceCopy = !!(opts && opts.priceCopy);
+    // 수량 열의 오른쪽 여백(그림 빌지의 ticketRightMarginMm 과 같은 값) — 글자 한 칸이 12점 = 1.5mm.
+    // 수량 줄에만 쓴다. 나머지 줄은 종이 폭 그대로(LINE_WIDTH).
+    const W = LINE_WIDTH - Math.round((ticketRightMarginMm(opts || {}) * 8) / 12);
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과를 그대로
     // 넘겨받는다(이 파일은 admin.js의 테이블별 할인 상태를 모르므로).
     // { active:false } 아니면 { active:true, isPercent, rate?,
@@ -239,8 +242,16 @@
     out += divider() + "\n";
 
     o.items.forEach((it) => {
-      const name = truncateToWidth(itemName(it, priceCopy), LINE_WIDTH - 6);
-      out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
+      // 넘치면 다음 줄로(2026-10-06 — 잘리면 「(草莓)」·「(牛奶)」를 못 가린다).
+      let rest = itemName(it, priceCopy);
+      const first = truncateToWidth(rest, W - 6).replace(/…$/, "");
+      rest = rest.slice(first.length);
+      out += CMD.BOLD_ON + padLine(first, `x${it.qty}`, W) + CMD.BOLD_OFF + "\n";
+      while (rest) {
+        const part = truncateToWidth(rest, W - 6).replace(/…$/, "") || rest.slice(0, 1);
+        out += CMD.BOLD_ON + part + CMD.BOLD_OFF + "\n";
+        rest = rest.slice(part.length);
+      }
       // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
       // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
       if (it.option_choice) out += "  └ " + optionLine(it) + "\n";
@@ -369,6 +380,38 @@
     return lo <= 0 ? "" : text.slice(0, lo) + "…";
   }
 
+  // 넘치면 자르지 않고 다음 줄로 — 2026-10-06 사장님: "잘리지 말고 다음 줄로 넘겨줘". 「Pororo ZERO兒童飲料
+  // (草莓)」가 「…(…」로 잘려 딸기·우유를 못 가렸다. 첫 줄은 firstMax, 다음 줄부터 restMax 안에.
+  // 끊는 자리는 빈칸·「(」 앞·「)」「-」 뒤를 먼저 찾되, 줄의 40% 보다 앞이면 그냥 글자에서 끊는다.
+  function wrapText(ctx, text, firstMax, restMax) {
+    const chars = Array.from(String(text || ""));
+    const out = [];
+    let max = firstMax;
+    while (chars.length) {
+      let n = 0;
+      while (n < chars.length && ctx.measureText(chars.slice(0, n + 1).join("")).width <= max) n++;
+      if (n >= chars.length) {
+        out.push(chars.join(""));
+        break;
+      }
+      n = Math.max(1, n);
+      let cut = n;
+      for (let k = n; k > Math.floor(n * 0.4); k--) {
+        const prev = chars[k - 1];
+        const next = chars[k];
+        if (next === " " || next === "(" || next === "（" || prev === " " || prev === ")" || prev === "）" || prev === "-") {
+          cut = k;
+          break;
+        }
+      }
+      out.push(chars.slice(0, cut).join("").trimEnd());
+      chars.splice(0, cut);
+      while (chars[0] === " ") chars.shift();
+      max = restMax;
+    }
+    return out.length ? out : [""];
+  }
+
   // `labelInfo` = { tableLabel, phoneLine } — precomputed by admin.js the
   // same way buildTicketHtml() derives them there (the counter-order /
   // pickup-number lookup needs the `tables` list, which this file
@@ -448,8 +491,24 @@
     return Math.max(6, Math.round(v * 8));
   }
 
+  // 오른쪽 여백(mm) — 2026-10-06 사장님: "주방으로 들어가는 빌지의 숫자탭이 오른쪽 끝에 있는데 그걸 조금
+  // 들여 쓸 수 있을까? 빌지가 조금이라도 겹치면 안보인대". 주방에서 빌지를 겹쳐 걸면 오른쪽 끝(수량 x2)이
+  // 다음 종이에 가린다. **수량 열만** 이만큼 안으로 들인다 — 나머지(구분선·桌號 줄·合計·가운데 글자)는 그대로
+  // (같은 날 사장님: "빌지 자체의 오른쪽 경계를 들여써달라는 게 아니라 나머지는 냅두고 숫자 열만"). 기본 8mm(64점).
+  const DEFAULT_RIGHT_MARGIN_MM = 8;
+  const MAX_RIGHT_MARGIN_MM = 30;
+  function ticketRightMarginMm(fs) {
+    const mm = Number(fs && fs.rightMargin);
+    return Number.isFinite(mm) && fs.rightMargin !== null && fs.rightMargin !== "" ? Math.max(0, Math.min(MAX_RIGHT_MARGIN_MM, mm)) : DEFAULT_RIGHT_MARGIN_MM;
+  }
+  /** 오른쪽 끝에서 수량 글자까지(점) — 원래 여백(RASTER_PAD) + 설정한 여백. */
+  function ticketRightPadDots(fs) {
+    return RASTER_PAD + Math.round(ticketRightMarginMm(fs) * 8);
+  }
+
   function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
+    const QTY_PAD = ticketRightPadDots(fs); // 수량 열만 이만큼 들인다
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
@@ -489,6 +548,17 @@
       mctx.font = rasterFont(px, weight);
       const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD * 2;
       const align = opts.align || "left";
+      // 왼쪽 정렬 줄(「  └ 옵션」 등)은 넘치면 다음 줄로, 「└」 뒤에 맞춰 들여서. 가운데 줄·취소선 줄은 예전처럼.
+      if (!opts.noFit && align === "left" && !opts.strike && mctx.measureText(text).width > maxWidth) {
+        const m = /^\s*└\s*/.exec(text);
+        const indent = m ? Math.round(mctx.measureText(m[0]).width) : 0;
+        wrapText(mctx, text, maxWidth, maxWidth - indent).forEach((t, k) => {
+          ops.push({ type: "text", text: t, px, weight, align, y, x: RASTER_PAD + (k ? indent : 0), strike: null });
+          y += Math.round(px * PX_TO_DOTS * 1.4);
+        });
+        y += opts.gapAfter || 0;
+        return;
+      }
       const fitted = opts.noFit ? text : fitText(mctx, text, maxWidth);
       // opts.strike = { before, text } — 줄 안의 한 토막에만 취소선을 긋는다.
       // 2026-09-16 사장님: "vip 로 할인들어가는 그거는 할인 들어간 요소마다
@@ -511,15 +581,24 @@
       const badge = opts.badge || null;
       const badgeSize = badge ? Math.round(px * PX_TO_DOTS * 1.35) : 0;
       const badgeGap = badge ? 14 : 0;
-      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD * 2 - rightWidth - 16 - badgeSize - badgeGap;
-      const fittedLeft = fitText(mctx, left, leftMax);
+      // opts.qty — 품목 줄의 수량(x2). 그 열만 오른쪽 여백만큼 안으로.
+      const rightPad = opts.qty ? QTY_PAD : RASTER_PAD;
+      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap;
+      // 넘치면 다음 줄로(위 wrapText). 수량은 첫 줄 오른쪽에 그대로, 다음 줄은 이름 시작에 맞춰 수량 칸 앞까지.
+      const lines = wrapText(mctx, left, leftMax, leftMax);
+      const fittedLeft = lines[0];
       // opts.strikePrefix — 오른쪽 값의 **앞부분**에 취소선을 긋는다.
       //
       // 2026-09-16 사장님: "프린트는 빨간색이 안나와서 총 금액을 긋고 하는
       // 게 나을 거 같아." 래스터는 우리가 직접 그리는 그림이라 진짜 선을
       // 그을 수 있다(텍스트 모드에는 그런 명령이 없어 화살표를 쓴다).
-      ops.push({ type: "row", left: fittedLeft, right, px, weight, y, badge, badgeSize, badgeGap, strikePrefix: opts.strikePrefix || null });
-      y += Math.round(px * PX_TO_DOTS * 1.4) + (opts.gapAfter || 0);
+      ops.push({ type: "row", left: fittedLeft, right, rightPad, px, weight, y, badge, badgeSize, badgeGap, strikePrefix: opts.strikePrefix || null });
+      y += Math.round(px * PX_TO_DOTS * 1.4);
+      for (const t of lines.slice(1)) {
+        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: RASTER_PAD + (badge ? badgeSize + badgeGap : 0), strike: null });
+        y += Math.round(px * PX_TO_DOTS * 1.4);
+      }
+      y += opts.gapAfter || 0;
     }
     function divider() {
       ops.push({ type: "divider", y });
@@ -569,7 +648,7 @@
       // 읽혀야 한다. 취소를 추가로 읽으면 만들지 말아야 할 것을 만든다.
       if (it.__delta === "-") line(priceCopy ? "[取消]" : "[취소 / 取消]", sz("itemDetail", 13), 900);
       else if (it.__delta === "+") line(priceCopy ? "[追加]" : "[추가 / 追加]", sz("itemDetail", 13), 900);
-      row(itemName(it, priceCopy), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900));
+      row(itemName(it, priceCopy), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900), { qty: true });
       if (it.option_choice) line("  └ " + optionLine(it), sz("itemDetail", 13), wt("itemDetail", 400));
       // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
@@ -703,11 +782,11 @@
         ctx.textAlign = "left";
         ctx.fillText(op.left, leftX, op.y);
         ctx.textAlign = "right";
-        ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
+        ctx.fillText(op.right, canvas.width - op.rightPad, op.y);
         if (op.strikePrefix) {
           // 오른쪽 정렬이라 글자는 (오른끝 - 전체너비) 에서 시작한다.
           // 앞부분만 그 폭만큼 긋는다.
-          const startX = canvas.width - RASTER_PAD - ctx.measureText(op.right).width;
+          const startX = canvas.width - op.rightPad - ctx.measureText(op.right).width;
           const prefixWidth = ctx.measureText(op.strikePrefix).width;
           const midY = op.y + Math.round(op.px * PX_TO_DOTS * 0.52);
           ctx.fillRect(startX, midY, prefixWidth, Math.max(2, Math.round(op.px * PX_TO_DOTS * 0.09)));
@@ -716,7 +795,7 @@
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
-      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
+      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : op.x || RASTER_PAD, op.y);
       if (op.strike && op.align !== "center") {
         // 왼쪽 정렬이라 앞 토막의 폭만큼 밀어서 긋는다.
         const x0 = RASTER_PAD + ctx.measureText(op.strike.before || "").width;

@@ -104,7 +104,7 @@ out.push("\n[두 장은 그대로 둔다]");
 check("브라우저 인쇄는 두 장을 한 작업에 담는다",
   /const bodyHtml = `<div class="receipt-page-break">\$\{kitchenReceipt\}<\/div>\$\{priceReceipt\}`/.test(adminJs));
 check("ESC/POS 인쇄도 두 장을 만든다",
-  /rawKitchen = buildEscPosTicket\(o, storeName\)/.test(adminJs) &&
+  /rawKitchen = buildEscPosTicket\(o, storeName[,)]/.test(adminJs) &&
   /rawPriceCopy = buildEscPosTicket\(o, storeName, \{ priceCopy: true/.test(adminJs));
 
 console.log(out.join("\n"));

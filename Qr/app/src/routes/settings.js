@@ -665,7 +665,7 @@ const TICKET_WEIGHT_KEYS = TICKET_FONT_KEYS.map((k) => `${k}Weight`);
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
   const out = {};
-  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
+  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin", "rightMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
   return out;
 }
 
@@ -700,6 +700,14 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
     const v = Number(b.topMargin);
     if (b.topMargin !== undefined && b.topMargin !== null && b.topMargin !== "" && Number.isFinite(v)) {
       store.settings.ticket_font_sizes.topMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
+    }
+  }
+  // 오른쪽 여백(mm, 0.5 단위, 0~30, 안 정하면 8). 2026-10-06 사장님: "주방으로 들어가는 빌지의 숫자탭이
+  // 오른쪽 끝에 있는데 그걸 조금 들여 쓸 수 있을까? 빌지가 조금이라도 겹치면 안보인대".
+  {
+    const v = Number(b.rightMargin);
+    if (b.rightMargin !== undefined && b.rightMargin !== null && b.rightMargin !== "" && Number.isFinite(v)) {
+      store.settings.ticket_font_sizes.rightMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
     }
   }
   // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
