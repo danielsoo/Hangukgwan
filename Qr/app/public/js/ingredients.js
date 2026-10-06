@@ -15,6 +15,10 @@
   const fmt = (key, vals) =>
     Object.entries(vals).reduce((s, [k, v]) => s.split(`{${k}}`).join(String(v)), T(key));
 
+  // 지점 이름(「본점」·「2호점」). /meta 가 주는 것을 담아 두고 한눈에 보기가 쓴다.
+  const storeNames = {};
+  const storeName = (k) => storeNames[k] || k;
+
   // 엑셀 머리글 → 우리가 쓰는 이름. 사장님 엑셀은 「내  용」처럼 가운데
   // 공백이 들어가 있어서 띄어쓰기를 지우고 맞춘다.
   const HEAD = {
@@ -233,13 +237,167 @@
     return p.toString();
   }
 
+  // 「한눈에 보기」에서 고른 업체. 비어 있으면 전체.
+  let onlyVendor = "";
+
+  /** 큰 숫자 옆 네 칸. 결산·급여와 같은 모양(`stl-hero-side`). */
+  function heroStats(s) {
+    const perDay = s.days ? s.total / s.days : 0;
+    const cells = [
+      { label: T("ingStatDays"), value: money(s.days || 0) },
+      { label: T("ingStatPerDay"), value: `NT$${money(Math.round(perDay))}` },
+      { label: T("ingStatVendors"), value: money(s.vendors.length) },
+      { label: T("ingStatItems"), value: money(s.items.length) },
+    ];
+    // 결산·급여와 **같은 칸 모양**을 쓴다(.stl-stat). 제 모양을 따로 만들면
+    // 글자 크기와 줄 간격이 조금씩 어긋난다.
+    $("#ingHeroStats").innerHTML = cells
+      .map((c) => `<div class="stl-stat"><span class="stl-stat-label">${esc(c.label)}</span><span class="stl-stat-value">${esc(c.value)}</span></div>`)
+      .join("");
+  }
+
+  /** 달마다 — 결산과 같은 막대 그래프. Chart.js 가 없으면 글자 막대로 내려간다. */
+  let monthsChart = null;
+  function renderMonths(s) {
+    const canvas = $("#ingMonthsChart");
+    if (!canvas || typeof Chart === "undefined") return;
+    // 탭이 숨어 있을 때 그리면 높이가 0 이라 안 보인다 — 보일 때만 그린다.
+    if (!canvas.offsetParent) return;
+    if (monthsChart) monthsChart.destroy();
+    monthsChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: s.months.map((m) => m.month),
+        datasets: [{ label: T("ingMonthsTitle"), data: s.months.map((m) => m.amount), backgroundColor: "#16213e", borderRadius: 4, maxBarThickness: 48 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => `NT$${money(Math.round(c.parsed.y))}` } } },
+        scales: { y: { beginAtZero: true, ticks: { callback: (v) => `NT$${money(v)}` } } },
+      },
+    });
+  }
+
+  /**
+   * 업체별 한눈에 — 줄마다 지출·몫·마지막 매입일, 맨 밑에 합계.
+   *
+   * 줄을 누르면 **그 업체만** 본다(다시 누르면 전체). 업체가 스물이라
+   * 막대만으로는 「이 업체가 뭘 얼마에 사는가」까지 못 본다.
+   */
+  function renderVendorTable(s) {
+    const el = $("#ingVendorTable");
+    if (!el) return;
+    const head = [T("ingColVendor"), T("ingColLines"), T("ingColAmount"), T("ingColShare"), T("ingColLast")]
+      .map((h) => `<th>${esc(h)}</th>`).join("");
+    const body = s.vendors
+      .map((v) => {
+        const share = s.total ? Math.round((v.amount / s.total) * 1000) / 10 : 0;
+        const on = onlyVendor === v.vendor;
+        return `<tr data-ing-vendor="${esc(v.vendor)}" class="${on ? "is-on" : ""}" role="button" tabindex="0">
+          <td>${esc(v.vendor)}</td>
+          <td>${money(v.lines)}</td>
+          <td class="is-total">NT$${money(Math.round(v.amount))}</td>
+          <td>${share}%</td>
+          <td>${esc(v.last_date || "")}</td>
+        </tr>`;
+      })
+      .join("");
+    const foot = s.vendors.length
+      ? `<tfoot><tr><td>${esc(T("ingColTotal"))}</td><td>${money(s.lines)}</td>
+         <td class="is-total">NT$${money(Math.round(s.total))}</td><td>100%</td><td>${esc(s.last || "")}</td></tr></tfoot>`
+      : "";
+    el.innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}`;
+    el.querySelectorAll("[data-ing-vendor]").forEach((tr) => {
+      const go = () => {
+        onlyVendor = onlyVendor === tr.dataset.ingVendor ? "" : tr.dataset.ingVendor;
+        loadSummary();
+      };
+      tr.onclick = go;
+      tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    });
+  }
+
+  /**
+   * 업체 칩 줄 — 「전체」와 업체들. 급여 탭의 사람 칩 줄과 같은 자리다.
+   *
+   * 2026-10-06 사장님: "어떤 업체에서 어떤 종류를 우리가 언제 샀고 이런
+   * 것들? 업체별로 나눠서 볼 수도 있게 해줬으면 좋겠고"
+   *
+   * 한 업체를 고르면 집계가 그 업체만으로 바뀌므로, 칩 줄에 쓸 **전체 업체
+   * 목록은 안 고른 상태에서 받아 둔 것**을 쓴다 — 그러지 않으면 고르는 순간
+   * 다른 업체 칩이 사라져서 돌아올 길이 없어진다.
+   */
+  let allVendors = [];
+  function renderVendorChips() {
+    const el = $("#ingVendorChips");
+    if (!el) return;
+    const chips = [{ key: "", label: T("ingAllVendors") }].concat(
+      allVendors.map((v) => ({ key: v.vendor, label: v.vendor }))
+    );
+    el.innerHTML = chips
+      .map((c) => `<button type="button" class="ing-chip${onlyVendor === c.key ? " is-on" : ""}" data-ing-chip="${esc(c.key)}">${esc(c.label)}</button>`)
+      .join("");
+    el.querySelectorAll("[data-ing-chip]").forEach((b) => {
+      b.onclick = () => { onlyVendor = b.dataset.ingChip; loadSummary(); };
+    });
+  }
+
+  /**
+   * 그 업체에서 **뭘 언제 샀나** — 날짜·품명·수량·단가·금액.
+   *
+   * 업체를 골랐을 때만 띄운다. 전체로 보면 15만 줄이라 화면이 멎는다.
+   */
+  async function loadRows() {
+    const card = $("#ingRowsCard");
+    if (!card) return;
+    if (!onlyVendor) { card.hidden = true; return; }
+    card.hidden = false;
+    $("#ingRowsTitle").textContent = fmt("ingRowsTitleFmt", { vendor: onlyVendor });
+    const res = await fetch(`/api/ingredients/rows?${query()}&vendor=${encodeURIComponent(onlyVendor)}&limit=300`);
+    const data = res.ok ? await res.json() : { rows: [] };
+    const rows = data.rows || [];
+    $("#ingRowsNote").textContent = rows.length
+      ? (data.truncated ? fmt("ingRowsTruncFmt", { n: rows.length }) : fmt("ingRowsCountFmt", { n: rows.length }))
+      : T("ingEmpty");
+    const head = [T("ingColDate"), T("ingColName"), T("ingColQty"), T("ingColPrice"), T("ingColAmount"), T("ingColStore")]
+      .map((h) => `<th>${esc(h)}</th>`).join("");
+    const body = rows
+      .map((r) => `<tr>
+        <td>${esc(r.date)}</td>
+        <td class="is-name">${esc(r.name_ko ? `${r.name}  ${r.name_ko}` : r.name)}</td>
+        <td>${money(r.qty)}${esc(r.unit || "")}</td>
+        <td>${r.price ? `NT$${money(r.price)}` : ""}</td>
+        <td class="is-total">NT$${money(Math.round(r.amount || 0))}</td>
+        <td>${esc(storeName(r.store))}</td>
+      </tr>`)
+      .join("");
+    $("#ingRowsTable").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+  }
+
   async function loadSummary() {
-    const res = await fetch(`/api/ingredients/summary?${query()}`);
+    const q = query() + (onlyVendor ? `&vendor=${encodeURIComponent(onlyVendor)}` : "");
+    const res = await fetch(`/api/ingredients/summary?${q}`);
     if (!res.ok) return;
     const s = await res.json();
     $("#ingTotal").textContent = `NT$${money(Math.round(s.total))}`;
-    $("#ingTotalSub").textContent = fmt("ingLinesFmt", { n: s.lines });
-    bars($("#ingMonths"), s.months.map((m) => ({ key: m.month, label: m.month, value: m.amount })));
+    $("#ingTotalSub").textContent = s.first
+      ? `${fmt("ingLinesFmt", { n: s.lines })} · ${s.first} ~ ${s.last}`
+      : fmt("ingLinesFmt", { n: s.lines });
+    heroStats(s);
+    renderMonths(s);
+    // 지점별은 「전체」로 보실 때만 뜻이 있다
+    const sc = $("#ingStoresCard");
+    if (sc) {
+      const many = (s.stores || []).length > 1;
+      sc.hidden = !many;
+      if (many) bars($("#ingStores"), s.stores.map((x) => ({ key: x.store, label: storeName(x.store), value: x.amount, sub: fmt("ingLinesFmt", { n: x.lines }) })));
+    }
+    // 전체로 볼 때의 업체 목록을 담아 둔다 — 칩 줄이 이걸 쓴다
+    if (!onlyVendor) allVendors = s.vendors;
+    renderVendorChips();
+    renderVendorTable(s);
+    loadRows();
     bars($("#ingVendors"), s.vendors.map((v) => ({ key: v.vendor, label: v.vendor, value: v.amount, sub: fmt("ingLinesFmt", { n: v.lines }) })));
     bars(
       $("#ingItems"),
@@ -313,6 +471,7 @@
     const res = await fetch("/api/ingredients/meta");
     if (!res.ok) return null;
     const m = await res.json();
+    for (const st of m.stores || []) storeNames[st.key] = st.name_ko || st.key;
     const sel = $("#ingStore");
     if (sel && sel.options.length <= 1) {
       for (const s of m.stores || []) {

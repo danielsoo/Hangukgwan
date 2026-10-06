@@ -479,26 +479,54 @@
           </div>
         </div>
 
-        <div class="ing-hero">
-          <div class="ing-hero-label" data-i18n="ingTotalLabel">이 기간 식자재비</div>
-          <div class="ing-hero-value" id="ingTotal">NT$0</div>
-          <div class="ing-hero-sub" id="ingTotalSub"></div>
-        </div>
-
-        <div class="ing-block">
-          <h3 class="ing-block-title" data-i18n="ingMonthsTitle">📈 달마다</h3>
-          <div class="ing-bars" id="ingMonths"></div>
-        </div>
-
-        <div class="ing-two">
-          <div class="ing-block">
-            <h3 class="ing-block-title" data-i18n="ingVendorsTitle">🏪 업체별</h3>
-            <div class="ing-bars" id="ingVendors"></div>
+        <!-- 한눈에 보기 — 급여 탭과 같은 모양이다(2026-10-06 사장님: "식자재 탭에서
+             급여처럼 저런 전체 보기로 결산 보는 것처럼 볼 수 있으면 좋겠는데?").
+             결산의 큰 숫자·카드·그래프·표를 그대로 쓴다. 업체 줄을 누르면 그 업체만 본다. -->
+        <div class="ing-overview">
+          <div class="stl-hero">
+            <div class="stl-hero-main">
+              <div class="stl-hero-label" id="ingTotalLabel" data-i18n="ingTotalLabel">이 기간 식자재비</div>
+              <div class="stl-hero-value" id="ingTotal">NT$0</div>
+              <div class="stl-hero-sub" id="ingTotalSub"></div>
+            </div>
+            <div class="stl-hero-side" id="ingHeroStats"></div>
           </div>
-          <div class="ing-block">
-            <h3 class="ing-block-title" data-i18n="ingItemsTitle">🥬 품목별</h3>
-            <p class="ing-note" data-i18n="ingItemsHint">품목을 누르면 단가가 언제 얼마였는지 봅니다.</p>
-            <div class="ing-bars" id="ingItems"></div>
+
+          <!-- 업체별로 나눠 보기(2026-10-06 사장님: "어떤 업체에서 어떤 종류를 우리가 언제
+               샀고 … 업체별로 나눠서 볼 수도 있게"). 급여 탭의 사람 칩 줄과 같은 자리다. -->
+          <div class="ing-chips" id="ingVendorChips"></div>
+
+          <div class="settlement-charts-grid">
+            <div class="settlement-wide-card">
+              <h3 data-i18n="ingMonthsTitle">📈 달마다</h3>
+              <div class="settlement-chart-wrap"><canvas id="ingMonthsChart"></canvas></div>
+            </div>
+            <div class="settlement-wide-card" id="ingStoresCard" hidden>
+              <h3 data-i18n="ingStoresTitle">🏬 지점별</h3>
+              <div class="ing-bars" id="ingStores"></div>
+            </div>
+            <div class="settlement-wide-card">
+              <h3 data-i18n="ingVendorsTitle">🏪 업체별</h3>
+              <div class="ing-bars" id="ingVendors"></div>
+            </div>
+            <div class="settlement-wide-card">
+              <h3 data-i18n="ingItemsTitle">🥬 품목별</h3>
+              <p class="settings-hint" data-i18n="ingItemsHint">품목을 누르면 단가가 언제 얼마였는지 봅니다.</p>
+              <div class="ing-bars" id="ingItems"></div>
+            </div>
+          </div>
+
+          <!-- 그 업체에서 뭘 언제 샀나. 업체를 골랐을 때만 뜬다 — 전체로 보면 15만 줄이다. -->
+          <div class="settlement-wide-card" id="ingRowsCard" hidden>
+            <h3 id="ingRowsTitle"></h3>
+            <p class="settings-hint" id="ingRowsNote"></p>
+            <div class="ing-ov-table-wrap"><table class="ing-ov-table ing-rows-table" id="ingRowsTable"></table></div>
+          </div>
+
+          <div class="settlement-wide-card">
+            <h3 data-i18n="ingVendorTableTitle">🏪 업체별 한눈에</h3>
+            <p class="settings-hint" data-i18n="ingVendorTableHint">줄을 누르면 그 업체만 봅니다. 다시 누르면 전체로 돌아와요.</p>
+            <div class="ing-ov-table-wrap"><table class="ing-ov-table" id="ingVendorTable"></table></div>
           </div>
         </div>
 

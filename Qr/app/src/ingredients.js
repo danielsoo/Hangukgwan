@@ -198,13 +198,29 @@ function summarize(rows) {
   const byVendor = new Map();
   const byItem = new Map();
   const byMonth = new Map();
+  const byStore = new Map();
+  const days = new Set();
   let total = 0;
+  let first = "", last = "";
   for (const r of rows || []) {
     total += r.amount || 0;
-    const v = byVendor.get(r.vendor) || { vendor: r.vendor, amount: 0, lines: 0 };
+    // 「한눈에 보기」가 쓰는 것들 — 하루 평균을 내려면 **산 날 수**가 있어야
+    // 하고(줄 수가 아니다), 업체 줄에는 마지막으로 산 날이 있어야 한다.
+    if (r.date) {
+      days.add(r.date);
+      if (!first || r.date < first) first = r.date;
+      if (!last || r.date > last) last = r.date;
+    }
+    const v = byVendor.get(r.vendor) || { vendor: r.vendor, amount: 0, lines: 0, last_date: "" };
     v.amount += r.amount || 0;
     v.lines += 1;
+    if (r.date > v.last_date) v.last_date = r.date;
     byVendor.set(r.vendor, v);
+
+    const st = byStore.get(r.store) || { store: r.store, amount: 0, lines: 0 };
+    st.amount += r.amount || 0;
+    st.lines += 1;
+    byStore.set(r.store, st);
 
     const it = byItem.get(r.name) || { name: r.name, name_ko: r.name_ko, unit: r.unit, amount: 0, qty: 0, lines: 0 };
     it.amount += r.amount || 0;
@@ -222,6 +238,10 @@ function summarize(rows) {
   return {
     total: round(total),
     lines: (rows || []).length,
+    days: days.size,
+    first,
+    last,
+    stores: [...byStore.values()].map((s) => ({ ...s, amount: round(s.amount) })).sort((a, b) => b.amount - a.amount),
     vendors: [...byVendor.values()].map((v) => ({ ...v, amount: round(v.amount) })).sort((a, b) => b.amount - a.amount),
     items: [...byItem.values()].map((i) => ({ ...i, amount: round(i.amount), qty: round(i.qty) })).sort((a, b) => b.amount - a.amount),
     months: [...byMonth.values()].map((m) => ({ ...m, amount: round(m.amount) })).sort((a, b) => a.month.localeCompare(b.month)),

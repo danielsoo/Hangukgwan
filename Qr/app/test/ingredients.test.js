@@ -114,6 +114,22 @@ out.push("\n[집계]");
   check("★ 품목 수량도 더한다", s.items.find((i) => i.name === "甲").qty === 3, "");
   check("★ 금액 많은 순", s.vendors[0].vendor === "台裕行", JSON.stringify(s.vendors));
   check("달별로도 모은다", s.months.length === 1 && s.months[0].month === "2025-01", JSON.stringify(s.months));
+  // 「한눈에 보기」가 쓰는 것들(2026-10-06 사장님: "급여처럼 저런 전체 보기로").
+  // 하루 평균을 내려면 **산 날 수**가 있어야 한다 — 줄 수로 나누면 한 영수증에
+  // 다섯 줄 적은 날이 다섯 날이 된다.
+  check("★★ 산 날 수를 센다 — 같은 날 여러 줄은 하루", s.days === 1, String(s.days));
+  check("★ 첫 날과 마지막 날", s.first === "2025-01-01" && s.last === "2025-01-01", s.first + "~" + s.last);
+  check("★ 업체 줄에 마지막 매입일", s.vendors.every((v) => v.last_date === "2025-01-01"), JSON.stringify(s.vendors));
+  check("★ 지점별로도 모은다", s.stores.length === 1 && s.stores[0].store === "main" && s.stores[0].amount === 450, JSON.stringify(s.stores));
+  {
+    const two = [
+      G.normalizeRow(row({ name: "甲", amount: 100, date: 45658 }), "main"),
+      G.normalizeRow(row({ name: "甲", amount: 70, date: 45659 }), "branch3"),
+    ];
+    const t = G.summarize(two);
+    check("★★ 지점이 둘이면 둘 다 — 많은 쪽이 위", t.stores.length === 2 && t.stores[0].store === "main", JSON.stringify(t.stores));
+    check("★ 날이 다르면 산 날도 둘", t.days === 2, String(t.days));
+  }
   check("빈 목록도 터지지 않는다", G.summarize([]).total === 0 && G.summarize(null).lines === 0, "");
 }
 

@@ -123,8 +123,12 @@ router.get("/meta", async (req, res) => {
 /** 업체별·품목별·달별 집계. */
 router.get("/summary", async (req, res) => {
   const c = await col();
-  const rows = await c.find(rangeQuery(req.query), { projection: { _id: 0 } }).toArray();
-  res.json(G.summarize(rows));
+  const where = rangeQuery(req.query);
+  // 「한눈에 보기」에서 업체 줄을 누르면 그 업체만 본다(2026-10-06).
+  const vendor = G.canonicalVendor((req.query || {}).vendor);
+  if (vendor) where.vendor = vendor;
+  const rows = await c.find(where, { projection: { _id: 0 } }).toArray();
+  res.json({ ...G.summarize(rows), vendor: vendor || "" });
 });
 
 /** 한 품목의 단가가 언제 얼마였나. */

@@ -2929,6 +2929,45 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-hero-value { font-size: 34px; font-weight: 800; line-height: 1.2; }
 .ing-hero-sub { color: var(--muted); font-size: 14px; }
 
+/* 한눈에 보기 — 결산·급여와 같은 모양(2026-10-06 사장님: "급여처럼 저런 전체
+   보기로 결산 보는 것처럼"). 큰 숫자·카드·그래프·표는 결산 것을 그대로 쓰고,
+   여기엔 식자재에만 있는 것(업체 칩 줄·내역 표)만 적는다. */
+.ing-overview { margin-bottom: 14px; }
+/* 막대 **묶음 전체가 하나의 격자**다(결산 .stl-bars 와 같은 이유) — 줄마다
+   제 격자를 쓰면 이름 칸 너비가 줄마다 달라져서 막대 시작이 어긋나고,
+   그러면 서로 견줄 수가 없다. 줄은 display:contents 로 칸만 내어준다. */
+.ing-bars {
+  display: grid;
+  grid-template-columns: minmax(88px, 260px) 1fr minmax(96px, max-content) minmax(40px, max-content);
+  align-items: center; column-gap: 10px; row-gap: 9px;
+}
+.ing-bars .ing-bar { display: contents; }
+.ing-bars .ing-bar.clickable:hover > * { background: #faf7f1; }
+.ing-bars .ing-bar-value { text-align: right; font-weight: 700; white-space: nowrap; }
+.ing-bars .ing-bar-sub { text-align: right; color: var(--muted); font-size: 13.5px; white-space: nowrap; }
+.ing-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 14px; }
+.ing-chip {
+  height: 34px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; color: var(--ink); cursor: pointer; font: inherit; font-size: 14px; font-weight: 600;
+  max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ing-chip:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
+.ing-chip.is-on { background: var(--navy, #16213e); color: #fff; border-color: var(--navy, #16213e); }
+
+.ing-ov-table-wrap { overflow-x: auto; }
+.ing-ov-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ing-ov-table th { text-align: right; font-weight: 600; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.ing-ov-table td { text-align: right; padding: 9px 10px; border-bottom: 1px solid #f0ebe2; white-space: nowrap; }
+.ing-ov-table th:first-child, .ing-ov-table td:first-child { text-align: left; }
+.ing-ov-table td.is-total { font-weight: 800; }
+.ing-ov-table tbody tr[data-ing-vendor] { cursor: pointer; }
+.ing-ov-table tbody tr:hover td { background: #faf6ef; }
+.ing-ov-table tbody tr.is-on td { background: #f3efe6; font-weight: 700; }
+/* 산 내역은 줄이 많다 — 길어지면 그 안에서 굴린다. 품목 이름만 왼쪽. */
+.ing-rows-table td.is-name, .ing-rows-table th:nth-child(2) { text-align: left; }
+.ing-rows-table tbody tr { cursor: default; }
+.ing-ov-table-wrap { max-height: 520px; overflow-y: auto; }
+
 .ing-block { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
 .ing-block-title { margin: 0 0 10px; font-size: 17px; }
 /* 업체와 품목을 나란히 — 둘을 같이 보는 일이 많다. 좁으면 한 줄로 내려간다. */
