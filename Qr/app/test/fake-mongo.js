@@ -81,6 +81,11 @@ function matchOne(val, cond) {
 // 고르는 형태 둘 다 — src/db.js 의 refreshStore() 가 store 문서에서 주문을
 // 빼고 읽는 데 쓴다. 예전에는 두 번째 인자를 통째로 무시해서, "주문을 안
 // 읽는다"는 이 변경의 핵심이 테스트에서 확인되지 않았다.
+// 점이 든 칸 이름도 읽는다 — 집계가 쓴다.
+function get(doc, path) {
+  return String(path).split(".").reduce((o, k) => (o == null ? undefined : o[k]), doc);
+}
+
 function project(doc, projection) {
   if (!projection || !Object.keys(projection).length) return doc;
   const keys = Object.keys(projection).filter((k) => k !== "_id");
@@ -380,6 +385,75 @@ class Collection {
     }
     return { upsertedCount: upserted, modifiedCount: modified, deletedCount: deleted };
   }
+  /**
+   * 쓰는 만큼만 흉내 낸 집계.
+   *
+   * 2026-10-06 사장님: "이것도 전체 데이터를 읽으려고 하지마 각 날짜와 업체마다
+   * 고유 아이디를 주면 그것만 찾으면 되잖아 전처럼 서버 터져" — 그래서 식자재
+   * 집계가 **줄을 다 받아 오지 않고** DB 가 묶어서 주게 바뀌었다(16만 줄이다).
+   * 그 길을 시험이 지나가려면 여기에도 있어야 한다.
+   *
+   * 아는 토막: $match · $group($sum·$min·$max·$first) · $sort · $limit · $count.
+   * 모르는 토막이 오면 **조용히 넘기지 않고 터뜨린다** — 시험이 거짓으로
+   * 통과하는 것이 제일 나쁘다.
+   */
+  aggregate(pipeline = []) {
+    let rows = this.docs.slice();
+    for (const stage of pipeline) {
+      const op = Object.keys(stage)[0];
+      if (op === "$match") {
+        rows = rows.filter((d) => matches(d, stage.$match));
+      } else if (op === "$group") {
+        const spec = stage.$group;
+        const key = (d) => (spec._id === null ? "" : String(get(d, String(spec._id).slice(1))));
+        const by = new Map();
+        for (const d of rows) {
+          const k = key(d);
+          if (!by.has(k)) by.set(k, { _id: spec._id === null ? null : get(d, String(spec._id).slice(1)), __n: 0 });
+          const acc = by.get(k);
+          acc.__n++;
+          for (const [field, expr] of Object.entries(spec)) {
+            if (field === "_id") continue;
+            const [fn, arg] = Object.entries(expr)[0];
+            const val = typeof arg === "string" && arg.startsWith("$") ? get(d, arg.slice(1)) : arg;
+            if (fn === "$sum") acc[field] = (acc[field] || 0) + (typeof val === "number" ? val : 1);
+            else if (fn === "$min") acc[field] = acc[field] === undefined || (val != null && val < acc[field]) ? val : acc[field];
+            else if (fn === "$max") acc[field] = acc[field] === undefined || (val != null && val > acc[field]) ? val : acc[field];
+            else if (fn === "$first") acc[field] = acc[field] === undefined ? val : acc[field];
+            else throw new Error(`fake-mongo: $group 이 모르는 ${fn}`);
+          }
+        }
+        rows = [...by.values()].map((r) => { delete r.__n; return r; });
+      } else if (op === "$sort") {
+        const spec = stage.$sort;
+        rows = rows.slice().sort((x, y) => {
+          for (const [f, dir] of Object.entries(spec)) {
+            const a2 = get(x, f), b2 = get(y, f);
+            if (a2 === b2) continue;
+            const cmp = a2 == null ? -1 : b2 == null ? 1 : a2 < b2 ? -1 : 1;
+            return cmp * (dir < 0 ? -1 : 1);
+          }
+          return 0;
+        });
+      } else if (op === "$limit") {
+        rows = rows.slice(0, stage.$limit);
+      } else if (op === "$count") {
+        rows = [{ [stage.$count]: rows.length }];
+      } else {
+        throw new Error(`fake-mongo: aggregate 가 모르는 토막 ${op}`);
+      }
+    }
+    const out = rows;
+    return { toArray: async () => out };
+  }
+
+  /** 그 칸의 값들만. 업체 목록처럼 **줄을 다 읽을 필요가 없는** 자리에 쓴다. */
+  async distinct(field, filter = {}) {
+    const out = new Set();
+    for (const d of this.docs) if (matches(d, filter)) { const v = get(d, field); if (v !== undefined) out.add(v); }
+    return [...out];
+  }
+
   async countDocuments(filter = {}) {
     return this.docs.filter((d) => matches(d, filter)).length;
   }

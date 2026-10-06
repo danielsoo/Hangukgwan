@@ -200,8 +200,10 @@ function startMeasuring(req, res) {
 // 라우터에서 큰 한도로 다시 읽는다(src/routes/ingredients.js).
 // 2026-10-06 에 대기함을 만들며 걸렸다: 작은 시험 그림은 지나가고 진짜
 // 사진만 안 돼서, 화면에는 「대기함에 문제가 있었어요」로만 보였다.
+// 엑셀 가져오기(/import)도 같다 — 800줄 묶음이 78KB 라 **아슬아슬하게** 들어가고,
+// 한 날짜에 줄이 많으면(그 날짜는 쪼개지 않는다) 그대로 넘긴다.
 const jsonParser = express.json({ verify: (req, res, buf) => { req.rawBody = buf; } });
-const BIG_BODY = new RegExp("^/api/ingredients/(inbox|read-photo)");
+const BIG_BODY = new RegExp("^/api/ingredients/(inbox|read-photo|import)");
 app.use((req, res, next) => (BIG_BODY.test(req.path) ? next() : jsonParser(req, res, next)));
 
 // Static files (css/js/images) and the two page shells right below never

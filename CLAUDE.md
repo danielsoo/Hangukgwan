@@ -645,6 +645,28 @@ git checkout -- Qr/app/package-lock.json
 - 시험: `test/sensitive-lock.test.js`(시계 넘겨 15분·5회, 세 영역이 따로 풀리는지), `test/e2e-sensitive-lock.js`
   (식자재는 떠났다 오면 또 묻는지), `test/e2e-staff-hidden.js`(직원은 탭도 길도 없다).
 
+## 집계는 DB 가 한다 — 줄을 통째로 받아오지 않는다 (2026-10-06)
+
+사장님: "이것도 전체 데이터를 읽으려고 하지마 각 날짜와 업체마다 고유 아이디를
+주면 그것만 찾으면 되잖아 전처럼 서버 터져"
+
+식자재 장부는 **16만 줄**이다(2007년부터, 사장님 엑셀 두 벌을 합친 것). 예전
+`/summary` 는 `find(where).toArray()` 로 그걸 **다 받아** 화면 쪽에서 더했다 —
+「전체 기간」을 한 번 누르면 수십 MB 가 한 인스턴스 메모리에 올라온다.
+
+- 이제 `G.summaryPipelines(where)` 가 묶음마다 파이프라인을 주고 DB 가 묶는다
+  (`$group`). 돌아오는 것은 업체 스무 줄 · 품목 200줄 · 달 수십 줄뿐이다.
+  `G.shapeSummary` 가 예전 `summarize()` 와 **같은 모양**으로 만들고,
+  `test/ingredients.test.js` 가 두 길의 답이 같은지 잰다.
+- 업체 목록은 `distinct("vendor")` 다 — 이름 스무 개 받자고 16만 줄을 읽지 않는다.
+- 색인: `{store,date}` · `{date}` · `{name,date}` · `{vendor,date}` · **`{store,date,vendor}`**
+  (「그 날 그 업체 영수증」을 저장할 때마다 찾는다) · `{month}`.
+- 사진·엑셀이 오가는 길은 전역 `express.json()`(100KB)을 **건너뛴다**
+  (`server.js` BIG_BODY). 건너뛰게 했으면 그 라우터에서 `express.json({limit})`을
+  **직접 걸어야** 한다 — 안 그러면 `req.body` 가 비어 400 이다.
+- 엑셀 가져오기는 한 번에 2,000줄(≈195KB)씩 보낸다. 한 날짜는 **쪼개지 않는다**
+  (뒤 덩이가 앞 덩이를 지운다).
+
 ## store 문서를 통째로 쓰지 않는다
 
 `save()` 는 store 문서 **전체**를 지금 이 인스턴스가 들고 있는 값으로

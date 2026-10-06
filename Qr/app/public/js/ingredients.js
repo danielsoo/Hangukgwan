@@ -191,7 +191,10 @@
       };
       try {
         for (const [, rows] of byDate) {
-          if (chunk.length + rows.length > 800) await send();
+          // 한 번에 2,000줄씩. 800줄이면 15만 줄짜리 장부가 요청 183번이라 몇 분
+          // 걸린다. 2,000줄은 약 195KB 인데, 이 길은 전역 100KB 파서를 건너뛰게
+          // 해 두었다(server.js BIG_BODY) — 안 그러면 413 으로 튕긴다.
+          if (chunk.length + rows.length > 2000) await send();
           chunk = chunk.concat(rows);
         }
         await send();

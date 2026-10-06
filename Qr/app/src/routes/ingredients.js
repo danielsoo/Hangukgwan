@@ -27,6 +27,10 @@ async function col() {
       await c.createIndex({ date: -1 });
       await c.createIndex({ name: 1, date: 1 });
       await c.createIndex({ vendor: 1, date: -1 });
+      // 「그 날 그 업체 영수증」 — 저장할 때마다 찾는다. 2026-10-06 사장님:
+      // "각 날짜와 업체마다 고유 아이디를 주면 그것만 찾으면 되잖아".
+      await c.createIndex({ store: 1, date: 1, vendor: 1 });
+      await c.createIndex({ month: 1 });
     } catch (e) {
       // 인덱스가 없어도 읽기는 된다 — 느릴 뿐이다. 막지 않는다.
       console.warn("[ingredients] 인덱스 생성 실패:", e && e.message);
@@ -76,7 +80,9 @@ function rangeQuery(q) {
  * 오면 뒤 덩이가 앞 덩이를 지워버리므로, 화면은 **한 날짜를 쪼개지 않는다**
  * (public/js/ingredients-import.js). 그 약속을 서버도 확인한다.
  */
-router.post("/import", async (req, res) => {
+// 몸집이 크다(한 번에 2,000줄 ≈ 195KB). 전역 파서를 건너뛰게 해 두었으므로
+// (server.js BIG_BODY) **여기서 직접 읽는다** — 안 하면 req.body 가 비어 400 이다.
+router.post("/import", express.json({ limit: "8mb" }), async (req, res) => {
   const body = req.body || {};
   const store = String(body.store || "").trim();
   if (!G.storeByKey(store)) return res.status(400).json({ error: "unknown_store" });
@@ -127,8 +133,12 @@ router.get("/summary", async (req, res) => {
   // 「한눈에 보기」에서 업체 줄을 누르면 그 업체만 본다(2026-10-06).
   const vendor = G.canonicalVendor((req.query || {}).vendor);
   if (vendor) where.vendor = vendor;
-  const rows = await c.find(where, { projection: { _id: 0 } }).toArray();
-  res.json({ ...G.summarize(rows), vendor: vendor || "" });
+  // **줄을 받아 오지 않는다.** 묶는 일은 DB 가 한다(G.summaryPipelines) —
+  // 사장님 장부는 16만 줄이라 통째로 받으면 인스턴스가 못 버틴다.
+  const pipes = G.summaryPipelines(where);
+  const parts = {};
+  for (const [key, pipe] of Object.entries(pipes)) parts[key] = await c.aggregate(pipe).toArray();
+  res.json({ ...G.shapeSummary(parts), vendor: vendor || "" });
 });
 
 /** 한 품목의 단가가 언제 얼마였나. */
@@ -172,16 +182,15 @@ router.get("/catalog", async (req, res) => {
   const vendor = G.canonicalVendor(q.vendor);
 
   if (!vendor) {
-    const rows = await c.find(where, { projection: { vendor: 1, date: 1, _id: 0 } }).toArray();
-    const by = new Map();
-    for (const r of rows) {
-      const v = by.get(r.vendor) || { vendor: r.vendor, count: 0, last_date: "" };
-      v.count += 1;
-      if (r.date > v.last_date) v.last_date = r.date;
-      by.set(r.vendor, v);
-    }
+    // 업체 목록도 DB 가 묶어서 준다 — 예전엔 16만 줄을 다 받아 세었다.
+    const got = await c.aggregate([
+      { $match: where },
+      { $group: { _id: "$vendor", count: { $sum: 1 }, last_date: { $max: "$date" } } },
+      { $sort: { last_date: -1 } },
+    ]).toArray();
     return res.json({
-      vendors: [...by.values()].sort((a, b) => b.last_date.localeCompare(a.last_date) || b.count - a.count),
+      vendors: got.map((v) => ({ vendor: v._id, count: v.count, last_date: v.last_date || "" }))
+        .sort((a, b) => b.last_date.localeCompare(a.last_date) || b.count - a.count),
     });
   }
 
@@ -284,8 +293,8 @@ router.post("/inbox/:id/read", express.json({ limit: "2mb" }), async (req, res) 
   if (!parsed.ok) return res.status(400).json({ error: parsed.error });
   let vendors = [];
   try {
-    const rows = await (await col()).find({}, { projection: { vendor: 1, _id: 0 } }).toArray();
-    vendors = [...new Set(rows.map((r) => r.vendor).filter(Boolean))];
+    // 업체 이름(스무 곳)만 있으면 된다 — 줄을 다 읽지 않는다
+    vendors = (await (await col()).distinct("vendor")).filter(Boolean);
   } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
   const read = INBOX.normalizeRead(parsed.receipt, { vendors });
   const c = await inboxCol();

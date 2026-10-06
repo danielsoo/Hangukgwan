@@ -114,7 +114,11 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
     // 2026-10-04 사장님: "급여에서 사진 선택 말고도 드래그로 할 수 있게 해줘"
     const hint = await page.locator('#tab-ingredients [data-i18n="ingPhotoHint"]').innerText();
     check("★ 끌어다 놓을 수 있다고 적혀 있다", /끌어다 놓/.test(hint), hint);
-    check("★★ 사진이 기기 밖으로 안 나간다고 적혀 있다", /기기 밖으로 나가지 않/.test(hint), hint);
+    // 2026-10-06: 대기함을 만들며 사진이 **가게 서버**로 간다(아빠가 올리고
+    // 사장님이 받아 보셔야 하므로). 그래서 「기기 밖으로 안 나간다」가 아니라
+    // **어디에 있고 언제 지워지는지**를 적는다. 급여 출근 카드는 그대로 기기 안이다.
+    check("★★ 사진이 어디에 있고 언제 지워지는지 적혀 있다",
+      /가게 서버에만 있고/.test(hint) && /저장하면 지워져요/.test(hint), hint);
   }
 
   out.push("\n[읽은 값이 칸에 들어간다]");

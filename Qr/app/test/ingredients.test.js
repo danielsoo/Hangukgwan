@@ -284,7 +284,7 @@ out.push("\n[15만 줄을 보내다 한 번 걸려도 처음부터 다시 하지
     "왜 안전한지 안 적어두면 다음 사람이 이 되풀이를 지운다"
   );
   // 한 날짜가 두 덩이로 쪼개지면 뒤 덩이가 앞 덩이를 지운다.
-  check("★★ 한 날짜를 쪼개 보내지 않는다", /chunk\.length \+ rows\.length > 800/.test(client), "");
+  check("★★ 한 날짜를 쪼개 보내지 않는다", /chunk\.length \+ rows\.length > \d+\) await send\(\);/.test(client), "");
 }
 
 out.push("\n[15만 줄을 통째로 끌어오지 않는다]");
@@ -300,6 +300,13 @@ out.push("\n[15만 줄을 통째로 끌어오지 않는다]");
   );
   const client = require("fs").readFileSync(require("path").join(__dirname, "..", "public/js/ingredients.js"), "utf8");
   check("★ 화면은 「전체 기간」을 누를 때만 그 깃발을 보낸다", /wantAll = true/.test(client) && /p\.set\("all", "1"\)/.test(client), "");
+  // 2026-10-06 사장님: "이것도 전체 데이터를 읽으려고 하지마 각 날짜와 업체마다
+  // 고유 아이디를 주면 그것만 찾으면 되잖아 전처럼 서버 터져"
+  check("★★ 집계는 DB 가 묶어서 준다 — 줄을 다 받아오지 않는다",
+    /summaryPipelines/.test(src) && !/G\.summarize\(rows\)/.test(src),
+    "find().toArray() 로 16만 줄을 받으면 인스턴스가 못 버틴다");
+  check("★★ 업체 목록도 그 칸만 읽는다 — distinct", /distinct\("vendor"\)/.test(src), "");
+  check("★ 「그 날 그 업체」 색인이 있다", /createIndex\(\{ store: 1, date: 1, vendor: 1 \}\)/.test(src), "");
 }
 
 out.push("\n[사장님만 보는 자리]");
@@ -311,6 +318,68 @@ out.push("\n[사장님만 보는 자리]");
   check("★ 들어갈 때마다 비밀번호", /requireUnlocked\("ingredients"\)/.test(src), "");
 }
 
-console.log(out.join("\n"));
-console.log(`\n${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+out.push("\n[집계는 DB 가 한다 — 숫자가 예전과 같아야 한다]");
+
+/**
+ * 2026-10-06 사장님: "이것도 전체 데이터를 읽으려고 하지마 각 날짜와 업체마다
+ * 고유 아이디를 주면 그것만 찾으면 되잖아 전처럼 서버 터져"
+ *
+ * 줄을 다 받아 와서 더하던 것(summarize)을 **DB 가 묶게** 바꿨다
+ * (summaryPipelines + shapeSummary). 두 길이 **같은 답**을 내야 바꾼 보람이
+ * 있으므로 여기서 맞춰 본다. 가짜 몽고의 집계로 돈다(test/fake-mongo.js).
+ */
+async function aggMatchesJs() {
+  const fake = require("./fake-mongo");
+  const rows = [];
+  const names = ["紅蘿蔔", "洋蔥", "白菜"];
+  const vendors = ["房信菓菜行", "泳慶蛋行"];
+  for (let i = 0; i < 60; i++) {
+    rows.push(G.normalizeRow({
+      date: 45658 + (i % 7), name: names[i % names.length],
+      qty: (i % 4) + 1, unit: "斤", price: 10 + (i % 5),
+      amount: ((i % 4) + 1) * (10 + (i % 5)),
+      vendor: vendors[i % vendors.length], note: "비고",
+    }, i % 3 === 0 ? "branch3" : "main"));
+  }
+  const byJs = G.summarize(rows);
+  const c = fake.__db.collection("ingredient_agg_test");
+  await c.insertMany(G.withIds(rows).map((d) => ({ ...d })));
+
+  const run = async (where) => {
+    const parts = {};
+    for (const [k, pipe] of Object.entries(G.summaryPipelines(where))) parts[k] = await c.aggregate(pipe).toArray();
+    return G.shapeSummary(parts);
+  };
+
+  const byDb = await run({});
+  check("★★ 합계가 같다", byDb.total === byJs.total, byDb.total + " vs " + byJs.total);
+  check("★★ 줄 수가 같다", byDb.lines === byJs.lines, byDb.lines + " vs " + byJs.lines);
+  check("★★ 산 날 수가 같다", byDb.days === byJs.days, byDb.days + " vs " + byJs.days);
+  check("★ 첫 날·마지막 날이 같다", byDb.first === byJs.first && byDb.last === byJs.last, byDb.first + "~" + byDb.last);
+  check("★★ 업체별이 같다 (차례까지)", JSON.stringify(byDb.vendors) === JSON.stringify(byJs.vendors), JSON.stringify(byDb.vendors));
+  check("★★ 지점별이 같다", JSON.stringify(byDb.stores) === JSON.stringify(byJs.stores), JSON.stringify(byDb.stores));
+  check("★★ 달별이 같다", JSON.stringify(byDb.months) === JSON.stringify(byJs.months), JSON.stringify(byDb.months));
+  check("★★ 품목별이 같다",
+    JSON.stringify(byDb.items.map((i) => [i.name, i.amount, i.qty, i.lines])) ===
+    JSON.stringify(byJs.items.map((i) => [i.name, i.amount, i.qty, i.lines])), JSON.stringify(byDb.items));
+
+  const only = await run({ store: "main" });
+  const jsOnly = G.summarize(rows.filter((r) => r.store === "main"));
+  check("★★ 지점을 거른 집계도 같다", only.total === jsOnly.total && only.lines === jsOnly.lines, only.total + " vs " + jsOnly.total);
+
+  // 품목은 200가지까지만 돌려준다 — 그보다 많아도 화면이 멎지 않게
+  const many = G.summaryPipelines({}, { items: 2 });
+  const cut = G.shapeSummary({ items: await c.aggregate(many.items).toArray() });
+  check("★ 품목은 많아도 끊어서 준다", cut.items.length === 2, String(cut.items.length));
+}
+
+aggMatchesJs().then(() => {
+    console.log(out.join("\n"));
+  console.log(`\n${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+}).catch((e) => {
+  console.log(out.join("\n"));
+  console.error("집계 맞춰보기에서 터졌습니다:", e && e.message);
+  process.exit(1);
+});
+

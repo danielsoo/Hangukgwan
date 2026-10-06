@@ -194,6 +194,55 @@ function datesCovered(rows) {
  * 돈은 소수점이 생기지 않게 더한 뒤 반올림한다. 斤 단위 단가에 0.5 수량이
  * 곱해지는 줄이 있어서 중간 값에는 소수가 나온다.
  */
+/**
+ * 집계를 **데이터베이스가 하게** 한다.
+ *
+ * 2026-10-06 사장님: "이것도 전체 데이터를 읽으려고 하지마 각 날짜와 업체마다
+ * 고유 아이디를 주면 그것만 찾으면 되잖아 전처럼 서버 터져"
+ *
+ * 그 전에는 `find(where).toArray()` 로 **줄을 다 받아** 화면 쪽에서 더했다.
+ * 사장님 장부는 16만 줄(2007년부터)이라, 「전체 기간」을 한 번 누르면 그걸
+ * 통째로 메모리에 올린다 — Vercel 한 인스턴스가 감당할 양이 아니다.
+ * (2026-09-10 에 store 문서를 통째로 쓰다 점심에 터진 것과 같은 종류다.)
+ *
+ * 이제 묶는 일은 DB 가 하고, 돌아오는 것은 **업체 20줄 · 품목 200줄 · 달 수십
+ * 줄**뿐이다. 묶음마다 파이프라인을 따로 두는 이유는 $facet 보다 읽기 쉽고,
+ * 시험용 가짜 몽고에서도 같은 길을 지나가기 때문이다.
+ */
+function summaryPipelines(where, opts) {
+  const o = Object.assign({ items: 200 }, opts || {});
+  const m = [{ $match: where }];
+  return {
+    totals: m.concat([{ $group: { _id: null, total: { $sum: "$amount" }, lines: { $sum: 1 }, first: { $min: "$date" }, last: { $max: "$date" } } }]),
+    days: m.concat([{ $group: { _id: "$date" } }, { $count: "n" }]),
+    stores: m.concat([{ $group: { _id: "$store", amount: { $sum: "$amount" }, lines: { $sum: 1 } } }, { $sort: { amount: -1 } }]),
+    vendors: m.concat([{ $group: { _id: "$vendor", amount: { $sum: "$amount" }, lines: { $sum: 1 }, last_date: { $max: "$date" } } }, { $sort: { amount: -1 } }]),
+    items: m.concat([
+      { $group: { _id: "$name", amount: { $sum: "$amount" }, qty: { $sum: "$qty" }, lines: { $sum: 1 }, name_ko: { $max: "$name_ko" }, unit: { $max: "$unit" } } },
+      { $sort: { amount: -1 } },
+      { $limit: o.items },
+    ]),
+    months: m.concat([{ $group: { _id: "$month", amount: { $sum: "$amount" } } }, { $sort: { _id: 1 } }]),
+  };
+}
+
+/** 파이프라인이 돌려준 것을 화면이 아는 모양으로. summarize() 와 같은 모양이어야 한다. */
+function shapeSummary(parts) {
+  const round = (x) => Math.round((x || 0) * 100) / 100;
+  const t = (parts.totals || [])[0] || {};
+  return {
+    total: round(t.total),
+    lines: t.lines || 0,
+    days: ((parts.days || [])[0] || {}).n || 0,
+    first: t.first || "",
+    last: t.last || "",
+    stores: (parts.stores || []).map((s) => ({ store: s._id, amount: round(s.amount), lines: s.lines })),
+    vendors: (parts.vendors || []).map((v) => ({ vendor: v._id, amount: round(v.amount), lines: v.lines, last_date: v.last_date || "" })),
+    items: (parts.items || []).map((i) => ({ name: i._id, name_ko: i.name_ko || "", unit: i.unit || "", amount: round(i.amount), qty: round(i.qty), lines: i.lines })),
+    months: (parts.months || []).map((m) => ({ month: m._id, amount: round(m.amount) })),
+  };
+}
+
 function summarize(rows) {
   const byVendor = new Map();
   const byItem = new Map();
@@ -343,6 +392,8 @@ function lineWarnings(line, known) {
 
 module.exports = {
   PURCHASES,
+  summaryPipelines,
+  shapeSummary,
   buildCatalog,
   lineWarnings,
   STORES,
