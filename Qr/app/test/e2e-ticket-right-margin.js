@@ -3,8 +3,8 @@
 // 2026-10-06 사장님: "주방으로 들어가는 빌지의 숫자탭이 오른쪽 끝에 있는데 그걸 조금 들여 쓸 수 있을까?
 // 빌지가 조금이라도 겹치면 안보인대"
 //
-// 앱·RawBT 빌지는 그림(래스터)이다. 그 바이트를 풀어 **가장 오른쪽 잉크가 종이 오른끝에서 몇 점
-// 떨어져 있는지**를 직접 센다. 203dpi 라 1mm = 8점. 예전엔 24점(3mm)이었다.
+// 같은 날: "빌지 자체의 오른쪽 경계를 들여써달라는 게 아니라 나머지는 냅두고 숫자 열만" — 수량 열만 들인다.
+// 앱·RawBT 빌지는 그림(래스터)이다. 그리는 글자의 오른끝 x 를 받아 잰다. 203dpi 라 1mm = 8점.
 const fake = require("./fake-mongo");
 require.cache[require.resolve("mongodb")] = {
   id: require.resolve("mongodb"), filename: require.resolve("mongodb"),
@@ -58,54 +58,54 @@ function check(name, cond, extra = "") {
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForTimeout(1200);
 
-  // 빌지 바이트 → 줄마다 가장 오른쪽 잉크(점). kind: ticket | move
-  async function measure(rm, kind = "ticket") {
+  // 같은 날 사장님: "빌지 자체의 오른쪽 경계를 들여써달라는 게 아니라 나머지는 냅두고 숫자 열만" —
+  // 그리는 글자(fillText)를 받아 **오른쪽 정렬 글자마다 오른끝 x** 를 본다. 종이 폭 576점, 원래 여백 24점.
+  async function drawnAt(rm, kind = "ticket") {
     return page.evaluate(([rm, kind]) => {
+      const seen = [];
+      const P = CanvasRenderingContext2D.prototype;
+      const ft = P.fillText;
+      const fr = P.fillRect;
+      const lt = P.lineTo;
+      P.fillText = function (t, x, y) { if (this.canvas.width === 576 && this.textAlign === "right") seen.push({ t: String(t), x: Math.round(x) }); return ft.apply(this, arguments); };
+      P.fillRect = function (x, y, w, h) { if (this.canvas.width === 576 && h === 2) seen.push({ t: "—", x: Math.round(x + w) }); return fr.apply(this, arguments); };
+      P.lineTo = function (x, y) { if (this.canvas.width === 576) seen.push({ t: "—", x: Math.round(x) }); return lt.apply(this, arguments); };
       const fs = rm === undefined ? {} : { rightMargin: rm };
-      const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }, { name_zh: "辣炒年糕", qty: 13, unit_price: 190 }], total: 2930 };
-      const b = kind === "move"
-        ? window.buildEscPosMoveSlip({ from: "3", to: "7", at: "12:00", partySize: 4, orders: [{ id: 12, time: "11:50", summary: "石鍋拌飯 x2" }] }, "韓國館", fs)
-        : window.buildEscPosRasterTicket(o, "韓國館", fs, { tableLabel: "桌號 7" });
-      let i = 2;
-      let rightmost = -1;
-      let W = 0;
-      while (i + 8 <= b.length && b[i] === 0x1d && b[i + 1] === 0x76 && b[i + 2] === 0x30) {
-        const wb = b[i + 4] | (b[i + 5] << 8);
-        const rows = b[i + 6] | (b[i + 7] << 8);
-        W = wb * 8;
-        i += 8;
-        for (let y = 0; y < rows; y++)
-          for (let x = wb - 1; x >= 0; x--) {
-            const v = b[i + y * wb + x];
-            if (!v) continue;
-            let bit = 0;
-            while (!(v & (1 << bit))) bit++;
-            rightmost = Math.max(rightmost, x * 8 + (7 - bit));
-            break;
-          }
-        i += rows * wb;
+      const o = { table_number: "7", order_type: "mixed", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }, { name_zh: "辣炒年糕", qty: 13, unit_price: 190, order_type: "takeout" }], total: 2930 };
+      try {
+        if (kind === "move") window.buildEscPosMoveSlip({ from: "3", to: "7", at: "12:00", partySize: 4, orders: [{ id: 12, time: "11:50", summary: "石鍋拌飯 x2" }] }, "韓國館", fs);
+        else window.buildEscPosRasterTicket(o, "韓國館", fs, { tableLabel: "桌號 7" }, kind === "price" ? { priceCopy: true } : undefined);
+      } finally {
+        P.fillText = ft; P.fillRect = fr; P.lineTo = lt;
       }
-      return { gap: W - 1 - rightmost, W };
+      return seen;
     }, [rm, kind]);
   }
 
-  out.push("\n[앱 빌지(그림) — 오른끝에서 가장 오른쪽 글자까지]");
-  const mDef = await measure(undefined);
-  const m8 = await measure(8);
-  const m0 = await measure(0);
-  const m15 = await measure(15);
-  check(`★★ 설정 안 해도 8mm 들어간다 — 오른끝에서 ${mDef.gap}점(${(mDef.gap / 8).toFixed(1)}mm), 예전 24점(3mm)`, mDef.gap >= 24 + 64 && mDef.gap === m8.gap, JSON.stringify({ mDef, m8 }));
-  check("0mm 면 예전 그대로(3mm)", m0.gap >= 24 && m0.gap < 24 + 8, JSON.stringify(m0));
-  check("★ 15mm → 0mm 보다 120점 더 안쪽", m15.gap - m0.gap === 120, JSON.stringify({ m0, m15 }));
-  const mv0 = await measure(0, "move");
-  const mv8 = await measure(8, "move");
-  check("★ 자리 이동 빌지도 같은 여백(같은 줄에 걸린다)", mv8.gap - mv0.gap === 64, JSON.stringify({ mv0, mv8 }));
+  out.push("\n[앱 빌지(그림) — 수량 열만 안으로]");
+  const d8 = await drawnAt(undefined);
+  const d0 = await drawnAt(0);
+  const d15 = await drawnAt(15);
+  const qtyX = (d) => d.filter((e) => /^x\d+$/.test(e.t)).map((e) => e.x);
+  const otherX = (d) => d.filter((e) => !/^x\d+$/.test(e.t)).map((e) => e.x);
+  check(`★★ 설정 안 해도 수량(x2·x13)은 8mm 안쪽 — 오른끝 ${qtyX(d8).join("·")}점 (종이 끝 552점보다 64점 안)`, qtyX(d8).length === 2 && qtyX(d8).every((x) => x === 552 - 64), JSON.stringify(qtyX(d8)));
+  check(`★★ 나머지(混合·合計·구분선)는 그대로 종이 끝 552점 (${[...new Set(otherX(d8))].join("·")})`, otherX(d8).length >= 3 && otherX(d8).every((x) => x === 552), JSON.stringify(d8));
+  check("0mm 면 수량도 예전 그대로(552)", qtyX(d0).every((x) => x === 552), JSON.stringify(qtyX(d0)));
+  check("★ 15mm → 수량만 120점 안쪽", qtyX(d15).every((x) => x === 552 - 120) && otherX(d15).every((x) => x === 552), JSON.stringify(d15));
+  const dp = await drawnAt(8, "price");
+  check("결제용(금액) 사본도 수량 열만", qtyX(dp).every((x) => x === 552 - 64) && otherX(dp).every((x) => x === 552), JSON.stringify(dp));
+  const mv = await drawnAt(30, "move");
+  check("자리 이동 빌지는 손대지 않는다(수량 열이 없다)", mv.every((e) => e.x === 552), JSON.stringify(mv));
   const txt = await page.evaluate(() => {
     const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460 };
-    const at = (s) => (s.split("\n").find((l) => l.includes("x2")) || "").indexOf("x2");
-    return [at(window.buildEscPosTicket(o, "韓國館", { rightMargin: 0 })), at(window.buildEscPosTicket(o, "韓國館", {}))];
+    const lines = (s) => s.split("\n");
+    const at = (s) => (lines(s).find((l) => l.includes("x2")) || "").indexOf("x2");
+    const div = (s) => (lines(s).find((l) => /^-{10,}$/.test(l.replace(/^\x1b.{2}/, ""))) || "").replace(/^\x1b.{2}/, "").length;
+    const a = window.buildEscPosTicket(o, "韓國館", { rightMargin: 0 });
+    const b = window.buildEscPosTicket(o, "韓國館", {});
+    return [at(a), at(b), div(a), div(b)];
   });
-  check("글자 빌지(QZ)도 수량이 안쪽으로(8mm ≈ 5칸)", txt[0] - txt[1] === 5, JSON.stringify(txt));
+  check("글자 빌지(QZ)도 수량만 안쪽으로(8mm ≈ 5칸), 구분선은 그대로", txt[0] - txt[1] === 5 && txt[2] === txt[3] && txt[2] > 0, JSON.stringify(txt));
 
   // 2026-10-06 사장님: "잘리지 말고 다음 줄로 넘겨줘" — 가장 긴 메뉴 「Pororo ZERO兒童飲料(草莓)」가
   // 여백 8mm 에서 「…」로 잘려 딸기·우유를 못 가렸다. 그리는 글자를 그대로 받아 본다.
@@ -154,10 +154,11 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(400);
   const pad = await page.evaluate(() => {
     const d = document.querySelector("#ticketFontPreviewFrame").contentDocument;
-    const el = d && d.querySelector(".receipt");
-    return el ? getComputedStyle(el).paddingRight : "";
+    const q = d && d.querySelector(".item-qty");
+    const r = d && d.querySelector(".receipt");
+    return q && r ? [getComputedStyle(q).marginRight, getComputedStyle(r).paddingRight] : [];
   });
-  check("★ 미리보기에 바로 보인다(4 + 12mm)", Math.abs(parseFloat(pad) - 16 * 96 / 25.4) < 1, pad);
+  check("★ 미리보기에 바로 보인다 — 수량만 12mm, 종이 오른쪽은 그대로 4mm", Math.abs(parseFloat(pad[0]) - 12 * 96 / 25.4) < 1 && Math.abs(parseFloat(pad[1]) - 4 * 96 / 25.4) < 1, JSON.stringify(pad));
   await page.locator("#saveTicketFontSizesBtn").click();
   await page.waitForTimeout(600);
   check("★ 저장된다", store.settings.ticket_font_sizes.rightMargin === 12, JSON.stringify(store.settings.ticket_font_sizes));

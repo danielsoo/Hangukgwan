@@ -786,7 +786,7 @@
       settlementRefundCancel: "취소 {n}개 −{amount}",
       settlementRefundReturn: "반품 {n}개 −{amount}",
       tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
-      tfsRightMargin: "오른쪽 여백 (겹쳐 걸어도 수량이 보이게)",
+      tfsRightMargin: "수량 열 오른쪽 여백 (겹쳐 걸어도 수량이 보이게)",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -1993,7 +1993,7 @@
       settlementRefundCancel: "取消 {n} 份 −{amount}",
       settlementRefundReturn: "退貨 {n} 份 −{amount}",
       tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
-      tfsRightMargin: "右側留白（單子疊掛時也看得到數量）",
+      tfsRightMargin: "數量欄右側留白（單子疊掛時也看得到數量）",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -6758,7 +6758,7 @@
     font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
     color: #000;
   }
-  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; padding-top: ${Number.isFinite(Number(fs.topMargin)) ? Math.max(0, Math.min(30, Number(fs.topMargin))) : 3}mm; padding-right: ${4 + (fs.rightMargin != null && Number.isFinite(Number(fs.rightMargin)) ? Math.max(0, Math.min(30, Number(fs.rightMargin))) : 8)}mm; }
+  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; padding-top: ${Number.isFinite(Number(fs.topMargin)) ? Math.max(0, Math.min(30, Number(fs.topMargin))) : 3}mm; }
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: ${fs.storeName}px; font-weight: ${fs.storeNameWeight}; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
@@ -6780,7 +6780,7 @@
   .item-row:last-child { border-bottom: none; }
   .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
   .item-name { flex: 1; }
-  .item-qty { white-space: nowrap; }
+  .item-qty { white-space: nowrap; margin-right: ${fs.rightMargin != null && Number.isFinite(Number(fs.rightMargin)) ? Math.max(0, Math.min(30, Number(fs.rightMargin))) : 8}mm; }
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
   .item-price { font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; color: #000; }
@@ -15525,8 +15525,7 @@
     let bytes;
     try {
       const storeName = (storeSettings && (storeSettings.store_name_zh || storeSettings.store_name_ko)) || "한국관";
-      // 오른쪽 여백은 주문서 설정 값을 같이 쓴다 — 같은 줄에 겹쳐 걸린다.
-      bytes = buildEscPosMoveSlip(info, storeName, Object.assign({}, moveSlipSettings, { rightMargin: ticketFontSizes.rightMargin }));
+      bytes = buildEscPosMoveSlip(info, storeName, moveSlipSettings);
     } catch (e) {
       console.warn("자리 이동 빌지를 만들지 못했습니다:", e);
       return { ok: false, reason: moveSlipFailReason() };
