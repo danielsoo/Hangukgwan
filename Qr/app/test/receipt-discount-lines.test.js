@@ -94,7 +94,7 @@ check("★ 그리는 쪽이 실제로 선을 긋는다 (合計)", /if \(op\.stri
 check("★ 品目 줄에 화살표를 안 쓴다", !/line\("  └ NT\$" \+ money\(amount\) \+ "→NT\$"/.test(escposSrc), "옛 방식이 남아 있다");
 
 out.push("\n[텍스트 ESC/POS — 할 수 있는 만큼만]");
-check("★ 할인 한 줄은 여기에도 찍힌다", /out \+= padLine\(discount\.label \|\| "折扣", `-NT\$\$\{money\(discount\.amount\)\}`\)/.test(escposSrc), "");
+check("★ 할인 한 줄은 여기에도 찍힌다", /out \+= padLine\(discount\.label \|\| "折扣", `-NT\$\$\{money\(discount\.amount\)\}`(, W)?\)/.test(escposSrc), "");
 check("★ 小計 는 안 찍는다", !/padLine\("小計"/.test(escposSrc), "");
 check("★ 취소선이 없다는 사실이 적혀 있다", /텍스트 모드에는 취소선이 없다/.test(escposSrc), "");
 

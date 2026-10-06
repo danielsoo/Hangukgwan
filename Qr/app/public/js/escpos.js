@@ -213,6 +213,8 @@
 
   function buildEscPosTicket(o, storeName, opts) {
     const priceCopy = !!(opts && opts.priceCopy);
+    // 오른쪽 여백(그림 빌지의 ticketRightMarginMm 과 같은 값) — 글자 한 칸이 12점 = 1.5mm.
+    const W = LINE_WIDTH - Math.round((ticketRightMarginMm(opts || {}) * 8) / 12);
     // opts.discount — admin.js의 computeTicketDiscountInfo(o) 결과를 그대로
     // 넘겨받는다(이 파일은 admin.js의 테이블별 할인 상태를 모르므로).
     // { active:false } 아니면 { active:true, isPercent, rate?,
@@ -229,18 +231,18 @@
       out += CMD.ALIGN_CENTER + CMD.BOLD_ON + (priceCopy ? "*** 測試 ***" : "*** 테스트 / 測試 ***") + CMD.BOLD_OFF + "\n";
       if (!priceCopy) out += CMD.ALIGN_CENTER + "이 주문은 만들지 마세요\n";
       out += CMD.ALIGN_CENTER + "請勿製作此訂單\n";
-      out += CMD.ALIGN_LEFT + divider() + "\n";
+      out += CMD.ALIGN_LEFT + divider(W) + "\n";
     }
 
     out += CMD.ALIGN_CENTER + CMD.BOLD_ON + `${storeName} ${priceCopy ? "結帳單" : "廚房出單"}` + CMD.BOLD_OFF + "\n";
-    out += CMD.ALIGN_LEFT + divider() + "\n";
-    out += padLine(`桌號 ${o.table_number}${partyTag(o)}`, orderTypeLabel(o)) + "\n";
+    out += CMD.ALIGN_LEFT + divider(W) + "\n";
+    out += padLine(`桌號 ${o.table_number}${partyTag(o)}`, orderTypeLabel(o), W) + "\n";
     out += time + "\n";
-    out += divider() + "\n";
+    out += divider(W) + "\n";
 
     o.items.forEach((it) => {
-      const name = truncateToWidth(itemName(it, priceCopy), LINE_WIDTH - 6);
-      out += CMD.BOLD_ON + padLine(name, `x${it.qty}`) + CMD.BOLD_OFF + "\n";
+      const name = truncateToWidth(itemName(it, priceCopy), W - 6);
+      out += CMD.BOLD_ON + padLine(name, `x${it.qty}`, W) + CMD.BOLD_OFF + "\n";
       // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
       // 종이를 보고 「왜 380이지」를 물으면 그 자리에서 답이 돼야 한다.
       if (it.option_choice) out += "  └ " + optionLine(it) + "\n";
@@ -285,19 +287,19 @@
     if (priceCopy && discount.active && discount.isPercent && hasDrinkItem) {
       out += "※ 飲料/酒類恕不折扣\n";
     }
-    out += divider() + "\n";
+    out += divider(W) + "\n";
     // 2026-09-16 사장님이 고른 안(B2): 小計 줄은 안 찍는다. 같은 금액이 두
     // 번 적히면 되레 헷갈린다. 「무슨 할인 얼마」 한 줄과 合計 하나면
     // 원래 얼마 · 얼마 깎고 · 얼마 받았다가 전부 들어간다.
     if (priceCopy && discount.active && Number(discount.amount) > 0) {
-      out += padLine(discount.label || "折扣", `-NT$${money(discount.amount)}`) + "\n";
+      out += padLine(discount.label || "折扣", `-NT$${money(discount.amount)}`, W) + "\n";
     }
     // 텍스트 모드에는 취소선이 없다(ESC/POS 에 그런 명령이 없다). 화살표가
     // 그 자리를 대신한다 — 래스터로 뽑을 때는 진짜 취소선을 긋는다.
     if (priceCopy && discount.active) {
-      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}→NT$${money(discount.discountedTotal)}`, Math.floor(W / 2)) + CMD.DOUBLE_OFF + "\n";
     } else {
-      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}`, Math.floor(LINE_WIDTH / 2)) + CMD.DOUBLE_OFF + "\n";
+      out += CMD.DOUBLE_ON + padLine("合計", `NT$${money(o.total)}`, Math.floor(W / 2)) + CMD.DOUBLE_OFF + "\n";
     }
     if (priceCopy) out += "※本單僅供結帳參考，實際折扣依系統結帳畫面為準\n";
     // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
@@ -448,8 +450,24 @@
     return Math.max(6, Math.round(v * 8));
   }
 
+  // 오른쪽 여백(mm) — 2026-10-06 사장님: "주방으로 들어가는 빌지의 숫자탭이 오른쪽 끝에 있는데 그걸 조금
+  // 들여 쓸 수 있을까? 빌지가 조금이라도 겹치면 안보인대". 주방에서 빌지를 겹쳐 걸면 오른쪽 끝(수량 x2)이
+  // 다음 종이에 가린다. 오른쪽 정렬 글자·줄·가운데를 이만큼 안으로 들인다. 기본 8mm(64점), 0~30mm.
+  const DEFAULT_RIGHT_MARGIN_MM = 8;
+  const MAX_RIGHT_MARGIN_MM = 30;
+  function ticketRightMarginMm(fs) {
+    const mm = Number(fs && fs.rightMargin);
+    return Number.isFinite(mm) && fs.rightMargin !== null && fs.rightMargin !== "" ? Math.max(0, Math.min(MAX_RIGHT_MARGIN_MM, mm)) : DEFAULT_RIGHT_MARGIN_MM;
+  }
+  /** 오른쪽 끝에서 글자까지(점) — 원래 여백(RASTER_PAD) + 설정한 여백. */
+  function ticketRightPadDots(fs) {
+    return RASTER_PAD + Math.round(ticketRightMarginMm(fs) * 8);
+  }
+
   function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
+    const RP = ticketRightPadDots(fs);
+    const CX = Math.round((RASTER_PAD + RASTER_DOTS_WIDE - RP) / 2); // 가운데 = 글자 칸의 가운데
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
@@ -487,7 +505,7 @@
     function line(text, px, weight, opts) {
       opts = opts || {};
       mctx.font = rasterFont(px, weight);
-      const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD * 2;
+      const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD - RP;
       const align = opts.align || "left";
       const fitted = opts.noFit ? text : fitText(mctx, text, maxWidth);
       // opts.strike = { before, text } — 줄 안의 한 토막에만 취소선을 긋는다.
@@ -511,7 +529,7 @@
       const badge = opts.badge || null;
       const badgeSize = badge ? Math.round(px * PX_TO_DOTS * 1.35) : 0;
       const badgeGap = badge ? 14 : 0;
-      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD * 2 - rightWidth - 16 - badgeSize - badgeGap;
+      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - RP - rightWidth - 16 - badgeSize - badgeGap;
       const fittedLeft = fitText(mctx, left, leftMax);
       // opts.strikePrefix — 오른쪽 값의 **앞부분**에 취소선을 긋는다.
       //
@@ -673,7 +691,7 @@
         ctx.beginPath();
         ctx.setLineDash([6, 4]);
         ctx.moveTo(RASTER_PAD, op.y);
-        ctx.lineTo(canvas.width - RASTER_PAD, op.y);
+        ctx.lineTo(canvas.width - RP, op.y);
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.setLineDash([]);
@@ -703,11 +721,11 @@
         ctx.textAlign = "left";
         ctx.fillText(op.left, leftX, op.y);
         ctx.textAlign = "right";
-        ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
+        ctx.fillText(op.right, canvas.width - RP, op.y);
         if (op.strikePrefix) {
           // 오른쪽 정렬이라 글자는 (오른끝 - 전체너비) 에서 시작한다.
           // 앞부분만 그 폭만큼 긋는다.
-          const startX = canvas.width - RASTER_PAD - ctx.measureText(op.right).width;
+          const startX = canvas.width - RP - ctx.measureText(op.right).width;
           const prefixWidth = ctx.measureText(op.strikePrefix).width;
           const midY = op.y + Math.round(op.px * PX_TO_DOTS * 0.52);
           ctx.fillRect(startX, midY, prefixWidth, Math.max(2, Math.round(op.px * PX_TO_DOTS * 0.09)));
@@ -716,7 +734,7 @@
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
-      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
+      ctx.fillText(op.text, op.align === "center" ? CX : RASTER_PAD, op.y);
       if (op.strike && op.align !== "center") {
         // 왼쪽 정렬이라 앞 토막의 폭만큼 밀어서 긋는다.
         const x0 = RASTER_PAD + ctx.measureText(op.strike.before || "").width;
@@ -750,6 +768,9 @@
     const sz = (k, d) => z[k] || d;
     const wt = (k, d) => z[k + "Weight"] || d;
     const orders = info.showOrders === false ? [] : info.orders || [];
+    // 오른쪽 여백은 주문서와 같은 값(rightMargin — admin.js 가 주문서 설정에서 넘긴다).
+    const RP = ticketRightPadDots(z);
+    const CX = Math.round((RASTER_PAD + RASTER_DOTS_WIDE - RP) / 2);
 
     const measureCanvas = document.createElement("canvas");
     measureCanvas.width = RASTER_DOTS_WIDE;
@@ -763,7 +784,7 @@
     };
     const text = (t, px, weight, align, gap) => {
       mctx.font = rasterFont(px, weight);
-      push({ type: "text", text: fitText(mctx, t, RASTER_DOTS_WIDE - RASTER_PAD * 2), px, weight, align }, px, gap);
+      push({ type: "text", text: fitText(mctx, t, RASTER_DOTS_WIDE - RASTER_PAD - RP), px, weight, align }, px, gap);
     };
     const row = (l, r, px, weight, gap) => {
       mctx.font = rasterFont(px, weight);
@@ -815,7 +836,7 @@
     ctx.textBaseline = "alphabetic";
     ops.forEach((op) => {
       if (op.type === "divider") {
-        ctx.fillRect(RASTER_PAD, op.y, canvas.width - RASTER_PAD * 2, 2);
+        ctx.fillRect(RASTER_PAD, op.y, canvas.width - RASTER_PAD - RP, 2);
         return;
       }
       if (op.type === "row") {
@@ -823,12 +844,12 @@
         ctx.textAlign = "left";
         ctx.fillText(op.left, RASTER_PAD, op.y);
         ctx.textAlign = "right";
-        ctx.fillText(op.right, canvas.width - RASTER_PAD, op.y);
+        ctx.fillText(op.right, canvas.width - RP, op.y);
         return;
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
-      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : RASTER_PAD, op.y);
+      ctx.fillText(op.text, op.align === "center" ? CX : RASTER_PAD, op.y);
     });
 
     return rasterCanvasToEscPos(canvas, ctx);
