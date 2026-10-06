@@ -542,7 +542,7 @@ git checkout -- Qr/app/package-lock.json
 사장님: "직원들은 급여 페이지 보이면 절대 안되고 링크로 타도 안돼 설정에서 마감 알림 이거 전체
 보이면 안되고 결제 페이지도 안되고 vip 카드 판매 가격, 할인 퍼센트 말고는 보이면 안되고 진단 속도도 안돼"
 
-- 사장님만: 💰 급여 탭, 설정의 알림(마감 LINE)·결제(ECPay)·인쇄·진단·속도, 회원(VIP)의 구글
+- 사장님만: 💰 급여 탭, 🧾 식자재 탭(2026-10-05), 설정의 알림(마감 LINE)·결제(ECPay)·인쇄·진단·속도, 회원(VIP)의 구글
   로그인(Firebase) 칸. 화면은 `owner-only`(`.role-staff .owner-only` 숨김), 서버는 `requireOwner`.
 - **화면은 「직원」으로 시작한다**(`<body class="role-staff">`, `currentRole = "staff"`). 서버(`/api/auth/me`)가
   사장님이라고 답한 뒤에야 사장님 칸이 열린다. 예전엔 사장님으로 시작해서, 로그인 기억이 있는 패드는
@@ -553,17 +553,20 @@ git checkout -- Qr/app/package-lock.json
   권한이 있는 직원이 그 길로 바꿀 수 있었다.
 - 시험: `test/e2e-staff-hidden.js` — 주소로 열기, 서버 답 전, 서버 길 직접, 설정 찾기까지.
 
-## 급여·결산 탭은 들어갈 때마다 따로 비밀번호 (2026-10-04)
+## 급여·결산·식자재 탭은 들어갈 때마다 따로 비밀번호 (2026-10-04)
 
 사장님: "사장 탭에 급여와 결산이 직원들이나 다른 사람한테 엑세스가 될까봐 걱정이 된대 그래서 그 탭
 들어갈 때마다 비밀번호 치게 해줘. 비밀번호 설정에서 한 번 저장하게 해줘. 로그인 비번이랑 결산 급여
 비번은 다르게"
 
+2026-10-05 사장님(식자재에 대해): "사장만 들어갈 수 있고 비밀번호도 매번 쳐야 돼. 직원은 절대 절대
+못 들어가" — 영수증에는 매입 단가가 줄마다 적혀 있다. 식자재도 같은 자물쇠다.
+
 - 규칙은 `src/sensitiveLock.js` 한 곳. 비밀번호는 `settings.sensitive_pin_hash`(bcrypt, `saveFields`) —
-  설정 > 계정 「🔒 급여·결산 비밀번호」에서 사장님이 **사장 로그인 비밀번호를 한 번 더 넣고** 정한다.
+  설정 > 계정 「🔒 급여·결산·식자재 비밀번호」에서 사장님이 **사장 로그인 비밀번호를 한 번 더 넣고** 정한다.
   사장·직원 로그인 비밀번호와 같으면 안 받고, 반대로 로그인 비밀번호를 이것과 같게 바꾸는 것도 막는다.
   정하기 전엔 잠그지 않는다. 테스터 모드 종료가 되돌리지 않는다(`SNAPSHOT_SKIP`).
-- **서버가 막는다**: 풀림은 세션에 탭마다(`sensitiveUnlock.payroll|settlement`). 급여 전체와 결산 탭이 쓰는
+- **서버가 막는다**: 풀림은 세션에 탭마다(`sensitiveUnlock.payroll|settlement|ingredients`). 급여 전체와 결산 탭이 쓰는
   길(`GET /`·history·item-trend·item-movers·close·resend-line)은 잠긴 동안 **423**(401 이면 화면이
   로그인이 풀린 줄 안다). 「오전/오후 정산」(shift-close)·밤 마감·LINE 시험은 결산 탭이 아니라 안 잠근다.
 - 화면은 탭에 들어갈 때마다 묻고, 떠날 때 서버에도 잠근다. 15분 동안 요청이 없으면 서버가 저절로
@@ -572,7 +575,11 @@ git checkout -- Qr/app/package-lock.json
 - **직원 결산은 비밀번호 없이**(2026-10-05 사장님: "직원용 결산 페이지는 비번 없이 해줘 어짜피 하루 밖에
   안나와서"). 직원 세션은 오늘 하루만 보이므로(`requireTodayForStaff`) `GET /api/settlements` 를 잠그지 않고
   (`settlementUnlockedOwner`), 화면도 묻지 않는다. 사장님 세션은 그대로 들어갈 때마다 묻는다.
-- 시험: `test/sensitive-lock.test.js`(시계 넘겨 15분·5회), `test/e2e-sensitive-lock.js`.
+- **식자재(영수증·장부)도 같다**: `/api/ingredients/*` 전체가 `requireOwner` + `requireUnlocked("ingredients")`
+  이고(사진 읽기 `POST /read-photo` 까지), 탭 버튼과 화면이 `owner-only` 다. 직원은 주소(`#ingredients`)로
+  들어와도 안 열리고 서버 길도 401/403 이다.
+- 시험: `test/sensitive-lock.test.js`(시계 넘겨 15분·5회, 세 영역이 따로 풀리는지), `test/e2e-sensitive-lock.js`
+  (식자재는 떠났다 오면 또 묻는지), `test/e2e-staff-hidden.js`(직원은 탭도 길도 없다).
 
 ## store 문서를 통째로 쓰지 않는다
 

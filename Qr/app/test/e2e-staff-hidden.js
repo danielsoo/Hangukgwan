@@ -72,6 +72,29 @@ function check(name, cond, extra = "") {
   };
   check("★★ 서버 길로 불러도 막힌다 — 급여·LINE·결제·진단 모두 401/403", Object.values(api).every((s) => s === 401 || s === 403), JSON.stringify(api));
 
+  out.push("\n[식자재 — 직원은 절대 못 들어간다]");
+  {
+    // 2026-10-05 사장님: "사장만 들어갈 수 있고 비밀번호도 매번 쳐야 돼.
+    // 직원은 절대 절대 못 들어가" — 영수증에는 매입 단가가 다 적혀 있다.
+    await page.goto(`${base}/admin#ingredients`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(800);
+    check("★★ 「🧾 식자재」 탭 버튼이 안 보인다",
+      !(await page.locator('.admin-tabs button[data-tab="ingredients"]').isVisible()), "");
+    check("★★ /admin#ingredients 로 들어와도 안 열린다",
+      await page.locator("#tab-ingredients").evaluate((el) => el.hidden || getComputedStyle(el).display === "none"), "");
+    const ing = {
+      rows: await st("/api/ingredients/rows?from=2026-01-01&to=2026-12-31"),
+      summary: await st("/api/ingredients/summary"),
+      catalog: await st("/api/ingredients/catalog"),
+      meta: await st("/api/ingredients/meta"),
+      usage: await st("/api/ingredients/ai-usage"),
+    };
+    check("★★ 서버 길로 불러도 모두 막힌다 (401/403)",
+      Object.values(ing).every((x) => x === 401 || x === 403), JSON.stringify(ing));
+    const photo = (await page.request.post(`${base}/api/ingredients/read-photo`, { data: { images: [] } })).status();
+    check("★★ 사진 읽기 길도 막힌다", photo === 401 || photo === 403, String(photo));
+  }
+
   out.push("\n[로그인 기억이 있는 패드 — 서버 답을 받기 전에도]");
   {
     // /api/auth/me 를 2초 늦춘다. 예전엔 그 사이 「사장님」으로 그려 급여 탭이 보였다.

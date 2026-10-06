@@ -116,6 +116,32 @@ function check(name, cond, extra = "") {
   check("★ 주소(#settlement)로 열어도 묻는다", await gate(), "");
   await page.click("#pinGateCancel");
 
+  out.push("\n[식자재도 — 사장만, 들어갈 때마다]");
+  {
+    // 2026-10-05 사장님: "사장만 들어갈 수 있고 비밀번호도 매번 쳐야 돼.
+    // 직원은 절대 절대 못 들어가" — 영수증에는 매입 단가가 다 적혀 있다.
+    check("★ 잠긴 식자재는 서버가 안 준다(423)", (await st("/api/ingredients/meta")) === 423, String(await st("/api/ingredients/meta")));
+    await tab("ingredients").click();
+    await page.waitForTimeout(400);
+    check("★★ 식자재를 누르면 비밀번호 창", (await gate()) && /식자재/.test(await page.locator("#pinGateTitle").innerText()), await page.locator("#pinGateTitle").innerText());
+    await page.click("#pinGateCancel");
+    await page.waitForTimeout(300);
+    check("★ 취소하면 식자재가 안 열린다", await page.locator("#tab-ingredients").evaluate((el) => el.hidden), "");
+    await tab("ingredients").click();
+    await page.waitForTimeout(400);
+    await page.fill("#pinGateInput", "1357");
+    await page.click("#pinGateOk");
+    await page.waitForTimeout(1200);
+    check("★★ 맞으면 열린다", !(await page.locator("#tab-ingredients").evaluate((el) => el.hidden)) && (await st("/api/ingredients/meta")) === 200, "");
+    // 떠났다가 다시 들어오면 또 묻는다 — 「매번」이 이 시험이다
+    await tab("orders").click();
+    await page.waitForTimeout(600);
+    await tab("ingredients").click();
+    await page.waitForTimeout(500);
+    check("★★ 다시 들어가면 또 묻는다", await gate(), "");
+    await page.click("#pinGateCancel");
+  }
+
   out.push("\n[실시간 주문의 「오전/오후 정산」은 그대로]");
   const sc = await st("/api/settlements/shift-close", { method: "POST", data: { shift: "am" } });
   check("★★ 잠겨 있어도 오전·오후 정산 버튼 길은 막히지 않는다(423 아님)", sc !== 423, String(sc));

@@ -21,6 +21,12 @@ const t0 = 1_000_000;
 check("틀리면 못 푼다", L.unlock(req, "payroll", "0000", t0).error === "wrong_pin", "");
 check("맞으면 푼다", L.unlock(req, "payroll", "2468", t0).ok, "");
 check("급여만 풀리고 결산은 그대로", L.isUnlocked(req, "payroll", t0 + 1) && !L.isUnlocked(req, "settlement", t0 + 1), "");
+// 식자재(영수증·장부)도 같은 자물쇠다. 2026-10-05 사장님: "사장만 들어갈 수
+// 있고 비밀번호도 매번 쳐야 돼. 직원은 절대 절대 못 들어가"
+check("★★ 식자재도 잠긴다 — 급여를 풀어도 따로다", !L.isUnlocked(req, "ingredients", t0 + 1), "");
+check("★ 식자재도 같은 비밀번호로 풀린다", L.unlock(req, "ingredients", "2468", t0).ok && L.isUnlocked(req, "ingredients", t0 + 1), "");
+check("★★ 식자재도 15분 넘기면 잠긴다", !L.isUnlocked(req, "ingredients", t0 + L.TTL_MS + 1), "");
+L.lock(req, "ingredients");
 check("★★ 14분 59초 뒤에도 열려 있다", L.isUnlocked(req, "payroll", t0 + L.TTL_MS - 1000), "");
 check("★★ 15분 넘게 아무것도 안 하면 잠긴다", !L.isUnlocked(req, "payroll", t0 + L.TTL_MS + 1), "");
 // 쓰는 동안은 늘어난다 — 요청이 오면 그때부터 15분
