@@ -74,11 +74,20 @@
 
   // ───────── 가져오기 ─────────
 
-  function logLine(html) {
+  /**
+   * 화면 아래 한 줄. `{ add: true }` 면 **덧붙인다.**
+   *
+   * 2026-10-05: 사진을 읽을 때 할 말이 여럿인데(몇 줄 채웠다 · 머리에서 업체를
+   * 읽었다 · 표를 못 찾은 사진이 있다) 이 칸이 통째로 갈아끼우고 있었다 —
+   * **마지막 한 줄만 보였다.** 「못 읽었다」가 조용히 지워지는 자리였다.
+   */
+  function logLine(html, opts) {
     const box = $("#ingImportLog");
     if (!box) return;
+    if (html === "") { box.innerHTML = ""; box.hidden = true; return; }
+    const add = opts && opts.add && box.innerHTML;
     box.hidden = false;
-    box.innerHTML = html;
+    box.innerHTML = add ? `${box.innerHTML}<br>${html}` : html;
   }
 
   async function importFile(file) {
@@ -623,7 +632,7 @@
    * 표를 못 찾으면 사진 전체를 그냥 보낸다 — 아무것도 안 보내는 것보다 낫다.
    */
   async function cropsForAi(file, opts) {
-    const o = Object.assign({ side: 1568, pad: 0.03, splitRows: 9, minRows: 6, minCover: 0.25 }, opts || {});
+    const o = Object.assign({ side: 1568, pad: 0.03, splitRows: 9, minRows: 6, minCover: 0.25, header: false, headerSide: 1100 }, opts || {});
     const bmp = await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => null);
     if (!bmp) return [];
 
@@ -681,6 +690,27 @@
       ctx.drawImage(bmp, area.x0, sy, aw, sh, 0, 0, w, h);
       pieces.push(cv.toDataURL("image/jpeg", 0.85));
     }
+    // 업체·날짜·지점을 안 고르셨으면 **전표 머리**를 한 장 더 보낸다.
+    //
+    // 위에서 표만 잘라 보내므로 **가게 이름과 날짜가 잘려 나간다** — 그게
+    // 바로 사장님이 파일 이름에 적어 넣으시던 것이다(2026-10-05). 표 위쪽
+    // 띠를 작게 한 장 덧붙이면 그 타자가 없어진다. 머리는 글씨가 크고
+    // 인쇄된 것이라 작게 보내도 읽힌다 — 400토큰쯤이다.
+    // 표를 못 찾았으면 사진 전체를 이미 보냈다 — 머리도 그 안에 있다.
+    if (o.header && box) {
+      const top = Math.max(0, box.y0 - bmp.height * 0.01);
+      const hh = Math.max(1, Math.min(top, bmp.height));
+      const sc = Math.min(1, o.headerSide / Math.max(bmp.width, hh));
+      const w = Math.max(1, Math.round(bmp.width * sc));
+      const h = Math.max(1, Math.round(hh * sc));
+      const cv = document.createElement("canvas");
+      cv.width = w; cv.height = h;
+      const ctx = cv.getContext("2d");
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, 0, 0, bmp.width, hh, 0, 0, w, h);
+      pieces.push(cv.toDataURL("image/jpeg", 0.85));
+      pieces.headerPiece = true;
+    }
     if (bmp.close) bmp.close();
     return pieces;
   }
@@ -693,7 +723,11 @@
    * 길**로 내려간다. 화면이 멈추지 않는 것이 중요하다.
    */
   async function readByAi(file) {
-    const images = await cropsForAi(file);
+    const vendor = ($("#ingEntryVendor").value || "").trim();
+    const store = $("#ingEntryStore").value || "";
+    const date = $("#ingEntryDate").value || "";
+    // 안 고르신 것이 있으면 전표 머리를 한 장 더 보내 **종이에서 읽는다**
+    const images = await cropsForAi(file, { header: !(vendor && store && date) });
     if (!images.length) return null;
     let res;
     try {
@@ -701,10 +735,8 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          images,
-          vendor: ($("#ingEntryVendor").value || "").trim(),
-          store: $("#ingEntryStore").value || "",
-          date: $("#ingEntryDate").value || "",
+          images, vendor, store, date,
+          headerPiece: !!images.headerPiece,
         }),
       });
     } catch (e) { return null; }
@@ -717,6 +749,78 @@
     return await res.json().catch(() => null);
   }
 
+  // 사장님이 손수 고치신 칸. 여기 든 칸은 사진이 덮지 않는다.
+  const touched = new Set();
+  let applying = false;
+  function watchEntryFields() {
+    for (const id of ["ingEntryVendor", "ingEntryDate", "ingEntryStore"]) {
+      const el = $("#" + id);
+      if (!el || el.dataset.hgWatch) continue;
+      el.dataset.hgWatch = "1";
+      const mark = () => { if (!applying) touched.add(id); };
+      el.addEventListener("input", mark);
+      el.addEventListener("change", mark);
+    }
+  }
+
+  /**
+   * 종이에서 읽은 **업체·날짜·지점**을 칸에 넣는다.
+   *
+   * 2026-10-05 사장님: "아빠가 파일 이름에 저런 정보를 안 넣으면 넌 그걸
+   * 인식 못해?" — 영수증에는 가게 이름이 인쇄돼 있고 날짜가 머리에 적혀
+   * 있고 지점은 「台元三店」 도장으로 보인다. 12장 중 업체 10 · 날짜 8 ·
+   * 지점 12 를 맞혔다.
+   *
+   * **이미 적혀 있는 칸은 건드리지 않는다.** 특히 날짜가 그렇다 —
+   * 사장님(2026-10-05): "장부날짜는 구매 날짜고 사진 날짜는 찍은 날짜일거야
+   * 구매 날짜가 더 중요하지". 12장 중 2장이 종이 날짜와 장부 날짜가 달랐다
+   * (주문서에 4/29 인데 물건은 5/1 에 왔다). 읽은 것은 **제안**이고 정하는
+   * 것은 사장님이다.
+   */
+  function applyHead(head) {
+    if (!head) return false;
+    let did = false;
+    const put = (sel, v) => {
+      const el = $(sel);
+      if (!el || !v) return;
+      // 사장님이 손수 적으신 칸은 건드리지 않는다. 날짜 칸은 열 때 오늘로
+      // 채워 두므로 「적혀 있다」만으로는 모자라다 — 손을 대셨는지를 본다.
+      if (touched.has(el.id) || (el.tagName !== "SELECT" && (el.value || "").trim() && el.id !== "ingEntryDate")) return;
+      if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === v)) return;
+      if (el.value === v) return;
+      applying = true;
+      el.value = v;
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      applying = false;
+      did = true;
+    };
+    if (head.vendor) put("#ingEntryVendor", head.vendor);
+    if (head.date) put("#ingEntryDate", head.date);
+    if (head.store) put("#ingEntryStore", head.store);
+    // 사장님이 적으신 날짜와 종이 날짜가 다르면 **말만 한다.** 사장님
+    // (2026-10-05): "장부날짜는 구매 날짜고 … 구매 날짜가 더 중요하지".
+    const dEl = $("#ingEntryDate");
+    if (head.date && dEl && dEl.value && dEl.value !== head.date) {
+      logLine(esc(fmt("ingPhotoDateDiffFmt", { paper: head.date, kept: dEl.value })), { add: true });
+    }
+    if (did) {
+      const sEl = $("#ingEntryStore");
+      logLine(esc(fmt("ingPhotoHeadFmt", {
+        vendor: head.vendor || "?",
+        date: head.date || "?",
+        store: (sEl && sEl.selectedOptions[0] && sEl.selectedOptions[0].textContent) || "?",
+      })), { add: true });
+      // 읽은 상호가 장부 이름과 글자가 다르면 그렇다고 말한다
+      if (head.vendor && head.vendor_text && head.vendor_text !== head.vendor) {
+        logLine(esc(fmt("ingPhotoVendorAsFmt", { paper: head.vendor_text, as: head.vendor })), { add: true });
+      }
+    } else if (head.vendor_text && !head.vendor) {
+      // 장부에 없는 업체다. 짐작해서 남의 업체로 넣지 않는다.
+      logLine(esc(fmt("ingPhotoVendorUnknownFmt", { paper: head.vendor_text })), { add: true });
+    }
+    return did;
+  }
+
   let reading = false;
 
   async function readPhotos(files) {
@@ -726,6 +830,7 @@
     const RR = window.HG_RECEIPT_READ;
     if (!RR) return logLine(esc(T("ingPhotoNoReader")));
     reading = true;
+    logLine("");          // 지난 번 말은 치운다 — 아래 말들은 덧붙는다
     const btn = $("#ingPhotoBtn");
     if (btn) { btn.disabled = true; btn.textContent = T("ingPhotoReading"); }
     try {
@@ -738,6 +843,7 @@
         if (ai && ai.off) aiOff = true;
         else if (ai && ai.capped) capped = ai;
         else if (ai && Array.isArray(ai.rows) && ai.rows.length) {
+          applyHead(ai.head);
           for (const r of ai.rows) {
             const line = blankLine();
             line.name = r.name || "";
@@ -777,12 +883,12 @@
       entryLines = entryLines.filter((l, i) => i > 0 || String(l.name || "") !== "" || l.qty !== "" || l.amount !== "");
       if (!entryLines.length) entryLines.push(blankLine());
       renderLines();
-      if (added) logLine(esc(fmt("ingPhotoReadFmt", { n: added, unsure })));
-      if (byAi) logLine(esc(fmt("ingPhotoByAiFmt", { n: byAi })));
-      if (aiOff) logLine(esc(T("ingPhotoAiOff")));
-      if (capped) logLine(esc(fmt("ingPhotoCapFmt", { cap: capped.cap })));
-      if (noTable) logLine(esc(fmt("ingPhotoNoTableFmt", { n: noTable })));
-      if (!added && !noTable) logLine(esc(T("ingPhotoNothing")));
+      if (added) logLine(esc(fmt("ingPhotoReadFmt", { n: added, unsure })), { add: true });
+      if (byAi) logLine(esc(fmt("ingPhotoByAiFmt", { n: byAi })), { add: true });
+      if (aiOff) logLine(esc(T("ingPhotoAiOff")), { add: true });
+      if (capped) logLine(esc(fmt("ingPhotoCapFmt", { cap: capped.cap })), { add: true });
+      if (noTable) logLine(esc(fmt("ingPhotoNoTableFmt", { n: noTable })), { add: true });
+      if (!added && !noTable) logLine(esc(T("ingPhotoNothing")), { add: true });
     } finally {
       reading = false;
       if (btn) { btn.disabled = false; btn.textContent = T("ingPhotoBtn"); }
@@ -861,6 +967,7 @@
           readPhotos(e.dataTransfer && e.dataTransfer.files);
         });
       }
+      watchEntryFields();
       $("#ingEntryVendor").onchange = () => loadCatalog();
       $("#ingEntryStore").onchange = () => {
         loadVendorList();

@@ -40,6 +40,12 @@ function check(name, cond, extra = "") {
 const TINY = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
 const tinyFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(TINY, "base64") });
 
+// 64×64 흰 PNG. 1×1 은 브라우저가 그림으로 못 열어서(createImageBitmap 실패)
+// **Claude 에게 보내는 길을 아예 안 탄다** — 머리를 읽는 자리를 재려면
+// 그림으로 열리는 사진이어야 한다.
+const PHOTO = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAXklEQVR4nO3PMQ0AMAzAsPInvYLYYVWKESTzjhsd8KsBrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BrQGtAa0BbQHKU9LC7/CP1AAAAABJRU5ErkJggg==";
+const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(PHOTO, "base64") });
+
 (async () => {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -178,6 +184,63 @@ const tinyFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(T
     const log = await page.locator("#ingImportLog").innerText();
     check("★★ 못 읽었다고 말한다", /표를 못 찾/.test(log), log.slice(0, 200));
     check("★ 어떻게 하면 되는지도 말한다 (스캐너)", /스캐너/.test(log), log.slice(0, 200));
+  }
+
+  out.push("\n[업체·날짜·지점을 종이에서 읽는다]");
+  {
+    // 2026-10-05 사장님: "아빠가 파일 이름에 저런 정보를 안 넣으면 넌 그걸
+    // 인식 못해?" — 영수증 12장을 파일 이름 없이 읽어 업체 10 · 날짜 8 ·
+    // 지점 12 를 맞혔다(src/receiptHeader.js). 여기서 재는 것은 **읽은 뒤 화면**이다.
+    await page.evaluate(() => {
+      window.__hgSent = null;
+      const real = window.fetch;
+      window.__hgHead = {
+        vendor: "房信菓菜行", vendor_text: "房信菓菜行", vendor_sure: true,
+        date: "2026-09-30", store: "branch3",
+      };
+      window.fetch = async (u, o) => {
+        if (String(u).includes("/api/ingredients/read-photo")) {
+          window.__hgSent = JSON.parse(o.body);
+          return new Response(JSON.stringify({
+            rows: [{ name: "紅蘿蔔", qty: 2, price: 30, amount: 60, sure: true }],
+            head: window.__hgHead,
+          }), { status: 200, headers: { "Content-Type": "application/json" } });
+        }
+        return real(u, o);
+      };
+      window.__hgRestoreFetch = () => { window.fetch = real; };
+    });
+    await page.setInputFiles("#ingPhotoFile", photoFile("head.png"));
+    await page.waitForTimeout(900);
+    const sent = await page.evaluate(() => window.__hgSent);
+    check("★ 사진을 보낼 때 「머리 사진이 붙어 있나」도 같이 간다",
+      !!sent && typeof sent.headerPiece === "boolean", JSON.stringify(sent && Object.keys(sent)));
+    const v = await page.locator("#ingEntryVendor").inputValue();
+    const d = await page.locator("#ingEntryDate").inputValue();
+    const st = await page.locator("#ingEntryStore").inputValue();
+    check("★★ 업체가 저절로 채워진다", v === "房信菓菜行", v);
+    check("★★ 지점이 저절로 골라진다", st === "branch3", st);
+    // 날짜 칸은 열 때 오늘로 채워 두므로 「적혀 있다」만으로는 못 가린다 —
+    // 손을 대지 않으셨으면 종이 날짜로 바꾼다.
+    check("★★ 손 안 댄 날짜는 종이 날짜로 바뀐다", d === "2026-09-30", d);
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★ 어디서 읽었는지 말해준다", /영수증 머리에서 읽었/.test(log), log.slice(0, 200));
+  }
+
+  out.push("\n[사장님이 적으신 날짜는 덮지 않는다]");
+  {
+    // 사장님(2026-10-05): "장부날짜는 구매 날짜고 사진 날짜는 찍은 날짜일거야
+    // 구매 날짜가 더 중요하지". 12장 중 2장이 종이 날짜와 장부 날짜가 달랐다
+    // (주문서에 4/29 인데 물건은 5/1 에 왔다).
+    await page.fill("#ingEntryDate", "2026-10-02");
+    await page.dispatchEvent("#ingEntryDate", "input");
+    await page.setInputFiles("#ingPhotoFile", photoFile("head2.png"));
+    await page.waitForTimeout(900);
+    const d = await page.locator("#ingEntryDate").inputValue();
+    check("★★ 적어 두신 날짜가 그대로 남는다", d === "2026-10-02", d);
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★★ 종이 날짜가 다르면 말해준다", /종이에 적힌 날짜는 2026-09-30/.test(log), log.slice(-240));
+    await page.evaluate(() => window.__hgRestoreFetch && window.__hgRestoreFetch());
   }
 
   out.push("\n[저장은 읽은 값 그대로]");

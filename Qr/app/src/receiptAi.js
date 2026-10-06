@@ -77,12 +77,27 @@ function buildPrompt(opts) {
     "- 합계·소계·세금 줄은 rows 에 넣지 말고 total 에 넣으세요.",
     "- 빈 줄, 줄 번호만 있는 줄은 넣지 마세요.",
   ];
-  if (o.pieces > 1) {
-    lines.push(`- 사진 ${o.pieces}장은 **같은 전표의 위쪽과 아래쪽**입니다. 가운데가 조금 겹칩니다 —`);
+  const bodyPieces = o.pieces - (o.headerPiece ? 1 : 0);
+  if (bodyPieces > 1) {
+    lines.push(`- 앞의 사진 ${bodyPieces}장은 **같은 전표의 위쪽과 아래쪽**입니다. 가운데가 조금 겹칩니다 —`);
     lines.push("  겹친 줄을 두 번 넣지 마세요.");
   }
   if (o.vendor) lines.push(`- 이 전표는 「${o.vendor}」 것입니다.`);
   if (o.date) lines.push(`- 날짜는 ${o.date} 로 알고 있습니다.`);
+  // 업체·날짜·지점을 모를 때는 **종이에서 읽는다.** 사장님이 파일 이름에
+  // 적어 주지 않아도 되게(2026-10-05). 전표에는 가게 이름이 인쇄돼 있고,
+  // 날짜가 머리에 민국 연도로 적혀 있고, 지점은 「台元三店」 도장으로 보인다.
+  if (o.wantHead) {
+    if (o.headerPiece) lines.push("- **마지막 사진은 전표의 머리**입니다(가게 이름·날짜·받는 이).");
+    lines.push(
+      "",
+      "답에 head 도 넣으세요. 모르면 그 칸을 \"\" 로 두세요 — 짐작하지 마세요.",
+      "\"head\":{\"vendor\":\"파는 가게 상호\",\"date\":\"전표에 적힌 날짜 그대로\",\"store\":\"받는 이·주소에 적힌 말 그대로\"}",
+      "- vendor 는 **파는 쪽** 상호입니다. 「韓國館」·「韓食館」은 우리(사는 쪽)입니다.",
+      "- date 는 적힌 그대로 베끼세요(「113年5月29日」·「24.05.27」). 서기로 고치지 마세요.",
+      "- store 는 「台元三店」·「竹北區」처럼 받는 이 칸에 적힌 말입니다."
+    );
+  }
   if (items.length) {
     lines.push("", `이 업체에서 자주 사는 품목입니다. 같은 것이면 **이 글자 그대로** 쓰세요:`);
     lines.push(items.join(" · "));
@@ -214,8 +229,10 @@ async function readReceipt(image, opts) {
   const bytes = imgs.reduce((a, x) => a + x.bytes, 0);
   if (bytes > MAX_IMAGE_BYTES) return { ok: false, error: "too_big" };
 
+  // 업체·날짜·지점 중 하나라도 모르면 종이에서 읽어 달라고 한다
+  const wantHead = o.wantHead !== false && !(o.vendor && o.date && o.store);
   const content = imgs.map((x) => ({ type: "image", source: { type: "base64", media_type: x.media, data: x.data } }));
-  content.push({ type: "text", text: buildPrompt(Object.assign({ pieces: imgs.length }, o)) });
+  content.push({ type: "text", text: buildPrompt(Object.assign({ pieces: imgs.length, wantHead }, o)) });
   const body = { model: o.model, max_tokens: 2000, messages: [{ role: "user", content }] };
   const ctrl = typeof AbortController === "function" ? new AbortController() : null;
   const timer = ctrl ? setTimeout(() => ctrl.abort(), o.timeoutMs) : null;
@@ -247,9 +264,14 @@ async function readReceipt(image, opts) {
   const parsed = parseAnswer(text);
   if (!parsed) return { ok: false, error: "bad_answer", detail: text.slice(0, 200) };
   const checked = checkRows(parsed, { known: o.known });
+  // 읽어 온 머리를 **장부 말로** 바꾼다. 못 가리면 비워 둔다(receiptHeader.js).
+  const head = wantHead && parsed.head
+    ? require("./receiptHeader").readHeader(parsed.head, { vendors: o.vendors || [] })
+    : null;
   return {
     ok: true,
     ...checked,
+    head,
     usage: data && data.usage ? { in: data.usage.input_tokens, out: data.usage.output_tokens } : null,
     model: o.model,
   };

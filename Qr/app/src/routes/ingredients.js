@@ -308,12 +308,27 @@ router.post("/read-photo", express.json({ limit: "8mb" }), async (req, res) => {
     } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
   }
 
-  const got = await AI.readReceipt(list, { vendor, date: body.date, items, known });
+  // 4) 업체·날짜·지점을 안 고르셨으면 **종이에서 읽는다**(2026-10-05 사장님:
+  //    "아빠가 파일 이름에 저런 정보를 안 넣으면 넌 그걸 인식 못해?").
+  //    읽어 온 상호를 장부에 있는 이름에 맞추려면 그 목록이 있어야 한다.
+  const storeKnown = body.store && body.store !== "all" ? String(body.store) : "";
+  let vendors = [];
+  if (!vendor || !body.date || !storeKnown) {
+    try {
+      const rows = await (await col()).find({}, { projection: { vendor: 1, _id: 0 } }).toArray();
+      vendors = [...new Set(rows.map((r) => r.vendor).filter(Boolean))];
+    } catch (e) { /* 목록이 없으면 종이에 적힌 그대로 돌려준다 */ }
+  }
+
+  const got = await AI.readReceipt(list, {
+    vendor, date: body.date, store: storeKnown, items, known, vendors,
+    headerPiece: !!body.headerPiece,
+  });
   if (!got.ok) {
     console.warn("[ingredients] 사진 읽기 실패:", got.error, got.detail || "");
     return res.status(502).json({ error: got.error, message: "사진을 못 읽었습니다" });
   }
-  const answer = { rows: got.rows, total: got.total, sum: got.sum, totalOk: got.totalOk, note: got.note, model: got.model };
+  const answer = { rows: got.rows, total: got.total, sum: got.sum, totalOk: got.totalOk, note: got.note, head: got.head, model: got.model };
   await cache.updateOne(
     { _id: key },
     { $set: { answer, at: new Date().toISOString(), vendor: vendor || "", usage: got.usage || null } },
