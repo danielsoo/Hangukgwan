@@ -306,6 +306,120 @@ function ordersInRange(start, end, req) {
  * requireOwner — 여러 날에 걸친 것이라 직원에게는 애초에 열 수 없는 화면이다
  * (src/auth.js requireTodayForStaff 와 같은 이유).
  */
+/* ───────── 월 결산 · 연 결산 (src/periodSettlement.js) ─────────
+ *
+ * 2026-10-06 사장님: "결산탭에 월 결산, 연결산도 만들어줄래? 그 결산에는
+ * 식자재 비용, 급여도 같이 넣어서 계산하면 좋을 것 같은데?"
+ *
+ * 셋을 모은다 — 매출(하루 마감 기록) · 식자재(ingredient_purchases) ·
+ * 인건비(payroll_cards). 어느 것도 **줄을 통째로 받아오지 않는다**:
+ * 마감 기록은 날짜·매출·건수·손님 네 칸만, 식자재는 DB 가 묶은 것만,
+ * 인건비는 급여 쪽 셈을 그대로 부른다.
+ */
+const PS = require("../periodSettlement");
+
+/** 그 기간에서 **오늘까지** 며칠인가. 아직 오지 않은 날을 「기록 없음」이라 하지 않는다. */
+function daysUpToToday(range, today) {
+  const end = range.end < today ? range.end : today;
+  if (end < range.start) return 0;
+  const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${range.start}T00:00:00Z`);
+  return Math.floor(ms / 86400000) + 1;
+}
+
+async function periodSummary(req, key) {
+  const range = PS.rangeOf(key);
+  if (!range) return null;
+  const today = taipeiDateString();
+  const testId = testMode.currentId(req, store);
+
+  // 1) 매출 — 하루 마감 기록. 네 칸만 받는다.
+  const snaps = await findDocs(
+    "daily_settlements",
+    {
+      date: { $gte: range.start, $lte: range.end },
+      test_session: testId ? testId : { $exists: false },
+    },
+    { sort: { date: 1 }, projection: { date: 1, total_revenue: 1, paid_order_count: 1, guest_count: 1 } }
+  );
+  const days = snaps.map((d) => ({
+    date: d.date,
+    revenue: Number(d.total_revenue) || 0,
+    orders: Number(d.paid_order_count) || 0,
+    guests: Number(d.guest_count) || 0,
+  }));
+
+  // 2) 식자재 — 집계는 DB 가 한다(src/ingredients.js summaryPipelines)
+  const ing = { total: 0, lines: 0, byMonth: {}, vendors: [] };
+  try {
+    await connectDB();
+    const G = require("../ingredients");
+    const c = getDb().collection(G.PURCHASES);
+    const where = { date: { $gte: range.start, $lte: range.end } };
+    const pipes = G.summaryPipelines(where, { items: 1 });
+    const [totals, vendors, months] = await Promise.all([
+      c.aggregate(pipes.totals).toArray(),
+      c.aggregate(pipes.vendors).toArray(),
+      c.aggregate(pipes.months).toArray(),
+    ]);
+    const t = totals[0] || {};
+    ing.total = t.total || 0;
+    ing.lines = t.lines || 0;
+    ing.vendors = vendors.map((v) => ({ vendor: v._id, amount: Math.round((v.amount || 0) * 100) / 100 }));
+    for (const m of months) ing.byMonth[m._id] = m.amount || 0;
+  } catch (e) {
+    // 식자재가 아직 안 들어와 있어도 매출·인건비는 보여야 한다.
+    console.warn("[settlement] 식자재 집계 실패:", e && e.message);
+  }
+
+  // 3) 인건비 — 급여 쪽 셈을 그대로 부른다(규칙을 베껴 쓰지 않는다)
+  const pay = { total: 0, staff: 0, hours: 0, byMonth: {} };
+  try {
+    const byMonth = await require("./payroll").monthTotals(PS.monthsOf(range));
+    for (const [m, v] of Object.entries(byMonth)) {
+      pay.byMonth[m] = v.total;
+      pay.total += v.total;
+      pay.hours += v.hours;
+      pay.staff = Math.max(pay.staff, v.staff);
+    }
+  } catch (e) {
+    console.warn("[settlement] 인건비 집계 실패:", e && e.message);
+  }
+
+  return PS.summarize(range, days, ing, pay, { today, daysInRange: daysUpToToday(range, today) });
+}
+
+/** 월·연 결산 한 장. key 는 "2026-09"(달) 또는 "2026"(해). */
+router.get("/period", requireOwner, settlementUnlocked, async (req, res) => {
+  const got = await periodSummary(req, (req.query || {}).key);
+  if (!got) return res.status(400).json({ error: "bad_period" });
+  res.json(got);
+});
+
+/**
+ * 그 결산을 LINE 으로 보낸다.
+ *
+ * 사장님: "line 으로 한 번 싹 정리해서 보내주면 더 좋을 것 같고. 그리고 더
+ * 확실하게 알고 싶다면 링크 첨부하면서 메세지에 여기서 더 볼 수 있다고 하는
+ * 것도 좋을 것 같아."
+ *
+ * 링크는 **지금 보고 계신 그 주소**로 만든다 — 가게 주소를 따로 적어 두면
+ * 도메인이 바뀌었을 때 조용히 죽은 링크가 나간다.
+ */
+router.post("/period/line", requireOwner, settlementUnlocked, async (req, res) => {
+  const key = ((req.body || {}).key) || "";
+  const got = await periodSummary(req, key);
+  if (!got) return res.status(400).json({ error: "bad_period" });
+  const proto = (req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0];
+  const host = req.headers["x-forwarded-host"] || req.get("host") || "";
+  const link = host ? PS.linkFor(`${proto}://${host}`, got.key) : "";
+  const text = PS.lineText(got, { link });
+  const sent = await sendLineMessage(store, text);
+  if (!sent || sent.ok === false) {
+    return res.status(502).json({ error: "line_failed", detail: (sent && sent.error) || "", text });
+  }
+  res.json({ ok: true, text, link, ...got });
+});
+
 router.get("/item-trend", requireOwner, settlementUnlocked, async (req, res) => {
   const q = req.query || {};
   const valid = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || "");

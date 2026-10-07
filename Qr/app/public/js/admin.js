@@ -1266,6 +1266,30 @@
       settlementTodayBtn: "오늘",
       settlementWeekBtn: "최근 7일",
       settlementMonthBtn: "최근 30일",
+      settlementModeDay: "하루",
+      settlementModeMonth: "월",
+      settlementModeYear: "연",
+      periodTitle: "📅 월 결산 · 연 결산",
+      periodMonth: "월",
+      periodYear: "연",
+      periodRevenue: "매출",
+      periodIngredients: "식자재",
+      periodPayroll: "인건비",
+      periodLeft: "남은 것",
+      periodRevenueSubFmt: "주문 {orders}건 · 손님 {guests}명 · 장사한 날 {days}일",
+      periodStaffFmt: "직원 {n}명",
+      periodLeftSubFmt: "매출의 {pct}%",
+      periodLoading: "불러오는 중이에요…",
+      periodFailed: "불러오지 못했어요. 다시 해보세요.",
+      periodOngoing: "⏳ 아직 진행 중인 기간이에요",
+      periodMissingFmt: "⚠️ 마감 기록이 없는 날 {n}일 — 그만큼 매출이 덜 잡혀요. 결산 기록 목록을 한 번 열면 지난 날이 채워져요.",
+      periodMissingCosts: "※ 임대료·수도광열·세금·카드 수수료는 아직 안 들어갔어요. 「남은 것」은 이익이 아니라 매출에서 식자재와 인건비만 뺀 값이에요.",
+      periodColMonth: "달",
+      periodColTotal: "합계",
+      periodLineBtn: "📩 LINE 으로 보내기",
+      periodLineAskFmt: "{key} 결산을 LINE 으로 보낼까요? 링크도 같이 갑니다.",
+      periodLineSent: "보냈어요. 이렇게 나갔어요:",
+      periodLineFailed: "LINE 으로 보내지 못했어요. 설정 > 알림에서 LINE 이 켜져 있는지 보세요.",
       settlementAllBtn: "전체 기간",
       settlementCsvBtn: "⬇️ CSV 다운로드",
       settlementCloseBtn: "📌 이 날짜 정산 기록 저장",
@@ -2535,6 +2559,30 @@
       settlementTodayBtn: "今天",
       settlementWeekBtn: "最近 7 天",
       settlementMonthBtn: "最近 30 天",
+      settlementModeDay: "一天",
+      settlementModeMonth: "月",
+      settlementModeYear: "年",
+      periodTitle: "📅 月結算 · 年結算",
+      periodMonth: "月",
+      periodYear: "年",
+      periodRevenue: "營業額",
+      periodIngredients: "食材",
+      periodPayroll: "人事費",
+      periodLeft: "剩餘",
+      periodRevenueSubFmt: "訂單 {orders} 筆 · 客人 {guests} 位 · 營業 {days} 天",
+      periodStaffFmt: "員工 {n} 位",
+      periodLeftSubFmt: "佔營業額 {pct}%",
+      periodLoading: "載入中…",
+      periodFailed: "載入失敗，請再試一次。",
+      periodOngoing: "⏳ 這個期間還沒結束",
+      periodMissingFmt: "⚠️ 有 {n} 天沒有結算紀錄 — 營業額會少算。打開結算紀錄清單一次就會補上。",
+      periodMissingCosts: "※ 房租·水電·稅金·刷卡手續費尚未計入。「剩餘」不是利潤，只是營業額扣掉食材與人事費。",
+      periodColMonth: "月",
+      periodColTotal: "合計",
+      periodLineBtn: "📩 傳送到 LINE",
+      periodLineAskFmt: "要把 {key} 的結算傳到 LINE 嗎？會一併附上連結。",
+      periodLineSent: "已傳送，內容如下：",
+      periodLineFailed: "傳送失敗。請確認設定 > 通知的 LINE 是否已開啟。",
       settlementAllBtn: "全部期間",
       settlementCsvBtn: "⬇️ 下載 CSV",
       settlementCloseBtn: "📌 儲存這天的結算紀錄",
@@ -4478,7 +4526,12 @@
       btn.classList.add("active");
       $$(".tab-panel").forEach((p) => (p.hidden = true));
       $(`#tab-${btn.dataset.tab}`).hidden = false;
-      if (btn.dataset.tab === "settlement") loadSettlement();
+      if (btn.dataset.tab === "settlement") {
+        loadSettlement();
+        // 월·연은 **누를 때** 부른다 — 탭을 열 때마다 세 곳(마감·식자재·급여)을
+        // 모으면 하루 결산이 그만큼 늦어진다.
+        wirePeriod();
+      }
       if (btn.dataset.tab === "reservations") loadReservations();
       if (btn.dataset.tab === "vip") loadVipCards();
       if (btn.dataset.tab === "accounts") loadAccounts();
@@ -17502,6 +17555,237 @@
   function setSettlementBusy(on) {
     const box = $("#tab-settlement");
     if (box) box.classList.toggle("stl-busy", !!on);
+  }
+
+  // ───────── 월 결산 · 연 결산 ─────────
+  //
+  // 2026-10-06 사장님: "결산탭에 월 결산, 연결산도 만들어줄래? 그 결산에는
+  // 식자재 비용, 급여도 같이 넣어서 계산하면 좋을 것 같은데? 그리고 그것도
+  // line 으로 한 번 싹 정리해서 보내주면 더 좋을 것 같고."
+  //
+  // 하루 결산과 **다른 질문**에 답한다 — 하루는 「서랍이 맞나」, 이건
+  // 「이 달에 남았나」. 매출에서 식자재비와 인건비를 뺀다.
+
+  let periodKind = "month";
+  let periodKey = "";
+  let periodData = null;
+  let periodSeq = 0;
+
+  const periodMoney = (n) => "NT$" + money(Math.round(Number(n) || 0));
+  // 이 파일에는 「{n} 을 채우는」 도우미가 없다 — 여기서만 쓰는 작은 것을 둔다.
+  const periodFmt = (key, vals) => Object.entries(vals).reduce((t, [k, v]) => t.split("{" + k + "}").join(String(v)), T(key));
+  const periodPct = (v) => (v == null ? "" : v + "%");
+
+  /** 이 달(또는 올해)을 기본으로. 아직 진행 중인 달도 보여 준다 — 중간 점검용이다. */
+  function periodDefaultKey(kind) {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    return kind === "year" ? String(y) : y + "-" + m;
+  }
+
+  function periodShiftKey(key, by) {
+    if (/^\d{4}$/.test(key)) return String(Number(key) + by);
+    const [y, m] = key.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + by, 1));
+    return d.toISOString().slice(0, 7);
+  }
+
+  /**
+   * 보기 바꾸기 — 하루 / 월 / 연.
+   *
+   * 하루 결산 **아래에** 월·연을 더 붙이면 화면이 3,000픽셀이 된다. 이 화면은
+   * 이미 「너무 복잡해」라는 말을 들어서 높이를 시험으로 재고 있다
+   * (e2e-settlement-ui.js). 그래서 쌓지 않고 바꾼다.
+   */
+  function setSettlementMode(mode) {
+    const m = mode === "month" || mode === "year" ? mode : "day";
+    const content = document.querySelector(".settlement-content");
+    if (content) content.classList.toggle("is-period", m !== "day");
+    const card = $("#settlementPeriod");
+    if (card) card.hidden = m === "day";
+    document.querySelectorAll("[data-stl-mode]").forEach((b) => b.classList.toggle("is-on", b.dataset.stlMode === m));
+    if (m === "day") return;
+    if (m !== periodKind || !periodKey) {
+      periodKind = m;
+      periodKey = periodDefaultKey(m);
+    }
+    periodSyncInputs();
+    loadPeriod();
+  }
+
+  function periodSetKind(kind) {
+    periodKind = kind === "year" ? "year" : "month";
+    const monthIn = $("#periodMonthInput");
+    const yearIn = $("#periodYearInput");
+    if (monthIn) monthIn.hidden = periodKind !== "month";
+    if (yearIn) yearIn.hidden = periodKind !== "year";
+    document.querySelectorAll("[data-period-kind]").forEach((b) => {
+      b.classList.toggle("is-on", b.dataset.periodKind === periodKind);
+    });
+    periodKey = periodDefaultKey(periodKind);
+    periodSyncInputs();
+    loadPeriod();
+  }
+
+  function periodSyncInputs() {
+    const monthIn = $("#periodMonthInput");
+    const yearIn = $("#periodYearInput");
+    // 어느 칸을 보일지도 여기서 정한다 — 2026-10-06 에 연으로 바꿔도 달 고르는
+    // 칸이 그대로 남아, 9월을 보고 있는 것처럼 보였다.
+    if (monthIn) monthIn.hidden = periodKind !== "month";
+    if (yearIn) yearIn.hidden = periodKind !== "year";
+    if (periodKind === "month" && monthIn) monthIn.value = periodKey;
+    if (periodKind === "year" && yearIn) {
+      // 올해부터 2019년까지. 더 옛날 것은 장부가 없어도 고를 수는 있게 둔다.
+      if (!yearIn.options.length) {
+        const now = new Date().getFullYear();
+        for (let y = now; y >= 2019; y--) yearIn.add(new Option(y + "년", String(y)));
+      }
+      yearIn.value = periodKey;
+    }
+  }
+
+  async function loadPeriod() {
+    const box = $("#settlementPeriod");
+    if (!box || currentRole !== "owner") return;
+    if (!periodKey) { periodKey = periodDefaultKey(periodKind); periodSyncInputs(); }
+    const mySeq = ++periodSeq;
+    const note = $("#periodNote");
+    if (note) note.textContent = T("periodLoading");
+    let got = null;
+    try {
+      const res = await fetch("/api/settlements/period?key=" + encodeURIComponent(periodKey));
+      if (res.ok) got = await res.json();
+    } catch (e) { /* 아래에서 말한다 */ }
+    if (mySeq !== periodSeq) return;          // 늦게 온 옛 답이 새 답을 덮지 않게
+    periodData = got;
+    renderPeriod(got);
+  }
+
+  function renderPeriod(d) {
+    const set = (sel, v) => { const el = $(sel); if (el) el.textContent = v; };
+    if (!d) {
+      set("#periodNote", T("periodFailed"));
+      for (const id of ["#periodRevenue", "#periodIngredients", "#periodPayroll", "#periodLeft"]) set(id, "—");
+      for (const id of ["#periodRevenueSub", "#periodIngredientsSub", "#periodPayrollSub", "#periodLeftSub"]) set(id, "");
+      const yb = $("#periodYearBlock"); if (yb) yb.hidden = true;
+      return;
+    }
+    set("#periodRevenue", periodMoney(d.revenue.total));
+    set("#periodRevenueSub", periodFmt("periodRevenueSubFmt", {
+      orders: money(d.revenue.orders || 0), guests: money(d.revenue.guests || 0), days: d.revenue.days,
+    }));
+    set("#periodIngredients", periodMoney(d.ingredients.total));
+    set("#periodIngredientsSub", periodPct(d.cost_pct.ingredients));
+    set("#periodPayroll", periodMoney(d.payroll.total));
+    set("#periodPayrollSub", d.payroll.staff
+      ? periodPct(d.cost_pct.payroll) + " · " + periodFmt("periodStaffFmt", { n: d.payroll.staff })
+      : periodPct(d.cost_pct.payroll));
+    set("#periodLeft", periodMoney(d.left));
+    set("#periodLeftSub", d.left_pct == null ? "" : periodFmt("periodLeftSubFmt", { pct: d.left_pct }));
+    const leftCell = document.querySelector(".stl-period-cell.is-left");
+    if (leftCell) leftCell.classList.toggle("is-minus", Number(d.left) < 0);
+
+    // 아직 안 끝난 달·해인지, 마감 기록이 빠진 날이 있는지 — 숨기지 않는다.
+    const bits = [];
+    if (d.ongoing) bits.push(T("periodOngoing"));
+    if (d.missing_days > 0) bits.push(periodFmt("periodMissingFmt", { n: d.missing_days }));
+    set("#periodNote", bits.join("  ·  "));
+    const note = $("#periodNote");
+    if (note) note.classList.toggle("is-warn", d.missing_days > 0);
+
+    renderPeriodYear(d);
+  }
+
+  let periodChart = null;
+  function renderPeriodYear(d) {
+    const box = $("#periodYearBlock");
+    if (!box) return;
+    box.hidden = d.kind !== "year" || !(d.by_month || []).length;
+    if (box.hidden) return;
+    const rows = d.by_month;
+    const head = [T("periodColMonth"), T("periodRevenue"), T("periodIngredients"), T("periodPayroll"), T("periodLeft")]
+      .map((h) => "<th>" + escapeHtml(h) + "</th>").join("");
+    const body = rows.map((m) =>
+      "<tr>" +
+      "<td>" + Number(m.month.slice(5, 7)) + "월</td>" +
+      "<td>" + periodMoney(m.revenue) + "</td>" +
+      "<td>" + periodMoney(m.ingredients) + "</td>" +
+      "<td>" + periodMoney(m.payroll) + "</td>" +
+      '<td class="is-total' + (m.left < 0 ? " is-minus" : "") + '">' + periodMoney(m.left) + "</td>" +
+      "</tr>").join("");
+    const foot = "<tfoot><tr><td>" + escapeHtml(T("periodColTotal")) + "</td>" +
+      "<td>" + periodMoney(d.revenue.total) + "</td><td>" + periodMoney(d.ingredients.total) + "</td>" +
+      "<td>" + periodMoney(d.payroll.total) + "</td><td class='is-total'>" + periodMoney(d.left) + "</td></tr></tfoot>";
+    $("#periodYearTable").innerHTML = "<thead><tr>" + head + "</tr></thead><tbody>" + body + "</tbody>" + foot;
+
+    const canvas = $("#periodYearChart");
+    if (!canvas || typeof Chart === "undefined" || !canvas.offsetParent) return;
+    if (periodChart) periodChart.destroy();
+    periodChart = new Chart(canvas.getContext("2d"), {
+      type: "bar",
+      data: {
+        labels: rows.map((m) => Number(m.month.slice(5, 7)) + "월"),
+        datasets: [
+          { label: T("periodRevenue"), data: rows.map((m) => m.revenue), backgroundColor: "#16213e", borderRadius: 4 },
+          { label: T("periodIngredients"), data: rows.map((m) => m.ingredients), backgroundColor: "#c0392b", borderRadius: 4 },
+          { label: T("periodPayroll"), data: rows.map((m) => m.payroll), backgroundColor: "#d9a441", borderRadius: 4 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: "bottom" }, tooltip: { callbacks: { label: (c) => c.dataset.label + " " + periodMoney(c.parsed.y) } } },
+        scales: { y: { beginAtZero: true, ticks: { callback: (v) => periodMoney(v) } } },
+      },
+    });
+  }
+
+  /** 그 결산을 LINE 으로. 링크까지 붙어서 나간다(서버가 만든다). */
+  async function sendPeriodLine() {
+    const btn = $("#periodLineBtn");
+    if (!btn) return;
+    const label = periodFmt("periodLineAskFmt", { key: periodKey });
+    if (!(await showConfirm(label))) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch("/api/settlements/period/line", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: periodKey }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) return showAlert(T("periodLineFailed") + (body.detail ? "\n" + body.detail : ""));
+      showAlert(T("periodLineSent") + "\n\n" + (body.text || ""));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function wirePeriod() {
+    if (!$("#settlementPeriod") || $("#settlementPeriod").dataset.wired) return;
+    $("#settlementPeriod").dataset.wired = "1";
+    document.querySelectorAll("[data-stl-mode]").forEach((b) => {
+      b.onclick = () => setSettlementMode(b.dataset.stlMode);
+    });
+    $("#periodMonthInput").onchange = (e) => { periodKey = e.target.value || periodDefaultKey("month"); loadPeriod(); };
+    $("#periodYearInput").onchange = (e) => { periodKey = e.target.value; loadPeriod(); };
+    $("#periodPrev").onclick = () => { periodKey = periodShiftKey(periodKey, -1); periodSyncInputs(); loadPeriod(); };
+    $("#periodNext").onclick = () => { periodKey = periodShiftKey(periodKey, 1); periodSyncInputs(); loadPeriod(); };
+    $("#periodLineBtn").onclick = () => sendPeriodLine();
+    // LINE 문자의 링크(/admin?period=2026-09#settlement)로 들어오면 그 달을 연다.
+    const asked = new URLSearchParams(location.search).get("period");
+    if (asked && /^\d{4}(-\d{2})?$/.test(asked)) {
+      periodKind = asked.length === 4 ? "year" : "month";
+      periodKey = asked;
+        const monthIn = $("#periodMonthInput"), yearIn = $("#periodYearInput");
+      if (monthIn) monthIn.hidden = periodKind !== "month";
+      if (yearIn) yearIn.hidden = periodKind !== "year";
+      // 문자의 링크로 들어온 것이다 — 그 보기로 바로 연다
+      setTimeout(() => setSettlementMode(periodKind), 0);
+    } else {
+      periodKey = periodDefaultKey(periodKind);
+    }
+    periodSyncInputs();
   }
 
   async function loadSettlement(start, end) {

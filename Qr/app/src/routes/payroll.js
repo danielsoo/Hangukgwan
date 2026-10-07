@@ -268,4 +268,30 @@ router.delete("/holidays/:date", async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * 그 달들의 **인건비 합계**. 월·연 결산이 쓴다(src/routes/settlements.js).
+ *
+ * 카드를 넣은 직원만 센다 — 카드가 없으면 그 달에 얼마를 드렸는지 알 수 없고,
+ * 0 으로 세면 인건비가 실제보다 적어 보인다. 몇 명을 셌는지도 같이 준다.
+ */
+async function monthTotals(months) {
+  const rules = await loadRules();
+  const holidays = await loadHolidays();
+  const staff = await (await col(P.STAFF_COLLECTION)).find({}).toArray();
+  const out = {};
+  for (const m of months || []) {
+    const s = await summaryFor(m, rules, holidays, staff);
+    const withCard = s.rows.filter((r) => r.has_card);
+    out[m] = {
+      total: withCard.reduce((a, r) => a + r.total, 0),
+      staff: withCard.length,
+      hours: withCard.reduce((a, r) => a + r.hours + r.ot_hours, 0),
+    };
+  }
+  return out;
+}
+
 module.exports = router;
+// 라우터는 함수라 칸을 달 수 있다. 결산이 급여 규칙을 베껴 쓰지 않도록
+// **이 한 곳에서만** 셈한다.
+module.exports.monthTotals = monthTotals;

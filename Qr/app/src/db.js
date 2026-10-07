@@ -395,7 +395,10 @@ async function findDocs(kind, filter = {}, opts = {}) {
   await connectDB();
   const name = DOC_COLLECTIONS[kind];
   if (!name) throw new Error(`findDocs: 모르는 종류 ${kind}`);
-  let cur = db.collection(name).find(filter);
+  // 칸을 골라 받을 수 있다. 마감 기록 한 줄에는 결제수단·분류·테이블·시간대
+  // 쪼개기가 다 들어 있어서, 한 해치(365줄)를 통째로 받으면 수 MB 다 —
+  // 월·연 결산은 날짜·매출·건수·손님만 있으면 된다(src/periodSettlement.js).
+  let cur = db.collection(name).find(filter, opts.projection ? { projection: opts.projection } : {});
   if (opts.sort) cur = cur.sort(opts.sort);
   if (opts.limit) cur = cur.limit(opts.limit);
   return (await cur.toArray()).map(stripMongoId);

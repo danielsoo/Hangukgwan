@@ -604,6 +604,15 @@
             <span data-i18n="settlementLoading">결산을 불러오는 중이에요…</span>
           </div>
           <div class="settlement-toolbar">
+            <!-- 무엇을 볼 것인가 — 하루 / 월 / 연 (2026-10-06).
+                 쌓지 않고 **바꾼다.** 하루 결산 아래에 월·연을 더 붙이면 화면이
+                 3,000픽셀이 되는데, 이 화면은 이미 한 번 「너무 복잡해」라는 말을
+                 들어서 높이를 시험으로 재고 있다(e2e-settlement-ui.js). -->
+            <div class="pr-seg settlement-mode owner-only" role="radiogroup">
+              <button type="button" data-stl-mode="day" class="is-on" data-i18n="settlementModeDay">하루</button>
+              <button type="button" data-stl-mode="month" data-i18n="settlementModeMonth">월</button>
+              <button type="button" data-stl-mode="year" data-i18n="settlementModeYear">연</button>
+            </div>
             <label class="settlement-date-label owner-only">
               <span data-i18n="settlementStartLabel">시작일</span>
               <input type="date" id="settlementStartDate" />
@@ -630,6 +639,65 @@
             <!-- 직원 계정에는 날짜를 고르는 길이 없다. 그러면 지금 무엇을 보고
                  있는지도 알 수 없으니, 그 자리에 날짜를 적어준다. -->
             <span class="settlement-today-only staff-only" id="settlementTodayOnly"></span>
+          </div>
+
+          <!-- 월 결산 · 연 결산 (2026-10-06 사장님: "결산탭에 월 결산, 연결산도
+               만들어줄래? 그 결산에는 식자재 비용, 급여도 같이 넣어서 계산하면
+               좋을 것 같은데? 그리고 그것도 line 으로 한 번 싹 정리해서
+               보내주면 더 좋을 것 같고").
+
+               하루 결산(아래)과 **다른 질문**에 답하는 자리다 — 하루는 「서랍이
+               맞나」, 이건 「이 달에 남았나」. 그래서 접어 두지 않고 위에 둔다. -->
+          <div class="stl-period owner-only" id="settlementPeriod" hidden>
+            <div class="stl-period-head">
+              <h3 data-i18n="periodTitle">📅 월 결산 · 연 결산</h3>
+              <div class="stl-period-pick">
+                <input type="month" id="periodMonthInput" />
+                <select id="periodYearInput" hidden></select>
+                <button type="button" id="periodPrev" title="이전">◀</button>
+                <button type="button" id="periodNext" title="다음">▶</button>
+                <span class="stl-period-space"></span>
+                <button type="button" id="periodLineBtn" data-i18n="periodLineBtn">📩 LINE 으로 보내기</button>
+              </div>
+            </div>
+
+            <p class="stl-period-note" id="periodNote"></p>
+
+            <!-- 매출 − 식자재 − 인건비 = 남은 것. 네 칸을 **한 줄로** 둬서
+                 빼는 셈이 눈에 보이게 한다. -->
+            <div class="stl-period-calc">
+              <div class="stl-period-cell is-revenue">
+                <span class="stl-period-label" data-i18n="periodRevenue">매출</span>
+                <strong id="periodRevenue">NT$0</strong>
+                <span class="stl-period-sub" id="periodRevenueSub"></span>
+              </div>
+              <div class="stl-period-op">−</div>
+              <div class="stl-period-cell">
+                <span class="stl-period-label" data-i18n="periodIngredients">식자재</span>
+                <strong id="periodIngredients">NT$0</strong>
+                <span class="stl-period-sub" id="periodIngredientsSub"></span>
+              </div>
+              <div class="stl-period-op">−</div>
+              <div class="stl-period-cell">
+                <span class="stl-period-label" data-i18n="periodPayroll">인건비</span>
+                <strong id="periodPayroll">NT$0</strong>
+                <span class="stl-period-sub" id="periodPayrollSub"></span>
+              </div>
+              <div class="stl-period-op">=</div>
+              <div class="stl-period-cell is-left">
+                <span class="stl-period-label" data-i18n="periodLeft">남은 것</span>
+                <strong id="periodLeft">NT$0</strong>
+                <span class="stl-period-sub" id="periodLeftSub"></span>
+              </div>
+            </div>
+
+            <!-- 「이익」이 아니라는 말. 빼먹은 비용이 있다는 것을 화면에도 적는다. -->
+            <p class="settings-hint" data-i18n="periodMissingCosts">※ 임대료·수도광열·세금·카드 수수료는 아직 안 들어갔어요. 「남은 것」은 이익이 아니라 매출에서 식자재와 인건비만 뺀 값이에요.</p>
+
+            <div class="stl-period-year" id="periodYearBlock" hidden>
+              <div class="settlement-chart-wrap"><canvas id="periodYearChart"></canvas></div>
+              <div class="ing-ov-table-wrap"><table class="ing-ov-table" id="periodYearTable"></table></div>
+            </div>
           </div>
 
           <!-- ── 결산 화면 다시 짜기 (2026-09-10) ───────────────────────
