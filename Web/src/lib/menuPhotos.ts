@@ -33,6 +33,7 @@ export const SITE_PHOTOS: Record<string, string> = {
   삼겹살: '/photos/samgyeopsal.jpg',
   순두부찌개: '/photos/sundubu-jjigae.jpg',
   닭갈비: '/photos/dakgalbi.jpg',
+  동판불고기: '/photos/dongpan-bulgogi.jpg',
 }
 
 type MenuItem = { name_ko?: string; photo_url?: string | null }

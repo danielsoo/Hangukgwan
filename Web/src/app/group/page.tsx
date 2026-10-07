@@ -2,13 +2,15 @@
 
 import { useLanguage } from '@/context/LanguageContext'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
+import { useDishPhotos } from '@/lib/menuPhotos'
 
 export default function GroupPage() {
   const { tr } = useLanguage()
+  const photoOf = useDishPhotos()
   const dishes = [
-    { ko: '부대찌개', zh: '部隊鍋', price: 600, note: tr.group.d1, label: '부대찌개 部隊鍋' },
-    { ko: '동판불고기', zh: '銅盤烤肉', price: 500, note: tr.group.d2, label: '동판불고기 銅盤烤肉' },
-    { ko: '닭갈비', zh: '辣炒雞排', price: 600, note: tr.group.d3, label: '닭갈비 辣炒雞排' },
+    { n: '01', ko: '부대찌개', zh: '部隊鍋', price: 600, note: tr.group.d1, label: '부대찌개 部隊鍋' },
+    { n: '02', ko: '동판불고기', zh: '銅盤烤肉', price: 500, note: tr.group.d2, label: '동판불고기 銅盤烤肉' },
+    { n: '03', ko: '닭갈비', zh: '辣炒雞排', price: 600, note: tr.group.d3, label: '닭갈비 辣炒雞排' },
   ]
 
   return (
@@ -76,49 +78,36 @@ export default function GroupPage() {
         </div>
       </section>
 
-      <section style={{ background: 'var(--bg-alt)', borderTop: '1px solid var(--gold-a14)' }}>
-        <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(64px, 8vw, 110px) var(--shell-pad)' }}>
-          <p
-            style={{
-              fontFamily: "'Newsreader', serif",
-              fontSize: 'var(--fs-xs)',
-              letterSpacing: '0.34em',
-              textTransform: 'uppercase',
-              color: 'var(--accent)',
-              margin: '0 0 24px',
-            }}
-          >
-            {tr.group.dishesLabel}
-          </p>
-          <h2
-            style={{
-              fontFamily: "'Noto Serif TC', serif",
-              fontWeight: 400,
-              fontSize: 'var(--fs-title)',
-              lineHeight: 1.55,
-              letterSpacing: '0.05em',
-              color: 'var(--ink)',
-              margin: '0 0 clamp(44px, 6vw, 68px)',
-              maxWidth: 'min(24ch, 100%)',
-            }}
-          >
-            {tr.group.dishesTitle}
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'clamp(30px, 4vw, 52px)' }}>
+      <section className="hg-group-menu">
+        <div className="hg-group-menu-inner">
+          <div className="hg-group-menu-head">
+            <div>
+              <p className="hg-group-menu-label">{tr.group.dishesLabel}</p>
+              <h2>{tr.group.dishesTitle}</h2>
+            </div>
+            <div className="hg-group-menu-callout">
+              <span>{tr.group.ctaNote}</span>
+              <a href="tel:0366567994">{tr.group.cta} · 03 656 7994 <span aria-hidden="true">→</span></a>
+            </div>
+          </div>
+
+          <div className="hg-group-dishes">
             {dishes.map((d) => (
-              <div key={d.ko}>
-                <div style={{ position: 'relative', aspectRatio: '4 / 3', marginBottom: 24 }}>
-                  <ImagePlaceholder label={d.label} />
+              <article key={d.ko} className="hg-group-dish-card">
+                <div className="hg-group-dish-photo">
+                  <ImagePlaceholder label={d.label} src={photoOf(d.ko)} alt={`${d.ko} ${d.zh}`} />
+                  <span className="hg-group-dish-number" aria-hidden="true">{d.n}</span>
+                  <span className="hg-group-dish-zh">{d.zh}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-                  <h3 lang="ko" style={{ fontFamily: "'Noto Serif KR', serif", fontWeight: 500, fontSize: 'var(--fs-lg)', color: 'var(--ink)', margin: 0 }}>
-                    {d.ko}
-                  </h3>
-                  <span style={{ flex: 1, height: 1, background: 'var(--gold-a22)' }} />
-                  <span style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-lg)', color: 'var(--gold)' }}>{d.price}</span>
+                <div className="hg-group-dish-body">
+                  <div className="hg-group-dish-title">
+                    <h3 lang="ko">{d.ko}</h3>
+                    <span aria-hidden="true" />
+                    <strong>NT${d.price}</strong>
+                  </div>
+                  <p>{d.note}</p>
                 </div>
-                <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.9, color: 'var(--ink-a5)', margin: '12px 0 0' }}>{d.note}</p>
-              </div>
+              </article>
             ))}
           </div>
         </div>

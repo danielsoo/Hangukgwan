@@ -684,3 +684,175 @@ a:hover {
   .hg-visit-copy { padding: 28px 22px 34px; }
   .hg-visit-fact { grid-template-columns: 1fr; gap: 4px; }
 }
+
+/* ── 단체 인기 메뉴 ────────────────────────────────────────────────
+   사진이 없는 듯 보이던 4:3 빈 면에 실제 메뉴 사진을 연결하고, 메뉴별 정보가
+   사진 아래에서 한 카드로 이어지도록 묶는다. */
+.hg-group-menu {
+  border-top: 1px solid var(--gold-a14);
+  background: var(--bg-alt);
+}
+
+.hg-group-menu-inner {
+  max-width: var(--shell-max);
+  margin: 0 auto;
+  padding: clamp(58px, 7vw, 100px) var(--shell-pad) clamp(72px, 9vw, 126px);
+}
+
+.hg-group-menu-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.42fr);
+  gap: clamp(36px, 7vw, 110px);
+  align-items: end;
+  margin-bottom: clamp(34px, 5vw, 64px);
+}
+
+.hg-group-menu-label {
+  margin: 0 0 22px;
+  color: var(--accent);
+  font-family: 'Newsreader', serif;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+}
+
+.hg-group-menu-head h2 {
+  max-width: min(24ch, 100%);
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Noto Serif TC', serif;
+  font-size: var(--fs-title);
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0.05em;
+}
+
+.hg-group-menu-callout {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 4px 24px;
+  border-left: 1px solid var(--gold-a3);
+}
+
+.hg-group-menu-callout > span {
+  color: var(--ink-a45);
+  font-size: var(--fs-sm);
+}
+
+.hg-group-menu-callout a {
+  color: var(--accent);
+  font-size: var(--fs-base);
+  letter-spacing: 0.04em;
+}
+
+.hg-group-dishes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(18px, 2.2vw, 36px);
+}
+
+.hg-group-dish-card {
+  min-width: 0;
+  border: 1px solid var(--gold-a18);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.hg-group-dish-photo {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  background: var(--scrim-20);
+}
+
+.hg-group-dish-photo img {
+  filter: saturate(0.86) contrast(1.04) brightness(0.88);
+  transition: transform 0.45s ease, filter 0.45s ease;
+}
+
+.hg-group-dish-card:hover .hg-group-dish-photo img {
+  transform: scale(1.025);
+  filter: saturate(0.94) contrast(1.04) brightness(0.94);
+}
+
+.hg-group-dish-photo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(5, 4, 3, 0.12), transparent 46%, rgba(5, 4, 3, 0.72));
+}
+
+.hg-group-dish-number,
+.hg-group-dish-zh {
+  position: absolute;
+  z-index: 2;
+  color: rgba(255, 248, 234, 0.88);
+  font-family: 'Newsreader', serif;
+}
+
+.hg-group-dish-number {
+  top: 18px;
+  left: 20px;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.24em;
+}
+
+.hg-group-dish-zh {
+  right: 22px;
+  bottom: 18px;
+  font-family: 'Noto Serif TC', serif;
+  font-size: var(--fs-md);
+  letter-spacing: 0.12em;
+}
+
+.hg-group-dish-body { padding: clamp(22px, 2.5vw, 34px); }
+
+.hg-group-dish-title {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+}
+
+.hg-group-dish-title h3 {
+  margin: 0;
+  color: var(--ink);
+  font-family: 'Noto Serif KR', serif;
+  font-size: var(--fs-lg);
+  font-weight: 500;
+}
+
+.hg-group-dish-title > span {
+  flex: 1;
+  height: 1px;
+  background: var(--gold-a22);
+}
+
+.hg-group-dish-title strong {
+  color: var(--gold);
+  font-family: 'Newsreader', serif;
+  font-size: var(--fs-lg);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.hg-group-dish-body > p {
+  min-height: 3.8em;
+  margin: 16px 0 0;
+  color: var(--ink-a5);
+  font-size: var(--fs-base);
+  line-height: 1.9;
+}
+
+@media (max-width: 860px) {
+  .hg-group-menu-head { grid-template-columns: 1fr; gap: 26px; }
+  .hg-group-dishes { grid-template-columns: 1fr; }
+  .hg-group-dish-photo { aspect-ratio: 16 / 10; }
+  .hg-group-dish-body > p { min-height: 0; }
+}
+
+@media (max-width: 560px) {
+  .hg-group-menu-callout { padding-left: 18px; }
+  .hg-group-dish-photo { aspect-ratio: 4 / 3; }
+}
