@@ -34,7 +34,7 @@ export default function Hero() {
             position: 'absolute',
             inset: 0,
             background:
-              'linear-gradient(to bottom, var(--scrim-45) 0%, var(--scrim-20) 40%, var(--scrim-90) 88%, var(--bg) 100%)',
+              'linear-gradient(to bottom, var(--scrim-20) 0%, var(--scrim-20) 34%, var(--scrim-45) 58%, var(--scrim-90) 82%, var(--bg) 100%)',
             pointerEvents: 'none',
           }}
         />
@@ -47,7 +47,7 @@ export default function Hero() {
       <div
         style={{
           position: 'relative',
-          marginTop: 'clamp(-70px, -7vw, -40px)',
+          marginTop: 'clamp(-300px, -20vw, -230px)',
           padding: '0 clamp(28px, 5vw, 60px) clamp(56px, 8vw, 96px)',
           display: 'flex',
           flexDirection: 'column',

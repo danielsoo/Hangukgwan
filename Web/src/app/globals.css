@@ -263,7 +263,7 @@ a:hover {
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12);
 }
 .hg-home-hero { margin-top: calc(-1 * var(--site-header-h)); }
-.hg-home-hero-media { height: calc(clamp(340px, 52vh, 560px) + var(--site-header-h)); }
+.hg-home-hero-media { height: calc(clamp(520px, 78vh, 760px) + var(--site-header-h)); }
 
 .hg-close-btn {
   border: 1px solid var(--gold-a22);
