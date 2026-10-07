@@ -22,12 +22,14 @@ export default function ImagePlaceholder({
   src,
   alt,
   minHeight,
+  objectPosition,
 }: {
   label: string
   aspectRatio?: string
   src?: string
   alt?: string
   minHeight?: string
+  objectPosition?: string
 }) {
   // 사진 주소가 깨졌으면(메뉴에서 지운 사진 등) 깨진 그림 대신 빈 면을 그린다.
   const [failed, setFailed] = useState<string | null>(null)
@@ -44,6 +46,7 @@ export default function ImagePlaceholder({
           width: '100%',
           height: '100%',
           objectFit: 'cover',
+          objectPosition: objectPosition || 'center',
           display: 'block',
         }}
       />

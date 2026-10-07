@@ -42,8 +42,44 @@ export default function AboutPage() {
             <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: '0 0 22px' }}>{tr.about.p2}</p>
             <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2.1, color: 'var(--ink-a75)', margin: 0 }}>{tr.about.p3}</p>
           </div>
-          <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
-            <ImagePlaceholder label="店內 · The room" />
+          <div
+            style={{
+              position: 'relative',
+              aspectRatio: '4 / 5',
+              overflow: 'hidden',
+              border: '1px solid var(--gold-a22)',
+              background: 'var(--bg-alt)',
+            }}
+          >
+            <ImagePlaceholder
+              label="韓國館本店 · Hangukgwan main restaurant"
+              src="/images/locations/main-exterior-building-vertical.jpg"
+              alt="밤에 불이 켜진 한국관 본점 건물과 붉은 간판"
+              objectPosition="center"
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'linear-gradient(to bottom, transparent 55%, var(--scrim-65) 100%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <p
+              style={{
+                position: 'absolute',
+                left: 'clamp(18px, 3vw, 34px)',
+                bottom: 'clamp(18px, 3vw, 30px)',
+                margin: 0,
+                fontFamily: "'Noto Serif TC', serif",
+                fontSize: 'var(--fs-sm)',
+                letterSpacing: '0.18em',
+                color: 'var(--ink)',
+              }}
+            >
+              韓國館 · 竹北本店
+            </p>
           </div>
         </div>
       </section>
