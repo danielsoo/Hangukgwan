@@ -22,7 +22,11 @@ export default function Hero() {
   return (
     <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>
       <div style={{ position: 'relative', height: 'clamp(260px, 46vh, 480px)' }}>
-        <ImagePlaceholder label="店內夜景 · A low-lit interior photograph" />
+        <ImagePlaceholder
+          label="廚房準備 · Kitchen preparation"
+          src="/images/editorial/kitchen-prep.jpg"
+          alt="한국관 주방에서 세 명의 직원이 음식을 준비하는 모습"
+        />
         <div
           aria-hidden="true"
           style={{

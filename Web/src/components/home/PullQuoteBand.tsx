@@ -9,7 +9,11 @@ export default function PullQuoteBand() {
     <section style={{ background: 'var(--bg-alt)', borderTop: '1px solid var(--gold-a14)', borderBottom: '1px solid var(--gold-a14)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'stretch' }}>
         <div style={{ position: 'relative', minHeight: 'clamp(240px, 34vw, 420px)' }}>
-          <ImagePlaceholder label="全幅照片 · A room or table photograph" />
+          <ImagePlaceholder
+            label="十種小菜 · Ten Korean side dishes"
+            src="/images/editorial/banchan-ten-dishes.jpg"
+            alt="검은 그릇에 정갈하게 담긴 한국관의 반찬 열 가지"
+          />
         </div>
         {/* minWidth: 0 이 없으면 안의 글이 자기 칸보다 넓어져도 줄어들지
             않는다(flex 항목의 기본 최소폭은 내용 크기다). 800px 폭에서
