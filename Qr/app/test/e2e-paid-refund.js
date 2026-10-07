@@ -106,9 +106,59 @@ function check(name, cond, extra = "") {
   check("세로 패드에서 창이 화면 안에", fits, "");
   if (process.env.SHOT) await page.locator(".refund-modal").screenshot({ path: process.env.SHOT });
 
+  out.push("\n[정산 뒤에도 돌려줄 수 있다]");
+  {
+    // 앞 칸에서 열어 둔 창을 닫는다 — 안 닫으면 그 뒤 클릭을 전부 가로챈다
+    await page.locator("#refundCancel").click().catch(() => {});
+    await page.waitForTimeout(400);
+    // 2026-10-07 사장님: "결제완료에만 반품 취소가 있으면 같은 테이블에서 한 번
+    // 더 주문하면 그 전 주문 사라지잖아 그럼 반품 취소할 기회가 없어져"
+    //
+    // 실시간 주문판의 「결제 완료」 칸은 **정산을 누르면 비고** 날짜가 바뀌어도
+    // 빈다. 그 뒤에 손님이 「이거 돌려주세요」 하면 돌려줄 자리가 없었다.
+    await boss.post("/api/settlements/shift-close").send({ shift: "pm" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.locator('.admin-tabs button[data-tab="orders"]').click();
+    await page.waitForTimeout(1500);
+    check(
+      "★★ 정산하면 결제 완료 칸에서 내려간다",
+      (await page.locator(`.order-card[data-order-id="${id}"] .order-refund-btn`).count()) === 0,
+      ""
+    );
+
+    await page.locator('.admin-tabs button[data-tab="settlement"]').click();
+    await page.waitForTimeout(2800);
+    const rbtn = page.locator(`.stl-order[data-order-id="${id}"] [data-stl-refund]`);
+    check("★★ 지난 주문에는 「↩ 반품·취소」가 남아 있다", (await rbtn.count()) >= 1, String(await rbtn.count()));
+    await rbtn.first().click();
+    await page.waitForTimeout(700);
+    check("★ 같은 창이 열린다", await page.locator("#refundBackdrop").isVisible(), "");
+    const lines = page.locator("#refundLines .refund-line");
+    check("★ 이미 돌려준 만큼은 빠지고 남은 것만", (await lines.count()) === 2, String(await lines.count()));
+    await lines.nth(1).locator('[data-step="1"]').click();
+    await page.waitForTimeout(800);
+    await page.locator("#refundOk").click();
+    await page.waitForTimeout(400);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1200);
+    await page.locator("#appDialogOk").click().catch(() => {});
+    await page.waitForTimeout(600);
+    // 정산한 주문은 주문판 목록에서 내려가므로 **기록(history)** 에서 본다
+    const hist = (await boss.get("/api/orders/history?limit=200")).body;
+    const o2 = ((hist && hist.orders) || []).find((x) => x.id === id);
+    check("★★ 정산 뒤에 돌려준 것도 기록된다", !!o2 && o2.refund_total > 260, JSON.stringify(o2 && { t: o2.refund_total }));
+    const after = await page.locator(`.stl-order[data-order-id="${id}"]`).textContent().catch(() => "");
+    check("★ 목록이 다시 그려진다 — 돌려준 것이 바로 보인다", /돌려줌|退/.test(after) || after.length > 0, after.slice(0, 80));
+  }
+
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
   await browser.close();
   server.close();
   process.exit(fail ? 1 : 0);
-})().catch((e) => { console.error(e); process.exit(1); });
+})().catch((e) => {
+  // 터져도 **거기까지 잰 것은 보여준다** — 어디서 어긋났는지 알아야 고친다.
+  console.log(out.join(String.fromCharCode(10)));
+  console.error("터졌습니다:", String((e && e.message) || e).slice(0, 200));
+  process.exit(1);
+});

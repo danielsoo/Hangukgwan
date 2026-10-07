@@ -1031,6 +1031,7 @@
       settlementItemTrendQty: "판매 수량",
       settlementOrdersTitle: "📋 지난 주문 불러오기",
       settlementOrdersSearchPlaceholder: "메뉴 이름, 손님 이름, 픽업 번호로 찾기",
+      settlementOrdersDayCount: "{teams}팀 · 주문 {rounds}번",
       settlementOrdersTablePlaceholder: "테이블 번호",
       settlementOrdersAllStatus: "전체 상태",
       settlementOrdersSearchBtn: "찾기",
@@ -2327,6 +2328,7 @@
       settlementItemTrendQty: "銷售份數",
       settlementOrdersTitle: "📋 查詢過往訂單",
       settlementOrdersSearchPlaceholder: "以菜名、客人姓名或取餐號搜尋",
+      settlementOrdersDayCount: "{teams} 組 · 訂單 {rounds} 筆",
       settlementOrdersTablePlaceholder: "桌號",
       settlementOrdersAllStatus: "全部狀態",
       settlementOrdersSearchBtn: "搜尋",
@@ -7544,7 +7546,11 @@
     const nm = cat ? `${cat.name_ko || ""}${cat.name_zh || ""}` : "";
     return REFUND_RETURNABLE_KEYS.includes(it.category_key) || /음료|飲料|주류|酒類|기타|其他/.test(nm) ? "return" : "cancel";
   }
-  function openRefund(o) {
+  /**
+   * @param opts.onDone 돌려주고 나서 부를 것. 지난 주문 목록처럼 **실시간
+   *   주문판이 아닌 곳**에서 열었으면 그 목록을 다시 그려야 한다.
+   */
+  function openRefund(o, opts) {
     const back = $("#refundBackdrop");
     const want = new Map(); // index -> qty
     const placeTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}${partyTag(o)}`;
@@ -7648,6 +7654,7 @@
       }
       back.hidden = true;
       if (!applyOrderUpdate(d.order)) await loadOrders();
+      if (opts && typeof opts.onDone === "function") await opts.onDone(d.order);
       await showAlert(T("refundDone").replace("{amount}", money(d.refund.amount)).replace("{method}", methodLabel));
     };
     paint();
@@ -18666,6 +18673,24 @@
    * 테이블이 두 줄이 되어 두 숫자가 또 갈라진다. 열쇠가 없는 응답(옛 서버)
    * 일 때만 결제 번호로 묶는다.
    */
+  /**
+   * 지난 주문에도 **반품·취소**를 둔다.
+   *
+   * 2026-10-07 사장님: "결제완료에만 반품 취소가 있으면 같은 테이블에서 한 번
+   * 더 주문하면 그 전 주문 사라지잖아 그럼 반품 취소할 기회가 없어져"
+   *
+   * 실시간 주문판의 「결제 완료」 칸은 **오전/오후 정산을 누르면 비고**, 날짜가
+   * 바뀌어도 빈다(renderOrders 의 settled_at·오늘 거르기). 그 뒤에 손님이
+   * 「이거 돌려주세요」 하면 돌려줄 자리가 어디에도 없었다. 결산의 지난 주문은
+   * 날짜로 찾아 들어가는 자리라 거기에 둔다 — 며칠 전 것도 된다.
+   */
+  function refundableHere(o) {
+    if (!o || o.status !== "paid" || !canCancelOrder()) return "";
+    const left = (o.items || []).some((it) => (Number(it.qty) || 0) > (Number(it.refunded_qty) || 0));
+    if (!left) return "";
+    return `<button type="button" class="stl-order-btn stl-order-refund" data-stl-refund="${o.id}">${T("refundBtn")}</button>`;
+  }
+
   function groupSettlementOrders(orders) {
     const groups = [];
     const byPaymentId = new Map();
@@ -18714,6 +18739,19 @@
     return settlementOrderTotalHtml({ total: gross, discount_amount: off });
   }
 
+  // 지난 주문 목록에서 **펴 둔 날짜들**. 사장님이 접고 편 것을 다시 그릴 때
+  // 그대로 두려고 화면 밖에 둔다(2026-10-07).
+  const settlementOpenDays = new Set();
+  const STL_WEEK = ["일", "월", "화", "수", "목", "금", "토"];
+  const weekdayTag = (d) => {
+    const dt = new Date(d + "T12:00:00");
+    return Number.isNaN(dt.getTime()) ? "" : " (" + STL_WEEK[dt.getDay()] + ")";
+  };
+  const fmtDayCount = (teams, rounds) =>
+    T("settlementOrdersDayCount").replace("{teams}", teams).replace("{rounds}", rounds);
+  // 그 주문으로 **실제로 받은 돈**(돌려준 것은 뺀다). 날짜 줄의 합계에 쓴다.
+  const netOrderTotal = (o) => Math.max(0, Number(orderPaidAmount(o)) || 0);
+
   function renderSettlementOrders(data) {
     const listEl = $("#settlementOrdersList");
     const countEl = $("#settlementOrdersCount");
@@ -18728,8 +18766,38 @@
     countEl.textContent = orders.length
       ? fmtSettlementOrdersCount(groups, orders) + (data.truncated ? T("settlementOrdersTruncated") : "")
       : T("settlementOrdersNone");
-    listEl.innerHTML = groups
-      .map((group) => {
+    // 2026-10-07 사장님: "너무 아래로 길게 뻗어나가서 한 참전에 건 정말 오래
+    // 걸려. 더 좋게 볼 수 있는 방법 없어?"
+    //
+    // 한 달을 고르면 줄이 수백 개가 되어 아래로 끝없이 늘어났다. 이제 **날짜로
+    // 접는다** — 날짜 줄 하나에 그 날 몇 팀·얼마인지 적고, 누르면 그 날만
+    // 펴진다. 오늘(또는 가장 최근 날)만 펴 둔다. 한 달이어도 줄이 서른 개다.
+    const byDay = new Map();
+    for (const g of groups) {
+      const d = String(g[0].created_at || "").slice(0, 10);
+      if (!byDay.has(d)) byDay.set(d, []);
+      byDay.get(d).push(g);
+    }
+    const days = [...byDay.keys()].sort().reverse();
+    // 처음 열 때는 가장 최근 날만 펴 둔다. 사장님이 접고 편 것은 그대로 둔다.
+    if (!settlementOpenDays.size && days.length) settlementOpenDays.add(days[0]);
+    const dayHtml = (d) => {
+      const gs = byDay.get(d) || [];
+      const open = settlementOpenDays.has(d);
+      const rounds = gs.reduce((n, g) => n + g.length, 0);
+      const sum = gs.reduce((n, g) => n + g.reduce((m, o) => m + (o.status === "paid" ? netOrderTotal(o) : 0), 0), 0);
+      return `<div class="stl-day${open ? " is-open" : ""}" data-stl-day="${d}">
+          <button type="button" class="stl-day-head">
+            <span class="stl-day-caret">${open ? "▾" : "▸"}</span>
+            <span class="stl-day-date">${d.slice(5).replace("-", "/")}${weekdayTag(d)}</span>
+            <span class="stl-day-sub">${fmtDayCount(gs.length, rounds)}</span>
+            <span class="stl-day-total">NT$${money(Math.round(sum))}</span>
+          </button>
+          <div class="stl-day-body"${open ? "" : " hidden"}>${gs.map(groupHtml).join("")}</div>
+        </div>`;
+    };
+
+    const groupHtml = (group) => {
         const first = group[0];
         const rounds = group.length;
         const time = String(first.created_at || "").slice(11, 16);
@@ -18763,7 +18831,7 @@
                   // 있게 해줘"). 라운드 하나만 뽑으려면 펼쳐서 그 라운드의 버튼.
                   rounds === 1
                     ? `<button type="button" class="stl-order-btn" data-stl-print="${first.id}">${T("printBtn")}</button>
-                       <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>`
+                       <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>${refundableHere(first)}`
                     : `<button type="button" class="stl-order-btn" data-stl-print-group="${first.id}">${T("settlementOrdersPrintAll")}</button>
                        <button type="button" class="stl-order-btn" data-stl-preview-group="${first.id}">${T("previewBtn")}</button>`
                 }
@@ -18782,7 +18850,7 @@
                             <span>${T("settlementOrdersRoundNo").replace("{n}", i + 1)} · ${String(o.created_at || "").slice(11, 16)}</span>
                             <span class="stl-order-actions">
                               <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
-                              <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>
+                              <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>${refundableHere(o)}
                             </span>
                           </div>
                           ${renderSettlementOrderBody(o)}
@@ -18792,8 +18860,19 @@
                 : ""
             }
           </div>`;
-      })
-      .join("");
+    };
+
+    listEl.innerHTML = days.map(dayHtml).join("");
+
+    // 날짜 줄 누르면 그 날만 접고 편다
+    listEl.querySelectorAll(".stl-day-head").forEach((head) => {
+      head.onclick = () => {
+        const d = head.closest(".stl-day").dataset.stlDay;
+        if (settlementOpenDays.has(d)) settlementOpenDays.delete(d);
+        else settlementOpenDays.add(d);
+        renderSettlementOrders(data);
+      };
+    });
 
     const toggle = (el) => {
       const id = parseInt(el.closest(".stl-order").dataset.orderId, 10);
@@ -18826,6 +18905,15 @@
     // previewKitchenTicket). 여기만 따로 만들면 빌지 모양이 언젠가 둘로
     // 갈라지고, 그러면 주방에 두 가지 종이가 나간다.
     const byId = new Map(orders.map((o) => [o.id, o]));
+    listEl.querySelectorAll("[data-stl-refund]").forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const o = byId.get(parseInt(btn.dataset.stlRefund, 10));
+        // 돌려준 뒤에는 **이 목록도 다시 그린다** — 안 그러면 방금 돌려준 줄이
+        // 그대로 보여서 또 누르게 된다.
+        if (o) openRefund(o, { onDone: () => loadSettlementOrders() });
+      };
+    });
     listEl.querySelectorAll("[data-stl-print]").forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();

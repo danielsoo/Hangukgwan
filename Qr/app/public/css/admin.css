@@ -3137,3 +3137,24 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-line-unsure { background: #fff8d8; border-left: 3px solid #e8b100; }
 /* 사진을 끌어다 놓는 동안 */
 .ing-drop { outline: 3px dashed #4a90d9; outline-offset: -6px; }
+
+/* 지난 주문의 「반품·취소」 — 인쇄·미리보기와 **다른 일**이라 색으로 가른다
+   (2026-10-07: 정산 뒤에는 실시간 주문판에서 할 수 없어서 여기에 뒀다). */
+.stl-order-btn.stl-order-refund { color: #b4541f; border-color: #e8d7d7; }
+.stl-order-btn.stl-order-refund:hover { background: #fdf3ef; }
+
+/* 지난 주문을 **날짜로 접는다**(2026-10-07 사장님: "너무 아래로 길게 뻗어나가서
+   한 참전에 건 정말 오래 걸려"). 한 달을 봐도 줄이 서른 개다. 목록 자체도
+   제 안에서 굴러서 페이지가 아래로 안 늘어난다. */
+.stl-orders { max-height: 560px; overflow-y: auto; }
+.stl-day { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff; }
+.stl-day-head {
+  display: grid; grid-template-columns: 18px minmax(96px, auto) 1fr auto; align-items: center; gap: 10px;
+  width: 100%; padding: 10px 12px; border: 0; background: none; cursor: pointer; font: inherit; text-align: left;
+}
+.stl-day-head:hover { background: #faf6ef; border-radius: 10px; }
+.stl-day.is-open .stl-day-head { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; }
+.stl-day-date { font-weight: 700; font-variant-numeric: tabular-nums; }
+.stl-day-sub { color: var(--muted); font-size: 13.5px; }
+.stl-day-total { font-weight: 700; font-variant-numeric: tabular-nums; }
+.stl-day-body { padding: 4px 8px 8px; }
