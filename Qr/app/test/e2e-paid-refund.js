@@ -64,6 +64,19 @@ function check(name, cond, extra = "") {
   check("★★ 비빔밥은 「취소」", /취소/.test(await rows.nth(0).locator(".refund-kind").textContent()), await rows.nth(0).textContent());
   check("★★ 음료는 「반품」", /반품/.test(await rows.nth(1).locator(".refund-kind").textContent()), await rows.nth(1).textContent());
   check("고르기 전에는 돌려주기 버튼이 잠겨 있다", await page.locator("#refundOk").isDisabled(), "");
+  // 2026-10-07 사장님: "반품 취소는 특정 메뉴만 선택해서 취소할 수 있게도 해줘
+  // 전체 취소가 아닐 수도 있잖아" — 줄마다 고르는 것은 원래 됐고, 그게 **보이게**
+  // 안내와 「전부」를 넣었다.
+  check("★★ 고르는 자리라고 적혀 있다", /돌려줄 품목만 고르세요/.test(await page.locator(".refund-pick-hint").innerText()), "");
+  check("★ 줄마다 「전부」 단추", (await page.locator("#refundLines .refund-all").count()) === 2, String(await page.locator("#refundLines .refund-all").count()));
+  // 한 품목만 통째로 — 비빔밥 2개 다, 음료는 그대로 0
+  await rows.nth(0).locator(".refund-all").click();
+  await page.waitForTimeout(700);
+  check("★★ 「전부」는 그 줄만 수량만큼 고른다 (비빔밥 2개 = NT$460)", /460/.test(await page.locator("#refundTotal").textContent()), await page.locator("#refundTotal").textContent());
+  check("★★ 다른 품목은 안 건드린다", (await rows.nth(1).locator("strong").textContent()) === "0", await rows.nth(1).locator("strong").textContent());
+  await rows.nth(0).locator(".refund-all").click();   // 다시 눌러 지운다
+  await page.waitForTimeout(600);
+  check("★ 다시 누르면 지워진다", await page.locator("#refundOk").isDisabled(), "");
   await rows.nth(1).locator('[data-step="1"]').click();
   await page.waitForTimeout(600);
   check("★ 고르면 돌려줄 금액이 보인다(서버 계산)", /NT\$30/.test(await page.locator("#refundTotal").textContent()), await page.locator("#refundTotal").textContent());

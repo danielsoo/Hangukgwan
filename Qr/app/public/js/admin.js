@@ -766,6 +766,9 @@
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
       printReceiptBtn: "🧾 영수증",
       receiptPrintConfirm: "영수증을 출력하시겠습니까?",
+      refundLineAll: "전부",
+      refundLineNone: "지우기",
+      refundPickHint: "돌려줄 품목만 고르세요 — 한 줄씩 수를 더하거나 「전부」. 안 고른 품목은 그대로 둡니다.",
       refundBtn: "↩ 반품·취소",
       refundTitle: "↩ 반품 · 취소",
       refundHint: "조리한 음식은 「취소」, 음료·라면 봉지처럼 돌려받을 수 있는 것은 「반품」으로 남아요. 돌려줄 금액은 실제로 받은 금액(할인 반영) 기준이에요.",
@@ -2063,6 +2066,9 @@
       printDevicesList: "🖨️ 自動列印中：{list}",
       printReceiptBtn: "🧾 收據",
       receiptPrintConfirm: "要列印收據嗎？",
+      refundLineAll: "全部",
+      refundLineNone: "清除",
+      refundPickHint: "只挑要退的品項 — 逐列加數量或按「全部」。沒挑的品項維持不變。",
       refundBtn: "↩ 退貨·取消",
       refundTitle: "↩ 退貨 · 取消",
       refundHint: "已烹調的餐點記為「取消」，飲料、泡麵包等可退回的商品記為「退貨」。退款金額以實際收款（含折扣）為準。",
@@ -7581,10 +7587,25 @@
               <button type="button" data-step="-1" ${n <= 0 ? "disabled" : ""}>−</button>
               <strong>${n}</strong>
               <button type="button" data-step="1" ${n >= left(it) ? "disabled" : ""}>+</button>
+              <!-- 2026-10-07 사장님: "특정 메뉴만 선택해서 취소할 수 있게도 해줘".
+                   줄마다 고르는 것은 원래 됐지만, 한 품목을 통째로 돌려줄 때
+                   + 를 수만큼 누르게 돼 있었다. 「전부」 한 번이면 된다. -->
+              <button type="button" class="refund-all" data-all="${i}">${escapeHtml(
+                n >= left(it) ? T("refundLineNone") : T("refundLineAll")
+              )}</button>
             </div>
           </div>`;
         })
         .join("");
+      // 「전부」 단추들
+      $("#refundLines").querySelectorAll("[data-all]").forEach((btn) => {
+        btn.onclick = () => {
+          const i = parseInt(btn.dataset.all, 10);
+          const it = o.items[i];
+          want.set(i, (want.get(i) || 0) >= left(it) ? 0 : left(it));
+          refresh();
+        };
+      });
       $("#refundLines").querySelectorAll(".refund-line").forEach((row) => {
         const i = parseInt(row.dataset.index, 10);
         row.querySelectorAll("[data-step]").forEach((b) => {

@@ -3158,3 +3158,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-day-sub { color: var(--muted); font-size: 13.5px; }
 .stl-day-total { font-weight: 700; font-variant-numeric: tabular-nums; }
 .stl-day-body { padding: 4px 8px 8px; }
+
+/* 돌려줄 품목 고르기 — 줄마다 「전부」 한 번이면 그 품목을 다 고른다
+   (2026-10-07 사장님: "특정 메뉴만 선택해서 취소할 수 있게도 해줘"). */
+.refund-pick-hint { margin: 0 0 8px; color: var(--muted); font-size: 13.5px; text-align: center; }
+.refund-step .refund-all {
+  margin-left: 6px; height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: #fff; cursor: pointer; font: inherit; font-size: 13px; color: var(--ink);
+  /* 좁은 창에서 「전부」가 「전/부」로 쪼개졌다 — 한 줄로 못 박는다 */
+  white-space: nowrap; flex: 0 0 auto;
+}
+.refund-step .refund-all:hover { background: #faf6ef; }
