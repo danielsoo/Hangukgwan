@@ -25,7 +25,7 @@
     "qrcode": "^1.5.3"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "devDependencies": {
     "playwright-core": "^1.63.0",

@@ -43,9 +43,9 @@ check("설명은 VERCEL.md 에 있다", fs.existsSync(path.join(APP, "VERCEL.md"
 
 out.push("\n[Node 런타임 — 자동 메이저 업그레이드를 막는다]");
 // 2026-10-07: ">=18"은 Vercel에서 최신 메이저로 자동 올라가며 실제 배포가
-// 그 경고를 냈다. 이 앱과 의존성은 Node 20에서 시험하므로 운영도 같은
-// 메이저로 고정한다. 메이저를 올릴 때는 로컬 시험 후 이 값을 함께 바꾼다.
-check("Node 20 메이저로 고정", pkg.engines && pkg.engines.node === "20.x", String(pkg.engines && pkg.engines.node));
+// 그 경고를 냈다. Node 20은 2026-10-01부터 새 배포에서 막혔으므로, 현재
+// 지원되는 Node 24 메이저로 명시해서 다음 메이저가 나와도 저절로 안 바뀐다.
+check("Node 24 메이저로 고정", pkg.engines && pkg.engines.node === "24.x", String(pkg.engines && pkg.engines.node));
 
 out.push("\n[정적 출력 — 홈페이지가 CDN 에서 나가는 근거]");
 check("outputDirectory 가 site", vercel.outputDirectory === "site", String(vercel.outputDirectory));
