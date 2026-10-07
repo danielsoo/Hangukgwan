@@ -17205,11 +17205,16 @@
    * 얹으면 정작 매일 보는 숫자가 그만큼 늦게 뜬다.
    */
   let itemTrendPickedId = null;
+  // 날짜나 메뉴를 연달아 바꾸면 먼저 보낸 요청이 더 늦게 도착할 수 있다.
+  // 마지막 선택의 답만 그려야 그래프가 이전 기간으로 되돌아가지 않는다.
+  let itemTrendSeq = 0;
   function renderItemTrendPicker(data) {
     const sel = $("#settlementItemTrendSelect");
     if (!sel) return;
     const rows = Array.isArray(data.menu_breakdown) ? data.menu_breakdown : [];
     if (!rows.length) {
+      itemTrendPickedId = null;
+      itemTrendSeq += 1; // 아직 오고 있는 옛 메뉴 요청도 무효로 만든다.
       sel.innerHTML = "";
       return;
     }
@@ -17239,6 +17244,7 @@
     const note = $("#settlementItemTrendNote");
     const totalEl = $("#settlementItemTrendTotal");
     if (!canvas || !itemTrendPickedId) return;
+    const mySeq = ++itemTrendSeq;
     const start = ($("#settlementStartDate") || {}).value || "";
     const end = ($("#settlementEndDate") || {}).value || "";
     const params = new URLSearchParams({ item_id: String(itemTrendPickedId) });
@@ -17251,10 +17257,12 @@
       if (!res.ok) throw new Error(String(res.status));
       data = await res.json();
     } catch (e) {
+      if (mySeq !== itemTrendSeq) return;
       if (note) note.textContent = T("settlementItemTrendFailed");
       if (totalEl) totalEl.textContent = "";
       return;
     }
+    if (mySeq !== itemTrendSeq) return;
     const points = data.points || [];
     if (totalEl) totalEl.textContent = T("settlementItemTrendTotal").replace("{n}", data.total_qty || 0);
     // 하루만 고르면 점 하나뿐이라 추이랄 것이 없다. 그 사실을 말해준다 —
@@ -18635,11 +18643,16 @@
   // GET /api/orders/history 를 그대로 보여준다. 날짜는 위 결산 범위를
   // 따라가므로, "지난주 금요일"을 고르면 그 날 주문이 여기 뜬다.
   let settlementOrdersExpanded = new Set();
+  // 결산 날짜를 빠르게 바꿀 때 이전 날짜의 /history 응답이 새 날짜 목록을
+  // 덮어쓰지 못하게 한다. 위 결산 본문(settlementSeq)과 별도로 필요하다 —
+  // 두 요청은 속도를 위해 나란히 출발하기 때문이다.
+  let settlementOrdersSeq = 0;
 
   async function loadSettlementOrders() {
     const listEl = $("#settlementOrdersList");
     const countEl = $("#settlementOrdersCount");
     if (!listEl) return;
+    const mySeq = ++settlementOrdersSeq;
     const params = new URLSearchParams();
     // 날짜 칸이 비어 있으면 **오늘**이다 — 위 결산이 그렇게 읽는다(서버가
     // 빈 날짜를 오늘로 채운다).
@@ -18673,9 +18686,11 @@
       if (!res.ok) throw new Error("failed");
       data = await res.json();
     } catch (e) {
+      if (mySeq !== settlementOrdersSeq) return;
       countEl.textContent = T("settlementOrdersFailed");
       return;
     }
+    if (mySeq !== settlementOrdersSeq) return;
     settlementOrdersExpanded = new Set();
     renderSettlementOrders(data);
   }
@@ -18794,8 +18809,6 @@
     const dt = new Date(d + "T12:00:00");
     return Number.isNaN(dt.getTime()) ? "" : " (" + STL_WEEK[dt.getDay()] + ")";
   };
-  const fmtDayCount = (teams, rounds) =>
-    T("settlementOrdersDayCount").replace("{teams}", teams).replace("{rounds}", rounds);
   // 그 주문으로 **실제로 받은 돈**(돌려준 것은 뺀다). 날짜 줄의 합계에 쓴다.
   const netOrderTotal = (o) => Math.max(0, Number(orderPaidAmount(o)) || 0);
 
@@ -18831,13 +18844,12 @@
     const dayHtml = (d) => {
       const gs = byDay.get(d) || [];
       const open = settlementOpenDays.has(d);
-      const rounds = gs.reduce((n, g) => n + g.length, 0);
       const sum = gs.reduce((n, g) => n + g.reduce((m, o) => m + (o.status === "paid" ? netOrderTotal(o) : 0), 0), 0);
       return `<div class="stl-day${open ? " is-open" : ""}" data-stl-day="${d}">
           <button type="button" class="stl-day-head">
             <span class="stl-day-caret">${open ? "▾" : "▸"}</span>
             <span class="stl-day-date">${d.slice(5).replace("-", "/")}${weekdayTag(d)}</span>
-            <span class="stl-day-sub">${fmtDayCount(gs.length, rounds)}</span>
+            <span class="stl-day-sub">${fmtSettlementOrdersCount(gs, gs.flat())}</span>
             <span class="stl-day-total">NT$${money(Math.round(sum))}</span>
           </button>
           <div class="stl-day-body"${open ? "" : " hidden"}>${gs.map(groupHtml).join("")}</div>
@@ -19358,11 +19370,20 @@
     });
   }
 
+  let reservationsSeq = 0;
   async function loadReservations(date) {
+    const mySeq = ++reservationsSeq;
     const url = date ? `/api/reservations?date=${encodeURIComponent(date)}` : "/api/reservations";
-    const res = await fetch(url);
-    if (!res.ok) return;
-    reservations = await res.json();
+    let next;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      next = await res.json();
+    } catch (e) {
+      return;
+    }
+    if (mySeq !== reservationsSeq) return;
+    reservations = next;
     renderReservations();
   }
 

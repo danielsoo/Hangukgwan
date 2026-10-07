@@ -153,6 +153,12 @@ out.push("\n[화면에 그리는 쪽]");
     "「5건」만 적혀 있는데 결제 건수가 8이면 어느 쪽이 맞는지 알 수 없다"
   );
   check(
+    "★ 날짜 접기의 팀 수도 취소·미결제를 완료 주문에 섞지 않는다",
+    /stl-day-sub[^\n]*fmtSettlementOrdersCount\(gs, gs\.flat\(\)\)/.test(render) &&
+      !/fmtDayCount\(gs\.length/.test(render),
+    "취소 주문만 있는 날을 「1팀 · 주문 1번」으로 적으면 위의 완료 0건과 충돌한다"
+  );
+  check(
     "★★ 묶음 전체가 취소일 때만 취소로 칠한다",
     /group\.every\(\(o\) => o\.status === "cancelled"\)/.test(render),
     "한 라운드만 취소된 것을 묶음째 취소로 칠하면 받은 돈이 안 받은 것처럼 보인다"

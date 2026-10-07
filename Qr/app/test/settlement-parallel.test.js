@@ -61,6 +61,24 @@ function bodyOf(name) {
     check("출발시킨 것을 나중에 기다린다", body.includes("await ordersPromise"));
   }
 
+  out.push("\n[늦게 온 옛 응답이 새 화면을 덮지 않는다]");
+  for (const [name, seq] of [
+    ["loadSettlementOrders", "settlementOrdersSeq"],
+    ["loadItemTrend", "itemTrendSeq"],
+    ["loadReservations", "reservationsSeq"],
+  ]) {
+    const requestBody = bodyOf(name) || "";
+    const assigned = requestBody.indexOf(`const mySeq = ++${seq}`);
+    const awaited = requestBody.indexOf("await res.json()");
+    const guarded = requestBody.lastIndexOf(`mySeq !== ${seq}`);
+    check(`${name}: 요청마다 순번을 올린다`, assigned !== -1, seq);
+    check(
+      `★ ${name}: 응답을 받은 뒤 마지막 요청인지 확인한다`,
+      awaited !== -1 && guarded > awaited,
+      `json ${awaited}, guard ${guarded}`
+    );
+  }
+
   out.push("\n[같은 요청이 두 번 나가지 않는다]");
   const render = ADMIN.slice(ADMIN.indexOf("function renderSettlement(data"));
   const renderBody = render.slice(0, render.indexOf("\n  const fmtOrderTableTag"));
