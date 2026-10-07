@@ -42,7 +42,7 @@ function bodyOf(name) {
   check("loadSettlementInner 을 찾았다 (아래 측정의 전제)", !!body);
 
   if (body) {
-    const iOrders = body.indexOf("loadSettlementOrders()");
+    const iOrders = body.indexOf("loadSettlementOrders(start, end)");
     const iHistory = body.indexOf("loadSettlementHistory()");
     const iAwait = body.indexOf("await resPromise");
     check("세 요청이 모두 이 함수에서 출발한다", iOrders !== -1 && iHistory !== -1 && iAwait !== -1,
@@ -50,7 +50,7 @@ function bodyOf(name) {
     check(
       "★ 지난 주문 목록이 결산 본문을 기다리지 않고 출발한다",
       iOrders !== -1 && iAwait !== -1 && iOrders < iAwait,
-      `loadSettlementOrders() 가 ${iOrders === -1 ? "아예 없다" : (iOrders < iAwait ? "앞" : "뒤") + "에 있다"}`
+      `loadSettlementOrders(start, end) 가 ${iOrders === -1 ? "아예 없다" : (iOrders < iAwait ? "앞" : "뒤") + "에 있다"}`
     );
     check(
       "★ 지난 정산 기록도 기다리지 않고 출발한다",
@@ -60,6 +60,15 @@ function bodyOf(name) {
     // 출발만 시키고 안 기다리면, 늦게 온 답이 다음 화면을 덮어쓸 수 있다.
     check("출발시킨 것을 나중에 기다린다", body.includes("await ordersPromise"));
   }
+
+  out.push("\n[결산 본문과 지난 주문이 같은 날짜를 본다]");
+  const ordersBody = bodyOf("loadSettlementOrders") || "";
+  check(
+    "★ 지난 주문 함수가 결산에서 받은 시작일·종료일을 우선한다",
+    /startOverride\s*\|\|[\s\S]{0,120}settlementStartDate/.test(ordersBody) &&
+      /endOverride\s*\|\|[\s\S]{0,120}settlementEndDate/.test(ordersBody),
+    "빠른 기간 버튼은 응답 전까지 입력칸이 옛 날짜라, 다시 읽으면 오늘만 조회한다"
+  );
 
   out.push("\n[늦게 온 옛 응답이 새 화면을 덮지 않는다]");
   for (const [name, seq] of [

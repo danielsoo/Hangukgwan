@@ -76,6 +76,28 @@ function check(name, cond, extra = "") {
   const loadingGone = await page.locator(".stl-loading").first().isVisible().catch(() => true);
   check("「불러오는 중」 줄도 사라진다", !loadingGone, String(loadingGone));
 
+  out.push("\n[최근 7일은 아래 지난 주문도 같은 7일]");
+  // 빠른 버튼은 날짜 입력칸의 change 이벤트를 거치지 않고 loadSettlement 에
+  // 범위를 직접 넘긴다. 예전 코드는 본문만 그 인수를 쓰고, 지난 주문은 아직
+  // 오늘로 남아 있는 입력칸을 읽어서 오늘 한 건만 보여줬다.
+  delayMs = 0;
+  const historyRequest = page.waitForRequest((req) => req.url().includes("/api/orders/history?"));
+  await page.locator("#settlementWeekBtn").click();
+  const historyUrl = new URL((await historyRequest).url());
+  const shownStart = await page.locator("#settlementStartDate").inputValue();
+  const shownEnd = await page.locator("#settlementEndDate").inputValue();
+  check(
+    "★★ 위 결산과 아래 지난 주문의 시작일·종료일이 같다",
+    historyUrl.searchParams.get("start") === shownStart && historyUrl.searchParams.get("end") === shownEnd,
+    `화면 ${shownStart}~${shownEnd}, 지난 주문 ${historyUrl.searchParams.get("start")}~${historyUrl.searchParams.get("end")}`
+  );
+  check(
+    "★ 실제로 7일 범위다",
+    (new Date(shownEnd + "T00:00:00Z") - new Date(shownStart + "T00:00:00Z")) / 86400000 === 6,
+    `${shownStart}~${shownEnd}`
+  );
+  await page.waitForLoadState("networkidle");
+
   out.push("\n[날짜를 바꾸면 — 앞의 숫자를 지우지 않는다]");
   // 비우면 새 값이 올 때까지 근거 없는 0 을 보게 되고, 그건 「매출이 없다」로
   // 읽힌다. 흐리게 두고 바뀌어야 한다.

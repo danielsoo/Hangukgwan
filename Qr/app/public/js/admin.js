@@ -17852,6 +17852,14 @@
 
   async function loadSettlement(start, end) {
     const mySeq = ++settlementSeq;
+    // 「최근 7일」 같은 빠른 버튼은 날짜를 인수로 바로 넘긴다. 결산 응답이
+    // 돌아온 뒤에야 입력칸을 고치면, 나란히 출발하는 지난 주문 목록은 그
+    // 짧은 사이에 입력칸의 옛 날짜(대개 오늘)를 읽는다. 화면과 모든 하위
+    // 요청이 처음부터 같은 범위를 보게 즉시 맞춘다.
+    if (currentRole === "owner") {
+      if (start && $("#settlementStartDate")) $("#settlementStartDate").value = start;
+      if (end && $("#settlementEndDate")) $("#settlementEndDate").value = end;
+    }
     setSettlementBusy(true);
     try {
       await loadSettlementInner(start, end, mySeq);
@@ -17895,7 +17903,9 @@
     // 안에서 불리고 있어서, 결산 본문이 다 그려질 때까지 출발조차 못 했다.
     // 그런데 이 목록이 필요로 하는 것은 화면의 날짜 칸과 오전/오후뿐이고,
     // 결산 응답에서 가져오는 값은 하나도 없다. 기다릴 이유가 없다.
-    const ordersPromise = loadSettlementOrders();
+    // 입력칸을 다시 읽어 짐작하지 않고, 위 결산과 **같은 날짜 인수**를 준다.
+    // 최근 7일 본문인데 지난 주문만 오늘 한 건이던 원인이 바로 이 갈림이었다.
+    const ordersPromise = loadSettlementOrders(start, end);
     const res = await resPromise;
 
     // 내가 부르고 나서 사장님이 날짜를 또 바꿨으면, 내 답은 이미 옛것이다.
@@ -18648,7 +18658,7 @@
   // 두 요청은 속도를 위해 나란히 출발하기 때문이다.
   let settlementOrdersSeq = 0;
 
-  async function loadSettlementOrders() {
+  async function loadSettlementOrders(startOverride, endOverride) {
     const listEl = $("#settlementOrdersList");
     const countEl = $("#settlementOrdersCount");
     if (!listEl) return;
@@ -18662,8 +18672,8 @@
     // (loadSettlement), 그 순간 날짜 칸은 아직 비어 있다. 빈 날짜로 물으면
     // 서버는 날짜를 안 걸고 **가장 최근 200건**을 준다 — 어제 저녁 것까지
     // 섞여서 위의 오늘 숫자의 두 배가 나왔다.
-    const start = $("#settlementStartDate").value || taipeiTodayString();
-    const end = $("#settlementEndDate").value || start;
+    const start = startOverride || $("#settlementStartDate").value || taipeiTodayString();
+    const end = endOverride || $("#settlementEndDate").value || start;
     // 위에서 오전만 보고 있으면 이 목록도 오전만. 위는 오전 매출인데 아래
     // 목록만 하루치면, 목록을 세어보다가 위 숫자를 의심하게 된다.
     if (settlementShift) params.set("shift", settlementShift);
