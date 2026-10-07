@@ -1,7 +1,7 @@
 'use client'
 
 import { useLanguage } from '@/context/LanguageContext'
-import { ORDER_URL, ADMIN_URL } from '@/lib/config'
+import { MENU_URL, ADMIN_URL } from '@/lib/config'
 
 export default function Footer() {
   const { tr } = useLanguage()
@@ -98,7 +98,7 @@ export default function Footer() {
               03 656 7994
             </a>
             <p style={{ margin: '12px 0 0' }}>
-              <a href={ORDER_URL} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--fs-base)' }}>
+              <a href={MENU_URL} target="_blank" rel="noopener noreferrer" style={{ fontSize: 'var(--fs-base)' }}>
                 {tr.footer.orderLink} →
               </a>
             </p>

@@ -5,8 +5,7 @@ const zhTW: TranslationsType = {
   hero: {
     eyebrow: 'Zhubei · Hsinchu · 韓式家常料理',
     tag: '正宗韓式家常料理，以細緻的款待端上每一桌。',
-    cta1: '招牌菜色',
-    cta2: '線上點餐',
+    cta1: '查看菜單',
   },
   info: {
     hours: '營業時間',
@@ -22,7 +21,7 @@ const zhTW: TranslationsType = {
     nav: '會員',
     label: 'VIP Members',
     title: '登入並綁定您的 VIP 折扣卡',
-    body: '使用 Google 帳號登入，綁定手上的實體 VIP 折扣卡，之後在店內 QR 點餐時系統會自動套用折扣，不必再出示卡片。',
+    body: '使用 Google 帳號登入後，即可綁定手上的實體 VIP 折扣卡。折扣使用方式請於店內付款時洽詢服務人員。',
     google: '使用 Google 帳號登入',
     privacy: '我們僅取得您的姓名與電子郵件，用於綁定卡片。',
     signedIn: '已連結 Google 帳號',
@@ -30,26 +29,15 @@ const zhTW: TranslationsType = {
     cardHint: '請輸入卡片背面的 12 位數字。',
     register: '綁定卡片',
     doneCard: '已綁定至您的帳號',
-    doneBody: '完成。下次在店內掃描 QR 點餐時，折扣會自動套用於結帳金額。',
-    doneCta: '前往點餐系統',
+    doneBody: '綁定完成。下次來店付款時，服務人員會協助您使用折扣。',
+    doneCta: '查看菜單',
   },
   sig: {
     label: '招牌菜色',
     badge: '代表',
     title: '幾道我們最有信心的菜',
     all: '完整菜單',
-    note: '所有菜色與價格皆可在桌上的 QR 點餐系統中查看，共 49 道菜。菜單依季節與食材微調。',
-  },
-  qr: {
-    label: '桌邊點餐',
-    title: '用手機點餐，不必等人來',
-    body: '座位上有 QR Code，掃描後即可在手機上瀏覽中文、韓文、英文菜單，選好直接送單到廚房。',
-    cta: '前往點餐系統',
-    steps: [
-      { n: 1, text: '掃描桌上的 QR Code' },
-      { n: 2, text: '選擇菜色、份量與備註' },
-      { n: 3, text: '送出後在座位上等待' },
-    ],
+    note: '完整 49 道菜色與價格都可在線上菜單中查看。點餐與付款請於店內由服務人員協助。',
   },
   about: {
     label: '關於韓國館',
@@ -101,11 +89,11 @@ const zhTW: TranslationsType = {
   menuPage: {
     label: '菜單',
     title: '招牌菜色與菜單分類',
-    intro: '以下是店內最常被點的幾道菜。完整 49 道菜的名稱、價格與圖片，都在桌上的 QR 點餐系統裡，隨時更新。',
+    intro: '以下是店內最常被點的幾道菜。完整 49 道菜的名稱、價格與圖片，都可在線上菜單中查看。',
     catsTitle: '菜單分類',
-    catsNote: '各分類的品項數與價格區間，實際內容以店內 QR 點餐系統為準。',
+    catsNote: '各分類的品項數與價格區間如下。點餐與付款請於店內辦理。',
     cta: '開啟完整菜單',
-    ctaNote: '也可以直接掃描桌上的 QR Code',
+    ctaNote: '僅供瀏覽 · 點餐與付款請於店內辦理',
     cats: [
       { zh: '飯類', ko: '밥류', en: 'Rice', count: '8 品', range: 'NT$210 – 250' },
       { zh: '麵類', ko: '면류', en: 'Noodles', count: '9 品', range: 'NT$180 – 280' },
@@ -119,7 +107,7 @@ const zhTW: TranslationsType = {
     tag: '正宗韓式家常料理 · 新竹竹北',
     storesLabel: '門市',
     rights: '無需訂位 · 現場候位',
-    orderLink: '線上點餐',
+    orderLink: '查看菜單',
   },
   settings: {
     title: '設定',

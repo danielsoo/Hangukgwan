@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/context/LanguageContext'
 import { getStoreStatus } from '@/lib/storeStatus'
-import { ORDER_URL } from '@/lib/config'
 import ImagePlaceholder from '@/components/ImagePlaceholder'
 
 export default function Hero() {
@@ -102,13 +101,10 @@ export default function Hero() {
           </div>
         )}
 
-        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
           <Link href="/menu/" className="hg-cta-solid" style={{ padding: '17px 38px', fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.2em' }}>
             {tr.hero.cta1}
           </Link>
-          <a href={ORDER_URL} target="_blank" rel="noopener noreferrer" className="hg-cta-outline" style={{ padding: '17px 38px', fontSize: 'var(--fs-sm)', letterSpacing: '0.2em' }}>
-            {tr.hero.cta2}
-          </a>
         </div>
       </div>
     </section>

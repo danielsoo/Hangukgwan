@@ -12,11 +12,6 @@ export interface AboutValue {
   d: string
 }
 
-export interface QrStep {
-  n: number
-  text: string
-}
-
 export interface GroupRow {
   k: string
   v: string
@@ -34,7 +29,6 @@ export interface TranslationsType {
     eyebrow: string
     tag: string
     cta1: string
-    cta2: string
   }
   info: {
     hours: string
@@ -67,13 +61,6 @@ export interface TranslationsType {
     title: string
     all: string
     note: string
-  }
-  qr: {
-    label: string
-    title: string
-    body: string
-    cta: string
-    steps: QrStep[]
   }
   about: {
     label: string

@@ -5,8 +5,7 @@ const ko: TranslationsType = {
   hero: {
     eyebrow: 'Zhubei · Hsinchu · 한식 가정 요리',
     tag: '정갈한 한식 가정 요리를 정성으로 차려냅니다.',
-    cta1: '대표 메뉴',
-    cta2: 'QR 주문',
+    cta1: '메뉴 보기',
   },
   info: {
     hours: '영업시간',
@@ -22,7 +21,7 @@ const ko: TranslationsType = {
     nav: '회원',
     label: 'VIP Members',
     title: '로그인하고 VIP 할인카드를 등록하세요',
-    body: 'Google 계정으로 로그인한 뒤 가지고 계신 실물 VIP 할인카드를 등록하면, 매장에서 QR로 주문할 때 할인이 자동으로 적용됩니다. 카드를 따로 보여주실 필요가 없습니다.',
+    body: 'Google 계정으로 로그인한 뒤 가지고 계신 실물 VIP 할인카드를 등록할 수 있습니다. 할인 적용은 매장 결제 시 직원에게 문의해 주세요.',
     google: 'Google 계정으로 로그인',
     privacy: '카드 등록을 위해 이름과 이메일만 확인합니다.',
     signedIn: 'Google 계정 연결됨',
@@ -30,26 +29,15 @@ const ko: TranslationsType = {
     cardHint: '카드 뒷면의 12자리 숫자를 입력하세요.',
     register: '카드 등록',
     doneCard: '계정에 등록되었습니다',
-    doneBody: '완료되었습니다. 다음 방문에서 QR로 주문하시면 결제 금액에 할인이 자동 적용됩니다.',
-    doneCta: '주문 페이지 열기',
+    doneBody: '등록되었습니다. 다음 방문 시 매장 결제 과정에서 할인 적용을 도와드리겠습니다.',
+    doneCta: '메뉴 보기',
   },
   sig: {
     label: '대표 메뉴',
     badge: '대표',
     title: '가장 자신 있는 몇 가지',
     all: '전체 메뉴',
-    note: '전체 49가지 메뉴와 가격은 테이블의 QR 주문 시스템에서 보실 수 있습니다. 계절과 재료에 따라 조금씩 달라집니다.',
-  },
-  qr: {
-    label: '테이블 주문',
-    title: '휴대폰으로 바로 주문하세요',
-    body: '테이블의 QR 코드를 스캔하면 중국어 · 한국어 · 영어 메뉴를 보고 그 자리에서 주방으로 주문을 보낼 수 있습니다.',
-    cta: '주문 페이지 열기',
-    steps: [
-      { n: 1, text: '테이블의 QR 코드를 스캔' },
-      { n: 2, text: '메뉴와 수량, 요청사항 선택' },
-      { n: 3, text: '주문 후 자리에서 기다리기' },
-    ],
+    note: '전체 49가지 메뉴와 가격을 온라인 메뉴에서 편하게 확인하실 수 있습니다. 주문과 결제는 매장에서 도와드립니다.',
   },
   about: {
     label: '한국관 소개',
@@ -101,11 +89,11 @@ const ko: TranslationsType = {
   menuPage: {
     label: '메뉴',
     title: '대표 메뉴와 메뉴 분류',
-    intro: '가장 많이 찾으시는 메뉴입니다. 전체 49가지의 이름, 가격, 사진은 테이블의 QR 주문 시스템에서 항상 최신으로 보실 수 있습니다.',
+    intro: '가장 많이 찾으시는 메뉴입니다. 전체 49가지의 이름, 가격, 사진은 온라인 메뉴에서 확인하실 수 있습니다.',
     catsTitle: '메뉴 분류',
-    catsNote: '분류별 품목 수와 가격대입니다. 실제 내용은 매장 QR 주문 시스템을 기준으로 합니다.',
+    catsNote: '분류별 품목 수와 가격대입니다. 주문과 결제는 매장에서 도와드립니다.',
     cta: '전체 메뉴 열기',
-    ctaNote: '테이블의 QR 코드를 스캔하셔도 됩니다',
+    ctaNote: '메뉴 열람 전용 · 주문 및 결제는 매장에서',
     cats: [
       { zh: '飯類', ko: '밥류', en: 'Rice', count: '8종', range: 'NT$210 – 250' },
       { zh: '麵類', ko: '면류', en: 'Noodles', count: '9종', range: 'NT$180 – 280' },
@@ -119,7 +107,7 @@ const ko: TranslationsType = {
     tag: '한식 가정 요리 · 신주 주부',
     storesLabel: '매장',
     rights: '예약 없이 방문 · 현장 대기',
-    orderLink: 'QR 주문',
+    orderLink: '메뉴 보기',
   },
   settings: {
     title: '설정',

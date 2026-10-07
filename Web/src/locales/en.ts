@@ -5,8 +5,7 @@ const en: TranslationsType = {
   hero: {
     eyebrow: 'Zhubei · Hsinchu · Korean Home Cooking',
     tag: 'Authentic Korean home cooking, served with quiet care.',
-    cta1: 'Signature dishes',
-    cta2: 'Order online',
+    cta1: 'View the menu',
   },
   info: {
     hours: 'Hours',
@@ -22,7 +21,7 @@ const en: TranslationsType = {
     nav: 'Members',
     label: 'VIP Members',
     title: 'Sign in and register your VIP discount card',
-    body: 'Sign in with Google and register the physical VIP card you already hold. Your discount is then applied automatically whenever you order by QR in the restaurant — no need to show the card.',
+    body: 'Sign in with Google to register the physical VIP card you already hold. Please ask our staff about applying the discount when you pay at the restaurant.',
     google: 'Continue with Google',
     privacy: 'We only read your name and email, to link the card.',
     signedIn: 'Google account connected',
@@ -30,26 +29,15 @@ const en: TranslationsType = {
     cardHint: 'Enter the 12 digits printed on the back of your card.',
     register: 'Register card',
     doneCard: 'Registered to your account',
-    doneBody: 'Done. Next time you order by QR at your table, the discount is applied to your bill automatically.',
-    doneCta: 'Open the ordering page',
+    doneBody: 'Your card is registered. Our staff will help apply the discount when you pay on your next visit.',
+    doneCta: 'View the menu',
   },
   sig: {
     label: 'Signature',
     badge: 'Signature',
     title: 'A few dishes we stand behind',
     all: 'Full menu',
-    note: 'All 49 dishes, with prices and photos, live in the QR ordering system on your table. The menu shifts slightly with the season and what the market has.',
-  },
-  qr: {
-    label: 'Order at your table',
-    title: 'Order from your phone, no waiting',
-    body: 'Scan the code on your table to browse the menu in Chinese, Korean or English, then send your order straight to the kitchen.',
-    cta: 'Open the ordering page',
-    steps: [
-      { n: 1, text: 'Scan the code on your table' },
-      { n: 2, text: 'Choose dishes, quantity and notes' },
-      { n: 3, text: 'Send it and stay seated' },
-    ],
+    note: 'Browse all 49 dishes and prices in our online menu. Ordering and payment are handled at the restaurant.',
   },
   about: {
     label: 'About us',
@@ -101,11 +89,11 @@ const en: TranslationsType = {
   menuPage: {
     label: 'Menu',
     title: 'Signature dishes and what else we cook',
-    intro: 'These are the dishes ordered most often. All 49 items, with prices and photos, live in the QR ordering system on your table and are always current.',
+    intro: 'These are the dishes ordered most often. Browse all 49 items, with prices and photos, in our online menu.',
     catsTitle: 'The rest of the menu',
-    catsNote: 'Item counts and price ranges by category. The in-store ordering system is the source of truth.',
+    catsNote: 'Item counts and price ranges by category. Ordering and payment are handled at the restaurant.',
     cta: 'Open the full menu',
-    ctaNote: 'Or simply scan the code on your table',
+    ctaNote: 'For browsing only · order and pay at the restaurant',
     cats: [
       { zh: '飯類', ko: '밥류', en: 'Rice dishes', count: '8 items', range: 'NT$210 – 250' },
       { zh: '麵類', ko: '면류', en: 'Noodles', count: '9 items', range: 'NT$180 – 280' },
@@ -119,7 +107,7 @@ const en: TranslationsType = {
     tag: 'Korean home cooking · Zhubei, Hsinchu',
     storesLabel: 'Locations',
     rights: 'No reservations · walk-in only',
-    orderLink: 'Order online',
+    orderLink: 'View the menu',
   },
   settings: {
     title: 'Settings',
