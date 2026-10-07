@@ -44,6 +44,16 @@ function check(name, cond, extra = "") {
 
   const browser = await launchBrowser();
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // POS 앱 인쇄를 가로챈다(e2e-payment-receipt.js 와 같은 수). 종이가 나갔는지,
+  // 몇 장 나갔는지를 세려는 것이다.
+  await ctx.addInitScript(() => {
+    window.__jobs = [];
+    window.HangukgwanPrint = {
+      printBase64(b64) { window.__jobs.push(b64.length); return "queued"; },
+      target() { return "192.168.111.142:9100"; },
+      available() { return true; },
+    };
+  });
   const page = await ctx.newPage();
   page.on("dialog", (d) => d.dismiss());
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
@@ -91,7 +101,14 @@ function check(name, cond, extra = "") {
   await page.waitForTimeout(800);
   const msg = await page.locator("#appDialogMessage").textContent();
   check("기록했다고 말한다", /돌려준 것으로 기록/.test(msg), msg);
-  await page.locator("#appDialogOk").click();
+  // 2026-10-07 사장님: "반품 확정하면 반품 적용된 영수증 출력을 원하는지 물어봐줘
+  // 그리고 적용된 걸 뽑아주고 원하면"
+  check("★★ 같은 창에서 영수증을 뽑을지 묻는다", /영수증을 출력할까요/.test(msg), msg);
+  check("★ 돌려준 품목이 빠진다고 적는다", /돌려준 품목은 빠지고/.test(msg), msg);
+  // 여기서는 「취소」 — 안 뽑는 길도 막히지 않아야 한다
+  await page.locator("#appDialogCancel").click().catch(() => page.locator("#appDialogOk").click());
+  await page.waitForTimeout(700);
+  check("★★ 「취소」면 종이가 안 나간다", (await page.evaluate(() => window.__jobs.length)) === 0, String(await page.evaluate(() => window.__jobs.length)));
   await page.waitForTimeout(400);
 
   const o = (await boss.get("/api/orders")).body.find((x) => x.id === id);
@@ -162,6 +179,43 @@ function check(name, cond, extra = "") {
     check("★★ 정산 뒤에 돌려준 것도 기록된다", !!o2 && o2.refund_total > 260, JSON.stringify(o2 && { t: o2.refund_total }));
     const after = await page.locator(`.stl-order[data-order-id="${id}"]`).textContent().catch(() => "");
     check("★ 목록이 다시 그려진다 — 돌려준 것이 바로 보인다", /돌려줌|退/.test(after) || after.length > 0, after.slice(0, 80));
+  }
+
+  out.push("\n[돌려준 뒤 — 영수증을 뽑을지 묻고, 「네」면 반품이 적용된 종이가 나간다]");
+  {
+    // 2026-10-07 사장님: "반품 확정하면 반품 적용된 영수증 출력을 원하는지
+    // 물어봐줘 그리고 적용된 걸 뽑아주고 원하면"
+    //
+    // **남는 품목이 있는** 새 주문으로 잰다. 앞 블록에서 쓰던 주문은 마지막
+    // 하나까지 돌려줘서 적을 것이 없다 — 그때는 묻지 않는 것이 맞다.
+    const r2 = await boss.post("/api/orders").send({
+      tableNumber: "11",
+      items: [{ itemId: byName("돌솥비빔밥").id, qty: 2 }, { itemId: byName("대만 음료수").id, qty: 2 }],
+      party: { adults: 2, children: 0 },
+    });
+    const id2 = r2.body.id;
+    await boss.patch(`/api/orders/${id2}`).send({ status: "paid", paymentMethod: "cash" });
+    await page.locator('.admin-tabs button[data-tab="orders"]').click();
+    await page.waitForTimeout(1800);
+
+    const before = await page.evaluate(() => window.__jobs.length);
+    await page.locator(`.order-card[data-order-id="${id2}"] .order-refund-btn`).click();
+    await page.waitForTimeout(700);
+    // 음료 한 개만 — 나머지는 그대로 둔다
+    await page.locator("#refundLines .refund-line").nth(1).locator('[data-step="1"]').click();
+    await page.waitForTimeout(800);
+    await page.locator("#refundOk").click();
+    await page.waitForTimeout(400);
+    await page.locator("#appDialogOk").click();          // 정말 돌려줄까요 → 네
+    await page.waitForTimeout(1400);
+    const ask = await page.locator("#appDialogMessage").textContent();
+    check("★★ 영수증을 뽑을지 묻는다", /영수증을 출력할까요/.test(ask), ask.slice(0, 90));
+    check("★ 얼마를 돌려줬는지도 같은 창에", /NT\$30/.test(ask), ask.slice(0, 90));
+    await page.locator("#appDialogOk").click();          // 영수증 → 네
+    await page.waitForTimeout(2000);
+    const after = await page.evaluate(() => window.__jobs.length);
+    check("★★ 종이가 한 장 나간다", after === before + 1, `${before} → ${after}`);
+    await page.locator("#appDialogOk").click().catch(() => {});
   }
 
   console.log(out.join("\n"));

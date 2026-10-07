@@ -766,6 +766,7 @@
       printDevicesList: "🖨️ 자동 인쇄 중: {list}",
       printReceiptBtn: "🧾 영수증",
       receiptPrintConfirm: "영수증을 출력하시겠습니까?",
+      refundPrintAsk: "반품이 적용된 영수증을 출력할까요? (돌려준 품목은 빠지고, 손님이 실제로 낸 금액으로 나와요)",
       refundLineAll: "전부",
       refundLineNone: "지우기",
       refundPickHint: "돌려줄 품목만 고르세요 — 한 줄씩 수를 더하거나 「전부」. 안 고른 품목은 그대로 둡니다.",
@@ -2066,6 +2067,7 @@
       printDevicesList: "🖨️ 自動列印中：{list}",
       printReceiptBtn: "🧾 收據",
       receiptPrintConfirm: "要列印收據嗎？",
+      refundPrintAsk: "要列印退貨後的收據嗎？（已退品項會扣除，金額為客人實際支付的金額）",
       refundLineAll: "全部",
       refundLineNone: "清除",
       refundPickHint: "只挑要退的品項 — 逐列加數量或按「全部」。沒挑的品項維持不變。",
@@ -7676,7 +7678,31 @@
       back.hidden = true;
       if (!applyOrderUpdate(d.order)) await loadOrders();
       if (opts && typeof opts.onDone === "function") await opts.onDone(d.order);
-      await showAlert(T("refundDone").replace("{amount}", money(d.refund.amount)).replace("{method}", methodLabel));
+
+      // 돌려준 뒤 영수증 — **물어보고** 원하면 뽑는다.
+      //
+      // 2026-10-07 사장님: "반품 확정하면 반품 적용된 영수증 출력을 원하는지
+      // 물어봐줘 그리고 적용된 걸 뽑아주고 원하면"
+      //
+      // 영수증은 이미 반품을 반영한다(printPaidOrderReceipt 가 돌려준 수량을
+      // 빼고 할인 줄로 합계를 맞춘다) — 손님이 **실제로 낸 것**만 적힌다.
+      //
+      // 결제 직후처럼 3초 자동 취소는 쓰지 않는다. 결제는 하루에 수십 번이라
+      // 묻는 창이 길을 막으면 안 되지만, 반품은 드물고 직원이 방금 손으로 돈을
+      // 돌려준 참이라 종이를 달라는 손님 앞에서 3초에 닫히면 안 된다.
+      const updated = (d && d.order) || o;
+      const leftAfter = (updated.items || []).some((it) => (Number(it.qty) || 0) > (Number(it.refunded_qty) || 0));
+      const msg = T("refundDone").replace("{amount}", money(d.refund.amount)).replace("{method}", methodLabel);
+      if (!leftAfter) {
+        // 다 돌려줬으면 적을 품목이 없다 — 종이를 만들지 않는다.
+        await showAlert(msg);
+        return;
+      }
+      if (!(await showConfirm(`${msg}\n\n${T("refundPrintAsk")}`))) return;
+      const printed = await printPaidOrderReceipt(updated);
+      if (!printed || !printed.ok) {
+        await showAlert(`${T("receiptPrintFailed")}${printed && printed.reason ? `\n${printed.reason}` : ""}`);
+      }
     };
     paint();
     back.hidden = false;

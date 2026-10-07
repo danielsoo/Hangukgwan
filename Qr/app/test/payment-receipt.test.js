@@ -137,6 +137,29 @@ out.push("\n[결제 완료 칸의 카드 — 영수증 한 장]");
   }
 }
 
+out.push("\n[반품 뒤의 영수증 — 돌려준 것은 빠지고, 묻고 나서 뽑는다]");
+// 2026-10-07 사장님: "반품 확정하면 반품 적용된 영수증 출력을 원하는지 물어봐줘
+// 그리고 적용된 걸 뽑아주고 원하면"
+{
+  const fn = admin.slice(admin.indexOf("async function printPaidOrderReceipt("), admin.indexOf("async function printNoticeTicket("));
+  check("★★ 돌려준 수량을 뺀다", /refunded_qty/.test(fn) && /qty - r|\(Number\(it\.qty\) \|\| 0\) - r/.test(fn), "");
+  check("★★ 다 돌려준 품목은 아예 안 적는다", /filter\(\(it\) => \(Number\(it\.qty\) \|\| 0\) > 0\)/.test(fn), "");
+  check("★★ 합계는 **실제로 받은 돈** — 할인 줄로 맞춘다", /orderPaidAmount\(o0\)/.test(fn), "");
+
+  // 반품 창의 끝 — 묻고 나서 뽑는다
+  const refundEnd = admin.slice(admin.indexOf("const updated = (d && d.order) || o;"), admin.indexOf("const updated = (d && d.order) || o;") + 1200);
+  check("★★ 물어본다", /showConfirm\([\s\S]*refundPrintAsk/.test(refundEnd), "");
+  check("★★ 「네」면 반품이 적용된 영수증을 뽑는다", /printPaidOrderReceipt\(updated\)/.test(refundEnd), "");
+  check("★ 못 찍으면 말한다", /receiptPrintFailed/.test(refundEnd), "");
+  // 전부 돌려준 주문은 적을 품목이 없다 — 종이를 만들지 않는다
+  check("★★ 다 돌려줬으면 묻지도 않는다", /leftAfter/.test(refundEnd) && /if \(!leftAfter\)/.test(refundEnd), "");
+  // 결제 직후(3초 자동 취소)와 다르다 — 반품은 사람이 손으로 돈을 돌려준 참이다
+  check("★ 3초 자동 취소를 쓰지 않는다", !/showConfirmCountdown/.test(refundEnd), "");
+  for (const k of ["refundPrintAsk", "refundLineAll", "refundLineNone", "refundPickHint"]) {
+    check(`${k} 가 두 언어에 다 있다`, admin.split(`${k}:`).length - 1 === 2, "");
+  }
+}
+
 console.log(out.join("\n"));
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
