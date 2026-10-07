@@ -20,8 +20,8 @@ export default function Hero() {
   const status = now ? getStoreStatus(lang, now) : null
 
   return (
-    <section style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>
-      <div style={{ position: 'relative', height: 'clamp(340px, 52vh, 560px)' }}>
+    <section className="hg-home-hero" style={{ position: 'relative', overflow: 'hidden', background: 'var(--bg)' }}>
+      <div className="hg-home-hero-media" style={{ position: 'relative' }}>
         <ImagePlaceholder
           label="廚房準備 · Kitchen preparation"
           src="/images/editorial/kitchen-prep.jpg"

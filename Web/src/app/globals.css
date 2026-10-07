@@ -24,6 +24,8 @@
   --hair: #3A2E20;
   --status-open: #9BAF6B;
   --bg-a86: rgba(13, 10, 8, 0.86);
+  --home-header-bg: rgba(10, 8, 6, 0.7);
+  --site-header-h: 63px;
   --scrim-45: rgba(13, 10, 8, 0.45);
   --scrim-20: rgba(13, 10, 8, 0.2);
   --scrim-90: rgba(13, 10, 8, 0.9);
@@ -75,6 +77,7 @@ html[data-theme='light'] {
   --hair: #DCC9A4;
   --status-open: #4F6B22;
   --bg-a86: rgba(246, 234, 210, 0.92);
+  --home-header-bg: rgba(246, 234, 210, 0.82);
   --scrim-45: rgba(246, 234, 210, 0.42);
   --scrim-20: rgba(246, 234, 210, 0.18);
   --scrim-90: rgba(246, 234, 210, 0.92);
@@ -248,6 +251,19 @@ a:hover {
 
 .hg-link-arrow { color: var(--accent); cursor: pointer; transition: color 0.2s ease; }
 .hg-link-arrow:hover { color: var(--gold2); }
+
+/* 홈에서는 주방 사진이 헤더 뒤까지 이어진다. 헤더가 차지하던 높이만큼
+   히어로를 위로 당기고 사진 높이에 같은 값을 더해, 아래 내용의 위치는
+   바뀌지 않게 한다. */
+.hg-site-header {
+  transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+.hg-site-header-home {
+  -webkit-backdrop-filter: blur(18px) saturate(0.88);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.12);
+}
+.hg-home-hero { margin-top: calc(-1 * var(--site-header-h)); }
+.hg-home-hero-media { height: calc(clamp(340px, 52vh, 560px) + var(--site-header-h)); }
 
 .hg-close-btn {
   border: 1px solid var(--gold-a22);

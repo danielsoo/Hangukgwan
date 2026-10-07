@@ -23,6 +23,7 @@ export default function Header() {
   const { tr } = useLanguage()
   const { user, loading } = useAuth()
   const pathname = usePathname()
+  const isHome = pathname === '/'
 
   // 한 번에 하나만 열린다 — 설정과 메뉴가 겹쳐 있으면 어느 것을 닫는 건지
   // 알 수 없다.
@@ -77,12 +78,13 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
+      className={isHome ? 'hg-site-header hg-site-header-home' : 'hg-site-header'}
       style={{
         position: 'sticky',
         top: 0,
         zIndex: 60,
-        background: 'var(--bg-a86)',
-        backdropFilter: 'blur(14px)',
+        background: isHome ? 'var(--home-header-bg)' : 'var(--bg-a86)',
+        backdropFilter: isHome ? 'blur(18px) saturate(0.88)' : 'blur(14px)',
         borderBottom: '1px solid var(--gold-a18)',
       }}
     >
