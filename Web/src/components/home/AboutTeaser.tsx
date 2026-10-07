@@ -11,7 +11,11 @@ export default function AboutTeaser() {
       <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) var(--shell-pad)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(44px, 6vw, 96px)', alignItems: 'center' }}>
           <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
-            <ImagePlaceholder label="廚房或老闆夫妻 · Kitchen or owners" />
+            <ImagePlaceholder
+              label="廚房備料 · Kitchen preparation"
+              src="/images/editorial/kitchen-chopping.jpg"
+              alt="한국관 주방에서 채소를 손질하는 모습"
+            />
           </div>
           <div>
             <p

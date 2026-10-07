@@ -93,16 +93,32 @@ export default function AboutPage() {
       <section style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 100px) var(--shell-pad)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 'clamp(14px, 2vw, 24px)' }}>
           <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
-            <ImagePlaceholder label="小菜 · Banchan" />
+            <ImagePlaceholder
+              label="炒鍋 · Wok cooking"
+              src="/images/editorial/kitchen-wok-flame.jpg"
+              alt="강한 불 위에서 웍으로 음식을 볶는 한국관 주방"
+            />
           </div>
           <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
-            <ImagePlaceholder label="廚房 · Kitchen" />
+            <ImagePlaceholder
+              label="備料 · Ingredient preparation"
+              src="/images/editorial/kitchen-chopping.jpg"
+              alt="둥근 나무 도마에서 채소를 손질하는 모습"
+            />
           </div>
           <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
-            <ImagePlaceholder label="座位 · Seating" />
+            <ImagePlaceholder
+              label="米飯 · Fresh rice"
+              src="/images/editorial/kitchen-rice.jpg"
+              alt="갓 지은 흰쌀밥을 주걱으로 푸는 모습"
+            />
           </div>
           <div style={{ position: 'relative', aspectRatio: '1 / 1' }}>
-            <ImagePlaceholder label="細節 · Detail" />
+            <ImagePlaceholder
+              label="小菜 · Banchan plating"
+              src="/images/editorial/kitchen-banchan-plating.jpg"
+              alt="작은 검은 그릇에 반찬을 정갈하게 담는 모습"
+            />
           </div>
         </div>
       </section>
