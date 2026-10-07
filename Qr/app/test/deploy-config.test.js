@@ -15,6 +15,7 @@ const path = require("path");
 const APP = path.join(__dirname, "..");
 const WEB_ROOT = path.join(__dirname, "..", "..", "..", "Web");
 const vercel = JSON.parse(fs.readFileSync(path.join(APP, "vercel.json"), "utf8"));
+const pkg = JSON.parse(fs.readFileSync(path.join(APP, "package.json"), "utf8"));
 const buildScript = fs.readFileSync(path.join(APP, "scripts", "build-site.js"), "utf8");
 
 let pass = 0;
@@ -39,6 +40,12 @@ const ALLOWED = new Set([
 const unknown = Object.keys(vercel).filter((k) => !ALLOWED.has(k));
 check("Vercel 이 아는 키만 쓴다", unknown.length === 0, unknown.join(", "));
 check("설명은 VERCEL.md 에 있다", fs.existsSync(path.join(APP, "VERCEL.md")));
+
+out.push("\n[Node 런타임 — 자동 메이저 업그레이드를 막는다]");
+// 2026-10-07: ">=18"은 Vercel에서 최신 메이저로 자동 올라가며 실제 배포가
+// 그 경고를 냈다. 이 앱과 의존성은 Node 20에서 시험하므로 운영도 같은
+// 메이저로 고정한다. 메이저를 올릴 때는 로컬 시험 후 이 값을 함께 바꾼다.
+check("Node 20 메이저로 고정", pkg.engines && pkg.engines.node === "20.x", String(pkg.engines && pkg.engines.node));
 
 out.push("\n[정적 출력 — 홈페이지가 CDN 에서 나가는 근거]");
 check("outputDirectory 가 site", vercel.outputDirectory === "site", String(vercel.outputDirectory));
