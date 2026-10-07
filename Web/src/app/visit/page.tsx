@@ -10,120 +10,113 @@ export default function VisitPage() {
   const { mainMapUrl, branchMapUrl } = useTranslatedInfo()
 
   return (
-    <main style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(60px, 8vw, 110px) var(--shell-pad) clamp(70px, 9vw, 120px)' }}>
-      <p
-        style={{
-          fontFamily: "'Newsreader', serif",
-          fontSize: 'var(--fs-xs)',
-          letterSpacing: '0.34em',
-          textTransform: 'uppercase',
-          color: 'var(--accent)',
-          margin: '0 0 24px',
-        }}
-      >
-        {tr.loc.label}
-      </p>
-      <h1
-        style={{
-          fontFamily: "'Noto Serif TC', serif",
-          fontWeight: 400,
-          fontSize: 'var(--fs-display)',
-          lineHeight: 1.45,
-          letterSpacing: '0.06em',
-          color: 'var(--ink)',
-          margin: '0 0 26px',
-          maxWidth: 'min(20ch, 100%)',
-        }}
-      >
-        {tr.loc.title}
-      </h1>
-      <p style={{ fontSize: 'var(--fs-md)', lineHeight: 2, color: 'var(--ink-a6)', margin: '0 0 clamp(48px, 6vw, 76px)', maxWidth: 'min(52ch, 100%)' }}>{tr.loc.intro}</p>
+    <main className="hg-visit-page">
+      <section className="hg-visit-intro">
+        <div>
+          <p className="hg-visit-label">{tr.loc.label}</p>
+          <h1>{tr.loc.title}</h1>
+          <p className="hg-visit-lead">{tr.loc.intro}</p>
+        </div>
 
-      <div style={{ display: 'grid', gap: 'clamp(48px, 6vw, 80px)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'start', paddingTop: 34, borderTop: '1px solid var(--gold-a28)' }}>
-          <div style={{ position: 'relative', aspectRatio: '4 / 3' }}>
+        <nav className="hg-visit-directory" aria-label={tr.loc.title}>
+          <a href="#main-store" className="hg-visit-directory-item">
+            <span className="hg-visit-directory-number">01</span>
+            <span>
+              <strong>{tr.loc.mainLabel}</strong>
+              <small>{tr.info.bookingVal}</small>
+            </span>
+            <span className="hg-visit-directory-arrow" aria-hidden="true">↓</span>
+          </a>
+          <a href="#branch-store" className="hg-visit-directory-item">
+            <span className="hg-visit-directory-number">02</span>
+            <span>
+              <strong>{tr.loc.branchLabel}</strong>
+              <small>{tr.loc.branchAccess}</small>
+            </span>
+            <span className="hg-visit-directory-arrow" aria-hidden="true">↓</span>
+          </a>
+        </nav>
+      </section>
+
+      <div className="hg-visit-list">
+        <article id="main-store" className="hg-visit-card">
+          <div className="hg-visit-photo">
             <ImagePlaceholder
               label="本店 · Main restaurant"
               src={LOCATION_PHOTOS.main.detail}
               alt="韓國館 縣政九路本店 외관"
             />
+            <span className="hg-visit-photo-number" aria-hidden="true">01</span>
           </div>
-          <div>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 16px' }}>
-              Nº 01 · {tr.loc.mainLabel}
-            </p>
-            <h2 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-xl)', letterSpacing: '0.08em', color: 'var(--ink)', margin: '0 0 24px' }}>
-              縣政九路本店
-            </h2>
-            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--ink-a82)', margin: '0 0 4px' }}>新竹縣竹北市縣政九路135巷32號</p>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', color: 'var(--ink-a38)', margin: '0 0 30px' }}>
-              No. 32, Ln. 135, Xianzhengjiu Rd., Zhubei City, Hsinchu County
-            </p>
-            <div style={{ display: 'grid', gap: 12, padding: '26px 0', borderTop: '1px solid var(--gold-a16)', borderBottom: '1px solid var(--gold-a16)', marginBottom: 30 }}>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.info.hours}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>11.00–14.00 · 17.00–21.00</span>
+
+          <div className="hg-visit-copy">
+            <p className="hg-visit-eyebrow">Nº 01 · {tr.loc.mainLabel}</p>
+            <h2>縣政九路本店</h2>
+            <p className="hg-visit-address">新竹縣竹北市縣政九路135巷32號</p>
+            <p className="hg-visit-address-en">No. 32, Ln. 135, Xianzhengjiu Rd., Zhubei City, Hsinchu County</p>
+
+            <dl className="hg-visit-facts">
+              <div className="hg-visit-fact">
+                <dt>{tr.info.hours}</dt>
+                <dd>11.00–14.00 · 17.00–21.00</dd>
               </div>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.info.closed}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>{tr.info.closedVal}</span>
+              <div className="hg-visit-fact">
+                <dt>{tr.info.closed}</dt>
+                <dd>{tr.info.closedVal}</dd>
               </div>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.info.phoneLabel}</span>
-                <a href="tel:0366567994">03-656-7994</a>
+              <div className="hg-visit-fact">
+                <dt>{tr.info.phoneLabel}</dt>
+                <dd><a href="tel:0366567994">03-656-7994</a></dd>
               </div>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.info.min}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>NT$200 / {tr.info.perPerson}</span>
+              <div className="hg-visit-fact">
+                <dt>{tr.info.min}</dt>
+                <dd>NT$200 / {tr.info.perPerson}</dd>
               </div>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.info.booking}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>{tr.info.bookingVal}</span>
+              <div className="hg-visit-fact">
+                <dt>{tr.info.booking}</dt>
+                <dd>{tr.info.bookingVal}</dd>
               </div>
-            </div>
-            <a href={mainMapUrl} target="_blank" rel="noopener noreferrer" className="hg-cta-outline-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '15px 30px', fontSize: 'var(--fs-sm)', letterSpacing: '0.16em' }}>
-              {tr.loc.mapCta} <span>→</span>
+            </dl>
+
+            <a href={mainMapUrl} target="_blank" rel="noopener noreferrer" className="hg-cta-outline-gold hg-visit-map-link">
+              {tr.loc.mapCta} <span aria-hidden="true">↗</span>
             </a>
           </div>
-        </div>
+        </article>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(32px, 5vw, 64px)', alignItems: 'start', paddingTop: 34, borderTop: '1px solid var(--gold-a28)' }}>
-          <div style={{ position: 'relative', aspectRatio: '4 / 3' }}>
+        <article id="branch-store" className="hg-visit-card hg-visit-card-reverse">
+          <div className="hg-visit-photo">
             <ImagePlaceholder
               label="直營店 · Corporate branch"
               src={LOCATION_PHOTOS.branch.detail}
               alt="韓國館 太元一街直營店 매장 전경"
             />
+            <span className="hg-visit-photo-number" aria-hidden="true">02</span>
           </div>
-          <div>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', letterSpacing: '0.24em', color: 'var(--muted)', margin: '0 0 16px' }}>
-              Nº 02 · {tr.loc.branchLabel}
-            </p>
-            <h2 style={{ fontFamily: "'Noto Serif TC', serif", fontWeight: 400, fontSize: 'var(--fs-xl)', letterSpacing: '0.08em', color: 'var(--ink)', margin: '0 0 24px' }}>
-              太元一街直營店
-            </h2>
-            <p style={{ fontSize: 'var(--fs-md)', color: 'var(--ink-a82)', margin: '0 0 4px' }}>新竹縣竹北市太元一街7號</p>
-            <p style={{ fontFamily: "'Newsreader', serif", fontSize: 'var(--fs-sm)', color: 'var(--ink-a38)', margin: '0 0 30px' }}>
-              No. 7, Taiyuan 1st St., Zhubei City, Hsinchu County
-            </p>
-            <div style={{ display: 'grid', gap: 12, padding: '26px 0', borderTop: '1px solid var(--gold-a16)', borderBottom: '1px solid var(--gold-a16)', marginBottom: 26 }}>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.loc.accessLabel}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>{tr.loc.branchAccess}</span>
+
+          <div className="hg-visit-copy">
+            <p className="hg-visit-eyebrow">Nº 02 · {tr.loc.branchLabel}</p>
+            <h2>太元一街直營店</h2>
+            <p className="hg-visit-address">新竹縣竹北市太元一街7號</p>
+            <p className="hg-visit-address-en">No. 7, Taiyuan 1st St., Zhubei City, Hsinchu County</p>
+
+            <dl className="hg-visit-facts">
+              <div className="hg-visit-fact">
+                <dt>{tr.loc.accessLabel}</dt>
+                <dd>{tr.loc.branchAccess}</dd>
               </div>
-              <div style={{ display: 'flex', gap: 22, fontSize: 'var(--fs-base)' }}>
-                <span style={{ color: 'var(--muted)', minWidth: '6.5em' }}>{tr.loc.nearby}</span>
-                <span style={{ color: 'var(--ink-a82)' }}>Samsung · TSMC · 新竹科學園區</span>
+              <div className="hg-visit-fact">
+                <dt>{tr.loc.nearby}</dt>
+                <dd>Samsung · TSMC · 新竹科學園區</dd>
               </div>
-            </div>
-            <p style={{ fontSize: 'var(--fs-base)', lineHeight: 2, color: 'var(--ink-a45)', margin: '0 0 30px', paddingLeft: 20, borderLeft: '1px solid var(--gold-a3)' }}>
-              {tr.loc.branchNote}
-            </p>
-            <a href={branchMapUrl} target="_blank" rel="noopener noreferrer" className="hg-cta-outline-gold" style={{ display: 'inline-flex', alignItems: 'center', gap: 14, padding: '15px 30px', fontSize: 'var(--fs-sm)', letterSpacing: '0.16em' }}>
-              {tr.loc.mapCta} <span>→</span>
+            </dl>
+
+            <p className="hg-visit-note">{tr.loc.branchNote}</p>
+            <a href={branchMapUrl} target="_blank" rel="noopener noreferrer" className="hg-cta-outline-gold hg-visit-map-link">
+              {tr.loc.mapCta} <span aria-hidden="true">↗</span>
             </a>
           </div>
-        </div>
+        </article>
       </div>
     </main>
   )
