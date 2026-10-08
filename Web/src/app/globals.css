@@ -352,6 +352,11 @@ a:hover {
   margin-top: clamp(44px, 6vw, 78px);
   margin-left: clamp(-18px, -1vw, -4px);
 }
+.hg-editorial-portrait-signature .hg-editorial-caption {
+  right: clamp(18px, 2.4vw, 36px);
+  max-width: calc(100% - 36px);
+  text-align: right;
+}
 
 .hg-pull-quote {
   overflow: hidden;
