@@ -318,6 +318,14 @@ router.post("/", async (req, res) => {
   if (!orderingTable) return res.status(400).json({ error: "party_size_required" });
   const isStaff = !!(req.session && req.session.isAdmin);
   const customer = await resolveCustomer(req);
+
+  // 홈페이지의 /online-takeout 주문은 회원 전용이다. 현장 QR의
+  // /t/COUNTER 주문에는 entrySource가 없어서 로그인 없이 그대로 받는다.
+  // 화면에서 먼저 확인하지만, 주소를 직접 열거나 화면 검사를 건너뛰어도
+  // 홈페이지 주문 경로라면 실제 접수 단계에서 다시 막는다.
+  if (req.body && req.body.entrySource === "website_takeout" && !customer && !isStaff) {
+    return res.status(401).json({ error: "login_required" });
+  }
   // 테스트 기기는 인원수를 안 물어도 넣을 수 있다. 「테스트 테이블」도
   // 마찬가지다 — 그 자리에 몇 명이 앉았는지는 아무 데도 안 쓰인다(결산에
   // 안 들어가므로). 없는 자리에 넣는 것은 여전히 막는다 — 그건 우회할

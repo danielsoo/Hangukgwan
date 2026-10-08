@@ -1,5 +1,11 @@
 (function () {
-  const tableNumber = decodeURIComponent(location.pathname.split("/t/")[1] || "").trim();
+  // 현장 포장 QR은 /t/COUNTER, 홈페이지 회원 포장은 /online-takeout으로
+  // 주소부터 분리한다. 같은 주문·주방 파이프라인을 쓰되, 홈페이지 쪽은
+  // 아래 시작 단계와 주문 API에서 로그인 여부를 다시 확인한다.
+  const ONLINE_TAKEOUT = /^\/online-takeout\/?$/.test(location.pathname);
+  const tableNumber = ONLINE_TAKEOUT
+    ? "COUNTER"
+    : decodeURIComponent(location.pathname.split("/t/")[1] || "").trim();
   // 메뉴 보기 전용(/menu-view) — 2026-09-30 사장님: 홈페이지의 「전체 메뉴 열기」를
   // 누르면 포장 QR 로 들어가는데 "메뉴만 볼 수 있게 해줘 그래서 인원, 포장 정보
   // 필요 없이 주문은 안되지만 메뉴는 볼 수 있게." 같은 화면을 쓰되 인원·포장 정보를
@@ -1708,6 +1714,9 @@
         headers: authHeaders,
         body: JSON.stringify({
           tableNumber,
+          // 현장 QR과 홈페이지 포장 주문을 서버도 구별한다. 홈페이지용
+          // 주소에서 온 주문은 세션 회원이 아니면 서버가 거절한다.
+          entrySource: ONLINE_TAKEOUT ? "website_takeout" : undefined,
           // 두 번 눌렸을 때 두 번째를 새 주문으로 만들지 않기 위한 표.
           clientRequestId: cartToken,
           // Each cart line carries its own orderType now (chosen per dish in
@@ -2674,22 +2683,42 @@
   // 보는 손님에게는 이유가 없다.
   if (!VIEW_ONLY) resetIdleTimer();
 
-  applyStaticI18n();
-  // 설정 → 메뉴 순서는 예전 그대로 둔다. 바뀐 것은 「인원수를 언제 묻는가」뿐이다.
-  const settingsReady = loadSettings().catch(() => {});
-  loadMenu();
-  // checkPriorOrder() must run after initPartySize() resolves — it branches
-  // on isCounterTable (see the comment inside checkPriorOrder), which
-  // initPartySize() is what sets.
-  // loadSettings() 를 먼저 기다린다 — 영업시간을 알기 전에 initPartySize() 가
-  // 돌면 「지금 주문할 수 있는가」를 모르는 채로 인원수를 묻게 된다.
-  // 설정을 못 받아온 경우에는 예전처럼 묻는다(기본값이 "열림"이다). 네트워크가
-  // 잠깐 끊긴 것 때문에 앉아 계신 손님이 주문을 못 하게 되면 더 나쁘다.
-  if (VIEW_ONLY) {
-    // 인원·포장 이름/전화를 묻지 않고, 이 자리의 지난 주문도 보지 않는다.
-    document.body.classList.add("view-only");
-    $("#viewOnlyBanner").hidden = false;
-  } else {
-    settingsReady.then(() => initPartySize()).then(checkPriorOrder);
+  async function startOrderingPage() {
+    if (ONLINE_TAKEOUT) {
+      try {
+        const res = await fetch("/api/account/me", { credentials: "same-origin" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || !body.user) {
+          location.replace("/login/?next=%2Ftakeout%2F");
+          return;
+        }
+      } catch (e) {
+        // 로그인 확인을 못 했는데 주문 화면부터 열어 주지 않는다. 새로고침하면
+        // 다시 확인하고, 주문 API에도 같은 검사가 있어 이중으로 막힌다.
+        alert(t("networkErrorMsg"));
+        return;
+      }
+    }
+
+    applyStaticI18n();
+    // 설정 → 메뉴 순서는 예전 그대로 둔다. 바뀐 것은 「인원수를 언제 묻는가」뿐이다.
+    const settingsReady = loadSettings().catch(() => {});
+    loadMenu();
+    // checkPriorOrder() must run after initPartySize() resolves — it branches
+    // on isCounterTable (see the comment inside checkPriorOrder), which
+    // initPartySize() is what sets.
+    // loadSettings() 를 먼저 기다린다 — 영업시간을 알기 전에 initPartySize() 가
+    // 돌면 「지금 주문할 수 있는가」를 모르는 채로 인원수를 묻게 된다.
+    // 설정을 못 받아온 경우에는 예전처럼 묻는다(기본값이 "열림"이다). 네트워크가
+    // 잠깐 끊긴 것 때문에 앉아 계신 손님이 주문을 못 하게 되면 더 나쁘다.
+    if (VIEW_ONLY) {
+      // 인원·포장 이름/전화를 묻지 않고, 이 자리의 지난 주문도 보지 않는다.
+      document.body.classList.add("view-only");
+      $("#viewOnlyBanner").hidden = false;
+    } else {
+      settingsReady.then(() => initPartySize()).then(checkPriorOrder);
+    }
   }
+
+  startOrderingPage();
 })();

@@ -212,6 +212,7 @@ const body = (token) => ({ tableNumber: "7", items: CART, ...(token ? { clientRe
       posts.push(JSON.parse(opt.body));
       return { ok: true, status: 201, json: async () => ({ id: 900 + posts.length }) };
     },
+    ONLINE_TAKEOUT: false,
     tableNumber: "7",
     setSubmitBusy: (on) => { busy = on; },
     applyOrderingState() {},

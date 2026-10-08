@@ -71,6 +71,8 @@ function check(name, cond, extra = "") {
     const t = await request(app).get("/t/1");
     check("손님 주문 화면도 나온다", t.status === 200, String(t.status));
     check("order.js 에 지문이 박혀 있다", t.text.includes(`/js/order.js?v=${ver}`), (t.text.match(/\/js\/order\.js[^"]*/) || [""])[0]);
+    const onlineTakeout = await request(app).get("/online-takeout");
+    check("홈페이지 회원 포장은 현장 QR과 다른 화면 주소를 쓴다", onlineTakeout.status === 200, String(onlineTakeout.status));
   }
 
   out.push("\n[4] 그 주소로 실제 파일이 나오는가");

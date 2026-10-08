@@ -109,7 +109,7 @@ function check(name, cond, extra = "") {
   r = await request(app).get("/api/tables/counter-link");
   check("비로그인은 포장 링크를 받지 못함", r.status === 401, `${r.status} ${JSON.stringify(r.body)}`);
   r = await alice.get("/api/tables/counter-link");
-  check("로그인 회원은 포장 링크를 받음", r.status === 200 && r.body.path === "/t/COUNTER", JSON.stringify(r.body));
+  check("로그인 회원은 현장 QR과 다른 포장 링크를 받음", r.status === 200 && r.body.path === "/online-takeout", JSON.stringify(r.body));
 
   out.push("\n[VIP 카드 — 로그인 계정으로 등록]");
   r = await request(app).get("/api/members/me");
@@ -183,7 +183,9 @@ function check(name, cond, extra = "") {
   r = await request(app).post("/api/orders").send(takeoutBody);
   check("현장 QR 비회원도 포장 주문 성공", r.status === 201 && r.body.pickup_number, `${r.status} ${JSON.stringify(r.body)}`);
   check("비회원 포장 주문에는 계정·VIP 할인 없음", !r.body.account_id && !r.body.vip_discount_percent, JSON.stringify(r.body));
-  r = await alice.post("/api/orders").send(takeoutBody);
+  r = await request(app).post("/api/orders").send({ ...takeoutBody, entrySource: "website_takeout" });
+  check("홈페이지 포장 주문은 비회원 접수 거부", r.status === 401 && r.body.error === "login_required", `${r.status} ${JSON.stringify(r.body)}`);
+  r = await alice.post("/api/orders").send({ ...takeoutBody, entrySource: "website_takeout" });
   check("로그인 회원 포장 주문 성공", r.status === 201 && r.body.pickup_number, `${r.status} ${JSON.stringify(r.body).slice(0, 180)}`);
   check("포장 주문에도 회원 계정이 기록됨", !!r.body.account_id && r.body.vip_discount_percent === 10, JSON.stringify(r.body));
 

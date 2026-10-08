@@ -234,6 +234,10 @@ app.use(
 // 안 그러면 한 시간 캐시와 "열어둔 탭은 js 를 다시 안 받는다" 가 겹쳐서,
 // 배포한 고침이 가게 화면에 며칠씩 안 닿는다.
 app.get("/t/:tableNumber", sendStamped("order.html"));
+// 홈페이지에서 로그인한 회원이 들어오는 포장 주문 화면. 현장에 인쇄된
+// /t/COUNTER QR과 주소부터 분리하고, 화면과 주문 API 양쪽에서 회원 여부를
+// 다시 확인한다(public/js/order.js, src/routes/orders.js).
+app.get("/online-takeout", sendStamped("order.html"));
 // 메뉴 보기 전용 — 홈페이지 「전체 메뉴 열기」(2026-09-30). 같은 화면에서 인원·포장
 // 정보를 묻지 않고 주문 버튼을 숨긴다(public/js/order.js VIEW_ONLY).
 app.get("/menu-view", sendStamped("order.html"));

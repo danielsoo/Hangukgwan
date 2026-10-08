@@ -127,6 +127,7 @@ const tick = (ms) => new Promise((r) => setTimeout(r, ms));
       authHeadersNow: async () => ({ "Content-Type": "application/json" }),
       firebaseAuth: null,
       fetch: async () => ({ ok: true, status: 201, json: async () => ({ id: 901 }) }),
+      ONLINE_TAKEOUT: false,
       tableNumber: "7",
       setSubmitBusy: (on) => { busy = on; },
       applyOrderingState() {},

@@ -60,6 +60,7 @@ function run({ fromAdmin, ok = true }) {
     fetch: async () => (ok
       ? { ok: true, status: 201, json: async () => ({ id: 901 }) }
       : { ok: false, status: 403, json: async () => ({ error: "closed_now" }) }),
+    ONLINE_TAKEOUT: false,
     tableNumber: "7",
     setSubmitBusy() {},
     applyOrderingState() {},
