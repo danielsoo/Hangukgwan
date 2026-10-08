@@ -173,7 +173,7 @@ function check(name, cond, extra = "") {
   const anon = store.orders.find((o) => o.id === r.body.id);
   check("익명 주문은 계정이 안 붙는다", anon && anon.account_id === null);
 
-  out.push("\n[포장 주문 자체도 서버에서 회원 확인]");
+  out.push("\n[현장 QR 포장 주문 — 로그인 없이 가능]");
   const takeoutBody = {
     tableNumber: "COUNTER",
     customerName: "앨리스",
@@ -181,7 +181,8 @@ function check(name, cond, extra = "") {
     items: [{ itemId: 1, qty: 1, orderType: "takeout" }],
   };
   r = await request(app).post("/api/orders").send(takeoutBody);
-  check("주소를 알아도 비회원 포장 주문 거부", r.status === 401 && r.body.error === "login_required", `${r.status} ${JSON.stringify(r.body)}`);
+  check("현장 QR 비회원도 포장 주문 성공", r.status === 201 && r.body.pickup_number, `${r.status} ${JSON.stringify(r.body)}`);
+  check("비회원 포장 주문에는 계정·VIP 할인 없음", !r.body.account_id && !r.body.vip_discount_percent, JSON.stringify(r.body));
   r = await alice.post("/api/orders").send(takeoutBody);
   check("로그인 회원 포장 주문 성공", r.status === 201 && r.body.pickup_number, `${r.status} ${JSON.stringify(r.body).slice(0, 180)}`);
   check("포장 주문에도 회원 계정이 기록됨", !!r.body.account_id && r.body.vip_discount_percent === 10, JSON.stringify(r.body));
