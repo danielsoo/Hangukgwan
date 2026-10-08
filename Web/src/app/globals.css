@@ -348,9 +348,9 @@ a:hover {
   white-space: nowrap;
 }
 .hg-editorial-portrait-signature {
-  width: min(92%, 620px);
+  width: min(110%, 760px);
   margin-top: clamp(44px, 6vw, 78px);
-  margin-left: clamp(8px, 2vw, 28px);
+  margin-left: clamp(-18px, -1vw, -4px);
 }
 
 .hg-pull-quote {
@@ -413,13 +413,13 @@ a:hover {
 }
 .hg-about-teaser-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 0.92fr) minmax(300px, 1.08fr);
-  gap: clamp(54px, 8vw, 136px);
+  grid-template-columns: minmax(340px, 1.08fr) minmax(300px, 0.92fr);
+  gap: clamp(34px, 5vw, 88px);
   align-items: center;
 }
 .hg-editorial-portrait-about {
-  width: min(90%, 620px);
-  margin-left: clamp(10px, 3vw, 48px);
+  width: min(108%, 780px);
+  margin-left: 0;
 }
 .hg-editorial-portrait-about::after {
   background:
@@ -448,7 +448,7 @@ html[data-theme='light'] .hg-pull-quote-media img {
   }
   .hg-pull-quote-copy::before { left: var(--shell-pad); }
   .hg-about-teaser-grid { grid-template-columns: 1fr; }
-  .hg-editorial-portrait-about { width: min(86%, 560px); }
+  .hg-editorial-portrait-about { width: min(96%, 680px); }
   .hg-about-teaser-copy { max-width: 680px; }
 }
 
