@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/context/LanguageContext'
 import { useAuth } from '@/context/AuthContext'
 import { AuthShell, Divider, Field, GoogleButton, Notice, SubmitButton, isPopupCancel, useAuthError } from '@/components/account/AuthShell'
+import { authHref, returnPathFromLocation } from '@/lib/returnPath'
 
 export default function SignupPage() {
   const { tr } = useLanguage()
@@ -14,6 +15,9 @@ export default function SignupPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', phone: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [returnPath, setReturnPath] = useState('/account/')
+
+  useEffect(() => setReturnPath(returnPathFromLocation()), [])
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -24,7 +28,7 @@ export default function SignupPage() {
     setBusy(true)
     try {
       await register(form)
-      window.location.href = '/account/'
+      window.location.href = returnPath
     } catch (err) {
       setError(errorText((err as Error).message))
       setBusy(false)
@@ -38,7 +42,7 @@ export default function SignupPage() {
     setBusy(true)
     try {
       await loginWithGoogle()
-      window.location.href = '/account/'
+      window.location.href = returnPath
     } catch (err) {
       const msg = (err as Error).message
       if (!isPopupCancel(msg)) setError(errorText(msg))
@@ -66,7 +70,7 @@ export default function SignupPage() {
 
       <p style={{ marginTop: 22, textAlign: 'center', fontSize: 'var(--fs-sm)', color: 'var(--ink-a6)' }}>
         {tr.auth.haveAccount}{' '}
-        <Link href="/login/" className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.login}</Link>
+        <Link href={authHref('/login/', returnPath)} className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.login}</Link>
       </p>
     </AuthShell>
   )

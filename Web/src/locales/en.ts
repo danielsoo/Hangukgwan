@@ -6,6 +6,7 @@ const en: TranslationsType = {
     eyebrow: 'Zhubei · Hsinchu · Korean Home Cooking',
     tag: 'Authentic Korean home cooking, served with quiet care.',
     cta1: 'View the menu',
+    cta2: 'Order takeout',
   },
   info: {
     hours: 'Hours',
@@ -21,7 +22,7 @@ const en: TranslationsType = {
     nav: 'Members',
     label: 'VIP Members',
     title: 'Sign in and register your VIP discount card',
-    body: 'Sign in with Google to register the physical VIP card you already hold. Please ask our staff about applying the discount when you pay at the restaurant.',
+    body: 'Sign in and register your physical VIP card. On future orders, staff can immediately recognize your membership and the discount is applied automatically.',
     google: 'Continue with Google',
     privacy: 'We only read your name and email, to link the card.',
     signedIn: 'Google account connected',
@@ -29,7 +30,7 @@ const en: TranslationsType = {
     cardHint: 'Enter the 12 digits printed on the back of your card.',
     register: 'Register card',
     doneCard: 'Registered to your account',
-    doneBody: 'Your card is registered. Our staff will help apply the discount when you pay on your next visit.',
+    doneBody: 'Your card is registered. Your membership and discount will be linked automatically on future orders.',
     doneCta: 'View the menu',
   },
   sig: {
@@ -37,7 +38,7 @@ const en: TranslationsType = {
     badge: 'Signature',
     title: 'A few dishes we stand behind',
     all: 'Full menu',
-    note: 'Browse all 49 dishes and prices in our online menu. Ordering and payment are handled at the restaurant.',
+    note: 'Browse all 49 dishes and prices online. Members can order takeout from the home page and pay at the restaurant.',
   },
   about: {
     label: 'About us',
@@ -166,6 +167,9 @@ const en: TranslationsType = {
     ordersEmpty: 'No orders yet.',
     ordersTable: 'Table',
     ordersTakeout: 'Takeout',
+    takeoutGateTitle: 'Preparing takeout ordering',
+    takeoutGateBody: 'We are confirming your membership before opening secure takeout ordering.',
+    takeoutGateError: 'We could not open takeout ordering. Please try again shortly.',
     errors: {
       invalid_email: 'Please check your email address.',
       weak_password: 'Password must be at least 8 characters.',

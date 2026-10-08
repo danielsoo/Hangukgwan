@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/context/LanguageContext'
 import { useAuth } from '@/context/AuthContext'
 import { AuthShell, Divider, Field, GoogleButton, Notice, SubmitButton, isPopupCancel, useAuthError } from '@/components/account/AuthShell'
+import { authHref, returnPathFromLocation } from '@/lib/returnPath'
 
 export default function LoginPage() {
   const { tr } = useLanguage()
@@ -15,12 +16,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [returnPath, setReturnPath] = useState('/account/')
+
+  useEffect(() => setReturnPath(returnPathFromLocation()), [])
 
   // 로그인 후에는 관리자든 손님이든 내 계정 화면으로 보낸다. 관리자는
   // 거기(그리고 헤더)에서 "관리자" 버튼을 보게 된다 — 로그인하자마자
   // 관리자 화면으로 튕겨버리면 손님으로서의 내 계정을 볼 방법이 없어진다.
   const done = () => {
-    window.location.href = '/account/'
+    window.location.href = returnPath
   }
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -67,7 +71,7 @@ export default function LoginPage() {
 
       <p style={{ marginTop: 22, textAlign: 'center', fontSize: 'var(--fs-sm)', color: 'var(--ink-a6)' }}>
         {tr.auth.noAccount}{' '}
-        <Link href="/signup/" className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.signup}</Link>
+        <Link href={authHref('/signup/', returnPath)} className="hg-link-arrow" style={{ textDecoration: 'none' }}>{tr.auth.signup}</Link>
       </p>
     </AuthShell>
   )

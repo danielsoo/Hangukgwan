@@ -6,6 +6,7 @@ const ko: TranslationsType = {
     eyebrow: 'Zhubei · Hsinchu · 한식 가정 요리',
     tag: '정갈한 한식 가정 요리를 정성으로 차려냅니다.',
     cta1: '메뉴 보기',
+    cta2: '포장 주문하기',
   },
   info: {
     hours: '영업시간',
@@ -21,7 +22,7 @@ const ko: TranslationsType = {
     nav: '회원',
     label: 'VIP Members',
     title: '로그인하고 VIP 할인카드를 등록하세요',
-    body: 'Google 계정으로 로그인한 뒤 가지고 계신 실물 VIP 할인카드를 등록할 수 있습니다. 할인 적용은 매장 결제 시 직원에게 문의해 주세요.',
+    body: '로그인한 뒤 가지고 계신 실물 VIP 할인카드를 등록하면, 다음 주문부터 직원 화면에서 회원 여부를 바로 확인하고 할인을 자동 적용합니다.',
     google: 'Google 계정으로 로그인',
     privacy: '카드 등록을 위해 이름과 이메일만 확인합니다.',
     signedIn: 'Google 계정 연결됨',
@@ -29,7 +30,7 @@ const ko: TranslationsType = {
     cardHint: '카드 뒷면의 12자리 숫자를 입력하세요.',
     register: '카드 등록',
     doneCard: '계정에 등록되었습니다',
-    doneBody: '등록되었습니다. 다음 방문 시 매장 결제 과정에서 할인 적용을 도와드리겠습니다.',
+    doneBody: '등록되었습니다. 다음 주문부터 회원 상태와 할인이 자동으로 연결됩니다.',
     doneCta: '메뉴 보기',
   },
   sig: {
@@ -37,7 +38,7 @@ const ko: TranslationsType = {
     badge: '대표',
     title: '가장 자신 있는 몇 가지',
     all: '전체 메뉴',
-    note: '전체 49가지 메뉴와 가격을 온라인 메뉴에서 편하게 확인하실 수 있습니다. 주문과 결제는 매장에서 도와드립니다.',
+    note: '전체 49가지 메뉴와 가격을 편하게 확인하세요. 회원 포장 주문은 홈에서 가능하며, 결제는 매장에서 진행합니다.',
   },
   about: {
     label: '한국관 소개',
@@ -166,6 +167,9 @@ const ko: TranslationsType = {
     ordersEmpty: '아직 주문 내역이 없습니다.',
     ordersTable: '테이블',
     ordersTakeout: '포장',
+    takeoutGateTitle: '포장 주문 준비 중',
+    takeoutGateBody: '회원 확인 후 안전한 포장 주문 화면으로 이동합니다.',
+    takeoutGateError: '포장 주문 화면을 열지 못했습니다. 잠시 후 다시 시도해 주세요.',
     errors: {
       invalid_email: '이메일 주소를 확인해 주세요.',
       weak_password: '비밀번호는 8자 이상이어야 합니다.',

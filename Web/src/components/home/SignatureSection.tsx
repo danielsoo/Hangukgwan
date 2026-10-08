@@ -53,8 +53,9 @@ export default function SignatureSection() {
             </h2>
             <span style={{ display: 'block', width: 56, height: 1, background: 'var(--gold)', marginBottom: 30 }} />
             <p style={{ fontSize: 'var(--fs-base)', lineHeight: 1.95, color: 'var(--ink-a5)', margin: '0 0 40px', maxWidth: 'min(40ch, 100%)' }}>{tr.sig.note}</p>
-            <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
+            <div className="hg-editorial-portrait hg-editorial-portrait-signature">
               <ImagePlaceholder label="招牌菜特寫 · A signature dish, close up" src={hero ? photoOf(hero.ko) : undefined} alt={hero ? `${hero.ko} ${hero.zh.split(' · ')[0]}` : undefined} />
+              <span className="hg-editorial-caption" aria-hidden="true">韓國館 · SIGNATURE</span>
             </div>
           </div>
 

@@ -29,6 +29,7 @@ export interface TranslationsType {
     eyebrow: string
     tag: string
     cta1: string
+    cta2: string
   }
   info: {
     hours: string
@@ -173,6 +174,9 @@ export interface TranslationsType {
     ordersEmpty: string
     ordersTable: string
     ordersTakeout: string
+    takeoutGateTitle: string
+    takeoutGateBody: string
+    takeoutGateError: string
     errors: {
       invalid_email: string
       weak_password: string

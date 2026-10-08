@@ -65,9 +65,12 @@ check("옛 좌우 여백 값이 남아 있지 않다", hardPad.length === 0, [..
 // 껍데기를 쓰는 곳은 폭과 여백을 둘 다 변수로 받아야 한다. 하나만 바꾸면
 // 헤더와 본문의 왼쪽 끝이 어긋난다.
 const shellUsers = files.filter((f) => fs.readFileSync(f, "utf8").includes("var(--shell-max)"));
-// 홈의 QR 주문 섹션을 없앤 뒤 현재 공통 껍데기를 쓰는 화면은 9곳이다.
+// 컴포넌트가 인라인 스타일 대신 공용 CSS 클래스를 써도 같은 껍데기를 쓰는
+// 것이다. 사진 섹션처럼 반응형 fade가 필요한 곳은 CSS에 두는 편이 맞다.
+const cssUsesShell = css.includes("max-width: var(--shell-max)") && css.includes("var(--shell-pad)");
+// 홈의 QR 주문 섹션을 없앤 뒤 현재 공통 껍데기를 쓰는 화면/스타일은 9곳이다.
 // 특정 섹션 개수보다, 공통 변수가 여러 화면에 실제로 적용되는지를 지킨다.
-check("껍데기를 쓰는 파일이 여럿이다", shellUsers.length >= 9, String(shellUsers.length));
+check("껍데기를 쓰는 파일이 여럿이다", shellUsers.length + (cssUsesShell ? 1 : 0) >= 9, String(shellUsers.length + (cssUsesShell ? 1 : 0)));
 const padMissing = shellUsers.filter((f) => !fs.readFileSync(f, "utf8").includes("var(--shell-pad)"));
 check("폭을 쓰는 곳은 여백도 같이 쓴다", padMissing.length === 0, padMissing.map((f) => path.relative(WEB, f)).join(" | "));
 

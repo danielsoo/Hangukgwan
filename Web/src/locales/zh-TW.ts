@@ -6,6 +6,7 @@ const zhTW: TranslationsType = {
     eyebrow: 'Zhubei · Hsinchu · 韓式家常料理',
     tag: '正宗韓式家常料理，以細緻的款待端上每一桌。',
     cta1: '查看菜單',
+    cta2: '會員外帶點餐',
   },
   info: {
     hours: '營業時間',
@@ -21,7 +22,7 @@ const zhTW: TranslationsType = {
     nav: '會員',
     label: 'VIP Members',
     title: '登入並綁定您的 VIP 折扣卡',
-    body: '使用 Google 帳號登入後，即可綁定手上的實體 VIP 折扣卡。折扣使用方式請於店內付款時洽詢服務人員。',
+    body: '登入後綁定手上的實體 VIP 折扣卡，下次點餐時系統會自動辨識會員身分，並在店員畫面套用折扣。',
     google: '使用 Google 帳號登入',
     privacy: '我們僅取得您的姓名與電子郵件，用於綁定卡片。',
     signedIn: '已連結 Google 帳號',
@@ -29,7 +30,7 @@ const zhTW: TranslationsType = {
     cardHint: '請輸入卡片背面的 12 位數字。',
     register: '綁定卡片',
     doneCard: '已綁定至您的帳號',
-    doneBody: '綁定完成。下次來店付款時，服務人員會協助您使用折扣。',
+    doneBody: '綁定完成。下次點餐時，會員身分與折扣會自動連結。',
     doneCta: '查看菜單',
   },
   sig: {
@@ -37,7 +38,7 @@ const zhTW: TranslationsType = {
     badge: '代表',
     title: '幾道我們最有信心的菜',
     all: '完整菜單',
-    note: '完整 49 道菜色與價格都可在線上菜單中查看。點餐與付款請於店內由服務人員協助。',
+    note: '可線上查看完整 49 道菜色與價格。會員可從首頁預訂外帶，付款仍於店內完成。',
   },
   about: {
     label: '關於韓國館',
@@ -166,6 +167,9 @@ const zhTW: TranslationsType = {
     ordersEmpty: '尚無訂單紀錄。',
     ordersTable: '桌號',
     ordersTakeout: '外帶',
+    takeoutGateTitle: '正在準備外帶點餐',
+    takeoutGateBody: '確認會員身分後，即將前往安全的外帶點餐頁面。',
+    takeoutGateError: '無法開啟外帶點餐頁面，請稍後再試。',
     errors: {
       invalid_email: '請確認電子信箱格式。',
       weak_password: '密碼至少需要 8 個字元。',

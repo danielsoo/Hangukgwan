@@ -23,7 +23,7 @@
   ],
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
-    { "source": "/:page(about|account|group|login|menu|signup|visit)/", "destination": "/:page/index.html" },
+    { "source": "/:page(about|account|group|login|menu|signup|takeout|visit)/", "destination": "/:page/index.html" },
     { "source": "/(.*)", "destination": "/api/index" }
   ],
   "crons": [

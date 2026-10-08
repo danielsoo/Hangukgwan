@@ -1744,6 +1744,7 @@
         }
         if (body.error === "seating_stale") throw new Error("seating_stale");
         if (body.error === "party_size_required") throw new Error("party_size_required");
+        if (body.error === "login_required" || body.error === "not_authenticated") throw new Error("login_required");
         if (body.error === "customer_name_required") throw new Error("customer_name_required");
         if (body.error === "customer_phone_required") throw new Error("customer_phone_required");
         if (body.error === "grill_min_qty") {
@@ -1790,6 +1791,10 @@
       if (e.message === "closed_now") alert(closedMessage());
       else if (e.message === "out_of_range") alert(t("locationOutOfRangeMsg"));
       else if (e.message === "location_required") alert(t("locationRequiredMsg"));
+      else if (e.message === "login_required") {
+        alert(t("loginRequiredMsg"));
+        location.href = "/login/?next=%2Ftakeout%2F";
+      }
       else if (e.message === "seating_stale") {
         // 이 페이지가 앞 손님 때 열린 것이다. 화면만 남아 있고 자리에는
         // 다른 분이 앉으셨다 — 그대로 담아둔 것을 보내면 그 분 계산서에

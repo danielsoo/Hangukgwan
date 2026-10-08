@@ -1,6 +1,6 @@
 const express = require("express");
 const { store, save, refreshAndSave, patchArrayItem, nextId, getPhoto, saveOrders } = require("../db");
-const { requireAdmin, requirePermission } = require("../auth");
+const { requireAdmin, requirePermission, requireUser } = require("../auth");
 const { buildQrSvg, getLogoDataUri } = require("../qr");
 const {
   hasUnpaidOrder,
@@ -56,6 +56,14 @@ async function getOrCreateCounterTable() {
   });
   return table;
 }
+
+// 홈페이지의 「포장 주문하기」가 로그인 확인을 마친 뒤 실제 포장 카운터
+// 주문 화면을 찾는 길. COUNTER 번호를 화면에 박아두지 않고 서버가 돌려준다.
+// 로그인하지 않은 사람이 주소만 직접 호출해도 포장 주문 링크를 받을 수 없다.
+router.get("/counter-link", requireUser, async (req, res) => {
+  const table = await getOrCreateCounterTable();
+  res.json({ path: `/t/${encodeURIComponent(table.number)}` });
+});
 
 /**
  * 직원 화면이 보는 자리 목록.

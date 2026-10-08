@@ -7,17 +7,18 @@ import ImagePlaceholder from '@/components/ImagePlaceholder'
 export default function AboutTeaser() {
   const { tr } = useLanguage()
   return (
-    <section style={{ background: 'var(--bg)' }}>
-      <div style={{ maxWidth: 'var(--shell-max)', margin: '0 auto', padding: 'clamp(70px, 10vw, 140px) var(--shell-pad)' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'clamp(44px, 6vw, 96px)', alignItems: 'center' }}>
-          <div style={{ position: 'relative', aspectRatio: '4 / 5' }}>
+    <section className="hg-about-teaser">
+      <div className="hg-about-teaser-inner">
+        <div className="hg-about-teaser-grid">
+          <div className="hg-editorial-portrait hg-editorial-portrait-about">
             <ImagePlaceholder
               label="廚房備料 · Kitchen preparation"
               src="/images/editorial/kitchen-chopping.jpg"
               alt="한국관 주방에서 채소를 손질하는 모습"
             />
+            <span className="hg-editorial-caption" aria-hidden="true">每日現做 · MADE EACH MORNING</span>
           </div>
-          <div>
+          <div className="hg-about-teaser-copy">
             <p
               style={{
                 fontFamily: "'Newsreader', serif",

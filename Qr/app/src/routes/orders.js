@@ -316,6 +316,16 @@ router.post("/", async (req, res) => {
   // public/js/order.js's initPartySize() already skips that modal for it.
   const orderingTable = orderingTableEarly;
   if (!orderingTable) return res.status(400).json({ error: "party_size_required" });
+  const isStaff = !!(req.session && req.session.isAdmin);
+  const customer = await resolveCustomer(req);
+
+  // 포장 카운터는 홈페이지 회원만 주문할 수 있다. 홈에서 버튼을 숨기거나
+  // 로그인 화면을 먼저 보여주는 것만으로는 주소를 저장해 둔 장난 주문을
+  // 막지 못하므로, 실제 주문을 받는 서버에서도 다시 확인한다. 직원 수기
+  // 주문과 테스터 모드는 기존대로 통과한다.
+  if (orderingTable.is_counter && !customer && !isStaff && !isTestDevice) {
+    return res.status(401).json({ error: "login_required" });
+  }
   // 테스트 기기는 인원수를 안 물어도 넣을 수 있다. 「테스트 테이블」도
   // 마찬가지다 — 그 자리에 몇 명이 앉았는지는 아무 데도 안 쓰인다(결산에
   // 안 들어가므로). 없는 자리에 넣는 것은 여전히 막는다 — 그건 우회할
@@ -371,7 +381,6 @@ router.post("/", async (req, res) => {
   //
   // 직원과 테스트 기기는 지나간다. 직원은 수기 주문으로 아무 자리에나 넣을
   // 수 있어야 하고(전화 주문, 대신 주문), 그건 이 검사가 막으려는 것이 아니다.
-  const isStaff = !!(req.session && req.session.isAdmin);
   if (!isTestDevice && !isStaff && seating.isStale(req, orderingTable)) {
     return res.status(409).json({ error: "seating_stale" });
   }
@@ -403,7 +412,6 @@ router.post("/", async (req, res) => {
   // 2026-09-08: 손님을 알아보는 경로가 홈페이지 로그인 세션과 기존 구글
   // 토큰 두 가지가 됐다. 어느 쪽이든 src/customer.js 한 곳을 거친다.
   // 로그인하지 않은 손님은 null 이고, 그건 오류가 아니라 가장 흔한 경우다.
-  const customer = await resolveCustomer(req);
   let vipCard = null;
   if (customer) {
     const candidate = store.vipCards.find((c) => cardBelongsTo(c, customer));

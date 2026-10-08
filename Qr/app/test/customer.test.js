@@ -42,7 +42,10 @@ function resetStore() {
 // 경로(PUT /api/tables/:n/party-size)가 항상 둘을 같이 쓰고, 시각이 없는
 // 인원수는 "언제 찍힌 건지 모르는 옛 데이터"로 취급돼 만료된다
 // (src/partySize.js).
-store.tables = [{ id: 1, number: "7", party_size: 2, party_size_updated_at: new Date().toISOString() }];
+store.tables = [
+  { id: 1, number: "7", party_size: 2, party_size_updated_at: new Date().toISOString() },
+  { id: 2, number: "COUNTER", label: "포장 카운터", is_counter: true },
+];
   store.orders = [];
   store.vipCards = [
     // 사장님이 발급해둔, 아직 아무도 안 가져간 카드
@@ -66,6 +69,7 @@ app.use(session({ secret: "t", resave: false, saveUninitialized: false }));
 app.use(syncSessionRole);
 app.use("/api/account", require("../src/routes/account"));
 app.use("/api/members", require("../src/routes/members"));
+app.use("/api/tables", require("../src/routes/tables"));
 app.use("/api/orders", require("../src/routes/orders"));
 app.use("/api/vip-cards", require("../src/routes/vipCards"));
 app.use("/api/auth", require("../src/routes/auth"));
@@ -100,6 +104,12 @@ function check(name, cond, extra = "") {
   check("앨리스 가입", r.status === 200, JSON.stringify(r.body));
   r = await bob.post("/api/account/register").send({ email: "bob@example.com", password: "hunter2hunter", name: "밥" });
   check("밥 가입", r.status === 200);
+
+  out.push("\n[포장 주문 입구 — 회원 전용]");
+  r = await request(app).get("/api/tables/counter-link");
+  check("비로그인은 포장 링크를 받지 못함", r.status === 401, `${r.status} ${JSON.stringify(r.body)}`);
+  r = await alice.get("/api/tables/counter-link");
+  check("로그인 회원은 포장 링크를 받음", r.status === 200 && r.body.path === "/t/COUNTER", JSON.stringify(r.body));
 
   out.push("\n[VIP 카드 — 로그인 계정으로 등록]");
   r = await request(app).get("/api/members/me");
@@ -162,6 +172,19 @@ function check(name, cond, extra = "") {
   check("익명 주문 성공", r.status === 201 && r.body.total === 230, `${r.status}`);
   const anon = store.orders.find((o) => o.id === r.body.id);
   check("익명 주문은 계정이 안 붙는다", anon && anon.account_id === null);
+
+  out.push("\n[포장 주문 자체도 서버에서 회원 확인]");
+  const takeoutBody = {
+    tableNumber: "COUNTER",
+    customerName: "앨리스",
+    customerPhone: "0912345678",
+    items: [{ itemId: 1, qty: 1, orderType: "takeout" }],
+  };
+  r = await request(app).post("/api/orders").send(takeoutBody);
+  check("주소를 알아도 비회원 포장 주문 거부", r.status === 401 && r.body.error === "login_required", `${r.status} ${JSON.stringify(r.body)}`);
+  r = await alice.post("/api/orders").send(takeoutBody);
+  check("로그인 회원 포장 주문 성공", r.status === 201 && r.body.pickup_number, `${r.status} ${JSON.stringify(r.body).slice(0, 180)}`);
+  check("포장 주문에도 회원 계정이 기록됨", !!r.body.account_id && r.body.vip_discount_percent === 10, JSON.stringify(r.body));
 
   out.push("\n[예전 구글 전용 등록도 계속 동작]");
   const { cardBelongsTo, isActive } = require("../src/vip");

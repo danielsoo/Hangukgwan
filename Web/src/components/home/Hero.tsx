@@ -101,9 +101,12 @@ export default function Hero() {
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <Link href="/menu/" className="hg-cta-solid" style={{ padding: '17px 38px', fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.2em' }}>
+        <div className="hg-hero-actions">
+          <Link href="/menu/" className="hg-cta-solid hg-hero-action" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.2em' }}>
             {tr.hero.cta1}
+          </Link>
+          <Link href="/takeout/" className="hg-cta-outline-gold hg-hero-action" style={{ fontSize: 'var(--fs-sm)', fontWeight: 500, letterSpacing: '0.16em' }}>
+            {tr.hero.cta2}
           </Link>
         </div>
       </div>

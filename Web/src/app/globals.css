@@ -265,6 +265,202 @@ a:hover {
 .hg-home-hero { margin-top: calc(-1 * var(--site-header-h)); }
 .hg-home-hero-media { height: calc(clamp(520px, 78vh, 760px) + var(--site-header-h)); }
 
+/* 홈의 두 행동은 역할이 다르다. 메뉴는 누구나 보고, 포장 주문은 로그인한
+   회원만 들어간다. 한 덩어리로 보이되 주 행동/보조 행동의 위계는 남긴다. */
+.hg-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+.hg-hero-action {
+  display: inline-flex;
+  min-width: 168px;
+  min-height: 54px;
+  padding: 14px 28px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.hg-takeout-loader {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  border: 1px solid var(--gold-a28);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: hg-spin 0.8s linear infinite;
+}
+@keyframes hg-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .hg-takeout-loader { animation: none; border-color: var(--gold-a55); }
+}
+
+/* ── 홈 사진: 액자보다 한 장의 편집면처럼 ────────────────────────────
+   사진마다 네모 테두리를 둘러 카드로 만드는 대신, 배경색으로 가장자리를
+   서서히 덮어 사진과 글이 같은 면에 놓인 듯 보이게 한다. 모양은 직선으로
+   유지해 한국관의 단정한 분위기를 지키고, 비대칭 금선과 작은 캡션으로
+   사진마다 같은 시각 언어를 준다. */
+.hg-editorial-portrait {
+  position: relative;
+  isolation: isolate;
+  aspect-ratio: 4 / 5;
+  overflow: visible;
+}
+.hg-editorial-portrait::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -16px;
+  left: -16px;
+  width: clamp(74px, 9vw, 128px);
+  height: clamp(74px, 9vw, 128px);
+  border-top: 1px solid var(--gold-a28);
+  border-left: 1px solid var(--gold-a28);
+  pointer-events: none;
+}
+.hg-editorial-portrait::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: -1px;
+  background:
+    linear-gradient(180deg, var(--bg) 0%, transparent 12%, transparent 70%, var(--bg) 100%),
+    linear-gradient(90deg, var(--bg) 0%, transparent 13%, transparent 88%, var(--bg) 100%);
+  pointer-events: none;
+}
+.hg-editorial-portrait img {
+  filter: saturate(0.88) contrast(1.04) brightness(0.88);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 8%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 8%, #000 82%, transparent 100%);
+}
+.hg-editorial-caption {
+  position: absolute;
+  z-index: 2;
+  right: -12px;
+  bottom: 24px;
+  padding: 7px 0 7px 18px;
+  border-top: 1px solid var(--gold-a28);
+  color: var(--accent);
+  font-family: 'Newsreader', serif;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.25em;
+  white-space: nowrap;
+}
+.hg-editorial-portrait-signature {
+  width: min(92%, 620px);
+  margin-top: clamp(44px, 6vw, 78px);
+  margin-left: clamp(8px, 2vw, 28px);
+}
+
+.hg-pull-quote {
+  overflow: hidden;
+  border-top: 1px solid var(--gold-a14);
+  border-bottom: 1px solid var(--gold-a14);
+  background: var(--bg-alt);
+}
+.hg-pull-quote-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  align-items: stretch;
+}
+.hg-pull-quote-media {
+  position: relative;
+  min-height: clamp(330px, 32vw, 540px);
+  overflow: hidden;
+}
+.hg-pull-quote-media img {
+  filter: saturate(0.9) contrast(1.04) brightness(0.86);
+  transform: scale(1.015);
+}
+.hg-pull-quote-media::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: -1px;
+  background:
+    linear-gradient(90deg, var(--bg-alt) 0%, transparent 7%, transparent 62%, var(--bg-alt) 100%),
+    linear-gradient(180deg, var(--bg-alt) 0%, transparent 9%, transparent 91%, var(--bg-alt) 100%);
+  pointer-events: none;
+}
+.hg-pull-quote-copy {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  margin-left: clamp(-150px, -7vw, -72px);
+  padding: clamp(54px, 7vw, 100px) clamp(28px, 5vw, 76px) clamp(54px, 7vw, 100px) clamp(72px, 8vw, 150px);
+  align-items: center;
+  background: linear-gradient(90deg, transparent 0%, var(--bg-alt) 25%, var(--bg-alt) 100%);
+}
+.hg-pull-quote-copy::before {
+  content: '“';
+  position: absolute;
+  top: clamp(18px, 3vw, 44px);
+  left: clamp(48px, 7vw, 118px);
+  color: var(--gold-a28);
+  font-family: 'Newsreader', serif;
+  font-size: clamp(70px, 8vw, 130px);
+  font-style: italic;
+  line-height: 1;
+}
+
+.hg-about-teaser { background: var(--bg); }
+.hg-about-teaser-inner {
+  max-width: var(--shell-max);
+  margin: 0 auto;
+  padding: clamp(70px, 10vw, 140px) var(--shell-pad);
+}
+.hg-about-teaser-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.92fr) minmax(300px, 1.08fr);
+  gap: clamp(54px, 8vw, 136px);
+  align-items: center;
+}
+.hg-editorial-portrait-about {
+  width: min(90%, 620px);
+  margin-left: clamp(10px, 3vw, 48px);
+}
+.hg-editorial-portrait-about::after {
+  background:
+    linear-gradient(180deg, var(--bg) 0%, transparent 12%, transparent 68%, var(--bg) 100%),
+    linear-gradient(90deg, var(--bg) 0%, transparent 14%, transparent 86%, var(--bg) 100%);
+}
+
+html[data-theme='light'] .hg-editorial-portrait img,
+html[data-theme='light'] .hg-pull-quote-media img {
+  filter: saturate(0.9) contrast(1.02) brightness(0.96);
+}
+
+@media (max-width: 860px) {
+  .hg-pull-quote-grid { grid-template-columns: 1fr; }
+  .hg-pull-quote-media { min-height: 0; aspect-ratio: 16 / 10; }
+  .hg-pull-quote-media::after {
+    background:
+      linear-gradient(90deg, var(--bg-alt) 0%, transparent 8%, transparent 92%, var(--bg-alt) 100%),
+      linear-gradient(180deg, var(--bg-alt) 0%, transparent 10%, transparent 66%, var(--bg-alt) 100%);
+  }
+  .hg-pull-quote-copy {
+    margin: clamp(-100px, -12vw, -62px) 0 0;
+    padding: clamp(70px, 13vw, 118px) var(--shell-pad) clamp(58px, 9vw, 90px);
+    justify-content: center;
+    background: linear-gradient(180deg, transparent 0%, var(--bg-alt) 30%, var(--bg-alt) 100%);
+  }
+  .hg-pull-quote-copy::before { left: var(--shell-pad); }
+  .hg-about-teaser-grid { grid-template-columns: 1fr; }
+  .hg-editorial-portrait-about { width: min(86%, 560px); }
+  .hg-about-teaser-copy { max-width: 680px; }
+}
+
+@media (max-width: 560px) {
+  .hg-hero-actions { width: min(100%, 360px); }
+  .hg-hero-action { width: 100%; min-height: 50px; }
+  .hg-editorial-portrait-signature,
+  .hg-editorial-portrait-about { width: calc(100% - 12px); margin-left: 12px; }
+  .hg-editorial-portrait::before { top: -10px; left: -10px; }
+  .hg-editorial-caption { right: 0; letter-spacing: 0.16em; }
+}
+
 .hg-close-btn {
   border: 1px solid var(--gold-a22);
   color: var(--ink3);
