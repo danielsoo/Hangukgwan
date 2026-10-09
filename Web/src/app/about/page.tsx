@@ -52,7 +52,7 @@ export default function AboutPage() {
             }}
           >
             <ImagePlaceholder
-              label="韓國館本店 · Hangukgwan main restaurant"
+              label="韓國館總店 · Hangukgwan main restaurant"
               src="/images/locations/main-exterior-building-vertical.jpg"
               alt="밤에 불이 켜진 한국관 본점 건물과 붉은 간판"
               objectPosition="center"
@@ -78,7 +78,7 @@ export default function AboutPage() {
                 color: 'var(--ink)',
               }}
             >
-              韓國館 · 竹北本店
+              韓國館 · 竹北總店
             </p>
           </div>
         </div>

@@ -59,14 +59,14 @@ const zhTW: TranslationsType = {
   loc: {
     label: '門市資訊',
     title: '竹北兩處門市',
-    intro: '本店開放給所有客人，太元一街的直營店僅供鄰近園區企業的員工使用。',
-    mainLabel: '本店',
-    branchLabel: '企業直營店',
+    intro: '總店開放給所有客人，台元三店僅供鄰近園區企業的員工使用。',
+    mainLabel: '總店',
+    branchLabel: '台元三店',
     mapCta: '開啟地圖',
     accessLabel: '使用對象',
     branchAccess: '園區企業員工',
     nearby: '鄰近',
-    branchNote: '此門市為企業合作據點，僅限三星、台積電等鄰近園區企業之員工使用，需公司帳號。一般客人請至縣政九路本店。',
+    branchNote: '此門市為企業合作據點，僅限三星、台積電等鄰近園區企業之員工使用，需公司帳號。一般客人請至縣政九路總店。',
   },
   group: {
     label: '團體與公司訂餐',

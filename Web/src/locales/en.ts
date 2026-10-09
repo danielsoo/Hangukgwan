@@ -59,9 +59,9 @@ const en: TranslationsType = {
   loc: {
     label: 'Visit us',
     title: 'Two rooms in Zhubei',
-    intro: 'The main restaurant is open to everyone. The Taiyuan 1st Street room serves employees of the neighbouring corporate campuses only.',
+    intro: 'The main restaurant is open to everyone. The Taiyuan Branch serves employees of the neighbouring corporate campuses only.',
     mainLabel: 'Main restaurant',
-    branchLabel: 'Corporate branch',
+    branchLabel: 'Taiyuan Branch',
     mapCta: 'Open in Maps',
     accessLabel: 'Access',
     branchAccess: 'Corporate employees',

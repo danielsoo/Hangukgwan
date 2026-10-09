@@ -42,16 +42,16 @@ export default function VisitPage() {
         <article id="main-store" className="hg-visit-card">
           <div className="hg-visit-photo">
             <ImagePlaceholder
-              label="本店 · Main restaurant"
+              label="總店 · Main restaurant"
               src={LOCATION_PHOTOS.main.detail}
-              alt="韓國館 縣政九路本店 외관"
+              alt="韓國館 縣政九路總店 외관"
             />
             <span className="hg-visit-photo-number" aria-hidden="true">01</span>
           </div>
 
           <div className="hg-visit-copy">
             <p className="hg-visit-eyebrow">Nº 01 · {tr.loc.mainLabel}</p>
-            <h2>縣政九路本店</h2>
+            <h2>縣政九路總店</h2>
             <p className="hg-visit-address">新竹縣竹北市縣政九路135巷32號</p>
             <p className="hg-visit-address-en">No. 32, Ln. 135, Xianzhengjiu Rd., Zhubei City, Hsinchu County</p>
 
@@ -87,16 +87,16 @@ export default function VisitPage() {
         <article id="branch-store" className="hg-visit-card hg-visit-card-reverse">
           <div className="hg-visit-photo">
             <ImagePlaceholder
-              label="直營店 · Corporate branch"
+              label="台元三店 · Taiyuan Branch"
               src={LOCATION_PHOTOS.branch.detail}
-              alt="韓國館 太元一街直營店 매장 전경"
+              alt="韓國館 台元三店 매장 전경"
             />
             <span className="hg-visit-photo-number" aria-hidden="true">02</span>
           </div>
 
           <div className="hg-visit-copy">
             <p className="hg-visit-eyebrow">Nº 02 · {tr.loc.branchLabel}</p>
-            <h2>太元一街直營店</h2>
+            <h2>台元三店</h2>
             <p className="hg-visit-address">新竹縣竹北市太元一街7號</p>
             <p className="hg-visit-address-en">No. 7, Taiyuan 1st St., Zhubei City, Hsinchu County</p>
 

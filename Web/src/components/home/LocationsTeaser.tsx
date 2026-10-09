@@ -44,9 +44,9 @@ export default function LocationsTeaser() {
           <div>
             <div style={{ position: 'relative', aspectRatio: '16 / 10', marginBottom: 30 }}>
               <ImagePlaceholder
-                label="本店 · Main restaurant"
+                label="總店 · Main restaurant"
                 src={LOCATION_PHOTOS.main.card}
-                alt="韓國館 縣政九路本店 야간 외관"
+                alt="韓國館 縣政九路總店 야간 외관"
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>
@@ -86,9 +86,9 @@ export default function LocationsTeaser() {
           <div>
             <div style={{ position: 'relative', aspectRatio: '16 / 10', marginBottom: 30 }}>
               <ImagePlaceholder
-                label="直營店 · Corporate branch"
+                label="台元三店 · Taiyuan Branch"
                 src={LOCATION_PHOTOS.branch.card}
-                alt="韓國館 太元一街直營店 카운터"
+                alt="韓國館 台元三店 카운터"
               />
             </div>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, marginBottom: 20 }}>

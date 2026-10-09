@@ -55,7 +55,7 @@ const zhCN: TranslationsType = {
     label: '交通指引',
     title: '两个地点\n方便您选择',
     main: {
-      label: '本店',
+      label: '总店',
       addr: '竹北市县政九路135巷32号',
       addrZh: '新竹县竹北市县政九路135巷32号',
       hours: '周二 – 周日  11:00 – 14:00, 17:00 – 21:00',
@@ -63,7 +63,7 @@ const zhCN: TranslationsType = {
       mapCta: '查看地图',
     },
     branch: {
-      label: '直营店（企业专属）',
+      label: '台元三店',
       addr: '竹北市太元一街7号',
       addrZh: '新竹县竹北市太元一街7号',
       hours: '仅供企业员工使用',

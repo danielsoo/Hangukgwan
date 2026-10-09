@@ -59,9 +59,9 @@ const ko: TranslationsType = {
   loc: {
     label: '오시는 길',
     title: '주부에 두 곳',
-    intro: '본점은 누구나 오실 수 있고, 태원일가의 지점은 인근 단지 기업 임직원 전용입니다.',
+    intro: '본점은 누구나 오실 수 있고, 태원일가의 2호점은 인근 단지 기업 임직원 전용입니다.',
     mainLabel: '본점',
-    branchLabel: '기업 전용점',
+    branchLabel: '2호점',
     mapCta: '지도 열기',
     accessLabel: '이용 대상',
     branchAccess: '단지 기업 임직원',

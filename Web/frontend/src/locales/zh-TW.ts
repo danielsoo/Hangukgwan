@@ -55,7 +55,7 @@ const zhTW: TranslationsType = {
     label: '交通指引',
     title: '兩個地點\n方便您選擇',
     main: {
-      label: '本店',
+      label: '總店',
       addr: '竹北市縣政九路135巷32號',
       addrZh: '新竹縣竹北市縣政九路135巷32號',
       hours: '週二 – 週日  11:00 – 14:00, 17:00 – 21:00',
@@ -63,7 +63,7 @@ const zhTW: TranslationsType = {
       mapCta: '查看地圖',
     },
     branch: {
-      label: '直營店（企業專屬）',
+      label: '台元三店',
       addr: '竹北市太元一街7號',
       addrZh: '新竹縣竹北市太元一街7號',
       hours: '僅供企業員工使用',

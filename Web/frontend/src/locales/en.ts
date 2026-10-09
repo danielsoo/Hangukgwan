@@ -63,7 +63,7 @@ const en: TranslationsType = {
       mapCta: 'View on Map',
     },
     branch: {
-      label: 'Corporate Branch',
+      label: 'Taiyuan Branch',
       addr: 'No. 7, Taiyuan 1st St., Zhubei City',
       addrZh: '新竹縣竹北市太元一街7號',
       hours: 'Corporate Employees Only',
