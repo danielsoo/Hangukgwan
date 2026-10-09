@@ -7,6 +7,10 @@ const COLLECTION = "owner_login_activity";
 const ONLINE_WINDOW_MS = 150 * 1000;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+// 관리자 API는 몇 초마다 들어온다. 접속 기록 때문에 그때마다 Mongo를 쓰지
+// 않도록 인스턴스 안에서 최근 신호를 잠깐 기억한다. 세션 객체에 적으면
+// connect-mongo가 세션까지 다시 저장하므로 주문 처리 성능이 나빠진다.
+const recentTouches = new Map();
 
 function sessionKey(req) {
   const sid = String((req && req.sessionID) || "");
@@ -103,6 +107,7 @@ async function recordLogin(req, { method = "shared_password", email = null, user
   };
   const col = await collection();
   await col.updateOne({ session_key: key }, { $set: row }, { upsert: true });
+  recentTouches.set(key, now.getTime());
   return true;
 }
 
@@ -128,11 +133,43 @@ async function touch(req) {
         last_seen_at: now,
         expires_at: sessionExpiry(req),
         role: req && req.session && req.session.role === "staff" ? "staff" : "owner",
-        ...requestDetails(req),
       },
     }
   );
+  recentTouches.set(key, now.getTime());
   return true;
+}
+
+async function touchIfDue(req, intervalMs = 55 * 1000) {
+  const key = sessionKey(req);
+  if (!key) return false;
+  const now = Date.now();
+  const last = recentTouches.get(key) || 0;
+  if (now - last < intervalMs) return false;
+
+  // 오래 켜 두는 서버 인스턴스에서도 맵이 끝없이 자라지 않게 가끔 청소한다.
+  if (recentTouches.size > 1000) {
+    const staleBefore = now - 12 * 60 * 60 * 1000;
+    for (const [storedKey, touchedAt] of recentTouches) {
+      if (touchedAt < staleBefore) recentTouches.delete(storedKey);
+    }
+  }
+
+  // 동시 요청 두 개가 함께 들어와도 한 번만 쓰도록 먼저 표시한다. 실패하면
+  // 지워 다음 관리자 요청에서 다시 시도한다.
+  recentTouches.set(key, now);
+  try {
+    await touch(req);
+    return true;
+  } catch (e) {
+    recentTouches.delete(key);
+    throw e;
+  }
+}
+
+function forgetRecentTouch(req) {
+  const key = sessionKey(req);
+  if (key) recentTouches.delete(key);
 }
 
 async function recordLogout(req) {
@@ -144,6 +181,7 @@ async function recordLogout(req) {
     { session_key: key },
     { $set: { last_seen_at: now, logged_out_at: now } }
   );
+  recentTouches.delete(key);
   return !!(result && result.matchedCount);
 }
 
@@ -190,6 +228,8 @@ module.exports = {
   describeDevice,
   recordLogin,
   touch,
+  touchIfDue,
+  forgetRecentTouch,
   recordLogout,
   listRecent,
 };

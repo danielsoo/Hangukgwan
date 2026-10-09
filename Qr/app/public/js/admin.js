@@ -1867,6 +1867,11 @@
       ownerActivityLoadError: "로그인 기록을 불러오지 못했어요.",
       ownerActivityEmpty: "아직 저장된 사장·직원 로그인 기록이 없어요.",
       ownerActivitySummary: "현재 접속 {online}곳 · 최근 기록 {total}건",
+      ownerActivityOwnerGroup: "사장 접속",
+      ownerActivityStaffGroup: "직원 접속",
+      ownerActivityGroupSummary: "접속 중 {online}곳 · 전체 {total}건",
+      ownerActivityOwnerEmpty: "아직 사장 로그인 기록이 없어요.",
+      ownerActivityStaffEmpty: "아직 직원 로그인 기록이 없어요. 로그인된 태블릿은 관리자 화면에서 주문을 조회하면 자동으로 표시됩니다.",
       ownerActivityOnline: "현재 접속 중",
       ownerActivityInactive: "접속 종료 / 비활성",
       ownerActivityLoggedOut: "로그아웃",
@@ -3190,6 +3195,11 @@
       ownerActivityLoadError: "無法載入登入紀錄。",
       ownerActivityEmpty: "目前沒有負責人或店員的登入紀錄。",
       ownerActivitySummary: "目前在線 {online} 處 · 最近紀錄 {total} 筆",
+      ownerActivityOwnerGroup: "負責人連線",
+      ownerActivityStaffGroup: "店員連線",
+      ownerActivityGroupSummary: "在線 {online} 處 · 共 {total} 筆",
+      ownerActivityOwnerEmpty: "目前沒有負責人登入紀錄。",
+      ownerActivityStaffEmpty: "目前沒有店員登入紀錄。已登入的平板在管理畫面讀取訂單後會自動顯示。",
       ownerActivityOnline: "目前在線",
       ownerActivityInactive: "已離線 / 無活動",
       ownerActivityLoggedOut: "已登出",
@@ -15067,12 +15077,7 @@
         .replace("{online}", rows.filter((row) => row.isOnline).length)
         .replace("{total}", rows.length);
     }
-    if (!rows.length) {
-      wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("ownerActivityEmpty"))}</p>`;
-      return;
-    }
-    wrap.innerHTML = rows
-      .map((row) => {
+    const renderRow = (row) => {
         const stateKey = row.isOnline
           ? "ownerActivityOnline"
           : row.loggedOutAt
@@ -15105,8 +15110,28 @@
           </div>
           <div class="owner-activity-times">${times}</div>
         </article>`;
-      })
-      .join("");
+    };
+    const renderGroup = (role, titleKey, emptyKey) => {
+      const groupRows = rows.filter((row) => row.role === role);
+      const online = groupRows.filter((row) => row.isOnline).length;
+      const body = groupRows.length
+        ? groupRows.map(renderRow).join("")
+        : `<p class="owner-activity-empty">${escapeHtml(T(emptyKey))}</p>`;
+      const groupSummary = T("ownerActivityGroupSummary")
+        .replace("{online}", online)
+        .replace("{total}", groupRows.length);
+      return `<section class="owner-activity-group owner-activity-group-${role}" aria-label="${escapeHtml(T(titleKey))}">
+        <div class="owner-activity-group-heading">
+          <h3>${escapeHtml(T(titleKey))}</h3>
+          <span>${escapeHtml(groupSummary)}</span>
+        </div>
+        <div class="owner-activity-group-list">${body}</div>
+      </section>`;
+    };
+    wrap.innerHTML = [
+      renderGroup("owner", "ownerActivityOwnerGroup", "ownerActivityOwnerEmpty"),
+      renderGroup("staff", "ownerActivityStaffGroup", "ownerActivityStaffEmpty"),
+    ].join("");
   }
 
   async function loadOwnerActivity() {

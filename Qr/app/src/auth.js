@@ -1,6 +1,14 @@
 const { store } = require("./db");
 const accounts = require("./accounts");
+const ownerActivity = require("./ownerActivity");
 const { isAdminRole } = accounts;
+
+// 이미 로그인된 채로 하루 종일 켜 두는 매장 태블릿은 새 기능이 배포돼도
+// 다시 로그인하지 않는다. 브라우저의 heartbeat 코드에만 의존하면 그런
+// 태블릿은 주문을 계속 받고 있으면서도 접속 기록에는 영영 나타나지 않는다.
+// 관리자 API 요청 자체를 접속 신호로 보되, Mongo 쓰기가 주문 폴링(4초)마다
+// 생기지 않도록 세션별로 55초에 한 번만 기록한다.
+const ADMIN_PRESENCE_INTERVAL_MS = 55 * 1000;
 
 // Keeps req.session.role honest for account-based logins.
 //
@@ -33,6 +41,23 @@ async function syncSessionRole(req, res, next) {
     // request continues on the role already in the session. Anything that
     // actually needs the database is about to fail on its own anyway.
     console.error("[auth] session role sync failed:", e.message);
+  }
+  next();
+}
+
+async function trackAdminPresence(req, res, next) {
+  if (!req.session || !isAdminRole(req.session.role)) return next();
+
+  // 새 화면이 직접 보내는 heartbeat는 해당 라우트가 저장한다. 여기서까지
+  // 저장하면 같은 요청으로 두 번 쓰게 된다.
+  if (String(req.originalUrl || req.url || "").startsWith("/api/auth/owner-activity/heartbeat")) {
+    return next();
+  }
+
+  try {
+    await ownerActivity.touchIfDue(req, ADMIN_PRESENCE_INTERVAL_MS);
+  } catch (e) {
+    console.error("[owner-activity] automatic presence failed:", e.message);
   }
   next();
 }
@@ -118,4 +143,13 @@ function requireUser(req, res, next) {
   return res.status(401).json({ error: "not_authenticated" });
 }
 
-module.exports = { requireAdmin, requirePermission, requireOwner, requireTodayForStaff, requireUser, syncSessionRole };
+module.exports = {
+  requireAdmin,
+  requirePermission,
+  requireOwner,
+  requireTodayForStaff,
+  requireUser,
+  syncSessionRole,
+  trackAdminPresence,
+  ADMIN_PRESENCE_INTERVAL_MS,
+};

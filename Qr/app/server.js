@@ -422,6 +422,11 @@ app.use(
 // every route that guards on a role.
 app.use(require("./src/auth").syncSessionRole);
 
+// 브라우저 화면 버전과 무관하게, 로그인된 관리자 기기가 API를 쓰고 있으면
+// 접속 기록에 남긴다. 배포 전에 이미 로그인해 둔 직원 태블릿도 다음 주문
+// 조회 요청부터 자동으로 직원 접속으로 잡힌다.
+app.use(require("./src/auth").trackAdminPresence);
+
 // The unified customer+admin login (사장님 요청 2026-09-08). /api/auth
 // below is the legacy password-only admin login, kept as the never-locked-out
 // fallback; /api/account is the one the website's login form uses.

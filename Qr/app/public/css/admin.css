@@ -1813,7 +1813,18 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .owner-activity-heading button:hover { background: #f1f6fc; }
 .owner-activity-summary { margin: 18px 0 10px; color: var(--navy); font-size: 14px; font-weight: 800; }
-.owner-activity-list { display: grid; gap: 10px; }
+.owner-activity-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.owner-activity-group {
+  min-width: 0; padding: 14px; border: 1px solid #dbe2eb; border-radius: 14px; background: rgba(255,255,255,.72);
+}
+.owner-activity-group-owner { border-top: 4px solid #c8922d; }
+.owner-activity-group-staff { border-top: 4px solid #5279ad; }
+.owner-activity-group-heading {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 11px;
+}
+.owner-activity-group-heading h3 { margin: 0; color: var(--ink); font-size: 17px; }
+.owner-activity-group-heading span { color: var(--muted); font-size: 12px; font-weight: 700; text-align: right; }
+.owner-activity-group-list { display: grid; gap: 10px; }
 .owner-activity-row {
   padding: 14px 15px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.9);
 }
@@ -1840,7 +1851,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .owner-activity-meta span, .owner-activity-times span { overflow-wrap: anywhere; }
 .owner-activity-times { padding-top: 8px; border-top: 1px dashed #e4e8ed; font-size: 12px; }
-.owner-activity-empty { margin: 0; padding: 18px 0; color: var(--muted); text-align: center; }
+.owner-activity-empty { margin: 0; padding: 20px 8px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.55; }
 .accounts-list-title { max-width: 900px; margin-bottom: 12px; }
 .accounts-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; max-width: 900px; }
 .accounts-toolbar input {
@@ -1877,6 +1888,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .owner-activity-heading { flex-direction: column; }
   .owner-activity-heading button { width: 100%; }
   .owner-activity-meta, .owner-activity-times { flex-direction: column; gap: 4px; }
+  .owner-activity-list { grid-template-columns: 1fr; }
 }
 
 /* 「손님 나감 (인원수 비우기)」 — 결제할 게 없는 테이블에만 나온다.

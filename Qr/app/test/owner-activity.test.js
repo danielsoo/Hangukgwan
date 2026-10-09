@@ -42,6 +42,13 @@ app.use(
   })
 );
 app.use(require("../src/auth").syncSessionRole);
+app.use(require("../src/auth").trackAdminPresence);
+// 실제로는 55초가 지나면 다시 기록한다. 테스트에서는 이미 로그인된 오래된
+// 태블릿 상황을 기다리지 않고 만들기 위해 최근 신호 제한만 지운다.
+app.post("/test/forget-presence-throttle", (req, res) => {
+  activity.forgetRecentTouch(req);
+  res.json({ ok: true });
+});
 app.use("/api/account", require("../src/routes/account"));
 app.use("/api/auth", require("../src/routes/auth"));
 
@@ -97,6 +104,17 @@ function check(name, cond, extra = "") {
   const sharedStaff = (r.body.activity || []).find((row) => row.role === "staff" && row.loginMethod === "shared_password");
   check("사장은 직원 공용 로그인을 확인", !!sharedStaff && sharedStaff.isOnline === true, JSON.stringify(r.body.activity));
 
+  out.push("\n[예전 화면을 켜 둔 직원 태블릿 자동 발견]");
+  // 배포 전 로그인된 기기에는 로그인 기록이 없다고 가정한다. 새 JS의
+  // heartbeat를 보내지 않아도 일반 관리자 API 요청 하나로 복구돼야 한다.
+  await fake.__db.collection(activity.COLLECTION).deleteMany({ role: "staff" });
+  await staff.post("/test/forget-presence-throttle");
+  r = await staff.get("/api/auth/me").set("user-agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit Chrome/140.0 Safari/537.36");
+  check("기존 직원 세션은 재로그인 없이 관리자 요청으로 등록", r.status === 200 && r.body.role === "staff", JSON.stringify(r.body));
+  r = await owner.get("/api/auth/owner-activity");
+  const recoveredStaff = (r.body.activity || []).find((row) => row.role === "staff");
+  check("복구된 태블릿은 직원·기기 정보로 표시", recoveredStaff && recoveredStaff.loginMethod === "existing_session" && /Android 태블릿/.test(recoveredStaff.device), JSON.stringify(recoveredStaff));
+
   const future = await activity.listRecent(50, new Date(Date.now() + activity.ONLINE_WINDOW_MS + 1000));
   check("최근 신호가 끊기면 비활성", future[0] && future[0].isOnline === false, JSON.stringify(future[0]));
 
@@ -149,6 +167,7 @@ function check(name, cond, extra = "") {
   check("주문 폴링을 바꿔도 접속 신호를 끄지 않음", stopPollingStart >= 0 && !stopPollingCode.includes("stopOwnerPresence()"));
   check("로그아웃할 때만 접속 신호를 명시적으로 끔", /logoutBtn[\s\S]+?stopOwnerPresence\(\);[\s\S]+?stopPolling\(\);/.test(adminJs));
   check("접속 상태 새로고침은 이 기기의 신호부터 갱신", /ownerActivityRefreshBtn[^\n]+onclick = sendOwnerPresence/.test(adminJs));
+  check("사장과 직원 기록을 별도 박스로 렌더링", /renderGroup\("owner"[\s\S]+renderGroup\("staff"/.test(adminJs));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);
