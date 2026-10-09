@@ -2,14 +2,13 @@
 //
 // 속도 진단용 request_log(14일)와 분리한다. 여기는 사람이 실제로 바꾸려 한
 // 작업만 MongoDB에 남기며, 사장 화면에서 「누가·어디서·어떤 기기로·무엇을」
-// 했는지 확인하는 장부다. 무료 DB가 무한히 차지 않도록 180일 보관한다.
+// 했는지 확인하는 장부다. 이 장부는 자동 삭제하지 않는다.
 //
 // 요청 본문은 절대 받거나 저장하지 않는다. 비밀번호·손님 연락처·금액 입력이
 // 섞일 수 있기 때문이다. 작업 분류, 가린 주소, 안전한 대상 이름만 기록한다.
 const ownerActivity = require("./ownerActivity");
 
 const COLLECTION = "admin_audit_log";
-const KEEP_DAYS = 180;
 const MAX_BATCH = 300;
 let queue = [];
 let flushing = null;
@@ -74,4 +73,4 @@ async function flush(db) {
   return flushing;
 }
 
-module.exports = { COLLECTION, KEEP_DAYS, MAX_BATCH, rowFromRequest, record, pending, flush };
+module.exports = { COLLECTION, MAX_BATCH, rowFromRequest, record, pending, flush };

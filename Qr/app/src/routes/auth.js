@@ -143,7 +143,7 @@ router.get("/admin-audit", requireOwner, async (req, res) => {
     const requestLog = require("../requestLog");
     await connectDB();
     // 이전 배포가 14일짜리 속도 기록에 남긴 감사 줄도 당분간 같이 보여준다.
-    // 새 기록은 별도 admin_audit_log에 180일 동안 확정 저장된다.
+    // 새 기록은 별도 admin_audit_log에 보관하며 자동 삭제하지 않는다.
     await requestLog.flush(getDb());
     await adminAudit.flush(getDb());
     const limit = Math.max(1, Math.min(100, Number(req.query && req.query.limit) || 40));
@@ -157,7 +157,7 @@ router.get("/admin-audit", requireOwner, async (req, res) => {
     ]);
     const merged = rows.concat(legacyRows).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, limit);
     res.json({
-      keepDays: adminAudit.KEEP_DAYS,
+      retention: "permanent",
       storage: "mongodb",
       audit: merged.map((row) => ({
         id: String(row._id || ""),

@@ -104,12 +104,12 @@ function check(name, cond, extra = "") {
   const auditResponse = await boss.get("/api/auth/admin-audit?limit=20");
   const securityAudit = (auditResponse.body.audit || []).find((row) => row.action === "security_change");
   check("관리자 변경 기록을 사장이 조회", auditResponse.status === 200 && securityAudit && securityAudit.actorRole === "owner", JSON.stringify(auditResponse.body));
-  check("감사 기록 보관소와 기간을 알려줌", auditResponse.body.storage === "mongodb" && auditResponse.body.keepDays === adminAudit.KEEP_DAYS, JSON.stringify(auditResponse.body));
+  check("감사 기록은 MongoDB에 계속 보관", auditResponse.body.storage === "mongodb" && auditResponse.body.retention === "permanent", JSON.stringify(auditResponse.body));
   check("IP·위치·기기·작업 주소를 함께 반환", securityAudit && securityAudit.ip === "203.0.113.77" && securityAudit.city === "Zhubei City" && securityAudit.country === "TW" && /Windows PC/.test(securityAudit.device || "") && securityAudit.route === "/api/auth/set-staff-password", JSON.stringify(securityAudit));
   const storedAudit = await handle.collection(adminAudit.COLLECTION).find({}).toArray();
   check("변경 기록은 별도 MongoDB 컬렉션에 저장", storedAudit.some((row) => row.action === "security_change" && row.ip === "203.0.113.77"), JSON.stringify(storedAudit));
-  const auditTtl = handle.collection(adminAudit.COLLECTION).indexes.find((idx) => idx.spec && idx.spec.created_at === 1);
-  check("감사 장부는 180일 뒤 정리되는 TTL 인덱스", auditTtl && auditTtl.opts.expireAfterSeconds === adminAudit.KEEP_DAYS * 24 * 60 * 60, JSON.stringify(auditTtl));
+  const auditIndexes = handle.collection(adminAudit.COLLECTION).indexes.filter((idx) => idx.spec && idx.spec.created_at);
+  check("감사 장부에는 자동 삭제 TTL이 없음", auditIndexes.some((idx) => idx.spec.created_at === -1) && auditIndexes.every((idx) => idx.opts.expireAfterSeconds === undefined), JSON.stringify(auditIndexes));
   check("비밀번호 입력값은 감사 기록에 저장하지 않음", !JSON.stringify(storedAudit).includes("newstaff123"));
 
   out.push("\n[요약이 세 가지 질문에 답한다]");

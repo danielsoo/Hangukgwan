@@ -1,15 +1,25 @@
-// 관리자 변경 기록은 속도 기록보다 오래 보되 무한히 쌓이지 않게 180일 TTL.
-// 완료 표시는 DB 전체에 하나라 서버리스 인스턴스마다 인덱스를 다시 확인하지 않는다.
+// 관리자 변경 기록은 자동 삭제하지 않는다. 잠시 배포됐을 수 있는 180일 TTL
+// 인덱스도 찾아 제거한 뒤, 조회 속도만 위한 일반 인덱스로 다시 만든다.
 const adminAudit = require("../adminAudit");
 
-const MIGRATION_FLAG = "migration_2026_10_09_admin_audit_index_applied";
+const MIGRATION_FLAG = "migration_2026_10_09_admin_audit_permanent_index_applied";
 
 async function applyAdminAuditIndex20261009(store, { getDb, connectDB, saveFields }) {
   if (store.settings && store.settings[MIGRATION_FLAG]) return;
   await connectDB();
-  await getDb().collection(adminAudit.COLLECTION).createIndex(
-    { created_at: 1 },
-    { expireAfterSeconds: adminAudit.KEEP_DAYS * 24 * 60 * 60 }
+  const collection = getDb().collection(adminAudit.COLLECTION);
+  // 이전 코드의 기본 이름이다. 인덱스가 없으면 MongoDB 오류 26(IndexNotFound)은
+  // 정상이다. 테스트용 DB처럼 dropIndex가 없는 구현도 그대로 통과한다.
+  if (typeof collection.dropIndex === "function") {
+    try {
+      await collection.dropIndex("created_at_1");
+    } catch (e) {
+      if (!(e && (e.code === 26 || e.codeName === "IndexNotFound"))) throw e;
+    }
+  }
+  await collection.createIndex(
+    { created_at: -1 },
+    { name: "admin_audit_created_at_desc" }
   );
   const appliedAt = new Date().toISOString();
   store.settings = store.settings || {};
