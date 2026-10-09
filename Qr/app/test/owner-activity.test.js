@@ -27,6 +27,7 @@ const accounts = require("../src/accounts");
 store.settings = {
   admin_password_hash: bcrypt.hashSync("ownerpass123", 10),
   staff_password_hash: bcrypt.hashSync("staffpass123", 10),
+  sensitive_pin_hash: bcrypt.hashSync("2468", 4),
   staff_permissions: {},
 };
 
@@ -140,13 +141,16 @@ function check(name, cond, extra = "") {
   check("원문 세션 ID 대신 HMAC 대상 키만 제공", forceTarget && /^[a-f0-9]{64}$/.test(forceTarget.id) && !JSON.stringify(forceTarget).includes(forcedReq.sessionID), JSON.stringify(forceTarget));
   r = await staff.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`);
   check("직원은 다른 기기 강제 로그아웃 불가", r.status === 401, `${r.status} ${JSON.stringify(r.body)}`);
-  r = await owner.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`);
+  r = await owner.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`).send({ pin: "0000" });
+  check("보안 비밀번호가 틀리면 강제 로그아웃 불가", r.status === 401 && r.body.error === "wrong_pin", `${r.status} ${JSON.stringify(r.body)}`);
+  check("비밀번호가 틀리면 대상 세션을 그대로 둠", !!(await fake.__db.collection("sessions").findOne({ _id: forcedReq.sessionID })));
+  r = await owner.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`).send({ pin: "2468" });
   check("사장은 다른 기기 강제 로그아웃", r.status === 200 && r.body.sessionDeleted === true, `${r.status} ${JSON.stringify(r.body)}`);
   check("대상 세션이 실제로 삭제됨", !(await fake.__db.collection("sessions").findOne({ _id: forcedReq.sessionID })));
   r = await owner.get("/api/auth/owner-activity");
   const forcedRow = (r.body.activity || []).find((row) => row.id === forceTarget.id);
   check("강제 종료 시각·실행 역할이 기록됨", forcedRow && forcedRow.forcedOutAt && forcedRow.forcedOutByRole === "owner" && forcedRow.isOnline === false, JSON.stringify(forcedRow));
-  r = await owner.post(`/api/auth/owner-activity/${first.id}/force-logout`);
+  r = await owner.post(`/api/auth/owner-activity/${first.id}/force-logout`).send({ pin: "2468" });
   check("현재 기기는 실수로 강제 종료하지 못함", r.status === 400 && r.body.error === "current_session", `${r.status} ${JSON.stringify(r.body)}`);
 
   out.push("\n[계정 로그인과 로그아웃]");
@@ -193,6 +197,7 @@ function check(name, cond, extra = "") {
   check("접속 상태 새로고침은 이 기기의 신호부터 갱신", /ownerActivityRefreshBtn[^\n]+onclick = sendOwnerPresence/.test(adminJs));
   check("사장과 직원 기록을 별도 박스로 렌더링", /renderGroup\("owner"[\s\S]+renderGroup\("staff"/.test(adminJs));
   check("강제 로그아웃은 확인 뒤 실행", /showConfirm\([\s\S]+?force-logout/.test(adminJs));
+  check("확인 뒤 보안 비밀번호를 요청 본문에 실어 서버가 검사", /askSensitivePinFor\([\s\S]+?force-logout[\s\S]+?JSON\.stringify\(\{ pin \}\)/.test(adminJs));
   check("변경 기록을 로그인 기록 옆에서 불러옴", /loadAdminAudit[\s\S]+?\/api\/auth\/admin-audit/.test(adminJs));
 
   console.log(out.join("\n"));

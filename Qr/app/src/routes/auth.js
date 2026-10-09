@@ -106,7 +106,13 @@ router.get("/owner-activity", requireOwner, async (req, res) => {
 // 끊지 못하게 막는다 — 자기 로그아웃은 화면 위의 로그아웃 버튼을 쓴다.
 router.post("/owner-activity/:sessionKey/force-logout", requireOwner, async (req, res) => {
   const targetKey = String(req.params.sessionKey || "").toLowerCase();
+  req.adminAuditAction = "force_logout";
   if (targetKey === ownerActivity.sessionKey(req)) return res.status(400).json({ error: "current_session" });
+  // 화면의 확인창만으로는 주소를 직접 호출해 우회할 수 있다. 실제 세션을
+  // 지우기 직전에 급여·결산·식자재와 같은 보안 비밀번호를 서버에서 확인한다.
+  // req.body 자체는 감사 기록에 저장하지 않으므로 비밀번호 원문은 남지 않는다.
+  const verified = lockbox.verifyPin(req, req.body && req.body.pin);
+  if (!verified.ok) return res.status(verified.status).json(verified);
   try {
     const result = await ownerActivity.forceLogout(targetKey, {
       role: req.session.role,
@@ -115,7 +121,6 @@ router.post("/owner-activity/:sessionKey/force-logout", requireOwner, async (req
     });
     if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json({ error: result.error });
     const target = result.row || {};
-    req.adminAuditAction = "force_logout";
     req.adminAuditTarget = [
       target.role === "staff" ? "직원" : "사장",
       target.account_email || null,

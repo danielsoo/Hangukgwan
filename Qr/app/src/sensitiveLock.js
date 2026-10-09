@@ -39,12 +39,17 @@ function requireUnlocked(area) {
   };
 }
 
-/** 비밀번호를 맞히면 그 탭을 푼다. { ok } | { error, status, retryAfter } */
-function unlock(req, area, pin, now = Date.now()) {
-  if (!AREAS.includes(area)) return { status: 400, error: "bad_area" };
-  if (!pinSet()) return { ok: true };
+/**
+ * 급여·결산·식자재와 같은 비밀번호를 위험 작업에서 한 번 확인한다.
+ * 탭을 열어 두지는 않고 맞는지만 확인한다. 강제 로그아웃처럼 주소를 직접
+ * 호출해도 우회할 수 없어야 하는 작업이 이 함수를 쓴다.
+ */
+function verifyPin(req, pin, now = Date.now()) {
+  if (!pinSet()) return { status: 409, error: "pin_not_set" };
   const s = req.session;
-  if (s.pinBlockedUntil && s.pinBlockedUntil > now) return { status: 429, error: "too_many", retryAfter: Math.ceil((s.pinBlockedUntil - now) / 1000) };
+  if (s.pinBlockedUntil && s.pinBlockedUntil > now) {
+    return { status: 429, error: "too_many", retryAfter: Math.ceil((s.pinBlockedUntil - now) / 1000) };
+  }
   if (!pin || !bcrypt.compareSync(String(pin), store.settings.sensitive_pin_hash)) {
     s.pinFails = (s.pinFails || 0) + 1;
     if (s.pinFails >= MAX_FAILS) {
@@ -55,6 +60,16 @@ function unlock(req, area, pin, now = Date.now()) {
     return { status: 401, error: "wrong_pin", left: MAX_FAILS - s.pinFails };
   }
   s.pinFails = 0;
+  return { ok: true };
+}
+
+/** 비밀번호를 맞히면 그 탭을 푼다. { ok } | { error, status, retryAfter } */
+function unlock(req, area, pin, now = Date.now()) {
+  if (!AREAS.includes(area)) return { status: 400, error: "bad_area" };
+  if (!pinSet()) return { ok: true };
+  const checked = verifyPin(req, pin, now);
+  if (!checked.ok) return checked;
+  const s = req.session;
   s.sensitiveUnlock = s.sensitiveUnlock || {};
   s.sensitiveUnlock[area] = now + TTL_MS;
   return { ok: true };
@@ -86,4 +101,4 @@ async function setPin(pin) {
   return { ok: true };
 }
 
-module.exports = { AREAS, TTL_MS, MAX_FAILS, MIN_LEN, pinSet, isUnlocked, requireUnlocked, unlock, lock, sameAsPin, setPin };
+module.exports = { AREAS, TTL_MS, MAX_FAILS, MIN_LEN, pinSet, isUnlocked, requireUnlocked, verifyPin, unlock, lock, sameAsPin, setPin };

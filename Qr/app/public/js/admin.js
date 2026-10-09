@@ -1875,6 +1875,9 @@
       ownerActivityCurrentDevice: "현재 기기",
       ownerActivityForceLogout: "강제 로그아웃",
       ownerActivityForceConfirm: "{who}\n{device}\n\n이 기기를 강제로 로그아웃할까요? 진행하면 이 기기에서 다시 로그인해야 합니다.",
+      ownerActivityForcePinTitle: "강제 로그아웃 보안 비밀번호를 입력하세요",
+      ownerActivityForcePinButton: "로그아웃",
+      ownerActivityForcePinNotSet: "먼저 설정 > 계정에서 급여·결산·식자재 비밀번호를 정해 주세요.",
       ownerActivityForceDone: "해당 기기를 로그아웃했습니다.",
       ownerActivityForceAlreadyEnded: "이미 종료된 접속입니다. 기록을 종료 상태로 바꿨습니다.",
       ownerActivityForceFailed: "강제 로그아웃하지 못했습니다. 다시 시도해주세요.",
@@ -3232,6 +3235,9 @@
       ownerActivityCurrentDevice: "目前裝置",
       ownerActivityForceLogout: "強制登出",
       ownerActivityForceConfirm: "{who}\n{device}\n\n要強制登出這台裝置嗎？執行後，該裝置必須重新登入。",
+      ownerActivityForcePinTitle: "請輸入強制登出的安全密碼",
+      ownerActivityForcePinButton: "登出",
+      ownerActivityForcePinNotSet: "請先到設定 > 帳號設定薪資、結算與食材安全密碼。",
       ownerActivityForceDone: "已將該裝置登出。",
       ownerActivityForceAlreadyEnded: "此連線已結束，紀錄已改為離線。",
       ownerActivityForceFailed: "無法強制登出，請再試一次。",
@@ -4558,54 +4564,75 @@
   // 들어갈 때마다 비밀번호를 묻는 탭 → 서버 잠금 이름(src/sensitiveLock.js)
   const LOCKED_TABS = { payroll: "payroll", settlement: "settlement", ingredients: "ingredients" };
 
-  // 비밀번호 창. 맞히면 true, 취소하면 false. 틀리면 창에서 바로 말한다.
-  function askSensitivePin(tab, label) {
+  // 공용 보안 비밀번호 창. 급여·결산·식자재 탭뿐 아니라 강제 로그아웃처럼
+  // 위험한 작업에도 같은 창을 쓴다. submit은 반드시 서버에서 비밀번호를
+  // 다시 확인해야 한다 — 화면에서만 확인하면 API 주소로 우회할 수 있다.
+  function askSensitivePinFor(title, submit, okLabel) {
     return new Promise((resolve) => {
       const back = $("#pinGateBackdrop");
       const input = $("#pinGateInput");
       const err = $("#pinGateError");
-      $("#pinGateTitle").textContent = T("pinGateTitle").replace("{tab}", label);
+      const okBtn = $("#pinGateOk");
+      const oldOkLabel = okBtn.textContent;
+      $("#pinGateTitle").textContent = title;
+      okBtn.textContent = okLabel || oldOkLabel;
       input.value = "";
       err.hidden = true;
       back.hidden = false;
       setTimeout(() => input.focus(), 30);
-      const done = (ok) => {
+      const done = (result) => {
         back.hidden = true;
-        $("#pinGateOk").onclick = null;
+        okBtn.disabled = false;
+        okBtn.textContent = oldOkLabel;
+        okBtn.onclick = null;
         $("#pinGateCancel").onclick = null;
         input.onkeydown = null;
-        resolve(ok);
+        resolve(result);
       };
       const tryIt = async () => {
+        if (okBtn.disabled) return;
+        okBtn.disabled = true;
         let res;
         try {
-          res = await fetch("/api/auth/sensitive-unlock", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ area: LOCKED_TABS[tab], pin: input.value }),
-          });
+          res = await submit(input.value);
         } catch (e) {
           res = null;
         }
-        if (res && res.ok) return done(true);
         const body = res ? await res.json().catch(() => ({})) : {};
+        if (res && res.ok) return done({ ok: true, body });
+        okBtn.disabled = false;
         err.textContent =
           body.error === "wrong_pin"
             ? T("pinGateWrong").replace("{left}", body.left)
             : body.error === "too_many"
               ? T("pinGateTooMany").replace("{sec}", body.retryAfter)
+              : body.error === "pin_not_set"
+                ? T("ownerActivityForcePinNotSet")
               : T("pinGateFailed");
         err.hidden = false;
         input.value = "";
         input.focus();
       };
-      $("#pinGateOk").onclick = tryIt;
-      $("#pinGateCancel").onclick = () => done(false);
+      okBtn.onclick = tryIt;
+      $("#pinGateCancel").onclick = () => done(null);
       input.onkeydown = (e) => {
         if (e.key === "Enter") tryIt();
-        if (e.key === "Escape") done(false);
+        if (e.key === "Escape") done(null);
       };
     });
+  }
+  // 탭 비밀번호 창. 맞히면 true, 취소하면 false. 틀리면 창에서 바로 말한다.
+  async function askSensitivePin(tab, label) {
+    const result = await askSensitivePinFor(
+      T("pinGateTitle").replace("{tab}", label),
+      (pin) => fetch("/api/auth/sensitive-unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area: LOCKED_TABS[tab], pin }),
+      }),
+      T("pinGateOk")
+    );
+    return !!(result && result.ok);
   }
   function lockSensitive(tab) {
     if (!sensitivePinSet) return;
@@ -15210,15 +15237,23 @@
             .replace("{device}", row.device || "-")
         );
         if (!ok) return;
-        button.disabled = true;
         try {
-          const res = await fetch(`/api/auth/owner-activity/${encodeURIComponent(row.id)}/force-logout`, { method: "POST" });
-          const data = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          // 확인 다음에 급여·결산·식자재와 같은 비밀번호를 마지막으로 묻는다.
+          // 비밀번호는 이 요청에서 서버가 직접 검사하고 감사 기록에는 남기지 않는다.
+          const verified = await askSensitivePinFor(
+            T("ownerActivityForcePinTitle"),
+            (pin) => fetch(`/api/auth/owner-activity/${encodeURIComponent(row.id)}/force-logout`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ pin }),
+            }),
+            T("ownerActivityForcePinButton")
+          );
+          if (!verified) return;
+          const data = verified.body || {};
           await Promise.all([loadOwnerActivity(), loadAdminAudit()]);
           await showAlert(T(data.sessionDeleted ? "ownerActivityForceDone" : "ownerActivityForceAlreadyEnded"));
         } catch (e) {
-          button.disabled = false;
           await showAlert(T("ownerActivityForceFailed"));
         }
       };
