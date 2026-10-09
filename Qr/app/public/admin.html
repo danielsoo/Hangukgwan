@@ -245,6 +245,18 @@
         그 사람이 홈페이지에 로그인했을 때 "관리자 페이지" 버튼이 생기고 관리자 화면에 들어올 수 있어요.
         등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.
       </p>
+      <section class="owner-activity-card" aria-labelledby="ownerActivityTitle">
+        <div class="owner-activity-heading">
+          <div>
+            <h2 id="ownerActivityTitle" data-i18n="ownerActivityTitle">사장 로그인 기록</h2>
+            <p data-i18n="ownerActivityHint">관리자 화면을 열어 둔 기기는 현재 접속 중으로 표시됩니다. 위치는 GPS가 아닌 인터넷 접속 위치라 실제 장소와 조금 다를 수 있어요.</p>
+          </div>
+          <button id="ownerActivityRefreshBtn" type="button" data-i18n="ownerActivityRefreshBtn">접속 상태 새로고침</button>
+        </div>
+        <div id="ownerActivitySummary" class="owner-activity-summary"></div>
+        <div id="ownerActivityList" class="owner-activity-list" aria-live="polite"></div>
+      </section>
+      <h2 class="accounts-list-title" data-i18n="accountsListTitle">가입 계정</h2>
       <div class="accounts-toolbar">
         <input type="search" id="accountSearch" data-i18n-placeholder="accountSearchPlaceholder" placeholder="이름 또는 이메일로 검색" />
         <button id="accountsRefreshBtn" data-i18n="accountsRefreshBtn">새로고침</button>

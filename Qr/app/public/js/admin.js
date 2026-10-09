@@ -1859,6 +1859,28 @@
       payrollBadTime: "빨간 칸의 시각을 고쳐 주세요(예: 09:05).",
       accountsTabHint:
         "홈페이지에서 가입한 계정 목록이에요. 손님으로 가입한 사람을 직원이나 사장으로 바꾸면, 그 사람이 홈페이지에 로그인했을 때 \"관리자 페이지\" 버튼이 생기고 관리자 화면에 들어올 수 있어요. 등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.",
+      ownerActivityTitle: "사장 로그인 기록",
+      ownerActivityHint:
+        "관리자 화면을 열어 둔 기기는 현재 접속 중으로 표시됩니다. 위치는 GPS가 아닌 인터넷 접속 위치라 실제 장소와 조금 다를 수 있어요.",
+      ownerActivityRefreshBtn: "접속 상태 새로고침",
+      ownerActivityLoading: "로그인 기록을 불러오는 중…",
+      ownerActivityLoadError: "로그인 기록을 불러오지 못했어요.",
+      ownerActivityEmpty: "아직 저장된 사장 로그인 기록이 없어요.",
+      ownerActivitySummary: "현재 접속 {online}곳 · 최근 기록 {total}건",
+      ownerActivityOnline: "현재 접속 중",
+      ownerActivityInactive: "접속 종료 / 비활성",
+      ownerActivityLoggedOut: "로그아웃",
+      ownerActivityLoginAt: "로그인",
+      ownerActivityLastSeenAt: "마지막 활동",
+      ownerActivityLogoutAt: "로그아웃",
+      ownerActivityLocationUnknown: "접속 위치 확인 안 됨",
+      ownerActivityIp: "IP",
+      ownerActivityMethodPassword: "계정 비밀번호",
+      ownerActivityMethodGoogle: "Google 계정",
+      ownerActivityMethodShared: "공용 사장 비밀번호",
+      ownerActivityMethodExisting: "기존 로그인 세션",
+      ownerActivitySharedAccount: "사장 공용 로그인",
+      accountsListTitle: "가입 계정",
       accountSearchPlaceholder: "이름 또는 이메일로 검색",
       accountsRefreshBtn: "새로고침",
       accountsLoading: "불러오는 중…",
@@ -3157,6 +3179,28 @@
       payrollBadTime: "請修正紅框的時間（例：09:05）。",
       accountsTabHint:
         "這裡是從官網註冊的帳號。把顧客改成員工或負責人後，那個人在官網登入時就會看到「管理後台」按鈕，並且可以進入管理畫面。降級後權限也會立刻收回，不用等他重新登入。",
+      ownerActivityTitle: "負責人登入紀錄",
+      ownerActivityHint:
+        "有開著管理畫面的裝置會顯示為目前在線。位置來自網路連線資訊，不是 GPS，因此可能和實際地點稍有差異。",
+      ownerActivityRefreshBtn: "重新整理在線狀態",
+      ownerActivityLoading: "正在載入登入紀錄…",
+      ownerActivityLoadError: "無法載入登入紀錄。",
+      ownerActivityEmpty: "目前沒有負責人的登入紀錄。",
+      ownerActivitySummary: "目前在線 {online} 處 · 最近紀錄 {total} 筆",
+      ownerActivityOnline: "目前在線",
+      ownerActivityInactive: "已離線 / 無活動",
+      ownerActivityLoggedOut: "已登出",
+      ownerActivityLoginAt: "登入",
+      ownerActivityLastSeenAt: "最後活動",
+      ownerActivityLogoutAt: "登出",
+      ownerActivityLocationUnknown: "無法確認連線位置",
+      ownerActivityIp: "IP",
+      ownerActivityMethodPassword: "帳號密碼",
+      ownerActivityMethodGoogle: "Google 帳號",
+      ownerActivityMethodShared: "共用負責人密碼",
+      ownerActivityMethodExisting: "既有登入工作階段",
+      ownerActivitySharedAccount: "負責人共用登入",
+      accountsListTitle: "註冊帳號",
       accountSearchPlaceholder: "以姓名或信箱搜尋",
       accountsRefreshBtn: "重新整理",
       accountsLoading: "載入中…",
@@ -4157,6 +4201,8 @@
       renderPadProfileBadge();
       renderPadProfilesEditor();
       updateMoveSlipPreview();
+      renderOwnerActivity();
+      renderAccounts();
       if ($("#settingsSearch")) renderSettingsSearch($("#settingsSearch").value);
     };
   });
@@ -4288,6 +4334,7 @@
     $("#loginScreen").hidden = true;
     $("#dashboard").hidden = false;
     applyRoleUI();
+    startOwnerPresence();
     // 주소에 #탭이름 이 있으면 그 탭으로 연다(아래 openTabFromHash).
     // 수기 주문을 끝낸 화면이 /admin#orders 로 돌아온다.
     openTabFromHash();
@@ -4884,6 +4931,33 @@
   // 해야 보이는」 상태로 되돌아가지 않게 가끔 스스로 다시 불러온다.
   // 주문(위 pollTimer)보다 훨씬 뜸해도 되는 것들이다.
   const DATA_REFRESH_MS = 30000;
+  let ownerPresenceTimer = null;
+
+  async function sendOwnerPresence() {
+    if (currentRole !== "owner") return;
+    try {
+      const res = await nativeFetch("/api/auth/owner-activity/heartbeat", { method: "POST" });
+      if (res.status === 401) stopOwnerPresence();
+      // 계정 탭을 보고 있을 때는 현재 접속 배지가 1분마다 같이 따라온다.
+      if (res.ok && $("#tab-accounts") && !$("#tab-accounts").hidden) loadOwnerActivity();
+    } catch (e) {
+      // 일시적인 네트워크 끊김은 다음 1분 신호에서 회복한다.
+    }
+  }
+
+  function startOwnerPresence() {
+    stopOwnerPresence();
+    if (currentRole !== "owner") return;
+    sendOwnerPresence();
+    ownerPresenceTimer = setInterval(sendOwnerPresence, 60000);
+  }
+
+  function stopOwnerPresence() {
+    if (!ownerPresenceTimer) return;
+    clearInterval(ownerPresenceTimer);
+    ownerPresenceTimer = null;
+  }
+
   function startPolling() {
     if (pollTimer) return;
     pollTimer = setInterval(loadOrders, realtimeEnabled ? 30000 : 2000);
@@ -4895,6 +4969,7 @@
     }
   }
   function stopPolling() {
+    stopOwnerPresence();
     if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -13839,6 +13914,7 @@
   // (src/routes/users.js) — 그렇게 되면 등급을 되돌려줄 사람이 아무도
   // 없어지기 때문이다.
   let accountsCache = [];
+  let ownerActivityCache = [];
 
   // ---------- 직원 급여 (2026-10-03, src/payroll.js) ----------
   //
@@ -14953,9 +15029,97 @@
       payrollPreview();
     };
 
+  function ownerActivityTime(value) {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "-";
+    return new Intl.DateTimeFormat(adminLang === "zh" ? "zh-TW" : "ko-KR", {
+      timeZone: "Asia/Taipei",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(date);
+  }
+
+  function ownerActivityMethod(method) {
+    if (method === "password") return T("ownerActivityMethodPassword");
+    if (method === "google") return T("ownerActivityMethodGoogle");
+    if (method === "existing_session") return T("ownerActivityMethodExisting");
+    return T("ownerActivityMethodShared");
+  }
+
+  function renderOwnerActivity() {
+    const wrap = $("#ownerActivityList");
+    const summary = $("#ownerActivitySummary");
+    if (!wrap) return;
+    const rows = ownerActivityCache || [];
+    if (summary) {
+      summary.textContent = T("ownerActivitySummary")
+        .replace("{online}", rows.filter((row) => row.isOnline).length)
+        .replace("{total}", rows.length);
+    }
+    if (!rows.length) {
+      wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("ownerActivityEmpty"))}</p>`;
+      return;
+    }
+    wrap.innerHTML = rows
+      .map((row) => {
+        const stateKey = row.isOnline
+          ? "ownerActivityOnline"
+          : row.loggedOutAt
+            ? "ownerActivityLoggedOut"
+            : "ownerActivityInactive";
+        const stateClass = row.isOnline ? "is-online" : row.loggedOutAt ? "is-logged-out" : "is-inactive";
+        const place = [row.city, row.region, row.country].filter(Boolean).join(" · ") || T("ownerActivityLocationUnknown");
+        const ip = row.ip ? `${T("ownerActivityIp")} ${row.ip}` : "";
+        const who = row.accountEmail || T("ownerActivitySharedAccount");
+        const times = [
+          `${T("ownerActivityLoginAt")} ${ownerActivityTime(row.loggedInAt)}`,
+          `${T("ownerActivityLastSeenAt")} ${ownerActivityTime(row.lastSeenAt)}`,
+          row.loggedOutAt ? `${T("ownerActivityLogoutAt")} ${ownerActivityTime(row.loggedOutAt)}` : null,
+        ]
+          .filter(Boolean)
+          .map((text) => `<span>${escapeHtml(text)}</span>`)
+          .join("");
+        return `<article class="owner-activity-row ${stateClass}">
+          <div class="owner-activity-row-head">
+            <span class="owner-activity-state"><i aria-hidden="true"></i>${escapeHtml(T(stateKey))}</span>
+            <strong>${escapeHtml(who)}</strong>
+            <span class="owner-activity-method">${escapeHtml(ownerActivityMethod(row.loginMethod))}</span>
+          </div>
+          <div class="owner-activity-meta">
+            <span>${escapeHtml(row.device || "-")}</span>
+            <span>${escapeHtml(place)}</span>
+            ${ip ? `<span>${escapeHtml(ip)}</span>` : ""}
+          </div>
+          <div class="owner-activity-times">${times}</div>
+        </article>`;
+      })
+      .join("");
+  }
+
+  async function loadOwnerActivity() {
+    const wrap = $("#ownerActivityList");
+    if (!wrap || currentRole !== "owner") return;
+    wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("ownerActivityLoading"))}</p>`;
+    try {
+      const res = await fetch("/api/auth/owner-activity?limit=50");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      ownerActivityCache = data.activity || [];
+      renderOwnerActivity();
+    } catch (e) {
+      wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("ownerActivityLoadError"))}</p>`;
+    }
+  }
+
   async function loadAccounts() {
     const wrap = $("#accountsList");
     if (!wrap) return;
+    loadOwnerActivity();
     wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("accountsLoading")}</p>`;
     try {
       const res = await fetch("/api/users");
@@ -15068,6 +15232,7 @@
 
   if ($("#accountSearch")) $("#accountSearch").oninput = renderAccounts;
   if ($("#accountsRefreshBtn")) $("#accountsRefreshBtn").onclick = loadAccounts;
+  if ($("#ownerActivityRefreshBtn")) $("#ownerActivityRefreshBtn").onclick = loadOwnerActivity;
 
   // ---------- Staff permission management (owner only) ----------
   const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "orderEdit", "reservationManage"];

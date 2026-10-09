@@ -4,6 +4,7 @@ const { store, save, getDb, connectDB } = require("../db");
 const { requireOwner } = require("../auth");
 const { isAdminRole } = require("../accounts");
 const lockbox = require("../sensitiveLock");
+const ownerActivity = require("../ownerActivity");
 
 const router = express.Router();
 
@@ -11,7 +12,26 @@ const router = express.Router();
 // the owner's password first, then the staff password, and remember which
 // one matched as the session's role. Owner always has full access; staff
 // only gets whatever the owner has switched on in Admin > 설정 > 직원 권한 관리.
-router.post("/login", (req, res) => {
+async function recordOwnerLoginQuietly(req, details) {
+  try {
+    await ownerActivity.recordLogin(req, details);
+  } catch (e) {
+    // 기록 저장 장애가 가게 관리자 로그인을 막으면 안 된다. 화면의 기록만
+    // 잠시 비고, 다음 heartbeat에서 다시 살아난다.
+    console.error("[owner-activity] login record failed:", e.message);
+  }
+}
+
+async function recordOwnerLogoutQuietly(req) {
+  if (!req.session || req.session.role !== "owner") return;
+  try {
+    await ownerActivity.recordLogout(req);
+  } catch (e) {
+    console.error("[owner-activity] logout record failed:", e.message);
+  }
+}
+
+router.post("/login", async (req, res) => {
   const { password } = req.body || {};
   if (!password) return res.status(400).json({ error: "password_required" });
 
@@ -29,6 +49,7 @@ router.post("/login", (req, res) => {
     delete req.session.userId;
     req.session.isAdmin = true;
     req.session.role = "owner";
+    await recordOwnerLoginQuietly(req, { method: "shared_password" });
     return res.json({ ok: true, role: "owner" });
   }
   if (staffHash && bcrypt.compareSync(password, staffHash)) {
@@ -58,7 +79,34 @@ router.post("/logout", async (req, res) => {
       // 자리 하나 못 비웠다고 로그아웃이 막히면 안 된다.
     }
   }
+  await recordOwnerLogoutQuietly(req);
   req.session.destroy(() => res.json({ ok: true }));
+});
+
+// 사장님만 보는 로그인 기록. 세션 ID 원문과 User-Agent 원문은 절대
+// 내보내지 않는다. 위치는 Vercel이 요청에 붙인 도시/지역/국가 수준이며
+// GPS나 정확한 주소가 아니다.
+router.get("/owner-activity", requireOwner, async (req, res) => {
+  try {
+    const activity = await ownerActivity.listRecent(req.query && req.query.limit);
+    res.json({ activity });
+  } catch (e) {
+    console.error("[owner-activity] list failed:", e.message);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+// 관리자 화면이 열려 있는 동안 1분마다 오는 신호. 세션 쿠키가 아직
+// 유효하다는 것만으로 접속 중이라 하지 않고, 이 신호가 최근에 온 경우만
+// 접속 중으로 표시한다.
+router.post("/owner-activity/heartbeat", requireOwner, async (req, res) => {
+  try {
+    await ownerActivity.touch(req);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[owner-activity] heartbeat failed:", e.message);
+    res.status(500).json({ error: "server_error" });
+  }
 });
 
 // admin.js's checkAuth() calls this on every load of /admin to decide

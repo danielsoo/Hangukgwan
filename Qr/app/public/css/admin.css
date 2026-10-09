@@ -1792,6 +1792,51 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* ---------- 계정(계정 관리) 탭 — owner only ---------- */
 /* 홈페이지에서 가입한 계정의 등급을 바꾸는 화면. VIP 카드 목록과 같은
    시각 언어를 쓰되, 등급 배지 색으로 사장/직원/손님이 한눈에 갈리게 한다. */
+.owner-activity-card {
+  max-width: 1100px; margin: 20px 0 28px; padding: 20px;
+  border: 1px solid #cfd9e8; border-radius: 16px;
+  background: linear-gradient(145deg, #f8fbff 0%, #fff 58%);
+  box-shadow: 0 8px 24px rgba(20, 39, 74, 0.06);
+}
+.owner-activity-heading {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 16px;
+}
+.owner-activity-heading h2, .accounts-list-title {
+  margin: 0; color: var(--ink); font-size: 20px;
+}
+.owner-activity-heading p {
+  max-width: 760px; margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.55;
+}
+.owner-activity-heading button {
+  flex: 0 0 auto; padding: 9px 13px; border: 1px solid #bdcbe0; border-radius: 9px;
+  background: #fff; color: var(--navy); font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+}
+.owner-activity-heading button:hover { background: #f1f6fc; }
+.owner-activity-summary { margin: 18px 0 10px; color: var(--navy); font-size: 14px; font-weight: 800; }
+.owner-activity-list { display: grid; gap: 10px; }
+.owner-activity-row {
+  padding: 14px 15px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.9);
+}
+.owner-activity-row.is-online { border-color: #9bcbae; box-shadow: inset 3px 0 #2e9b57; }
+.owner-activity-row-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.owner-activity-row-head strong { font-size: 15px; word-break: break-all; }
+.owner-activity-state {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px;
+  border-radius: 999px; background: #eef0f3; color: #626a75; font-size: 12px; font-weight: 800;
+}
+.owner-activity-state i { width: 8px; height: 8px; border-radius: 50%; background: #9198a1; }
+.owner-activity-row.is-online .owner-activity-state { background: #e4f5e9; color: #176b36; }
+.owner-activity-row.is-online .owner-activity-state i { background: #2ba653; box-shadow: 0 0 0 3px rgba(43,166,83,.13); }
+.owner-activity-method {
+  padding: 2px 7px; border: 1px solid #d8dee8; border-radius: 6px; color: var(--muted); font-size: 11px;
+}
+.owner-activity-meta, .owner-activity-times {
+  display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 8px; color: var(--muted); font-size: 13px;
+}
+.owner-activity-meta span, .owner-activity-times span { overflow-wrap: anywhere; }
+.owner-activity-times { padding-top: 8px; border-top: 1px dashed #e4e8ed; font-size: 12px; }
+.owner-activity-empty { margin: 0; padding: 18px 0; color: var(--muted); text-align: center; }
+.accounts-list-title { max-width: 900px; margin-bottom: 12px; }
 .accounts-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; max-width: 900px; }
 .accounts-toolbar input {
   flex: 1 1 240px; padding: 10px; border: 1px solid var(--line); border-radius: 8px;
@@ -1821,6 +1866,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
   font-size: 14px; font-family: inherit; background: #fff; cursor: pointer;
 }
 .account-actions select:disabled { opacity: 0.5; cursor: default; }
+
+@media (max-width: 640px) {
+  .owner-activity-card { padding: 15px; }
+  .owner-activity-heading { flex-direction: column; }
+  .owner-activity-heading button { width: 100%; }
+  .owner-activity-meta, .owner-activity-times { flex-direction: column; gap: 4px; }
+}
 
 /* 「손님 나감 (인원수 비우기)」 — 결제할 게 없는 테이블에만 나온다.
    자주 쓰는 버튼이 아니고 되돌릴 수 있는 동작이라, 결제 버튼처럼 눈에

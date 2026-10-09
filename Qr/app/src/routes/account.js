@@ -15,6 +15,7 @@ const accounts = require("../accounts");
 const { verifyIdToken, isConfigured } = require("../firebaseAdmin");
 const { requireUser } = require("../auth");
 const { store, findOrders } = require("../db");
+const ownerActivity = require("../ownerActivity");
 
 const router = express.Router();
 
@@ -44,6 +45,30 @@ function regenerateAndStart(req, user) {
   });
 }
 
+async function recordOwnerLoginQuietly(req, user, method) {
+  if (!user || user.role !== "owner") return;
+  try {
+    await ownerActivity.recordLogin(req, {
+      method,
+      email: user.email,
+      userId: user._id,
+    });
+  } catch (e) {
+    // 감사 기록을 못 썼다고 정상 로그인을 막지는 않는다. 관리자 화면의
+    // heartbeat가 같은 세션을 다시 기록한다.
+    console.error("[owner-activity] account login record failed:", e.message);
+  }
+}
+
+async function recordOwnerLogoutQuietly(req) {
+  if (!req.session || req.session.role !== "owner") return;
+  try {
+    await ownerActivity.recordLogout(req);
+  } catch (e) {
+    console.error("[owner-activity] account logout record failed:", e.message);
+  }
+}
+
 // ---------- 회원가입 (이메일) ----------
 router.post("/register", async (req, res) => {
   const { email, password, name, phone } = req.body || {};
@@ -58,6 +83,7 @@ router.post("/register", async (req, res) => {
   try {
     const user = await accounts.createEmailUser({ email: normalized, password, name, phone });
     await regenerateAndStart(req, user);
+    await recordOwnerLoginQuietly(req, user, "password");
     res.json({ user: accounts.publicUser(user) });
   } catch (e) {
     if (e.message === "email_taken") return res.status(409).json({ error: "email_taken" });
@@ -79,6 +105,7 @@ router.post("/login", async (req, res) => {
     }
     await regenerateAndStart(req, user);
     await accounts.touchLogin(user._id);
+    await recordOwnerLoginQuietly(req, user, "password");
     res.json({ user: accounts.publicUser(user) });
   } catch (e) {
     console.error("[account] login failed:", e);
@@ -107,6 +134,7 @@ router.post("/google", async (req, res) => {
 
     await regenerateAndStart(req, user);
     await accounts.touchLogin(user._id);
+    await recordOwnerLoginQuietly(req, user, "google");
     res.json({ user: accounts.publicUser(user) });
   } catch (e) {
     console.error("[account] google login failed:", e);
@@ -115,7 +143,8 @@ router.post("/google", async (req, res) => {
 });
 
 // ---------- 로그아웃 ----------
-router.post("/logout", (req, res) => {
+router.post("/logout", async (req, res) => {
+  await recordOwnerLogoutQuietly(req);
   req.session.destroy(() => res.json({ ok: true }));
 });
 
