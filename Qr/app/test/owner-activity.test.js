@@ -18,6 +18,8 @@ const express = require("express");
 const session = require("express-session");
 const request = require("supertest");
 const bcrypt = require("bcryptjs");
+const fs = require("fs");
+const path = require("path");
 const { store } = require("../src/db");
 const activity = require("../src/ownerActivity");
 const accounts = require("../src/accounts");
@@ -138,6 +140,15 @@ function check(name, cond, extra = "") {
   r = await owner.get("/api/auth/owner-activity");
   const accountStaffRow = (r.body.activity || []).find((row) => row.accountEmail === "staff-activity@hangukgwan.tw");
   check("사장은 직원 계정 로그인도 확인", accountStaffRow && accountStaffRow.role === "staff" && accountStaffRow.isOnline === true, JSON.stringify(accountStaffRow));
+
+  out.push("\n[실시간 주문 연결과 접속 신호는 서로 독립]");
+  const adminJs = fs.readFileSync(path.join(__dirname, "../public/js/admin.js"), "utf8");
+  const stopPollingStart = adminJs.indexOf("function stopPolling()");
+  const stopPollingEnd = adminJs.indexOf("// ---------- 주문 알림음", stopPollingStart);
+  const stopPollingCode = adminJs.slice(stopPollingStart, stopPollingEnd);
+  check("주문 폴링을 바꿔도 접속 신호를 끄지 않음", stopPollingStart >= 0 && !stopPollingCode.includes("stopOwnerPresence()"));
+  check("로그아웃할 때만 접속 신호를 명시적으로 끔", /logoutBtn[\s\S]+?stopOwnerPresence\(\);[\s\S]+?stopPolling\(\);/.test(adminJs));
+  check("접속 상태 새로고침은 이 기기의 신호부터 갱신", /ownerActivityRefreshBtn[^\n]+onclick = sendOwnerPresence/.test(adminJs));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);

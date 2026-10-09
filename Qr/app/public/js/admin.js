@@ -4460,6 +4460,7 @@
 
   $("#logoutBtn").onclick = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
+    stopOwnerPresence();
     stopPolling();
     // 「지난번에 로그인돼 있었다」는 짐작을 지운다. 안 지우면 다음에 열 때
     // 대시보드가 떴다가 로그인으로 튕긴다 — 고치려던 것의 정확히 반대다.
@@ -4975,7 +4976,6 @@
     }
   }
   function stopPolling() {
-    stopOwnerPresence();
     if (pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
@@ -15240,7 +15240,10 @@
 
   if ($("#accountSearch")) $("#accountSearch").oninput = renderAccounts;
   if ($("#accountsRefreshBtn")) $("#accountsRefreshBtn").onclick = loadAccounts;
-  if ($("#ownerActivityRefreshBtn")) $("#ownerActivityRefreshBtn").onclick = loadOwnerActivity;
+  // 눈으로 보는 목록만 다시 읽는 것이 아니라, 이 기기가 아직 접속 중이라는
+  // 신호부터 보낸다. 그래야 타이머가 잠깐 늦어진 순간에 눌러도 자기 기록이
+  // 비활성으로 남지 않는다.
+  if ($("#ownerActivityRefreshBtn")) $("#ownerActivityRefreshBtn").onclick = sendOwnerPresence;
 
   // ---------- Staff permission management (owner only) ----------
   const PERMISSION_KEYS = ["menuEdit", "tableEdit", "settingsEdit", "orderCancel", "orderEdit", "reservationManage"];
