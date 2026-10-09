@@ -5,6 +5,7 @@ const { requireAdmin, requireOwner } = require("../auth");
 const { isAdminRole } = require("../accounts");
 const lockbox = require("../sensitiveLock");
 const ownerActivity = require("../ownerActivity");
+const adminAudit = require("../adminAudit");
 
 const router = express.Router();
 
@@ -141,19 +142,27 @@ router.get("/admin-audit", requireOwner, async (req, res) => {
   try {
     const requestLog = require("../requestLog");
     await connectDB();
-    // 직전 버튼 클릭 기록도 바로 보이게 메모리 묶음을 먼저 내보낸다.
+    // 이전 배포가 14일짜리 속도 기록에 남긴 감사 줄도 당분간 같이 보여준다.
+    // 새 기록은 별도 admin_audit_log에 180일 동안 확정 저장된다.
     await requestLog.flush(getDb());
+    await adminAudit.flush(getDb());
     const limit = Math.max(1, Math.min(100, Number(req.query && req.query.limit) || 40));
-    const rows = await getDb().collection(requestLog.COLLECTION)
-      .find({ audit_action: { $exists: true } })
-      .sort({ created_at: -1 })
-      .limit(limit)
-      .toArray();
+    const [rows, legacyRows] = await Promise.all([
+      getDb().collection(adminAudit.COLLECTION).find({}).sort({ created_at: -1 }).limit(limit).toArray(),
+      getDb().collection(requestLog.COLLECTION)
+        .find({ audit_action: { $exists: true } })
+        .sort({ created_at: -1 })
+        .limit(limit)
+        .toArray(),
+    ]);
+    const merged = rows.concat(legacyRows).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, limit);
     res.json({
-      audit: rows.map((row) => ({
+      keepDays: adminAudit.KEEP_DAYS,
+      storage: "mongodb",
+      audit: merged.map((row) => ({
         id: String(row._id || ""),
-        action: row.audit_action,
-        target: row.audit_target || null,
+        action: row.action || row.audit_action,
+        target: row.target || row.audit_target || null,
         actorRole: row.actor_role === "staff" ? "staff" : "owner",
         actorEmail: row.actor_email || null,
         actorName: row.actor_name || null,
@@ -161,6 +170,11 @@ router.get("/admin-audit", requireOwner, async (req, res) => {
         route: row.route || null,
         status: Number(row.status) || 0,
         at: row.created_at ? new Date(row.created_at).toISOString() : null,
+        ip: row.ip || null,
+        city: row.city || null,
+        region: row.region || null,
+        country: row.country || null,
+        device: row.device || null,
       })),
     });
   } catch (e) {

@@ -33,6 +33,7 @@ const {
 const { applySpiceBasic20260910 } = require("./src/migrations/2026-09-10-spice-basic");
 const { applyServicePeriodBackfill20260910 } = require("./src/migrations/2026-09-10-service-period-backfill");
 const { applyRuntimeIndexes20260913 } = require("./src/migrations/2026-09-13-runtime-indexes");
+const { applyAdminAuditIndex20261009 } = require("./src/migrations/2026-10-09-admin-audit-index");
 const { applyTableOrdersIndex20260913 } = require("./src/migrations/2026-09-13-table-orders-index");
 const { applyBoardOrdersIndex20260914 } = require("./src/migrations/2026-09-14-board-orders-index");
 const { applyOrderRequestIdIndex20260914 } = require("./src/migrations/2026-09-14-order-request-id-index");
@@ -157,6 +158,7 @@ function startMeasuring(req, res) {
   // 요청까지 매달려 있게 된다. 어제 Pusher 에서 그 일이 있었다.
   const endResponse = res.end.bind(res);
   res.end = function (...args) {
+    let auditMeta = null;
     try {
       const ms = Date.now() - startedAt;
       const cold = stats.requests_served === 1;
@@ -185,18 +187,26 @@ function startMeasuring(req, res) {
           nth: stats.requests_served,
           age_s: stats.instance_age_s,
           region: process.env.VERCEL_REGION || null,
-          // 관리자 변경 감사 기록. 요청 본문은 절대 넣지 않는다 — 비밀번호와
-          // 손님 개인정보가 섞일 수 있다. 역할·계정 표시·큰 작업 분류만.
-          audit_action: auditAction || undefined,
-          audit_target: auditAction && req.adminAuditTarget ? String(req.adminAuditTarget).slice(0, 180) : undefined,
-          actor_role: auditAction ? actorRole : undefined,
-          actor_user_id: auditAction && req.session.userId ? String(req.session.userId).slice(0, 80) : undefined,
-          actor_email: auditAction && req.session.accountEmail ? String(req.session.accountEmail).slice(0, 254) : undefined,
-          actor_name: auditAction && req.session.accountName ? String(req.session.accountName).slice(0, 100) : undefined,
         });
+        if (auditAction) {
+          auditMeta = {
+            createdAt: new Date(),
+            action: auditAction,
+            target: req.adminAuditTarget,
+            method: req.method,
+            route: routeAtEntry,
+            status: res.statusCode,
+          };
+        }
       }
     } catch (e) {
       // 기록이 응답을 막지 않는다.
+    }
+    if (auditMeta) {
+      // 요청마다 감사 쓰기를 하나 더 기다리면 메뉴 수정·주문 처리 왕복이
+      // 늘어난다. 메모리에 먼저 담고 다음 API의 store 읽기와 나란히 묶어
+      // 내보낸다(src/adminAudit.js). 화면 응답은 여기서 바로 끝낸다.
+      require("./src/adminAudit").record(req, auditMeta);
     }
     return endResponse(...args);
   };
@@ -305,6 +315,7 @@ app.use(storeRefreshAndFlush);
 
 async function storeRefreshAndFlush(req, res, next) {
   const requestLog = require("./src/requestLog");
+  const adminAudit = require("./src/adminAudit");
   try {
     const includeOrders = needsRecentOrders(req);
     // 담아둔 기록은 30초씩 모은 뒤 store 읽기와 **나란히** 내보낸다.
@@ -321,6 +332,9 @@ async function storeRefreshAndFlush(req, res, next) {
       // 뒤에 내보낸다. connectDB() 는 같은 약속을 돌려주므로 refreshStore()
       // 와 나란히 가는 것은 그대로다.
       connectDB().then(() => (requestLog.shouldFlush() ? requestLog.flush(getDb()) : null)),
+      // 감사 기록은 표본이 아니라 장부이므로 한 줄이라도 있으면 다음 요청에
+      // 바로 저장한다. store 읽기와 나란히 가서 영업 화면 왕복은 늘지 않는다.
+      connectDB().then(() => (adminAudit.pending() ? adminAudit.flush(getDb()) : null)),
     ]);
     if (!seededOnce) {
       await seed();
@@ -377,6 +391,7 @@ async function storeRefreshAndFlush(req, res, next) {
       // DB 전체에서 딱 한 번 하는 마이그레이션으로 바꾼다.
       await applyRuntimeIndexes20260913(store, { getDb, connectDB, saveFields });
       requestLog.markIndexReady();
+      await applyAdminAuditIndex20261009(store, { getDb, connectDB, saveFields });
       await applyTableOrdersIndex20260913(store, { getDb, connectDB, saveFields });
       await applyBoardOrdersIndex20260914(store, { getDb, connectDB, saveFields });
       await applyOrderRequestIdIndex20260914(store, { getDb, connectDB, saveFields });

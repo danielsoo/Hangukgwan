@@ -1883,7 +1883,7 @@
       ownerActivityForceFailed: "강제 로그아웃하지 못했습니다. 다시 시도해주세요.",
       ownerActivityForcedBy: "{who}이(가) 강제 로그아웃 · {at}",
       adminAuditTitle: "관리자 변경 기록",
-      adminAuditHint: "사장·직원이 관리자 화면에서 변경한 작업을 기록합니다. 비밀번호와 입력 내용은 저장하지 않습니다.",
+      adminAuditHint: "사장·직원이 변경한 작업과 계정·IP·대략적 위치·기기를 MongoDB에 180일간 기록합니다. 비밀번호와 입력 내용은 저장하지 않습니다.",
       adminAuditLoading: "변경 기록을 불러오는 중…",
       adminAuditEmpty: "아직 저장된 변경 기록이 없어요.",
       adminAuditLoadError: "변경 기록을 불러오지 못했어요.",
@@ -3243,7 +3243,7 @@
       ownerActivityForceFailed: "無法強制登出，請再試一次。",
       ownerActivityForcedBy: "{who} 強制登出 · {at}",
       adminAuditTitle: "管理員變更紀錄",
-      adminAuditHint: "記錄負責人與店員在管理畫面進行的變更。密碼與輸入內容不會儲存。",
+      adminAuditHint: "負責人與店員的變更、帳號、IP、約略位置及裝置會在 MongoDB 保存 180 天。密碼與輸入內容不會儲存。",
       adminAuditLoading: "正在載入變更紀錄…",
       adminAuditEmpty: "目前沒有變更紀錄。",
       adminAuditLoadError: "無法載入變更紀錄。",
@@ -15289,8 +15289,14 @@
       return;
     }
     wrap.innerHTML = rows.map((row) => {
-      const actor = row.actorName || row.actorEmail || T(row.actorRole === "staff" ? "adminAuditActorStaff" : "adminAuditActorOwner");
+      const actorParts = [row.actorName, row.actorEmail].filter(Boolean);
+      const actor = actorParts.length
+        ? Array.from(new Set(actorParts)).join(" · ")
+        : T(row.actorRole === "staff" ? "ownerActivitySharedStaff" : "ownerActivitySharedAccount");
       const failed = row.status < 200 || row.status >= 400;
+      const place = [row.city, row.region, row.country].filter(Boolean).join(" · ") || T("ownerActivityLocationUnknown");
+      const ip = row.ip ? `${T("ownerActivityIp")} ${row.ip}` : "";
+      const operation = [row.method, row.route].filter(Boolean).join(" ");
       return `<article class="admin-audit-row${failed ? " is-failed" : ""}">
         <div class="admin-audit-row-main">
           <strong>${escapeHtml(adminAuditActionLabel(row.action))}</strong>
@@ -15300,6 +15306,10 @@
         <div class="admin-audit-meta">
           <span>${escapeHtml(actor)}</span>
           <span>${escapeHtml(ownerActivityTime(row.at))}</span>
+          <span>${escapeHtml(place)}</span>
+          ${ip ? `<span>${escapeHtml(ip)}</span>` : ""}
+          ${row.device ? `<span>${escapeHtml(row.device)}</span>` : ""}
+          ${operation ? `<span>${escapeHtml(operation)}</span>` : ""}
           ${row.target ? `<span>${escapeHtml(row.target)}</span>` : ""}
         </div>
       </article>`;
