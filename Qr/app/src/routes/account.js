@@ -28,6 +28,8 @@ function startSession(req, user) {
   req.session.userId = String(user._id);
   req.session.role = user.role || "customer";
   req.session.isAdmin = accounts.isAdminRole(user.role);
+  req.session.accountEmail = user.email || null;
+  req.session.accountName = user.name || null;
 }
 
 // Signing in must never silently keep the *previous* person's session data

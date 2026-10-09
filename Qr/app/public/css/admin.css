@@ -1846,12 +1846,34 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .owner-activity-role.is-owner { background: #f7ead1; color: #8b5b06; }
 .owner-activity-role.is-staff { background: #e6edf8; color: #315487; }
+.owner-activity-current {
+  padding: 3px 8px; border-radius: 999px; background: #edf1f5; color: #586474; font-size: 11px; font-weight: 800;
+}
+.owner-activity-force {
+  margin-left: auto; padding: 6px 9px; border: 1px solid #d8a3a3; border-radius: 8px;
+  background: #fff7f7; color: #a32626; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer;
+}
+.owner-activity-force:hover { background: #fdeaea; border-color: #bf7070; }
+.owner-activity-force:disabled { opacity: .55; cursor: wait; }
 .owner-activity-meta, .owner-activity-times {
   display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 8px; color: var(--muted); font-size: 13px;
 }
 .owner-activity-meta span, .owner-activity-times span { overflow-wrap: anywhere; }
 .owner-activity-times { padding-top: 8px; border-top: 1px dashed #e4e8ed; font-size: 12px; }
 .owner-activity-empty { margin: 0; padding: 20px 8px; color: var(--muted); text-align: center; font-size: 13px; line-height: 1.55; }
+.admin-audit-panel { margin-top: 18px; padding-top: 17px; border-top: 1px solid #dbe2eb; }
+.admin-audit-heading h3 { margin: 0; color: var(--ink); font-size: 17px; }
+.admin-audit-heading p { margin: 5px 0 12px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.admin-audit-list { display: grid; gap: 7px; max-height: 360px; overflow: auto; padding-right: 3px; }
+.admin-audit-row {
+  display: grid; grid-template-columns: minmax(180px, .8fr) minmax(260px, 1.2fr); gap: 12px;
+  align-items: center; padding: 10px 12px; border: 1px solid #e1e6ec; border-radius: 10px; background: rgba(255,255,255,.78);
+}
+.admin-audit-row.is-failed { background: #fff8f8; border-color: #e5baba; }
+.admin-audit-row-main, .admin-audit-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 9px; }
+.admin-audit-row-main strong { font-size: 13px; }
+.admin-audit-meta { color: var(--muted); font-size: 12px; }
+.admin-audit-failed { padding: 2px 6px; border-radius: 999px; background: #f7dede; color: #9b2525; font-size: 10px; font-weight: 900; }
 .accounts-list-title { max-width: 900px; margin-bottom: 12px; }
 .accounts-toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; max-width: 900px; }
 .accounts-toolbar input {
@@ -1889,6 +1911,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .owner-activity-heading button { width: 100%; }
   .owner-activity-meta, .owner-activity-times { flex-direction: column; gap: 4px; }
   .owner-activity-list { grid-template-columns: 1fr; }
+  .admin-audit-row { grid-template-columns: 1fr; gap: 5px; }
+  .owner-activity-force { width: 100%; margin-left: 0; }
 }
 
 /* 「손님 나감 (인원수 비우기)」 — 결제할 게 없는 테이블에만 나온다.

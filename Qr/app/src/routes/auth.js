@@ -47,6 +47,8 @@ router.post("/login", async (req, res) => {
   // admin login that just succeeded.
   if (bcrypt.compareSync(password, ownerHash)) {
     delete req.session.userId;
+    delete req.session.accountEmail;
+    delete req.session.accountName;
     req.session.isAdmin = true;
     req.session.role = "owner";
     await recordAdminLoginQuietly(req, { method: "shared_password", role: "owner" });
@@ -54,6 +56,8 @@ router.post("/login", async (req, res) => {
   }
   if (staffHash && bcrypt.compareSync(password, staffHash)) {
     delete req.session.userId;
+    delete req.session.accountEmail;
+    delete req.session.accountName;
     req.session.isAdmin = true;
     req.session.role = "staff";
     await recordAdminLoginQuietly(req, { method: "shared_password", role: "staff" });
@@ -89,10 +93,73 @@ router.post("/logout", async (req, res) => {
 // GPS나 정확한 주소가 아니다.
 router.get("/owner-activity", requireOwner, async (req, res) => {
   try {
-    const activity = await ownerActivity.listRecent(req.query && req.query.limit);
+    const activity = await ownerActivity.listRecent(req.query && req.query.limit, new Date(), ownerActivity.sessionKey(req));
     res.json({ activity });
   } catch (e) {
     console.error("[owner-activity] list failed:", e.message);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+// 사장만 다른 관리자 기기의 세션을 끊을 수 있다. 대상은 원문 세션 ID가
+// 아니라 로그인 기록에 공개된 HMAC 표지다. 현재 이 기기 자체는 실수로
+// 끊지 못하게 막는다 — 자기 로그아웃은 화면 위의 로그아웃 버튼을 쓴다.
+router.post("/owner-activity/:sessionKey/force-logout", requireOwner, async (req, res) => {
+  const targetKey = String(req.params.sessionKey || "").toLowerCase();
+  if (targetKey === ownerActivity.sessionKey(req)) return res.status(400).json({ error: "current_session" });
+  try {
+    const result = await ownerActivity.forceLogout(targetKey, {
+      role: req.session.role,
+      userId: req.session.userId,
+      email: req.session.accountEmail,
+    });
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400).json({ error: result.error });
+    const target = result.row || {};
+    req.adminAuditAction = "force_logout";
+    req.adminAuditTarget = [
+      target.role === "staff" ? "직원" : "사장",
+      target.account_email || null,
+      target.device || null,
+      target.city || null,
+    ].filter(Boolean).join(" · ");
+    res.json({ ok: true, sessionDeleted: result.sessionDeleted });
+  } catch (e) {
+    console.error("[owner-activity] force logout failed:", e.message);
+    res.status(500).json({ error: "server_error" });
+  }
+});
+
+// 로그인 기록 옆의 관리자 변경 기록. 기존 요청 속도 기록 중 관리자 변경만
+// 골라 보여준다. 요청 본문은 애초에 저장하지 않으므로 비밀번호·전화번호는
+// 이 응답에 들어올 수 없다.
+router.get("/admin-audit", requireOwner, async (req, res) => {
+  try {
+    const requestLog = require("../requestLog");
+    await connectDB();
+    // 직전 버튼 클릭 기록도 바로 보이게 메모리 묶음을 먼저 내보낸다.
+    await requestLog.flush(getDb());
+    const limit = Math.max(1, Math.min(100, Number(req.query && req.query.limit) || 40));
+    const rows = await getDb().collection(requestLog.COLLECTION)
+      .find({ audit_action: { $exists: true } })
+      .sort({ created_at: -1 })
+      .limit(limit)
+      .toArray();
+    res.json({
+      audit: rows.map((row) => ({
+        id: String(row._id || ""),
+        action: row.audit_action,
+        target: row.audit_target || null,
+        actorRole: row.actor_role === "staff" ? "staff" : "owner",
+        actorEmail: row.actor_email || null,
+        actorName: row.actor_name || null,
+        method: row.method || null,
+        route: row.route || null,
+        status: Number(row.status) || 0,
+        at: row.created_at ? new Date(row.created_at).toISOString() : null,
+      })),
+    });
+  } catch (e) {
+    console.error("[admin-audit] list failed:", e.message);
     res.status(500).json({ error: "server_error" });
   }
 });

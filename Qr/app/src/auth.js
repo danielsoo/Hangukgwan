@@ -36,6 +36,8 @@ async function syncSessionRole(req, res, next) {
     }
     req.session.role = user.role;
     req.session.isAdmin = isAdminRole(user.role);
+    req.session.accountEmail = user.email || null;
+    req.session.accountName = user.name || null;
   } catch (e) {
     // A Mongo hiccup shouldn't log out the whole restaurant mid-service; the
     // request continues on the role already in the session. Anything that

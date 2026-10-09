@@ -163,6 +163,12 @@ function startMeasuring(req, res) {
       // 사진·파일은 느리거나 방금 뜬 인스턴스일 때만. 위 주석 참고.
       if (isApi || cold || ms >= requestLog.SLOW_MS) {
         const mongo = require("./src/dbTiming").current();
+        const actorRole = req.session && (req.session.role === "owner" || req.session.role === "staff")
+          ? req.session.role
+          : null;
+        const auditAction = actorRole
+          ? (req.adminAuditAction || requestLog.auditActionFor(req.method, routeAtEntry))
+          : null;
         requestLog.record({
           created_at: new Date(), // 몽고 TTL 이 보는 값 — Date 여야 한다
           at: nowLocal(),
@@ -179,6 +185,14 @@ function startMeasuring(req, res) {
           nth: stats.requests_served,
           age_s: stats.instance_age_s,
           region: process.env.VERCEL_REGION || null,
+          // 관리자 변경 감사 기록. 요청 본문은 절대 넣지 않는다 — 비밀번호와
+          // 손님 개인정보가 섞일 수 있다. 역할·계정 표시·큰 작업 분류만.
+          audit_action: auditAction || undefined,
+          audit_target: auditAction && req.adminAuditTarget ? String(req.adminAuditTarget).slice(0, 180) : undefined,
+          actor_role: auditAction ? actorRole : undefined,
+          actor_user_id: auditAction && req.session.userId ? String(req.session.userId).slice(0, 80) : undefined,
+          actor_email: auditAction && req.session.accountEmail ? String(req.session.accountEmail).slice(0, 254) : undefined,
+          actor_name: auditAction && req.session.accountName ? String(req.session.accountName).slice(0, 100) : undefined,
         });
       }
     } catch (e) {

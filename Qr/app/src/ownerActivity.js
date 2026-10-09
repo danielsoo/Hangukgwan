@@ -12,8 +12,8 @@ const MAX_LIMIT = 100;
 // connect-mongo가 세션까지 다시 저장하므로 주문 처리 성능이 나빠진다.
 const recentTouches = new Map();
 
-function sessionKey(req) {
-  const sid = String((req && req.sessionID) || "");
+function sessionKeyFromId(sessionId) {
+  const sid = String(sessionId || "");
   if (!sid) return null;
   // 세션 ID 자체는 로그인 권한과 다름없다. 기록 화면이나 DB에 원문을 남기지
   // 않고, 서버 비밀키로 만든 되돌릴 수 없는 표지만 저장한다.
@@ -21,6 +21,10 @@ function sessionKey(req) {
     .createHmac("sha256", process.env.SESSION_SECRET || "dev-secret-change-me")
     .update(sid)
     .digest("hex");
+}
+
+function sessionKey(req) {
+  return sessionKeyFromId(req && req.sessionID);
 }
 
 function cleanHeader(value, max = 160) {
@@ -191,7 +195,49 @@ function iso(value) {
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
 }
 
-async function listRecent(limit = DEFAULT_LIMIT, now = new Date()) {
+async function forceLogout(targetKey, actor = {}) {
+  const key = String(targetKey || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(key)) return { ok: false, error: "invalid_target" };
+
+  const col = await collection();
+  const row = await col.findOne({ session_key: key });
+  if (!row) return { ok: false, error: "not_found" };
+
+  // 원문 세션 ID는 감사 컬렉션에 저장하지 않는다. 강제 종료할 때만 살아
+  // 있는 세션들의 ID를 같은 HMAC으로 바꿔 비교한 뒤, 일치한 세션을 지운다.
+  const sessions = await getDb().collection("sessions").find({}, { projection: { _id: 1 } }).toArray();
+  let deleted = 0;
+  for (const sessionRow of sessions) {
+    const candidate = sessionKeyFromId(sessionRow && sessionRow._id);
+    if (!candidate) continue;
+    const a = Buffer.from(candidate, "hex");
+    const b = Buffer.from(key, "hex");
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      const result = await getDb().collection("sessions").deleteOne({ _id: sessionRow._id });
+      deleted += Number(result && result.deletedCount) || 0;
+      break;
+    }
+  }
+
+  const now = new Date();
+  await col.updateOne(
+    { session_key: key },
+    {
+      $set: {
+        last_seen_at: now,
+        logged_out_at: now,
+        forced_out_at: now,
+        forced_out_by_role: actor.role === "staff" ? "staff" : "owner",
+        forced_out_by_user_id: actor.userId ? String(actor.userId).slice(0, 80) : null,
+        forced_out_by_email: actor.email ? String(actor.email).slice(0, 254) : null,
+      },
+    }
+  );
+  recentTouches.delete(key);
+  return { ok: true, sessionDeleted: deleted > 0, row };
+}
+
+async function listRecent(limit = DEFAULT_LIMIT, now = new Date(), currentSessionKey = null) {
   const safeLimit = Math.max(1, Math.min(MAX_LIMIT, Number(limit) || DEFAULT_LIMIT));
   const col = await collection();
   const rows = await col.find({}).sort({ logged_in_at: -1 }).limit(safeLimit).toArray();
@@ -201,7 +247,9 @@ async function listRecent(limit = DEFAULT_LIMIT, now = new Date()) {
     const expires = row.expires_at ? new Date(row.expires_at).getTime() : Infinity;
     const online = !row.logged_out_at && lastSeen >= current - ONLINE_WINDOW_MS && expires > current;
     return {
-      id: String(row._id || row.session_key),
+      // 되돌릴 수 없는 HMAC 표지를 강제 로그아웃 대상 키로 쓴다. Mongo의
+      // 내부 문서 번호를 내보내지 않고도 정확히 한 세션을 고를 수 있다.
+      id: String(row.session_key),
       accountEmail: row.account_email || null,
       // 이 기능이 생기기 전에 저장된 행은 모두 사장 로그인뿐이었다.
       role: row.role === "staff" ? "staff" : "owner",
@@ -211,6 +259,10 @@ async function listRecent(limit = DEFAULT_LIMIT, now = new Date()) {
       loggedOutAt: iso(row.logged_out_at),
       expiresAt: iso(row.expires_at),
       isOnline: online,
+      isCurrent: !!currentSessionKey && row.session_key === currentSessionKey,
+      forcedOutAt: iso(row.forced_out_at),
+      forcedOutByRole: row.forced_out_by_role || null,
+      forcedOutByEmail: row.forced_out_by_email || null,
       ip: row.ip || null,
       city: row.city || null,
       region: row.region || null,
@@ -223,6 +275,7 @@ async function listRecent(limit = DEFAULT_LIMIT, now = new Date()) {
 module.exports = {
   COLLECTION,
   ONLINE_WINDOW_MS,
+  sessionKeyFromId,
   sessionKey,
   requestDetails,
   describeDevice,
@@ -231,5 +284,6 @@ module.exports = {
   touchIfDue,
   forgetRecentTouch,
   recordLogout,
+  forceLogout,
   listRecent,
 };

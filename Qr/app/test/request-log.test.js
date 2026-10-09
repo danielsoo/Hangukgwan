@@ -40,7 +40,14 @@ function check(name, cond, extra = "") {
   out.push("\n[주소를 한 줄로 모은다 — 주문마다 따로 쌓이면 요약이 안 된다]");
   check("숫자는 :id 가 된다", requestLog.routeOf("/api/orders/123") === "/api/orders/:id", requestLog.routeOf("/api/orders/123"));
   check("숫자가 여럿이어도", requestLog.routeOf("/api/menu/admin/items/7/photo") === "/api/menu/admin/items/:id/photo", requestLog.routeOf("/api/menu/admin/items/7/photo"));
+  check("세션 HMAC은 :key로 가린다", requestLog.routeOf(`/api/auth/owner-activity/${"a".repeat(64)}/force-logout`) === "/api/auth/owner-activity/:key/force-logout");
   check("글자는 그대로", requestLog.routeOf("/api/settings/print-device") === "/api/settings/print-device");
+
+  out.push("\n[관리자 변경은 내용 없이 큰 분류만 남긴다]");
+  check("강제 로그아웃 분류", requestLog.auditActionFor("POST", `/api/auth/owner-activity/${"b".repeat(64)}/force-logout`) === "force_logout");
+  check("주문 변경 분류", requestLog.auditActionFor("PATCH", "/api/orders/123") === "order_change");
+  check("자동 접속 신호는 변경 기록에서 제외", requestLog.auditActionFor("POST", "/api/auth/owner-activity/heartbeat") === null);
+  check("조회 요청은 변경 기록이 아님", requestLog.auditActionFor("GET", "/api/settings") === null);
 
   out.push("\n[전부 남긴다 — 표본은 아침과 저녁의 차이를 지운다]");
   // 2026-09-12 사장님: "모든 이벤트에 속도를 측정할 수 있게 해줘. 분명 아침
@@ -75,6 +82,7 @@ function check(name, cond, extra = "") {
   await boss.post("/api/auth/login").send({ password: "ownerpass123" });
   await boss.get("/api/orders");
   await boss.get("/api/orders");
+  await boss.post("/api/auth/set-staff-password").send({ newPassword: "newstaff123" });
   // 운영에서는 30초마다 자동으로 나가지만, 테스트가 30초를 실제로 기다릴
   // 이유는 없다. 같은 flush를 직접 불러 저장된 내용만 확인한다.
   await requestLog.flush(handle);
@@ -86,6 +94,11 @@ function check(name, cond, extra = "") {
     check("몇 번째 요청이었는지 들어 있다", typeof r.nth === "number", String(r.nth));
     check("TTL 이 볼 수 있는 날짜다 (Date)", r.created_at instanceof Date, typeof r.created_at);
   }
+  const auditResponse = await boss.get("/api/auth/admin-audit?limit=20");
+  const securityAudit = (auditResponse.body.audit || []).find((row) => row.action === "security_change");
+  check("관리자 변경 기록을 사장이 조회", auditResponse.status === 200 && securityAudit && securityAudit.actorRole === "owner", JSON.stringify(auditResponse.body));
+  const storedAudit = await handle.collection(requestLog.COLLECTION).find({ audit_action: { $exists: true } }).toArray();
+  check("비밀번호 입력값은 감사 기록에 저장하지 않음", !JSON.stringify(storedAudit).includes("newstaff123"));
 
   out.push("\n[요약이 세 가지 질문에 답한다]");
   const r = await boss.get("/api/_diag/log?hours=24");
@@ -163,6 +176,8 @@ function check(name, cond, extra = "") {
   const anon = request.agent(app);
   const r2 = await anon.get("/api/_diag/log");
   check("로그인 안 하면 거부", r2.status === 401 || r2.status === 403, String(r2.status));
+  const rAudit = await anon.get("/api/auth/admin-audit");
+  check("로그인 안 하면 변경 기록도 거부", rAudit.status === 401 || rAudit.status === 403, String(rAudit.status));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);

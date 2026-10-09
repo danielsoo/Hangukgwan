@@ -46,9 +46,43 @@ function markIndexReady() {
 function routeOf(pathname) {
   return String(pathname || "")
     .split("/")
-    .map((seg) => (/^\d+$/.test(seg) ? ":id" : seg))
+    .map((seg) => (/^\d+$/.test(seg) || /^[a-f0-9]{24}$/i.test(seg) ? ":id" : /^[a-f0-9]{64}$/i.test(seg) ? ":key" : seg))
     .join("/")
     .slice(0, 120);
+}
+
+// 관리자 변경 기록에 남길 큰 분류. 본문(req.body)은 비밀번호·연락처·금액 등
+// 민감정보가 섞일 수 있어 절대 저장하지 않는다. 주소도 위 routeOf()로 번호와
+// 세션 표지를 가린 뒤 분류만 남긴다.
+function auditActionFor(method, route) {
+  const verb = String(method || "GET").toUpperCase();
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(verb)) return null;
+  const p = routeOf(route);
+
+  // 화면이 자동으로 보내는 생존·사용량 신호는 사람이 바꾼 일이 아니다.
+  if ([
+    "/api/auth/owner-activity/heartbeat",
+    "/api/settings/pad-touches",
+    "/api/settings/pad-seen",
+    "/api/auth/sensitive-unlock",
+    "/api/auth/sensitive-lock",
+  ].includes(p)) return null;
+  if (/^\/api\/(?:account|auth)\/(?:login|logout|google|register)$/.test(p)) return null;
+
+  if (/^\/api\/auth\/owner-activity\/:key\/force-logout$/.test(p)) return "force_logout";
+  if (p.startsWith("/api/orders")) return "order_change";
+  if (p.startsWith("/api/menu")) return "menu_change";
+  if (p.startsWith("/api/tables") || p.startsWith("/api/zones")) return "floor_change";
+  if (p.startsWith("/api/users")) return "account_change";
+  if (p.startsWith("/api/reservations")) return "reservation_change";
+  if (p.startsWith("/api/payroll")) return "payroll_change";
+  if (p.startsWith("/api/ingredients")) return "ingredients_change";
+  if (p.startsWith("/api/settlements")) return "settlement_change";
+  if (p.startsWith("/api/vip-cards")) return "vip_change";
+  if (p.startsWith("/api/test-mode")) return "test_mode_change";
+  if (p.startsWith("/api/settings")) return "settings_change";
+  if (p.startsWith("/api/auth")) return "security_change";
+  return "admin_change";
 }
 
 // 전부 남긴다.
@@ -137,5 +171,5 @@ function lastFlushError() {
 
 module.exports = {
   COLLECTION, KEEP_DAYS, SLOW_MS, MAX_QUEUE, MAX_BATCH, FLUSH_INTERVAL_MS,
-  routeOf, record, pending, shouldFlush, flush, markIndexReady, lastFlushError, droppedCount,
+  routeOf, auditActionFor, record, pending, shouldFlush, flush, markIndexReady, lastFlushError, droppedCount,
 };

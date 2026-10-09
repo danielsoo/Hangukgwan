@@ -1872,6 +1872,35 @@
       ownerActivityGroupSummary: "접속 중 {online}곳 · 전체 {total}건",
       ownerActivityOwnerEmpty: "아직 사장 로그인 기록이 없어요.",
       ownerActivityStaffEmpty: "아직 직원 로그인 기록이 없어요. 로그인된 태블릿은 관리자 화면에서 주문을 조회하면 자동으로 표시됩니다.",
+      ownerActivityCurrentDevice: "현재 기기",
+      ownerActivityForceLogout: "강제 로그아웃",
+      ownerActivityForceConfirm: "{who}\n{device}\n\n이 기기를 강제로 로그아웃할까요? 진행하면 이 기기에서 다시 로그인해야 합니다.",
+      ownerActivityForceDone: "해당 기기를 로그아웃했습니다.",
+      ownerActivityForceAlreadyEnded: "이미 종료된 접속입니다. 기록을 종료 상태로 바꿨습니다.",
+      ownerActivityForceFailed: "강제 로그아웃하지 못했습니다. 다시 시도해주세요.",
+      ownerActivityForcedBy: "{who}이(가) 강제 로그아웃 · {at}",
+      adminAuditTitle: "관리자 변경 기록",
+      adminAuditHint: "사장·직원이 관리자 화면에서 변경한 작업을 기록합니다. 비밀번호와 입력 내용은 저장하지 않습니다.",
+      adminAuditLoading: "변경 기록을 불러오는 중…",
+      adminAuditEmpty: "아직 저장된 변경 기록이 없어요.",
+      adminAuditLoadError: "변경 기록을 불러오지 못했어요.",
+      adminAuditActorOwner: "사장",
+      adminAuditActorStaff: "직원",
+      adminAuditFailed: "실패",
+      adminAuditActionForceLogout: "접속 기기 강제 로그아웃",
+      adminAuditActionOrderChange: "주문 변경",
+      adminAuditActionMenuChange: "메뉴 변경",
+      adminAuditActionFloorChange: "테이블·배치 변경",
+      adminAuditActionAccountChange: "계정 권한 변경",
+      adminAuditActionReservationChange: "예약 변경",
+      adminAuditActionPayrollChange: "급여 변경",
+      adminAuditActionIngredientsChange: "식자재 변경",
+      adminAuditActionSettlementChange: "결산 변경",
+      adminAuditActionVipChange: "VIP 변경",
+      adminAuditActionTestModeChange: "테스트 모드 변경",
+      adminAuditActionSettingsChange: "매장 설정 변경",
+      adminAuditActionSecurityChange: "보안 설정 변경",
+      adminAuditActionAdminChange: "관리자 변경",
       ownerActivityOnline: "현재 접속 중",
       ownerActivityInactive: "접속 종료 / 비활성",
       ownerActivityLoggedOut: "로그아웃",
@@ -3200,6 +3229,35 @@
       ownerActivityGroupSummary: "在線 {online} 處 · 共 {total} 筆",
       ownerActivityOwnerEmpty: "目前沒有負責人登入紀錄。",
       ownerActivityStaffEmpty: "目前沒有店員登入紀錄。已登入的平板在管理畫面讀取訂單後會自動顯示。",
+      ownerActivityCurrentDevice: "目前裝置",
+      ownerActivityForceLogout: "強制登出",
+      ownerActivityForceConfirm: "{who}\n{device}\n\n要強制登出這台裝置嗎？執行後，該裝置必須重新登入。",
+      ownerActivityForceDone: "已將該裝置登出。",
+      ownerActivityForceAlreadyEnded: "此連線已結束，紀錄已改為離線。",
+      ownerActivityForceFailed: "無法強制登出，請再試一次。",
+      ownerActivityForcedBy: "{who} 強制登出 · {at}",
+      adminAuditTitle: "管理員變更紀錄",
+      adminAuditHint: "記錄負責人與店員在管理畫面進行的變更。密碼與輸入內容不會儲存。",
+      adminAuditLoading: "正在載入變更紀錄…",
+      adminAuditEmpty: "目前沒有變更紀錄。",
+      adminAuditLoadError: "無法載入變更紀錄。",
+      adminAuditActorOwner: "負責人",
+      adminAuditActorStaff: "店員",
+      adminAuditFailed: "失敗",
+      adminAuditActionForceLogout: "強制登出連線裝置",
+      adminAuditActionOrderChange: "訂單變更",
+      adminAuditActionMenuChange: "菜單變更",
+      adminAuditActionFloorChange: "桌位與配置變更",
+      adminAuditActionAccountChange: "帳號權限變更",
+      adminAuditActionReservationChange: "預約變更",
+      adminAuditActionPayrollChange: "薪資變更",
+      adminAuditActionIngredientsChange: "食材變更",
+      adminAuditActionSettlementChange: "結算變更",
+      adminAuditActionVipChange: "VIP 變更",
+      adminAuditActionTestModeChange: "測試模式變更",
+      adminAuditActionSettingsChange: "店家設定變更",
+      adminAuditActionSecurityChange: "安全設定變更",
+      adminAuditActionAdminChange: "管理員變更",
       ownerActivityOnline: "目前在線",
       ownerActivityInactive: "已離線 / 無活動",
       ownerActivityLoggedOut: "已登出",
@@ -13931,6 +13989,7 @@
   // 없어지기 때문이다.
   let accountsCache = [];
   let ownerActivityCache = [];
+  let adminAuditCache = [];
 
   // ---------- 직원 급여 (2026-10-03, src/payroll.js) ----------
   //
@@ -15088,10 +15147,16 @@
         const ip = row.ip ? `${T("ownerActivityIp")} ${row.ip}` : "";
         const roleKey = row.role === "staff" ? "ownerActivityRoleStaff" : "ownerActivityRoleOwner";
         const who = row.accountEmail || T(row.role === "staff" ? "ownerActivitySharedStaff" : "ownerActivitySharedAccount");
+        const forcedBy = row.forcedOutAt
+          ? T("ownerActivityForcedBy")
+              .replace("{who}", row.forcedOutByEmail || T(row.forcedOutByRole === "staff" ? "adminAuditActorStaff" : "adminAuditActorOwner"))
+              .replace("{at}", ownerActivityTime(row.forcedOutAt))
+          : null;
         const times = [
           `${T("ownerActivityLoginAt")} ${ownerActivityTime(row.loggedInAt)}`,
           `${T("ownerActivityLastSeenAt")} ${ownerActivityTime(row.lastSeenAt)}`,
           row.loggedOutAt ? `${T("ownerActivityLogoutAt")} ${ownerActivityTime(row.loggedOutAt)}` : null,
+          forcedBy,
         ]
           .filter(Boolean)
           .map((text) => `<span>${escapeHtml(text)}</span>`)
@@ -15102,6 +15167,8 @@
             <span class="owner-activity-role ${row.role === "staff" ? "is-staff" : "is-owner"}">${escapeHtml(T(roleKey))}</span>
             <strong>${escapeHtml(who)}</strong>
             <span class="owner-activity-method">${escapeHtml(ownerActivityMethod(row.loginMethod))}</span>
+            ${row.isCurrent ? `<span class="owner-activity-current">${escapeHtml(T("ownerActivityCurrentDevice"))}</span>` : ""}
+            ${row.isOnline && !row.isCurrent ? `<button type="button" class="owner-activity-force" data-force-logout-key="${escapeHtml(row.id)}">${escapeHtml(T("ownerActivityForceLogout"))}</button>` : ""}
           </div>
           <div class="owner-activity-meta">
             <span>${escapeHtml(row.device || "-")}</span>
@@ -15132,6 +15199,91 @@
       renderGroup("owner", "ownerActivityOwnerGroup", "ownerActivityOwnerEmpty"),
       renderGroup("staff", "ownerActivityStaffGroup", "ownerActivityStaffEmpty"),
     ].join("");
+    wrap.querySelectorAll("[data-force-logout-key]").forEach((button) => {
+      button.onclick = async () => {
+        const row = rows.find((item) => item.id === button.dataset.forceLogoutKey);
+        if (!row) return;
+        const who = row.accountEmail || T(row.role === "staff" ? "ownerActivitySharedStaff" : "ownerActivitySharedAccount");
+        const ok = await showConfirm(
+          T("ownerActivityForceConfirm")
+            .replace("{who}", who)
+            .replace("{device}", row.device || "-")
+        );
+        if (!ok) return;
+        button.disabled = true;
+        try {
+          const res = await fetch(`/api/auth/owner-activity/${encodeURIComponent(row.id)}/force-logout`, { method: "POST" });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+          await Promise.all([loadOwnerActivity(), loadAdminAudit()]);
+          await showAlert(T(data.sessionDeleted ? "ownerActivityForceDone" : "ownerActivityForceAlreadyEnded"));
+        } catch (e) {
+          button.disabled = false;
+          await showAlert(T("ownerActivityForceFailed"));
+        }
+      };
+    });
+  }
+
+  function adminAuditActionLabel(action) {
+    const keys = {
+      force_logout: "adminAuditActionForceLogout",
+      order_change: "adminAuditActionOrderChange",
+      menu_change: "adminAuditActionMenuChange",
+      floor_change: "adminAuditActionFloorChange",
+      account_change: "adminAuditActionAccountChange",
+      reservation_change: "adminAuditActionReservationChange",
+      payroll_change: "adminAuditActionPayrollChange",
+      ingredients_change: "adminAuditActionIngredientsChange",
+      settlement_change: "adminAuditActionSettlementChange",
+      vip_change: "adminAuditActionVipChange",
+      test_mode_change: "adminAuditActionTestModeChange",
+      settings_change: "adminAuditActionSettingsChange",
+      security_change: "adminAuditActionSecurityChange",
+      admin_change: "adminAuditActionAdminChange",
+    };
+    return T(keys[action] || "adminAuditActionAdminChange");
+  }
+
+  function renderAdminAudit() {
+    const wrap = $("#adminAuditList");
+    if (!wrap) return;
+    const rows = adminAuditCache || [];
+    if (!rows.length) {
+      wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("adminAuditEmpty"))}</p>`;
+      return;
+    }
+    wrap.innerHTML = rows.map((row) => {
+      const actor = row.actorName || row.actorEmail || T(row.actorRole === "staff" ? "adminAuditActorStaff" : "adminAuditActorOwner");
+      const failed = row.status < 200 || row.status >= 400;
+      return `<article class="admin-audit-row${failed ? " is-failed" : ""}">
+        <div class="admin-audit-row-main">
+          <strong>${escapeHtml(adminAuditActionLabel(row.action))}</strong>
+          ${failed ? `<span class="admin-audit-failed">${escapeHtml(T("adminAuditFailed"))}</span>` : ""}
+          <span class="owner-activity-role ${row.actorRole === "staff" ? "is-staff" : "is-owner"}">${escapeHtml(T(row.actorRole === "staff" ? "adminAuditActorStaff" : "adminAuditActorOwner"))}</span>
+        </div>
+        <div class="admin-audit-meta">
+          <span>${escapeHtml(actor)}</span>
+          <span>${escapeHtml(ownerActivityTime(row.at))}</span>
+          ${row.target ? `<span>${escapeHtml(row.target)}</span>` : ""}
+        </div>
+      </article>`;
+    }).join("");
+  }
+
+  async function loadAdminAudit() {
+    const wrap = $("#adminAuditList");
+    if (!wrap || currentRole !== "owner") return;
+    wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("adminAuditLoading"))}</p>`;
+    try {
+      const res = await fetch("/api/auth/admin-audit?limit=40");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      adminAuditCache = data.audit || [];
+      renderAdminAudit();
+    } catch (e) {
+      wrap.innerHTML = `<p class="owner-activity-empty">${escapeHtml(T("adminAuditLoadError"))}</p>`;
+    }
   }
 
   async function loadOwnerActivity() {
@@ -15153,6 +15305,7 @@
     const wrap = $("#accountsList");
     if (!wrap) return;
     loadOwnerActivity();
+    loadAdminAudit();
     wrap.innerHTML = `<p style="color:var(--muted);padding:20px 0;text-align:center;">${T("accountsLoading")}</p>`;
     try {
       const res = await fetch("/api/users");

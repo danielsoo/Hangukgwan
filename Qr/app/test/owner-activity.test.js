@@ -93,6 +93,7 @@ function check(name, cond, extra = "") {
 
   const stored = fake.__db.collection(activity.COLLECTION).docs[0];
   check("DB에도 세션 ID 대신 HMAC만 저장", stored && /^[a-f0-9]{64}$/.test(stored.session_key || ""), stored && stored.session_key);
+  check("현재 보고 있는 기기는 강제 로그아웃 대상에서 구분", first && first.isCurrent === true, JSON.stringify(first));
 
   out.push("\n[권한과 현재 접속 판정]");
   await staff.post("/api/auth/login").send({ password: "staffpass123" });
@@ -124,6 +125,29 @@ function check(name, cond, extra = "") {
     .set("x-vercel-ip-city", "Zhubei%20City")
     .set("x-vercel-ip-country", "TW");
   check("heartbeat 저장", r.status === 200 && r.body.ok === true, JSON.stringify(r.body));
+
+  out.push("\n[위험 작업 — 다른 기기 강제 로그아웃]");
+  const forcedReq = {
+    sessionID: "staff-tablet-session-to-force",
+    session: { role: "staff", cookie: {} },
+    headers: { "user-agent": "Mozilla/5.0 (Linux; Android 13) AppleWebKit Chrome/140.0 Safari/537.36" },
+    ip: "203.0.113.90",
+  };
+  await activity.recordLogin(forcedReq, { method: "existing_session", role: "staff" });
+  await fake.__db.collection("sessions").insertOne({ _id: forcedReq.sessionID, session: "{}", expires: new Date(Date.now() + 3600000) });
+  r = await owner.get("/api/auth/owner-activity");
+  const forceTarget = (r.body.activity || []).find((row) => row.id === activity.sessionKey(forcedReq));
+  check("원문 세션 ID 대신 HMAC 대상 키만 제공", forceTarget && /^[a-f0-9]{64}$/.test(forceTarget.id) && !JSON.stringify(forceTarget).includes(forcedReq.sessionID), JSON.stringify(forceTarget));
+  r = await staff.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`);
+  check("직원은 다른 기기 강제 로그아웃 불가", r.status === 401, `${r.status} ${JSON.stringify(r.body)}`);
+  r = await owner.post(`/api/auth/owner-activity/${forceTarget.id}/force-logout`);
+  check("사장은 다른 기기 강제 로그아웃", r.status === 200 && r.body.sessionDeleted === true, `${r.status} ${JSON.stringify(r.body)}`);
+  check("대상 세션이 실제로 삭제됨", !(await fake.__db.collection("sessions").findOne({ _id: forcedReq.sessionID })));
+  r = await owner.get("/api/auth/owner-activity");
+  const forcedRow = (r.body.activity || []).find((row) => row.id === forceTarget.id);
+  check("강제 종료 시각·실행 역할이 기록됨", forcedRow && forcedRow.forcedOutAt && forcedRow.forcedOutByRole === "owner" && forcedRow.isOnline === false, JSON.stringify(forcedRow));
+  r = await owner.post(`/api/auth/owner-activity/${first.id}/force-logout`);
+  check("현재 기기는 실수로 강제 종료하지 못함", r.status === 400 && r.body.error === "current_session", `${r.status} ${JSON.stringify(r.body)}`);
 
   out.push("\n[계정 로그인과 로그아웃]");
   const accountOwner = request.agent(app);
@@ -168,6 +192,8 @@ function check(name, cond, extra = "") {
   check("로그아웃할 때만 접속 신호를 명시적으로 끔", /logoutBtn[\s\S]+?stopOwnerPresence\(\);[\s\S]+?stopPolling\(\);/.test(adminJs));
   check("접속 상태 새로고침은 이 기기의 신호부터 갱신", /ownerActivityRefreshBtn[^\n]+onclick = sendOwnerPresence/.test(adminJs));
   check("사장과 직원 기록을 별도 박스로 렌더링", /renderGroup\("owner"[\s\S]+renderGroup\("staff"/.test(adminJs));
+  check("강제 로그아웃은 확인 뒤 실행", /showConfirm\([\s\S]+?force-logout/.test(adminJs));
+  check("변경 기록을 로그인 기록 옆에서 불러옴", /loadAdminAudit[\s\S]+?\/api\/auth\/admin-audit/.test(adminJs));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);
