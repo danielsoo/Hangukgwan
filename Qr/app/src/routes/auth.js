@@ -1,7 +1,7 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const { store, save, getDb, connectDB } = require("../db");
-const { requireOwner } = require("../auth");
+const { requireAdmin, requireOwner } = require("../auth");
 const { isAdminRole } = require("../accounts");
 const lockbox = require("../sensitiveLock");
 const ownerActivity = require("../ownerActivity");
@@ -12,7 +12,7 @@ const router = express.Router();
 // the owner's password first, then the staff password, and remember which
 // one matched as the session's role. Owner always has full access; staff
 // only gets whatever the owner has switched on in Admin > 설정 > 직원 권한 관리.
-async function recordOwnerLoginQuietly(req, details) {
+async function recordAdminLoginQuietly(req, details) {
   try {
     await ownerActivity.recordLogin(req, details);
   } catch (e) {
@@ -22,8 +22,8 @@ async function recordOwnerLoginQuietly(req, details) {
   }
 }
 
-async function recordOwnerLogoutQuietly(req) {
-  if (!req.session || req.session.role !== "owner") return;
+async function recordAdminLogoutQuietly(req) {
+  if (!req.session || !isAdminRole(req.session.role)) return;
   try {
     await ownerActivity.recordLogout(req);
   } catch (e) {
@@ -49,13 +49,14 @@ router.post("/login", async (req, res) => {
     delete req.session.userId;
     req.session.isAdmin = true;
     req.session.role = "owner";
-    await recordOwnerLoginQuietly(req, { method: "shared_password" });
+    await recordAdminLoginQuietly(req, { method: "shared_password", role: "owner" });
     return res.json({ ok: true, role: "owner" });
   }
   if (staffHash && bcrypt.compareSync(password, staffHash)) {
     delete req.session.userId;
     req.session.isAdmin = true;
     req.session.role = "staff";
+    await recordAdminLoginQuietly(req, { method: "shared_password", role: "staff" });
     return res.json({ ok: true, role: "staff" });
   }
   return res.status(401).json({ error: "wrong_password" });
@@ -79,7 +80,7 @@ router.post("/logout", async (req, res) => {
       // 자리 하나 못 비웠다고 로그아웃이 막히면 안 된다.
     }
   }
-  await recordOwnerLogoutQuietly(req);
+  await recordAdminLogoutQuietly(req);
   req.session.destroy(() => res.json({ ok: true }));
 });
 
@@ -99,7 +100,7 @@ router.get("/owner-activity", requireOwner, async (req, res) => {
 // 관리자 화면이 열려 있는 동안 1분마다 오는 신호. 세션 쿠키가 아직
 // 유효하다는 것만으로 접속 중이라 하지 않고, 이 신호가 최근에 온 경우만
 // 접속 중으로 표시한다.
-router.post("/owner-activity/heartbeat", requireOwner, async (req, res) => {
+router.post("/owner-activity/heartbeat", requireAdmin, async (req, res) => {
   try {
     await ownerActivity.touch(req);
     res.json({ ok: true });

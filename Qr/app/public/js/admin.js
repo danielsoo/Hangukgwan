@@ -1859,13 +1859,13 @@
       payrollBadTime: "빨간 칸의 시각을 고쳐 주세요(예: 09:05).",
       accountsTabHint:
         "홈페이지에서 가입한 계정 목록이에요. 손님으로 가입한 사람을 직원이나 사장으로 바꾸면, 그 사람이 홈페이지에 로그인했을 때 \"관리자 페이지\" 버튼이 생기고 관리자 화면에 들어올 수 있어요. 등급을 내리면 그 사람의 접근 권한도 바로 사라져요 — 다시 로그인할 때까지 기다릴 필요 없어요.",
-      ownerActivityTitle: "사장 로그인 기록",
+      ownerActivityTitle: "사장·직원 로그인 기록",
       ownerActivityHint:
-        "관리자 화면을 열어 둔 기기는 현재 접속 중으로 표시됩니다. 위치는 GPS가 아닌 인터넷 접속 위치라 실제 장소와 조금 다를 수 있어요.",
+        "사장 또는 직원으로 관리자 화면을 열어 둔 기기는 현재 접속 중으로 표시됩니다. 위치는 GPS가 아닌 인터넷 접속 위치라 실제 장소와 조금 다를 수 있어요.",
       ownerActivityRefreshBtn: "접속 상태 새로고침",
       ownerActivityLoading: "로그인 기록을 불러오는 중…",
       ownerActivityLoadError: "로그인 기록을 불러오지 못했어요.",
-      ownerActivityEmpty: "아직 저장된 사장 로그인 기록이 없어요.",
+      ownerActivityEmpty: "아직 저장된 사장·직원 로그인 기록이 없어요.",
       ownerActivitySummary: "현재 접속 {online}곳 · 최근 기록 {total}건",
       ownerActivityOnline: "현재 접속 중",
       ownerActivityInactive: "접속 종료 / 비활성",
@@ -1880,6 +1880,9 @@
       ownerActivityMethodShared: "공용 사장 비밀번호",
       ownerActivityMethodExisting: "기존 로그인 세션",
       ownerActivitySharedAccount: "사장 공용 로그인",
+      ownerActivitySharedStaff: "직원 공용 로그인",
+      ownerActivityRoleOwner: "사장",
+      ownerActivityRoleStaff: "직원",
       accountsListTitle: "가입 계정",
       accountSearchPlaceholder: "이름 또는 이메일로 검색",
       accountsRefreshBtn: "새로고침",
@@ -3179,13 +3182,13 @@
       payrollBadTime: "請修正紅框的時間（例：09:05）。",
       accountsTabHint:
         "這裡是從官網註冊的帳號。把顧客改成員工或負責人後，那個人在官網登入時就會看到「管理後台」按鈕，並且可以進入管理畫面。降級後權限也會立刻收回，不用等他重新登入。",
-      ownerActivityTitle: "負責人登入紀錄",
+      ownerActivityTitle: "負責人與店員登入紀錄",
       ownerActivityHint:
-        "有開著管理畫面的裝置會顯示為目前在線。位置來自網路連線資訊，不是 GPS，因此可能和實際地點稍有差異。",
+        "負責人或店員開著管理畫面的裝置會顯示為目前在線。位置來自網路連線資訊，不是 GPS，因此可能和實際地點稍有差異。",
       ownerActivityRefreshBtn: "重新整理在線狀態",
       ownerActivityLoading: "正在載入登入紀錄…",
       ownerActivityLoadError: "無法載入登入紀錄。",
-      ownerActivityEmpty: "目前沒有負責人的登入紀錄。",
+      ownerActivityEmpty: "目前沒有負責人或店員的登入紀錄。",
       ownerActivitySummary: "目前在線 {online} 處 · 最近紀錄 {total} 筆",
       ownerActivityOnline: "目前在線",
       ownerActivityInactive: "已離線 / 無活動",
@@ -3200,6 +3203,9 @@
       ownerActivityMethodShared: "共用負責人密碼",
       ownerActivityMethodExisting: "既有登入工作階段",
       ownerActivitySharedAccount: "負責人共用登入",
+      ownerActivitySharedStaff: "店員共用登入",
+      ownerActivityRoleOwner: "負責人",
+      ownerActivityRoleStaff: "店員",
       accountsListTitle: "註冊帳號",
       accountSearchPlaceholder: "以姓名或信箱搜尋",
       accountsRefreshBtn: "重新整理",
@@ -4934,7 +4940,7 @@
   let ownerPresenceTimer = null;
 
   async function sendOwnerPresence() {
-    if (currentRole !== "owner") return;
+    if (currentRole !== "owner" && currentRole !== "staff") return;
     try {
       const res = await nativeFetch("/api/auth/owner-activity/heartbeat", { method: "POST" });
       if (res.status === 401) stopOwnerPresence();
@@ -4947,7 +4953,7 @@
 
   function startOwnerPresence() {
     stopOwnerPresence();
-    if (currentRole !== "owner") return;
+    if (currentRole !== "owner" && currentRole !== "staff") return;
     sendOwnerPresence();
     ownerPresenceTimer = setInterval(sendOwnerPresence, 60000);
   }
@@ -15075,7 +15081,8 @@
         const stateClass = row.isOnline ? "is-online" : row.loggedOutAt ? "is-logged-out" : "is-inactive";
         const place = [row.city, row.region, row.country].filter(Boolean).join(" · ") || T("ownerActivityLocationUnknown");
         const ip = row.ip ? `${T("ownerActivityIp")} ${row.ip}` : "";
-        const who = row.accountEmail || T("ownerActivitySharedAccount");
+        const roleKey = row.role === "staff" ? "ownerActivityRoleStaff" : "ownerActivityRoleOwner";
+        const who = row.accountEmail || T(row.role === "staff" ? "ownerActivitySharedStaff" : "ownerActivitySharedAccount");
         const times = [
           `${T("ownerActivityLoginAt")} ${ownerActivityTime(row.loggedInAt)}`,
           `${T("ownerActivityLastSeenAt")} ${ownerActivityTime(row.lastSeenAt)}`,
@@ -15087,6 +15094,7 @@
         return `<article class="owner-activity-row ${stateClass}">
           <div class="owner-activity-row-head">
             <span class="owner-activity-state"><i aria-hidden="true"></i>${escapeHtml(T(stateKey))}</span>
+            <span class="owner-activity-role ${row.role === "staff" ? "is-staff" : "is-owner"}">${escapeHtml(T(roleKey))}</span>
             <strong>${escapeHtml(who)}</strong>
             <span class="owner-activity-method">${escapeHtml(ownerActivityMethod(row.loginMethod))}</span>
           </div>

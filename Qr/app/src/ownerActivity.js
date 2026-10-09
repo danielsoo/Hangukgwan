@@ -84,15 +84,17 @@ async function collection() {
   return getDb().collection(COLLECTION);
 }
 
-async function recordLogin(req, { method = "shared_password", email = null, userId = null } = {}) {
+async function recordLogin(req, { method = "shared_password", email = null, userId = null, role = null } = {}) {
   const key = sessionKey(req);
   if (!key) return false;
   const now = new Date();
+  const sessionRole = role || (req && req.session && req.session.role);
   const row = {
     session_key: key,
     user_id: userId ? String(userId) : null,
     account_email: email ? String(email).trim().toLowerCase().slice(0, 254) : null,
     login_method: String(method || "shared_password").slice(0, 40),
+    role: sessionRole === "staff" ? "staff" : "owner",
     logged_in_at: now,
     last_seen_at: now,
     logged_out_at: null,
@@ -116,6 +118,7 @@ async function touch(req) {
     return recordLogin(req, {
       method: "existing_session",
       userId: req && req.session && req.session.userId,
+      role: req && req.session && req.session.role,
     });
   }
   await col.updateOne(
@@ -124,6 +127,7 @@ async function touch(req) {
       $set: {
         last_seen_at: now,
         expires_at: sessionExpiry(req),
+        role: req && req.session && req.session.role === "staff" ? "staff" : "owner",
         ...requestDetails(req),
       },
     }
@@ -161,6 +165,8 @@ async function listRecent(limit = DEFAULT_LIMIT, now = new Date()) {
     return {
       id: String(row._id || row.session_key),
       accountEmail: row.account_email || null,
+      // 이 기능이 생기기 전에 저장된 행은 모두 사장 로그인뿐이었다.
+      role: row.role === "staff" ? "staff" : "owner",
       loginMethod: row.login_method || "shared_password",
       loggedInAt: iso(row.logged_in_at),
       lastSeenAt: iso(row.last_seen_at),

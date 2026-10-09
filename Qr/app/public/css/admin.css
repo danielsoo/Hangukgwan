@@ -1830,6 +1830,11 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .owner-activity-method {
   padding: 2px 7px; border: 1px solid #d8dee8; border-radius: 6px; color: var(--muted); font-size: 11px;
 }
+.owner-activity-role {
+  padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 900;
+}
+.owner-activity-role.is-owner { background: #f7ead1; color: #8b5b06; }
+.owner-activity-role.is-staff { background: #e6edf8; color: #315487; }
 .owner-activity-meta, .owner-activity-times {
   display: flex; flex-wrap: wrap; gap: 5px 16px; margin-top: 8px; color: var(--muted); font-size: 13px;
 }

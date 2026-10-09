@@ -20,6 +20,7 @@ const request = require("supertest");
 const bcrypt = require("bcryptjs");
 const { store } = require("../src/db");
 const activity = require("../src/ownerActivity");
+const accounts = require("../src/accounts");
 
 store.settings = {
   admin_password_hash: bcrypt.hashSync("ownerpass123", 10),
@@ -78,6 +79,7 @@ function check(name, cond, extra = "") {
   check("IP와 대략적 위치 저장", first && first.ip === "203.0.113.41" && first.city === "Zhubei City" && first.country === "TW", JSON.stringify(first));
   check("기기·브라우저 요약", first && /Windows PC/.test(first.device) && /Chrome/.test(first.device), first && first.device);
   check("공용 비밀번호 방식 표시", first && first.loginMethod === "shared_password", first && first.loginMethod);
+  check("사장 역할 표시", first && first.role === "owner", first && first.role);
   check("세션 ID·원문 UA는 응답하지 않음", first && !("session_key" in first) && !("user_agent" in first));
 
   const stored = fake.__db.collection(activity.COLLECTION).docs[0];
@@ -88,7 +90,10 @@ function check(name, cond, extra = "") {
   r = await staff.get("/api/auth/owner-activity");
   check("직원은 기록 조회 불가", r.status === 401, `got ${r.status}`);
   r = await staff.post("/api/auth/owner-activity/heartbeat");
-  check("직원은 접속 신호 전송 불가", r.status === 401, `got ${r.status}`);
+  check("직원도 자기 접속 신호 저장", r.status === 200 && r.body.ok === true, `got ${r.status}`);
+  r = await owner.get("/api/auth/owner-activity");
+  const sharedStaff = (r.body.activity || []).find((row) => row.role === "staff" && row.loginMethod === "shared_password");
+  check("사장은 직원 공용 로그인을 확인", !!sharedStaff && sharedStaff.isOnline === true, JSON.stringify(r.body.activity));
 
   const future = await activity.listRecent(50, new Date(Date.now() + activity.ONLINE_WINDOW_MS + 1000));
   check("최근 신호가 끊기면 비활성", future[0] && future[0].isOnline === false, JSON.stringify(future[0]));
@@ -117,6 +122,22 @@ function check(name, cond, extra = "") {
   r = await owner.get("/api/auth/owner-activity");
   const loggedOut = (r.body.activity || []).find((row) => row.accountEmail === "boss-activity@hangukgwan.tw");
   check("명시적 로그아웃 시각과 오프라인 표시", loggedOut && loggedOut.loggedOutAt && loggedOut.isOnline === false, JSON.stringify(loggedOut));
+
+  const staffUser = await accounts.createEmailUser({
+    email: "staff-activity@hangukgwan.tw",
+    password: "staffaccount123",
+    name: "직원",
+  });
+  await accounts.setRole(staffUser._id, "staff");
+  const accountStaff = request.agent(app);
+  r = await accountStaff
+    .post("/api/account/login")
+    .set("x-forwarded-for", "198.51.100.9")
+    .send({ email: "staff-activity@hangukgwan.tw", password: "staffaccount123" });
+  check("직원 계정 로그인", r.status === 200 && r.body.user.role === "staff", JSON.stringify(r.body));
+  r = await owner.get("/api/auth/owner-activity");
+  const accountStaffRow = (r.body.activity || []).find((row) => row.accountEmail === "staff-activity@hangukgwan.tw");
+  check("사장은 직원 계정 로그인도 확인", accountStaffRow && accountStaffRow.role === "staff" && accountStaffRow.isOnline === true, JSON.stringify(accountStaffRow));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed\n`);
