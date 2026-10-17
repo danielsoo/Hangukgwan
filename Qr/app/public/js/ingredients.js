@@ -1214,6 +1214,45 @@
     if (got.more) logLine(esc(fmt("ingInboxMoreFmt", { n: got.more })));
   }
 
+  /**
+   * **여러 장을 한 번에** — JSON 묶음 하나로 대기함 줄들을 채운다.
+   *
+   * 2026-10-17: 대기함에 115장이 쌓였다. 줄마다 붙여넣으면 붙여넣기 115번이고,
+   * 어느 줄에 어느 사진 것을 넣었는지 사장님이 세어야 한다. 짝은 서버가 파일
+   * 이름으로 맞춘다(receiptInbox.matchReceipts).
+   *
+   * 넣기만 한다 — **저장은 줄마다 사장님이** 사진을 보며 누르신다.
+   */
+  async function pasteMany() {
+    const box = $("#ingInboxManyText");
+    const text = box ? box.value : "";
+    if (!text.trim()) return;
+    const btn = $("#ingInboxManyGo");
+    if (btn) btn.disabled = true;
+    try {
+      const res = await fetch("/api/ingredients/inbox/read-many", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const got = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const bad = got.error === "bad_json" || got.error === "bad_shape" || got.error === "no_rows" || got.error === "empty";
+        return logLine(esc(T(bad ? "ingInboxBadPaste" : "ingInboxFailed")));
+      }
+      logLine(esc(fmt("ingInboxManyDoneFmt", { n: got.filled, unsure: got.unsure })));
+      // 짝을 못 찾은 것을 **조용히 넘기지 않는다** — 그 장은 아무 줄에도 안 들어갔다
+      const missed = got.missed || [];
+      if (missed.length) {
+        logLine(esc(fmt("ingInboxManyMissedFmt", { n: missed.length, names: missed.slice(0, 3).join(", ") })), { add: true });
+      }
+      if (got.skipped) logLine(esc(fmt("ingInboxManySkippedFmt", { n: got.skipped })), { add: true });
+      if (box) box.value = "";
+      if ($("#ingInboxManyBox")) $("#ingInboxManyBox").hidden = true;
+      await loadInbox();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
   /** 전에 붙여넣어 둔 결과를 다시 표에 올린다(서버가 들고 있다). */
   async function useRead(id) {
     const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/read");
@@ -1437,6 +1476,16 @@
         };
       }
       if ($("#ingInboxGetAll")) $("#ingInboxGetAll").onclick = () => downloadInboxAll();
+      if ($("#ingInboxPasteMany")) {
+        $("#ingInboxPasteMany").onclick = () => {
+          const many = $("#ingInboxManyBox");
+          if (!many) return;
+          many.hidden = !many.hidden;
+          if (!many.hidden) $("#ingInboxManyText").focus();
+        };
+        $("#ingInboxManyGo").onclick = () => pasteMany();
+        $("#ingInboxManyCancel").onclick = () => { $("#ingInboxManyBox").hidden = true; };
+      }
       if ($("#ingInboxShowSaved")) $("#ingInboxShowSaved").onchange = () => renderInbox();
       if ($("#ingEntryPhotoClear")) $("#ingEntryPhotoClear").onclick = () => detachPhoto();
       $("#ingEntryVendor").onchange = () => loadCatalog();

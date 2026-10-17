@@ -3092,6 +3092,10 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .ing-inbox-btn:hover { background: #faf6ef; }
 .ing-inbox-btn.is-del { border-color: #e8d7d7; }
+/* 한꺼번에 넣기 — 115장을 줄마다 붙여넣지 않아도 되게(2026-10-17). */
+.ing-inbox-many { display: grid; gap: 8px; margin: 0 0 12px; }
+.ing-inbox-many textarea { width: 100%; box-sizing: border-box; font: inherit; font-size: 13px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.ing-inbox-many-tools { display: flex; gap: 8px; }
 .ing-inbox-paste { grid-column: 1 / -1; display: flex; gap: 8px; align-items: flex-start; }
 .ing-inbox-paste textarea { flex: 1 1 auto; font: inherit; font-size: 13.5px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
 

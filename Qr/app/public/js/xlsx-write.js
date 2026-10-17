@@ -110,6 +110,10 @@
       const dv = new DataView(local.buffer);
       dv.setUint32(0, 0x04034b50, true);
       dv.setUint16(4, 20, true);
+      // 「이름은 UTF-8 이다」 표시(비트 11). 2026-10-16: 이걸 안 켜서 영수증
+      // 사진 115장의 한글·중국어 이름이 탐색기에서 통째로 깨져 보였다.
+      // 엑셀은 이름이 전부 ASCII 라 그동안 티가 안 났다.
+      dv.setUint16(6, 0x0800, true);
       dv.setUint16(8, method, true);
       dv.setUint32(14, crc, true);
       dv.setUint32(18, data.length, true);
@@ -123,6 +127,7 @@
       cdv.setUint32(0, 0x02014b50, true);
       cdv.setUint16(4, 20, true);
       cdv.setUint16(6, 20, true);
+      cdv.setUint16(8, 0x0800, true);   // 여기도 — 가운데 목록이 이름의 주인이다
       cdv.setUint16(10, method, true);
       cdv.setUint32(16, crc, true);
       cdv.setUint32(20, data.length, true);

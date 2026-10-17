@@ -485,7 +485,17 @@
             <!-- 2026-10-16 사장님: 대기함에 115장이 쌓였는데 「받기」를 115번 눌러야 했다.
                  한 파일(zip)로 한 번에 받는다. -->
             <button type="button" id="ingInboxGetAll" data-i18n="ingInboxGetAll">📥 전부 받기</button>
+            <!-- 2026-10-17: 115장을 줄마다 붙여넣으면 붙여넣기 115번이다.
+                 JSON 한 묶음으로 받아 줄마다 나눠 넣는다. -->
+            <button type="button" id="ingInboxPasteMany" data-i18n="ingInboxPasteMany">📋 한꺼번에 넣기</button>
             <label class="ing-inbox-saved"><input type="checkbox" id="ingInboxShowSaved" /> <span data-i18n="ingInboxShowSaved">저장된 것도 보기</span></label>
+          </div>
+          <div class="ing-inbox-many" id="ingInboxManyBox" hidden>
+            <textarea id="ingInboxManyText" rows="4" data-i18n-placeholder="ingInboxManyPh" placeholder="Claude 가 준 JSON 묶음을 그대로 붙여넣으세요 — 여러 장이 한 번에 들어갑니다"></textarea>
+            <div class="ing-inbox-many-tools">
+              <button type="button" id="ingInboxManyGo" class="primary" data-i18n="ingInboxManyGo">줄마다 넣기</button>
+              <button type="button" id="ingInboxManyCancel" data-i18n="ingInboxManyCancel">닫기</button>
+            </div>
           </div>
           <div class="ing-inbox-list" id="ingInboxList"></div>
         </div>

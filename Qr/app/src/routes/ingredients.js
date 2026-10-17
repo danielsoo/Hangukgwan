@@ -305,6 +305,51 @@ router.post("/inbox/:id/read", express.json({ limit: "2mb" }), async (req, res) 
   res.json({ ok: true, ...read, more: parsed.more });
 });
 
+/**
+ * **여러 장을 한 번에** 붙여넣는다.
+ *
+ * 2026-10-17: 대기함에 115장이 쌓였다. 줄마다 붙여넣으면 붙여넣기 115번이다.
+ * JSON 한 묶음(배열)을 받아 줄마다 나눠 넣는다.
+ *
+ * 짝은 파일 이름으로 맞추고(receiptInbox.matchReceipts), **못 찾은 것은 아무
+ * 줄에나 넣지 않는다** — 엉뚱한 줄에 들어가면 사진과 숫자가 어긋난 채로
+ * 저장되고 눈으로는 못 찾는다. 못 찾은 이름을 돌려주고 화면이 말한다.
+ */
+router.post("/inbox/read-many", express.json({ limit: "8mb" }), async (req, res) => {
+  const parsed = INBOX.parsePastedList((req.body || {}).text);
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error });
+
+  const c = await inboxCol();
+  // 아직 저장 안 한 줄만 — 저장된 줄은 사진이 없고 장부에 이미 들어가 있다
+  const docs = await c
+    .find({ status: { $ne: INBOX.STATUS.SAVED } }, { projection: { image: 0 } })
+    .sort({ at: -1 })
+    .limit(INBOX.MAX_PENDING)
+    .toArray();
+  const items = docs.map((d) => ({ id: String(d._id), name: d.name || "" }));
+  const { pairs, missed } = INBOX.matchReceipts(parsed.list, items);
+
+  let vendors = [];
+  try {
+    // 업체 이름(스무 곳)만 있으면 된다 — 줄을 다 읽지 않는다
+    vendors = (await (await col()).distinct("vendor")).filter(Boolean);
+  } catch (e) { /* 목록이 없어도 읽기는 된다 */ }
+
+  let filled = 0;
+  let unsure = 0;
+  const at = new Date().toISOString();
+  for (const pair of pairs) {
+    const read = INBOX.normalizeRead(pair.receipt, { vendors });
+    let id = null;
+    try { id = new (require("mongodb").ObjectId)(pair.item.id); } catch (e) { id = null; }
+    if (!id) { missed.push(pair.item.name || pair.item.id); continue; }
+    const r = await c.updateOne({ _id: id }, { $set: { read, status: INBOX.STATUS.READ, read_at: at } });
+    if (!r.matchedCount) { missed.push(pair.item.name || pair.item.id); continue; }
+    unsure += read.unsure || 0;
+    filled++;
+  }
+  res.json({ ok: true, filled, unsure, missed, total: parsed.list.length, skipped: parsed.skipped || 0 });
+});
 /** 전에 붙여넣어 둔 결과를 그대로 돌려준다 — 화면이 다시 표에 올릴 때. */
 router.get("/inbox/:id/read", async (req, res) => {
   const c = await inboxCol();

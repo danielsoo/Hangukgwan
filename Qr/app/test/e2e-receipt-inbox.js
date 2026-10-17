@@ -106,8 +106,69 @@ const PASTED = `읽었습니다:
     const text = buf.toString("latin1");
     check("★★ 사진 두 장이 들어 있다", (text.match(/head\.png|receipt-1\.png|receipt-2\.png/g) || []).length >= 2, "");
     check("★★ 이름에 차례와 날짜", /001_\d{4}-\d{2}-\d{2}_/.test(text), text.slice(0, 120).replace(/[^\x20-\x7e]/g, "."));
+    // 2026-10-16: 한글·중국어 이름이 탐색기에서 깨졌다. zip 은 「이름이 UTF-8 이다」를
+    // 플래그 비트 11 로 알려야 한다 — 안 켜면 받는 쪽이 옛 CP437 로 읽는다.
+    check("★★ 이름이 UTF-8 이라고 표시한다 (플래그 비트 11)", (buf.readUInt16LE(6) & 0x0800) !== 0, "0x" + buf.readUInt16LE(6).toString(16));
     check("★ 받았다고 말한다", /한 파일로 받았어요/.test(await page.locator("#ingImportLog").innerText()), "");
     check("★ 단추가 다시 눌린다", !(await btn.isDisabled()), "");
+  }
+
+  out.push("\n[한꺼번에 넣기 — 붙여넣기 한 번으로 두 줄]");
+  {
+    // 2026-10-17: 대기함에 115장이 쌓였다. 줄마다 붙여넣으면 붙여넣기 115번이고,
+    // 어느 줄에 어느 사진 것을 넣었는지 사장님이 세어야 한다.
+    //
+    // 재는 것은 **짝이 맞는가**와 **못 찾은 것을 말하는가**다. 엉뚱한 줄에
+    // 들어가면 사진과 숫자가 어긋난 채로 저장되고 눈으로는 못 찾는다.
+    const btn = page.locator("#ingInboxPasteMany");
+    check("★ 「한꺼번에 넣기」 단추가 있다", await btn.isVisible(), "");
+    await btn.click();
+    await page.waitForTimeout(200);
+    check("★ 붙여넣는 칸이 열린다", await page.locator("#ingInboxManyText").isVisible(), "");
+
+    // 사진 두 장 것 + **대기함에 없는 한 장**. 셋째 것은 아무 줄에도 안 들어가야 한다.
+    const many = JSON.stringify([
+      { file: "001_" + today + "_receipt-1.png", vendor: "房信菓菜行", date: today, store: "main", total: 110,
+        rows: [{ name: "紅蘿蔔", name_ko: "당근", qty: 5, unit: "斤", price: 22, amount: 110, sure: true }] },
+      { file: "receipt-2.png", vendor: "泳慶蛋行", date: today, store: "main", total: 300,
+        rows: [{ name: "雞蛋", name_ko: "계란", qty: 2, unit: "箱", price: 150, amount: 300, sure: true }] },
+      { file: "없는사진.jpg", vendor: "房信菓菜行", date: today, store: "main", total: 10,
+        rows: [{ name: "甲", qty: 1, price: 10, amount: 10, sure: true }] },
+    ]);
+    await page.locator("#ingInboxManyText").fill(many);
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(1800);
+
+    const flat = (t) => String(t).split("\n").join(" | ").slice(0, 240);
+    const txt = await page.locator("#ingInboxList").innerText();
+    check("★★ 붙여넣기 한 번에 두 줄이 「확인 대기」", (txt.match(/확인 대기/g) || []).length === 2, flat(txt));
+    check("★★ 줄마다 몇 줄 읽었는지", /1줄 · 확인 필요 0줄/.test(txt), flat(txt));
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★ 몇 장에 넣었는지 말한다", /2장에 넣었어요/.test(log), flat(log));
+    check("★★ 짝을 못 찾은 장을 말한다 — 조용히 넘기지 않는다", /못 가렸어요/.test(log) && /없는사진/.test(log), flat(log));
+    check("★ 넣고 나면 칸이 닫힌다", await page.locator("#ingInboxManyBox").isHidden(), "");
+
+    // 머리가 붙은 이름(001_날짜_)도, 안 붙은 이름도 제 줄에 들어간다
+    const items = ((await (await page.request.get(base + "/api/ingredients/inbox")).json()).items) || [];
+    const one = items.find((i) => i.name === "receipt-1.png");
+    const two = items.find((i) => i.name === "receipt-2.png");
+    check("★★ 「001_날짜_」 머리가 붙은 이름도 제 줄로", !!(one && one.read && one.read.rows === 1), JSON.stringify(one && one.read));
+    check("★★ 머리 없는 이름도 제 줄로", !!(two && two.read && two.read.rows === 1), JSON.stringify(two && two.read));
+
+    // **저장은 줄마다 사장님이** — 넣기만 했을 뿐 장부에는 아직 안 들어갔다
+    const ledger = ((await (await page.request.get(base + "/api/ingredients/rows?limit=50")).json()).rows) || [];
+    check("★★ 넣기만 한다 — 장부에는 아직 안 들어간다", !ledger.some((r) => r.name === "雞蛋"), String(ledger.length));
+
+    // 엉뚱한 글은 안 받는다
+    await btn.click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill("안녕하세요");
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(800);
+    const bad = await page.locator("#ingImportLog").innerText();
+    check("★ 엉뚱한 글을 묶음으로 넣어도 말해 준다", /JSON 을 못 찾았어요/.test(bad), flat(bad));
+    await page.locator("#ingInboxManyCancel").click();
+    await page.waitForTimeout(200);
   }
 
   out.push("\n[진짜 사진 크기도 올라간다]");

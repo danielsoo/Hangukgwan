@@ -38,7 +38,7 @@ const STATUS = { NEW: "new", READ: "read", SAVED: "saved" };
  * ```json 울타리가 있을 수 있다. 영수증 한 장이면 객체 하나, 여러 장이면
  * 배열이나 {receipts:[...]} 로 올 수 있다 — 다 받는다.
  */
-function parsePasted(text) {
+function parsePastedList(text) {
   const raw = String(text || "").trim();
   if (!raw) return { ok: false, error: "empty" };
   let body = raw;
@@ -53,10 +53,18 @@ function parsePasted(text) {
   let obj;
   try { obj = JSON.parse(body); } catch (e) { return { ok: false, error: "bad_json" }; }
   const list = Array.isArray(obj) ? obj : Array.isArray(obj && obj.receipts) ? obj.receipts : [obj];
-  const first = list[0];
-  if (!first || typeof first !== "object") return { ok: false, error: "bad_shape" };
-  if (!Array.isArray(first.rows)) return { ok: false, error: "no_rows" };
-  return { ok: true, receipt: first, more: list.length - 1 };
+  const good = list.filter((x) => x && typeof x === "object" && Array.isArray(x.rows));
+  if (!list.length || !list[0] || typeof list[0] !== "object") return { ok: false, error: "bad_shape" };
+  if (!good.length) return { ok: false, error: "no_rows" };
+  // 줄이 없는 장은 **버리지 않고 센다** — 몇 장이 빠졌는지 화면이 말해야 한다
+  return { ok: true, list: good, skipped: list.length - good.length };
+}
+
+function parsePasted(text) {
+  const got = parsePastedList(text);
+  if (!got.ok) return got;
+  // 한 장만 받는 자리 — 첫 장을 쓰고 나머지는 몇 장인지만 알려준다
+  return { ok: true, receipt: got.list[0], more: got.list.length - 1 + (got.skipped || 0) };
 }
 
 /**
@@ -96,6 +104,65 @@ function normalizeRead(receipt, opts) {
   return { head, rows, unsure, total: checked.total, sum: checked.sum, totalOk: checked.totalOk, note: checked.note };
 }
 
+/**
+ * 한 번에 여러 장 — **어느 줄에 넣을지 짝을 맞춘다.**
+ *
+ * 2026-10-17 사장님이 고르심: 대기함에 115장이 쌓였는데 줄마다 붙여넣으면
+ * 115번이다. JSON 한 묶음을 받아 줄마다 나눠 넣는다.
+ *
+ * 짝은 이 차례로 찾는다. **짐작해서 아무 줄에나 넣지 않는다** — 엉뚱한 줄에
+ * 들어가면 영수증 사진과 숫자가 어긋난 채로 저장되고, 눈으로는 못 찾는다.
+ *
+ *   1. id        — 그 줄의 번호(있으면 가장 확실하다)
+ *   2. file      — 올린 파일 이름 그대로
+ *   3. file      — 「001_2026-10-16_」 같은 머리를 떼고 비교(전부 받기 zip 이 붙인다)
+ *   4. no        — 그 zip 에서의 차례(001). 그 사이에 올리거나 지운 것이 없을 때만 맞는다
+ *
+ * 못 찾은 것은 **버리지 않고 돌려준다** — 화면이 「짝을 못 찾은 n장」으로 말한다.
+ */
+const ZIP_PREFIX = /^\d{3}_\d{4}-\d{2}-\d{2}_/;
+const stripZipPrefix = (name) => String(name || "").replace(ZIP_PREFIX, "");
+
+function matchReceipts(list, items) {
+  const left = (items || []).filter((x) => x && x.id);
+  const byId = new Map(left.map((x) => [String(x.id), x]));
+  const byName = new Map();
+  const byStripped = new Map();
+  for (const x of left) {
+    const n = String(x.name || "");
+    if (n && !byName.has(n)) byName.set(n, x);
+    const st = stripZipPrefix(n);
+    if (st && !byStripped.has(st)) byStripped.set(st, x);
+  }
+  const used = new Set();
+  const pairs = [];
+  const missed = [];
+  for (const r of list || []) {
+    const file = String((r && r.file) || (r && r.name) || "");
+    const stripped = stripZipPrefix(file);
+    let item =
+      (r && r.id && byId.get(String(r.id))) ||
+      byName.get(file) ||
+      byName.get(stripped) ||
+      byStripped.get(file) ||
+      byStripped.get(stripped) ||
+      null;
+    // 차례(001_…)로 — 마지막 수단. 그 사이에 바뀐 것이 없을 때만 맞는다.
+    if (!item) {
+      const m = /^(\d{3})_/.exec(file);
+      const at = m ? left[Number(m[1]) - 1] : null;
+      if (at && !used.has(at.id)) item = at;
+    }
+    if (!item || used.has(item.id)) {
+      missed.push(file || "(이름 없음)");
+      continue;
+    }
+    used.add(item.id);
+    pairs.push({ item, receipt: r });
+  }
+  return { pairs, missed };
+}
+
 /** data:image/...;base64,... 를 바이트로. 너무 크면 안 받는다. */
 function decodeImage(dataUrl, max) {
   const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ""));
@@ -125,6 +192,7 @@ function listItem(doc) {
 }
 
 module.exports = {
+  matchReceipts, stripZipPrefix,
   COLL, STATUS, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_PER_UPLOAD, MAX_PENDING,
-  parsePasted, normalizeRead, decodeImage, listItem,
+  parsePasted, parsePastedList, normalizeRead, decodeImage, listItem,
 };

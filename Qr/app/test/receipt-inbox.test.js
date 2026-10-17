@@ -109,4 +109,69 @@ const R = (rows, extra) => Object.assign({ vendor: "房信菓菜行", date: "202
   eq(item.has_image, true, "사진이 아직 있는지");
 }
 
+// ── 한 번에 여러 장 — **어느 줄에 넣을지**
+//
+// 2026-10-17: 대기함에 115장이 쌓였다. 줄마다 붙여넣으면 115번이다. 짐작해서
+// 아무 줄에나 넣으면 사진과 숫자가 어긋난 채로 저장되고 눈으로는 못 찾는다.
+{
+  const one = (name) => Object.assign(R([{ name: "甲", qty: 1, price: 10, amount: 10 }]), { file: name });
+  const items = [
+    { id: "i1", name: "001_2026-10-14_a.jpg" },
+    { id: "i2", name: "002_2026-10-14_b.jpg" },
+    { id: "i3", name: "c.jpg" },
+  ];
+
+  // 묶음을 꺼낸다
+  const list = I.parsePastedList(JSON.stringify([one("a.jpg"), one("b.jpg")]));
+  ok(list.ok, "묶음을 꺼낸다");
+  eq(list.list.length, 2, "★ 두 장 다 들고 온다 — 첫 장만 쓰지 않는다");
+  eq(I.parsePastedList(JSON.stringify(one("a.jpg"))).list.length, 1, "한 장만 붙여넣어도 받는다");
+  eq(I.parsePastedList(JSON.stringify([{ vendor: "房信菓菜行" }, one("a.jpg")])).skipped, 1, "★ 품목 줄이 없는 장은 몇 장인지 센다");
+  eq(I.parsePastedList("안녕").error, "bad_json", "JSON 이 아니면");
+
+  // ① 번호로
+  {
+    const got = I.matchReceipts([Object.assign(one("뭐든"), { id: "i2" })], items);
+    eq(got.pairs[0].item.id, "i2", "★ 번호가 있으면 그걸 쓴다");
+  }
+  // ② 파일 이름 그대로
+  {
+    const got = I.matchReceipts([one("c.jpg")], items);
+    eq(got.pairs[0].item.id, "i3", "★ 올린 이름 그대로 맞는다");
+  }
+  // ③ zip 이 붙인 머리를 떼고
+  {
+    const got = I.matchReceipts([one("a.jpg"), one("002_2026-10-14_b.jpg")], items);
+    eq(got.pairs.length, 2, "★★ 「001_날짜_」 머리가 붙어 있든 없든 맞는다");
+    eq(got.pairs[0].item.id, "i1", "머리를 뗀 이름으로");
+    eq(got.pairs[1].item.id, "i2", "머리가 붙은 이름으로");
+    eq(I.stripZipPrefix("001_2026-10-14_a.jpg"), "a.jpg", "머리를 뗀다");
+    eq(I.stripZipPrefix("a.jpg"), "a.jpg", "없으면 그대로");
+  }
+  // ④ 차례로 — 마지막 수단
+  {
+    const got = I.matchReceipts([one("003_2026-10-14_모르는이름.jpg")], items);
+    eq(got.pairs[0].item.id, "i3", "★ 이름이 바뀌었으면 차례(003)로");
+  }
+  // 못 찾은 것은 **버리지 않고 돌려준다**
+  {
+    const got = I.matchReceipts([one("없는이름.jpg")], items);
+    eq(got.pairs.length, 0, "★★ 못 찾으면 아무 줄에도 안 넣는다");
+    eq(got.missed.length, 1, "★★ 못 찾았다고 말한다 — 조용히 넘기지 않는다");
+    eq(got.missed[0], "없는이름.jpg", "어느 장인지 이름으로");
+  }
+  // 한 줄에 두 장을 넣지 않는다
+  {
+    const got = I.matchReceipts([one("c.jpg"), one("c.jpg")], items);
+    eq(got.pairs.length, 1, "★★ 같은 줄에 두 번 넣지 않는다");
+    eq(got.missed.length, 1, "두 번째는 못 찾은 것으로");
+  }
+  // 대기함이 비어 있으면
+  {
+    const got = I.matchReceipts([one("a.jpg")], []);
+    eq(got.pairs.length, 0, "대기함이 비어 있으면 아무것도 안 넣는다");
+    eq(got.missed.length, 1, "그 장을 돌려준다");
+  }
+}
+
 console.log(`receipt-inbox: ${n}개 통과`);
