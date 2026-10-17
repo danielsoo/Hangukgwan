@@ -796,9 +796,13 @@
       logLine(esc(fmt("ingEntrySavedFmt", { n: got.saved })));
       entryLines = [blankLine()];
       renderLines();
+      const cameFrom = attached ? attached.id : "";
       if (attached) { detachPhoto(); await loadInbox(); }
       await loadCatalog();
       await loadSummary();
+      // 대기함에서 온 것이면 **다음 줄을 바로 연다** — 102줄을 하나씩 찾아
+      // 누르는 것이 102번이다(2026-10-17)
+      if (cameFrom) await openNextRead(cameFrom);
     } catch (e) {
       logLine(esc(T("ingEntrySaveFailed") + (e && e.message)));
     }
@@ -985,21 +989,31 @@
    * (주문서에 4/29 인데 물건은 5/1 에 왔다). 읽은 것은 **제안**이고 정하는
    * 것은 사장님이다.
    */
-  function applyHead(head) {
+  /**
+   * 읽은 머리(업체·날짜·지점)를 칸에 넣는다.
+   *
+   * `force` 면 **손댄 칸도 덮는다.** 대기함에서 「✓ 확인하기」로 그 영수증을
+   * 고르신 것은 「이 영수증을 넣겠다」는 뜻이라, 앞 영수증의 업체가 남아 있으면
+   * 안 된다 — 저장하면 **남의 업체 지출**이 되고 눈으로는 영영 못 찾는다
+   * (2026-10-17, 저장 뒤 다음 줄을 저절로 여는 길을 내면서 드러났다).
+   */
+  function applyHead(head, opts) {
     if (!head) return false;
+    const force = !!(opts && opts.force);
     let did = false;
     const put = (sel, v) => {
       const el = $(sel);
       if (!el || !v) return;
       // 사장님이 손수 적으신 칸은 건드리지 않는다. 날짜 칸은 열 때 오늘로
       // 채워 두므로 「적혀 있다」만으로는 모자라다 — 손을 대셨는지를 본다.
-      if (touched.has(el.id) || (el.tagName !== "SELECT" && (el.value || "").trim() && el.id !== "ingEntryDate")) return;
+      if (!force && (touched.has(el.id) || (el.tagName !== "SELECT" && (el.value || "").trim() && el.id !== "ingEntryDate"))) return;
       if (el.tagName === "SELECT" && ![...el.options].some((o) => o.value === v)) return;
       if (el.value === v) return;
       applying = true;
       el.value = v;
       el.dispatchEvent(new Event("change", { bubbles: true }));
       applying = false;
+      if (force) touched.delete(el.id);
       did = true;
     };
     if (head.vendor) put("#ingEntryVendor", head.vendor);
@@ -1245,7 +1259,10 @@
           ? '<a class="ing-inbox-btn" href="/api/ingredients/inbox/' + esc(i.id) + '/image?download=1" download>' + esc(T("ingInboxGet")) + "</a>" +
             '<button type="button" class="ing-inbox-btn" data-inbox-paste="' + esc(i.id) + '">' + esc(T("ingInboxPaste")) + "</button>"
           : "") +
-        (i.read ? '<button type="button" class="ing-inbox-btn" data-inbox-use="' + esc(i.id) + '">' + esc(T("ingInboxUse")) + "</button>" : "") +
+        (i.read
+          ? '<button type="button" class="ing-inbox-btn' + (i.status === "read" ? " is-go" : "") + '" data-inbox-use="' + esc(i.id) + '">' +
+            esc(T(i.status === "read" ? "ingInboxCheck" : "ingInboxUse")) + "</button>"
+          : "") +
         '<button type="button" class="ing-inbox-btn is-del" data-inbox-del="' + esc(i.id) + '">' + esc(T("ingInboxDel")) + "</button>" +
         "</div>" +
         '<div class="ing-inbox-paste" id="paste-' + esc(i.id) + '" hidden>' +
@@ -1382,8 +1399,9 @@
     }
     if (!entryLines.length) entryLines.push(blankLine());
     renderLines();
-    applyHead(got.head);
+    applyHead(got.head, { force: true });   // 고른 영수증이다 — 앞 영수증 업체가 남으면 안 된다
     attachPhoto(id);
+    showEntry();                // 표가 화면 아래면 눌러도 아무 일도 안 일어난 것처럼 보인다
     logLine(esc(fmt("ingPhotoReadFmt", { n: got.rows.length, unsure: got.unsure })));
     if (got.totalOk === false) logLine(esc(fmt("ingInboxTotalOffFmt", { paper: money(got.total), sum: money(Math.round(got.sum || 0)) })));
     showRowStrips(id);          // 사진의 그 줄을 숫자 밑에 (느리므로 안 기다린다)
@@ -1526,6 +1544,37 @@
       if (c.y1 > y1) y1 = c.y1;
     }
     return { x0, y0, x1, y1 };
+  }
+
+  /**
+   * 「영수증 넣기」 표를 **보이는 자리로** 올린다.
+   *
+   * 2026-10-17 사장님: "확인대기에서 확인을 하는 방법이 없어" — 대기함 줄을
+   * 눌러도 표가 화면 아래에 조용히 채워져서, 아무 일도 안 일어난 것처럼
+   * 보였다. 올려 주고 잠깐 테를 둘러 「여기요」라고 말한다.
+   */
+  function showEntry() {
+    const el = document.querySelector(".ing-entry");
+    if (!el) return;
+    try { el.scrollIntoView({ behavior: "smooth", block: "start" }); } catch (e) { el.scrollIntoView(); }
+    el.classList.remove("is-just-filled");
+    void el.offsetWidth;                       // 다시 눌러도 테가 또 돌게
+    el.classList.add("is-just-filled");
+    setTimeout(() => el.classList.remove("is-just-filled"), 2000);
+  }
+
+  /**
+   * 저장하고 나면 **다음 확인 대기 줄을 바로 연다.**
+   *
+   * 한 번에 102줄이 들어오므로, 저장할 때마다 목록으로 내려가 다음 줄을
+   * 찾아 누르는 것이 102번이다. 남은 장수를 같이 말해 어디까지 왔는지 보이게.
+   */
+  async function openNextRead(doneId) {
+    const next = (inbox.items || []).find((i) => i.status === "read" && i.id !== doneId);
+    if (!next) return logLine(esc(T("ingInboxAllDone")), { add: true });
+    await useRead(next.id);
+    const left = (inbox.items || []).filter((i) => i.status === "read").length;
+    logLine(esc(fmt("ingInboxNextFmt", { name: next.name || "", n: left })), { add: true });
   }
 
   /** 그 사진을 표 옆에 붙인다. */

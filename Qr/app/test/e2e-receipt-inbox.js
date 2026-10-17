@@ -512,7 +512,11 @@ const PASTED = `읽었습니다:
     const saved = page.locator(".ing-inbox-row").filter({ hasText: "저장됨" }).first();
     check("★★ 저장된 줄에는 「받기」가 없다 — 사진을 지웠다",
       (await saved.locator("a.ing-inbox-btn").count()) === 0, "");
-    check("★ 사진 칸이 닫힌다", await page.locator("#ingEntryPhoto").evaluate((el) => el.hidden), "");
+    // 저장하면 **다음 확인 대기 줄이 저절로 열린다**(2026-10-17) — 사진 칸은
+    // 닫히거나 그 다음 영수증으로 바뀐다. 아무것도 안 남았을 때만 닫힌다.
+    const photoAfter = await page.locator("#ingEntryPhoto").evaluate((el) => el.hidden);
+    const nextOpen = /다음 줄을 열었어요|다 끝났어요/.test(await page.locator("#ingImportLog").innerText());
+    check("★ 사진 칸이 닫히거나 다음 영수증으로 바뀐다", photoAfter || nextOpen, photoAfter + " / " + nextOpen);
   }
 
   out.push("\n[전체 내역에 들어간다]");
@@ -555,6 +559,78 @@ const PASTED = `읽었습니다:
     const log = await page.locator("#ingImportLog").innerText();
     check("★★ 조용히 넘기지 않고 무엇이 잘못됐는지 말한다", /JSON/.test(log), log.replace(/\n/g, " | ").slice(0, 200));
     check("★ 표를 엉뚱한 값으로 채우지 않는다", (await page.locator("#ingEntryLines .ing-line[data-i]").count()) <= 1, "");
+  }
+
+  out.push("\n[확인 대기에서 확인하는 길]");
+  {
+    // 2026-10-17 사장님: "확인대기에서 확인을 하는 방법이 없어"
+    //
+    // 단추 이름이 「↩︎ 다시 올리기」라 뭘 하라는 건지 알 수 없었고, 눌러도
+    // 표가 화면 아래에 조용히 채워져 아무 일도 안 일어난 것처럼 보였다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [
+      { name: "go-1.png", mimeType: "image/png", buffer: paper },
+      { name: "go-2.png", mimeType: "image/png", buffer: paper },
+    ]);
+    await page.waitForTimeout(1800);
+
+    const two = JSON.stringify([
+      { file: "go-1.png", vendor: "龍江興南北商行", date: "2026-09-01", store: "main", total: 60,
+        rows: [{ name: "豆芽", qty: 5, unit: "斤", price: 12, amount: 60, sure: true, band: [0.3, 0.36] }] },
+      { file: "go-2.png", vendor: "阿寶水產", date: "2026-09-01", store: "main", total: 90,
+        rows: [{ name: "雞蛋", qty: 3, unit: "箱", price: 30, amount: 90, sure: true, band: [0.4, 0.46] }] },
+    ]);
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(two);
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(2500);
+
+    await page.locator('[data-inbox-tab="read"]').click();
+    await page.waitForTimeout(400);
+    const row = page.locator('.ing-inbox-row:has-text("go-1.png")');
+    const btn = row.locator("[data-inbox-use]");
+    check("★★ 확인 대기 줄에 「확인하기」가 있다", /확인하기/.test(await btn.innerText()), await btn.innerText());
+    check("★ 그 단추가 눈에 띈다", (await btn.getAttribute("class")).includes("is-go"), await btn.getAttribute("class"));
+
+    await btn.click();
+    await page.waitForTimeout(1500);
+    // 눌렀으면 표가 **보이는 자리**에 있어야 한다 — 아래에 조용히 채워지면 못 찾는다
+    const seen = await page.locator(".ing-entry").evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { top: Math.round(r.top), h: window.innerHeight };
+    });
+    check("★★ 누르면 표가 보이는 자리로 올라온다", seen.top > -50 && seen.top < seen.h, JSON.stringify(seen));
+    check("★★ ★ 앞 영수증 업체가 남지 않는다 — 남으면 남의 업체 지출이 된다", (await page.locator("#ingEntryVendor").inputValue()) === "龍江興南北商行", await page.locator("#ingEntryVendor").inputValue());
+    check("★ 사진도 같이 뜬다", !(await page.locator("#ingEntryPhoto").evaluate((el) => el.hidden)), "");
+
+    // 저장하면 **다음 확인 대기 줄이 저절로 열린다** — 102번 찾아 누르지 않게
+    await page.locator("#ingEntrySave").click();
+    await page.waitForTimeout(3000);
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★★ 저장하면 다음 줄이 저절로 열린다", /다음 줄을 열었어요/.test(log), log.split("\n").join(" | ").slice(0, 200));
+    check("★★ 몇 장 남았는지 말한다", /남음/.test(log), log.split("\n").join(" | ").slice(0, 200));
+    const opened = await page.evaluate(() => {
+      const on = document.querySelector(".ing-inbox-row.is-on");
+      return on ? on.innerText : "";
+    });
+    check("★★ 열린 것은 방금 저장한 줄이 아니다", !!opened && opened.indexOf("go-1.png") < 0, opened.split(String.fromCharCode(10)).join(" | ").slice(0, 120));
+    check("★★ 열린 줄은 아직 확인 대기다", opened.indexOf("확인 대기") >= 0, opened.split(String.fromCharCode(10)).join(" | ").slice(0, 120));
+    // 치우기 — 남은 줄과 저장된 줄
+    await page.locator('[data-inbox-tab="all"]').click();
+    await page.waitForTimeout(400);
+    for (const name of ["go-1.png", "go-2.png"]) {
+      const r2 = page.locator('.ing-inbox-row:has-text("' + name + '")');
+      if (!(await r2.count())) continue;
+      await r2.first().locator("[data-inbox-del]").click();
+      await page.waitForTimeout(300);
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(800);
+    }
+    await page.locator("#ingEntryClear").click().catch(() => {});
+    await page.waitForTimeout(300);
   }
 
   console.log(out.join("\n"));

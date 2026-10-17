@@ -3069,6 +3069,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
 .ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+/* 확인할 줄의 단추는 눈에 띄게, 표는 열릴 때 잠깐 테를 두른다(2026-10-17). */
+.ing-inbox-btn.is-go { background: #2f3542; border-color: #2f3542; color: #fff; font-weight: 700; }
+.ing-entry.is-just-filled { animation: ing-just-filled 2s ease-out 1; border-radius: 12px; }
+@keyframes ing-just-filled {
+  0% { box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.55); }
+  100% { box-shadow: 0 0 0 3px rgba(192, 57, 43, 0); }
+}
 /* 상태별 칸 — 「확인 대기」만 따로 보려고(2026-10-17). */
 .ing-inbox-tabs { display: flex; gap: 6px; margin: 0 0 10px; flex-wrap: wrap; }
 .ing-inbox-tab {
