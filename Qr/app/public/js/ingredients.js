@@ -1222,10 +1222,78 @@
     });
   }
 
+  /**
+   * **영수증마다 칩** — 급여의 직원 칩과 같은 자리, 같은 쓰임.
+   *
+   * 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
+   * 영수증마다 탭이나 그런 걸 해줘서 확인할 수 있게"
+   *
+   * 확인 대기 영수증을 표 바로 위에 늘어놓는다. 누르면 그 영수증이 표에
+   * 열리고, 지금 보고 있는 칩은 눈에 띈다. 102장이라 옆으로 굴러가게 두고
+   * 보고 있는 칩을 가운데로 데려온다 — 어디까지 왔는지가 보여야 한다.
+   */
+  function renderCheckChips() {
+    const bar = $("#ingCheckBar");
+    const box = $("#ingCheckChips");
+    if (!bar || !box) return;
+    const list = (inbox.items || []).filter((i) => i.status === "read");
+    bar.hidden = !list.length;
+    if (!list.length) { box.innerHTML = ""; return; }
+
+    const cnt = $("#ingCheckCount");
+    if (cnt) cnt.textContent = fmt("ingCheckCountFmt", { n: list.length });
+
+    box.innerHTML = list.map((i) => {
+      const head = (i.read && i.read.head) || {};
+      // 업체가 안 읽힌 전표는 파일 이름으로 — 빈 칩이면 어느 것인지 모른다
+      const name = head.vendor || String(i.name || "").replace(/\.[a-z0-9]+$/i, "");
+      const day = String(head.date || "").slice(5).replace("-", "/");
+      const shop = storeShort(head.store);
+      const unsure = (i.read && i.read.unsure) || 0;
+      return (
+        '<button type="button" class="ing-check-chip' + (attached && attached.id === i.id ? " is-on" : "") + '"' +
+        ' data-check="' + esc(i.id) + '" title="' + esc(i.name || "") + '">' +
+        '<span class="ing-check-name">' + esc(name) + "</span>" +
+        (day ? '<span class="ing-check-day">' + esc(day) + "</span>" : "") +
+        (shop ? '<span class="ing-check-store">' + esc(shop) + "</span>" : "") +
+        (unsure ? '<span class="ing-check-warn">' + unsure + "</span>" : "") +
+        "</button>"
+      );
+    }).join("");
+
+    box.querySelectorAll("[data-check]").forEach((b) => {
+      b.onclick = () => useRead(b.dataset.check);
+    });
+    // 보고 있는 칩을 가운데로 — 102장이면 눈으로 못 찾는다
+    const on = box.querySelector(".is-on");
+    if (on && on.scrollIntoView) {
+      try { on.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }); } catch (e) { /* 안 돼도 그만 */ }
+    }
+  }
+
+  /** 지점 짧은 이름 — 「2호점(台元三店)」 에서 「2호점」까지만. */
+  function storeShort(v) {
+    if (!v) return "";
+    const sel = $("#ingEntryStore");
+    const op = sel && [...sel.options].find((o) => o.value === v);
+    const t = op ? (op.textContent || "") : v;
+    return t.split("(")[0].trim().slice(0, 6);
+  }
+
+  /** ◀ 이전 · 다음 ▶ — 칩을 눈으로 찾지 않고 차례로 넘긴다. */
+  function stepCheck(d) {
+    const list = (inbox.items || []).filter((i) => i.status === "read");
+    if (!list.length) return;
+    const at = attached ? list.findIndex((i) => i.id === attached.id) : -1;
+    const next = at < 0 ? (d > 0 ? 0 : list.length - 1) : (at + d + list.length) % list.length;
+    useRead(list[next].id);
+  }
+
   function renderInbox() {
     const el = $("#ingInboxList");
     if (!el) return;
     renderInboxTabs();
+    renderCheckChips();          // 영수증마다 칩 — 표 바로 위에서 오간다
     const items = inboxVisible();
     const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
     const cnt = $("#ingInboxCount");
@@ -1778,6 +1846,8 @@
         };
       }
       if ($("#ingInboxGetAll")) $("#ingInboxGetAll").onclick = () => downloadInboxAll();
+      if ($("#ingCheckPrev")) $("#ingCheckPrev").onclick = () => stepCheck(-1);
+      if ($("#ingCheckNext")) $("#ingCheckNext").onclick = () => stepCheck(1);
       if ($("#ingInboxPasteMany")) {
         $("#ingInboxPasteMany").onclick = () => {
           const many = $("#ingInboxManyBox");

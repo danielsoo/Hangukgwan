@@ -561,6 +561,73 @@ const PASTED = `읽었습니다:
     check("★ 표를 엉뚱한 값으로 채우지 않는다", (await page.locator("#ingEntryLines .ing-line[data-i]").count()) <= 1, "");
   }
 
+  out.push("\n[영수증마다 칩 — 급여의 직원 칩처럼 눌러서 오간다]");
+  {
+    // 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
+    // 영수증마다 탭이나 그런 걸 해줘서 확인할 수 있게"
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [
+      { name: "chip-1.png", mimeType: "image/png", buffer: paper },
+      { name: "chip-2.png", mimeType: "image/png", buffer: paper },
+      { name: "chip-3.png", mimeType: "image/png", buffer: paper },
+    ]);
+    await page.waitForTimeout(2200);
+
+    const three = JSON.stringify([
+      { file: "chip-1.png", vendor: "龍江興南北商行", date: "2026-09-02", store: "main", total: 60,
+        rows: [{ name: "甲", qty: 5, unit: "斤", price: 12, amount: 60, sure: true, band: [0.3, 0.36] }] },
+      { file: "chip-2.png", vendor: "阿寶水產", date: "2026-09-03", store: "main", total: 90,
+        rows: [{ name: "乙", qty: 3, unit: "箱", price: 30, amount: 90, sure: true, band: [0.4, 0.46] }] },
+      { file: "chip-3.png", vendor: "旺旺來", date: "2026-09-04", store: "main", total: 40,
+        rows: [{ name: "丙", qty: 2, unit: "包", price: 20, amount: 41, sure: false, band: [0.5, 0.56] }] },
+    ]);
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(three);
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(2800);
+
+    const chips = page.locator(".ing-check-chip");
+    check("★★ 확인 대기 영수증마다 칩이 있다", (await chips.count()) >= 3, String(await chips.count()));
+    const bar = await page.locator("#ingCheckCount").innerText();
+    check("★ 몇 장 확인할지 적힌다", /확인할 영수증/.test(bar), bar);
+    const names = await chips.evaluateAll((els) => els.map((e) => e.innerText.replace(/\s+/g, " ")));
+    check("★★ 칩에 업체와 날짜가 보인다", names.some((x) => x.includes("阿寶水產") && x.includes("09/03")), names.join(" / ").slice(0, 160));
+    check("★★ 확인 필요한 줄이 있으면 칩에 표시", names.some((x) => x.includes("旺旺來") && /1/.test(x)), names.join(" / ").slice(0, 160));
+
+    // 칩을 누르면 그 영수증이 표에 열린다
+    const one = page.locator('.ing-check-chip:has-text("阿寶水產")');
+    await one.click();
+    await page.waitForTimeout(1500);
+    check("★★ 칩을 누르면 그 영수증이 열린다", (await page.locator("#ingEntryVendor").inputValue()) === "阿寶水產", await page.locator("#ingEntryVendor").inputValue());
+    check("★★ 지금 보고 있는 칩이 눈에 띈다", (await one.getAttribute("class")).includes("is-on"), await one.getAttribute("class"));
+    const onCount = await page.locator(".ing-check-chip.is-on").count();
+    check("★ 눈에 띄는 칩은 하나뿐이다", onCount === 1, String(onCount));
+
+    // 「다음 ▶」으로도 넘어간다
+    const before = await page.locator("#ingEntryVendor").inputValue();
+    await page.locator("#ingCheckNext").click();
+    await page.waitForTimeout(1500);
+    check("★★ 「다음 ▶」으로 넘어간다", (await page.locator("#ingEntryVendor").inputValue()) !== before, before + " → " + (await page.locator("#ingEntryVendor").inputValue()));
+    await page.locator("#ingCheckPrev").click();
+    await page.waitForTimeout(1500);
+    check("★ 「◀ 이전」으로 돌아온다", (await page.locator("#ingEntryVendor").inputValue()) === before, await page.locator("#ingEntryVendor").inputValue());
+
+    // 치우기
+    await page.locator('[data-inbox-tab="all"]').click();
+    await page.waitForTimeout(400);
+    for (const name of ["chip-1.png", "chip-2.png", "chip-3.png"]) {
+      const r2 = page.locator('.ing-inbox-row:has-text("' + name + '")');
+      if (!(await r2.count())) continue;
+      await r2.first().locator("[data-inbox-del]").click();
+      await page.waitForTimeout(300);
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(800);
+    }
+  }
+
   out.push("\n[확인 대기에서 확인하는 길]");
   {
     // 2026-10-17 사장님: "확인대기에서 확인을 하는 방법이 없어"

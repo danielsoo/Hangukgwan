@@ -508,6 +508,17 @@
 
         <div class="ing-block ing-entry">
           <h3 class="ing-block-title" data-i18n="ingEntryTitle">🧾 영수증 넣기</h3>
+          <!-- 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
+               영수증마다 탭이나 그런 걸 해줘서 확인할 수 있게" — 급여의 직원 칩과
+               같은 자리, 같은 쓰임. 확인 대기 영수증을 여기서 눌러 오간다. -->
+          <div class="ing-check-bar" id="ingCheckBar" hidden>
+            <div class="ing-check-head">
+              <span id="ingCheckCount"></span>
+              <button type="button" id="ingCheckPrev" data-i18n="ingCheckPrev">◀ 이전</button>
+              <button type="button" id="ingCheckNext" data-i18n="ingCheckNext">다음 ▶</button>
+            </div>
+            <div class="ing-check-chips" id="ingCheckChips"></div>
+          </div>
           <div class="ing-entry-head">
             <label class="ing-field">
               <span data-i18n="ingStore">지점</span>
