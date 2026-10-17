@@ -1040,6 +1040,7 @@
       // 장부에 없는 업체다. 짐작해서 남의 업체로 넣지 않는다.
       logLine(esc(fmt("ingPhotoVendorUnknownFmt", { paper: head.vendor_text })), { add: true });
     }
+    renderEntryTitle();
     return did;
   }
 
@@ -1722,6 +1723,29 @@
     logLine(esc(fmt("ingInboxNextFmt", { name: next.name || "", n: left })), { add: true });
   }
 
+  /**
+   * 제목이 **지금 무엇을 하는 중인지** 말하게 한다.
+   *
+   * 2026-10-17 사장님: "영수증 확인이랑 영수증 넣기의 역할이 헷갈려" — 탭은
+   * 「영수증 확인」인데 그 안의 칸은 「영수증 넣기」라 둘이 다른 일처럼 보였다.
+   * 같은 표가 두 가지로 쓰인다: 대기함에서 고른 영수증을 **확인**하거나,
+   * 사진 없이 **손으로** 적거나. 제목이 그걸 말한다.
+   */
+  function renderEntryTitle() {
+    const mode = $("#ingEntryMode");
+    const which = $("#ingEntryWhich");
+    if (!mode) return;
+    const on = !!attached;
+    const key = on ? "ingEntryChecking" : "ingEntryManual";
+    mode.setAttribute("data-i18n", key);      // 말을 바꿔도 제자리를 찾게
+    mode.textContent = T(key);
+    if (!which) return;
+    if (!on) { which.textContent = ""; return; }
+    const v = ($("#ingEntryVendor") || {}).value || "";
+    const d = ($("#ingEntryDate") || {}).value || "";
+    which.textContent = [v, d].filter(Boolean).join(" · ");
+  }
+
   /** 그 사진을 표 옆에 붙인다. */
   function attachPhoto(id) {
     const item = (inbox.items || []).find((i) => i.id === id);
@@ -1736,11 +1760,13 @@
     }
     const entry = document.querySelector(".ing-entry");
     if (entry) entry.classList.toggle("has-photo", !box.hidden);
+    renderEntryTitle();
     renderInbox();
   }
 
   function detachPhoto() {
     attached = null;
+    renderEntryTitle();
     const box = $("#ingEntryPhoto");
     if (box) box.hidden = true;
     const entry = document.querySelector(".ing-entry");
@@ -1881,6 +1907,7 @@
       $("#ingEntryClear").onclick = () => {
         entryLines = [blankLine()];
         renderLines();
+        if (attached) detachPhoto();
       };
       $("#ingPhotoBtn").onclick = () => $("#ingPhotoFile").click();
       $("#ingPhotoFile").onchange = (e) => {

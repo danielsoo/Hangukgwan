@@ -635,6 +635,53 @@ const PASTED = `읽었습니다:
     check("★ 표를 엉뚱한 값으로 채우지 않는다", (await page.locator("#ingEntryLines .ing-line[data-i]").count()) <= 1, "");
   }
 
+  out.push("\n[제목이 지금 무엇을 하는 중인지 말한다]");
+  await openInbox();
+  {
+    // 2026-10-17 사장님: "영수증 확인이랑 영수증 넣기의 역할이 헷갈려"
+    //
+    // 같은 표가 두 가지로 쓰인다 — 대기함에서 고른 영수증을 **확인**하거나,
+    // 사진 없이 **손으로** 적거나. 제목이 그걸 말해야 한다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const paper = grayToPng(drawReceipt({ w: 700, h: 1200, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), 700, 1200);
+    await page.setInputFiles("#ingInboxFile", [{ name: "name-1.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1800);
+    await openInbox();
+
+    const title = () => page.locator(".ing-entry .ing-block-title").innerText();
+    check("★ 아무것도 안 골랐으면 「손으로 넣기」", /손으로 넣기/.test(await title()), await title());
+
+    const one = JSON.stringify([{
+      file: "name-1.png", vendor: "龍江興南北商行", date: "2026-09-05", store: "main", total: 60,
+      rows: [{ name: "甲", qty: 5, unit: "斤", price: 12, amount: 60, sure: true, band: [0.3, 0.36] }],
+    }]);
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(one);
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(2500);
+    await openInbox();
+    await page.locator('.ing-inbox-row:has-text("name-1.png")').locator("[data-inbox-use]").click();
+    await page.waitForTimeout(1800);
+
+    const t = await title();
+    check("★★ 영수증을 고르면 「이 영수증 확인하기」", /확인하기/.test(t), t);
+    check("★★ 어느 영수증인지 제목에 적힌다", /龍江興南北商行/.test(t) && /2026-09-05/.test(t), t);
+
+    await page.locator("#ingEntryClear").click();
+    await page.waitForTimeout(600);
+    const t2 = await title();
+    check("★★ 비우면 다시 「손으로 넣기」로 — 표는 비었는데 제목만 남으면 안 된다", /손으로 넣기/.test(t2), t2);
+    check("★ 비우면 사진도 떼어진다", await page.locator("#ingEntryPhoto").evaluate((el) => el.hidden), "");
+
+    await openInbox();
+    const row = page.locator('.ing-inbox-row:has-text("name-1.png")');
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(800);
+  }
+
   out.push("\n[영수증마다 칩 — 급여의 직원 칩처럼 눌러서 오간다]");
   await openInbox();
   {
