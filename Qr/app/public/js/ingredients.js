@@ -1291,6 +1291,7 @@
       const line = blankLine();
       line.name = r.name || "";
       line.name_ko = r.name_ko || "";
+      line.band = r.band || null;   // 사진에서 읽은 줄 자리(비율) — 있으면 그대로 자른다
       line.unit = r.unit || "";
       line.qty = r.qty === "" ? "" : r.qty;
       line.price = r.price === "" ? "" : r.price;
@@ -1306,6 +1307,45 @@
     logLine(esc(fmt("ingPhotoReadFmt", { n: got.rows.length, unsure: got.unsure })));
     if (got.totalOk === false) logLine(esc(fmt("ingInboxTotalOffFmt", { paper: money(got.total), sum: money(Math.round(got.sum || 0)) })));
     showRowStrips(id);          // 사진의 그 줄을 숫자 밑에 (느리므로 안 기다린다)
+  }
+
+  /**
+   * 읽은 쪽이 적어 보낸 **줄 자리**(band)로 자른다.
+   *
+   * 2026-10-17 사장님: "한 번 더 훑어서 102장 전부 정확히 맞춰줘"
+   *
+   * 사진에서 표를 다시 찾을 필요가 없다 — 읽은 사람이 어느 줄에서 읽었는지
+   * 알고 있으니 그 자리를 그대로 받는다. 줄 없는 전산 전표도, 비스듬히 찍은
+   * 사진도 된다(표 찾기로는 102장 중 54장만 됐다).
+   */
+  async function bandStrips(id) {
+    const bands = entryLines.map((l) => l.band);
+    if (!bands.some(Boolean)) return null;
+    const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/image");
+    if (!res.ok) return null;
+    const bmp = await createImageBitmap(await res.blob());
+    const out = bands.map((b) => (b ? cropBand(bmp, b) : null));
+    if (bmp.close) bmp.close();
+    return out;
+  }
+
+  /** 사진의 [위, 아래] 띠 한 장. 가로는 통째로 — 줄 전체가 보여야 한다. */
+  function cropBand(bmp, band) {
+    const pad = 0.004;                                   // 위아래로 조금 넉넉히
+    const y0 = Math.max(0, (band[0] - pad)) * bmp.height;
+    const y1 = Math.min(1, (band[1] + pad)) * bmp.height;
+    // 가로도 줄 수 있다 — 한 사진에 전표가 둘이면 옆 것이 딸려 온다
+    const x0 = (band.length === 4 ? band[2] : 0) * bmp.width;
+    const w = Math.max(2, Math.round(((band.length === 4 ? band[3] : 1) * bmp.width) - x0));
+    const h = Math.max(2, Math.round(y1 - y0));
+    const scale = Math.min(3, 44 / h);                   // 너무 작으면 키운다
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(w * scale);
+    cv.height = Math.round(h * scale);
+    const ctx = cv.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(bmp, Math.round(x0), Math.round(y0), w, h, 0, 0, cv.width, cv.height);
+    return cv.toDataURL("image/jpeg", 0.8);
   }
 
   /**
@@ -1329,10 +1369,25 @@
   let strips = { id: null, list: [], off: 0 };
 
   async function showRowStrips(id) {
+    strips = { id: null, list: [], off: 0 };
+    if (!id) return;
+
+    // ① 읽은 쪽이 줄 자리를 적어 보냈으면 그대로 자른다 — 표를 찾을 필요가 없다
+    try {
+      const band = await bandStrips(id);
+      if (band) {
+        if (!attached || attached.id !== id) return;
+        entryLines.forEach((l, i) => { l.pic = Object.assign({}, l.pic, { row: band[i] || null }); });
+        renderLines();
+        const n = band.filter(Boolean).length;
+        return logLine(esc(fmt("ingStripExactFmt", { n })), { add: true });
+      }
+    } catch (e) { /* 아래 길로 내려간다 */ }
+
+    // ② 없으면 사진에서 표 줄을 찾아 본다(맞춤은 사장님이 ◀▶ 로)
     const RR = window.HG_RECEIPT_READ;
     const R = window.HG_RECEIPT;
-    strips = { id: null, list: [], off: 0 };
-    if (!RR || !R || !id) return;
+    if (!RR || !R) return;
     let list = [];
     try {
       const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/image");

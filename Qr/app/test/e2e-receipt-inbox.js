@@ -266,6 +266,57 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1000);
   }
 
+  out.push("\n[줄 자리를 적어 보내면 — 표를 안 찾고 그대로 자른다]");
+  {
+    // 2026-10-17 사장님: "한 번 더 훑어서 102장 전부 정확히 맞춰줘"
+    //
+    // 읽은 쪽이 「사진 위에서 몇 % 줄」을 적어 보내면 표 찾기가 필요 없다.
+    // 사장님 영수증 102장으로 재보니 표 찾기로는 54장만 되고 줄 수까지 맞는
+    // 것은 7장뿐이었다 — 그 길로는 못 맞춘다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [{ name: "banded.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1500);
+
+    const row = page.locator('.ing-inbox-row:has-text("banded.png")');
+    await row.locator("[data-inbox-paste]").click();
+    await page.waitForTimeout(200);
+    // 1·2째 줄은 **같은 자리**, 3째 줄은 다른 자리, 4째 줄은 자리를 안 적었다
+    const withBands = {
+      vendor: "房信菓菜行", date: today, store: "main", rows: [
+        { name: "甲", qty: 1, unit: "斤", price: 10, amount: 10, sure: true, band: [0.30, 0.36] },
+        { name: "乙", qty: 1, unit: "斤", price: 10, amount: 10, sure: true, band: [0.30, 0.36] },
+        { name: "丙", qty: 1, unit: "斤", price: 10, amount: 10, sure: true, band: [0.60, 0.66] },
+        { name: "丁", qty: 1, unit: "斤", price: 10, amount: 10, sure: true },
+      ],
+    };
+    await row.locator("textarea").fill(JSON.stringify(withBands));
+    await row.locator("[data-inbox-go]").click();
+    await page.waitForTimeout(3000);
+
+    const srcs = await page.locator(".ing-line-strip img").evaluateAll((els) => els.map((e) => e.src));
+    check("★★ 자리를 적은 줄에만 띠가 붙는다 (3줄)", srcs.length === 3, String(srcs.length));
+    check("★★ 같은 자리를 적으면 같은 띠", srcs[0] === srcs[1], "");
+    check("★★ 다른 자리를 적으면 다른 띠", srcs[2] !== srcs[0], "");
+    check("★★ 맞출 필요가 없으므로 ◀▶ 를 안 띄운다", (await page.locator(".ing-strip-bar").count()) === 0, "");
+    check("★ 자리를 적어 뒀다고 말한다", /자리를 적어 둬서/.test(await page.locator("#ingImportLog").innerText()), "");
+    const tall = await page.locator(".ing-line-strip img").first().evaluate((el) => el.naturalHeight);
+    check("★ 읽을 만한 크기로 자른다", tall >= 40 && tall <= 260, String(tall));
+
+    // 다시 올려도(↩︎) 자리가 남아 있다 — 서버가 들고 있는 값에 band 가 들어간다
+    await page.locator("#ingEntryClear").click().catch(() => {});
+    await page.waitForTimeout(300);
+    await row.locator("[data-inbox-use]").click();
+    await page.waitForTimeout(2500);
+    check("★★ 「다시 올리기」로도 띠가 돌아온다", (await page.locator(".ing-line-strip img").count()) === 3, String(await page.locator(".ing-line-strip img").count()));
+
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1000);
+  }
+
   out.push("\n[줄 자리를 못 찾으면 — 지어내지 않는다]");
   {
     // 표가 없는 사진(시험용 흰 그림)에 두 줄을 붙여넣는다. 엉뚱한 줄을

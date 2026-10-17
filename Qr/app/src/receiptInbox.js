@@ -68,6 +68,25 @@ function parsePasted(text) {
 }
 
 /**
+ * 줄 자리 — 사진 높이의 비율 [위, 아래]. 벗어난 값은 버린다.
+ *
+ * 비율로 받는 이유: 사진을 줄여 올려도(긴 쪽 1,600점) 그대로 맞는다.
+ */
+function cleanBand(v) {
+  if (!Array.isArray(v) || (v.length !== 2 && v.length !== 4)) return null;
+  const n = v.map(Number);
+  // 비율이 아니면 버린다 — 0~1 밖의 값은 점(px)으로 적어 보낸 것이다
+  if (n.some((x) => !isFinite(x) || x < 0 || x > 1)) return null;
+  const y0 = Math.min(n[0], n[1]), y1 = Math.max(n[0], n[1]);
+  if (y1 - y0 < 0.002) return null;     // 너무 얇으면 글자가 안 보인다
+  if (v.length === 2) return [y0, y1];
+  // 한 사진에 전표가 둘일 때 — 가로도 잘라야 옆 전표가 안 딸려 온다(102번)
+  const x0 = Math.min(n[2], n[3]), x1 = Math.max(n[2], n[3]);
+  if (x1 - x0 < 0.05) return [y0, y1];
+  return [y0, y1, x0, x1];
+}
+
+/**
  * 읽은 결과를 **우리 쪽에서 한 번 더 검사한다.**
  *
  * 수량 × 단가 = 금액 이 안 맞는 줄은 고치지 않고 **확실치 않음**으로 넘긴다
@@ -96,9 +115,17 @@ function normalizeRead(receipt, opts) {
   // 날짜가 이미 YYYY-MM-DD 면 그대로
   if (/^\d{4}-\d{2}-\d{2}$/.test(String(r.date || ""))) head.date = r.date;
   // 품목마다 한국어 이름을 받는다 — 사장님 장부의 「비  고」 칸이다
+  //
+  // **줄 자리(band)도 같이 받는다**(2026-10-17). 읽은 쪽이 「사진 위에서 몇 %
+  // ~ 몇 % 줄에서 읽었다」를 적어 보내면, 화면이 그 자리를 그대로 잘라 숫자
+  // 밑에 붙인다. 사진에서 표를 다시 찾을 필요가 없어진다 — 사장님 영수증
+  // 102장으로 재보니 표를 찾은 것이 54장, 줄 수까지 맞는 것은 7장뿐이었다.
   const rows = checked.rows.map((row, i) => {
     const src = (r.rows || [])[i] || {};
-    return { ...row, name_ko: String(src.name_ko || src.note || "").normalize("NFC").trim() };
+    const out = { ...row, name_ko: String(src.name_ko || src.note || "").normalize("NFC").trim() };
+    const band = cleanBand(src.band);
+    if (band) out.band = band;
+    return out;
   });
   const unsure = rows.filter((x) => !x.sure).length;
   return { head, rows, unsure, total: checked.total, sum: checked.sum, totalOk: checked.totalOk, note: checked.note };
