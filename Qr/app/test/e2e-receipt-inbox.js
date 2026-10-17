@@ -317,6 +317,61 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1000);
   }
 
+  out.push("\n[묶음을 파일로 넣는다 — 50KB 를 손으로 복사하지 않게]");
+  {
+    // 2026-10-17 사장님: "bundle 파일이 안 올라가져 드래그해서"
+    //
+    // 칸은 글을 붙여넣는 칸이고 탭의 드래그는 사진만 받고 있었다. 묶음은
+    // 50KB 가 넘어서 패드에서 전부 골라 복사하는 것이 고된 일이다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [{ name: "byfile.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1500);
+
+    const bundle = JSON.stringify([{
+      file: "byfile.png", vendor: "房信菓菜行", date: today, store: "main", total: 60,
+      rows: [{ name: "豆芽", qty: 5, unit: "斤", price: 12, amount: 60, sure: true, band: [0.3, 0.36] }],
+    }]);
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    check("★ 「파일에서」 단추가 있다", await page.locator("#ingInboxManyFile").isVisible(), "");
+    await page.setInputFiles("#ingInboxManyFileInput", [{ name: "bundle.json", mimeType: "application/json", buffer: Buffer.from(bundle, "utf8") }]);
+    await page.waitForTimeout(2500);
+
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★★ 파일을 읽어 줄에 넣는다", /1장에 넣었어요/.test(log), log.split("\n").join(" | ").slice(0, 160));
+    check("★ 어느 파일을 읽었는지 말한다", /bundle\.json/.test(log), log.split("\n").join(" | ").slice(0, 160));
+    const txt = await page.locator("#ingInboxList").innerText();
+    check("★★ 그 줄이 「확인 대기」로", /확인 대기/.test(txt), "");
+
+    // 사진도 글도 아닌 것을 놓으면 — **조용히 넘기지 않는다**
+    await page.evaluate(() => {
+      const zone = document.getElementById("tab-ingredients");
+      const dt = new DataTransfer();
+      dt.items.add(new File(["zzz"], "뭔가.bin", { type: "application/octet-stream" }));
+      zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    });
+    await page.waitForTimeout(800);
+    check("★★ 엉뚱한 파일을 놓으면 뭘 놓으라고 말한다", /사진도 묶음 파일도 아니에요/.test(await page.locator("#ingImportLog").innerText()), await page.locator("#ingImportLog").innerText().then((t) => t.slice(0, 120)));
+
+    // 묶음을 **끌어다 놓아도** 같은 길
+    await page.evaluate(({ bundle }) => {
+      const zone = document.getElementById("tab-ingredients");
+      const dt = new DataTransfer();
+      dt.items.add(new File([bundle], "bundle2.json", { type: "application/json" }));
+      zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    }, { bundle });
+    await page.waitForTimeout(2500);
+    check("★★ 끌어다 놓아도 들어간다", /bundle2\.json/.test(await page.locator("#ingImportLog").innerText()), "");
+
+    const row = page.locator('.ing-inbox-row:has-text("byfile.png")');
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1000);
+  }
+
   out.push("\n[줄 자리를 못 찾으면 — 지어내지 않는다]");
   {
     // 표가 없는 사진(시험용 흰 그림)에 두 줄을 붙여넣는다. 엉뚱한 줄을

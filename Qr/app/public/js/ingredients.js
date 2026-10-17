@@ -1249,8 +1249,37 @@
    */
   async function pasteMany() {
     const box = $("#ingInboxManyText");
-    const text = box ? box.value : "";
-    if (!text.trim()) return;
+    await pasteManyText(box ? box.value : "");
+  }
+
+  /**
+   * **파일로도 받는다**(2026-10-17 사장님: "bundle 파일이 안 올라가져 드래그해서").
+   *
+   * 묶음은 50KB 가 넘는다. 파일을 열어 전부 골라 복사해서 칸에 붙여넣는 것은
+   * 패드에서 특히 고된 일이라, 그냥 끌어다 놓거나 고르면 되게 한다.
+   */
+  async function readManyFiles(files) {
+    const list = [...(files || [])].filter(isTextFile);
+    if (!list.length) return false;
+    for (const f of list) {
+      let text = "";
+      try { text = await f.text(); } catch (e) { text = ""; }
+      if (!text.trim()) { logLine(esc(fmt("ingInboxFileEmptyFmt", { name: f.name }))); continue; }
+      logLine(esc(fmt("ingInboxFileReadFmt", { name: f.name, kb: Math.round(f.size / 1024) })));
+      await pasteManyText(text, { add: true });
+    }
+    return true;
+  }
+
+  /** 사진이 아니라 **글 파일**인가 — 묶음(.json)·메모(.txt). */
+  function isTextFile(f) {
+    if (!f) return false;
+    if (/^image\//.test(f.type || "")) return false;
+    return /\.(json|txt)$/i.test(f.name || "") || /json|text/.test(f.type || "");
+  }
+
+  async function pasteManyText(text, opts) {
+    if (!String(text || "").trim()) return;
     const btn = $("#ingInboxManyGo");
     if (btn) btn.disabled = true;
     try {
@@ -1261,15 +1290,16 @@
       const got = await res.json().catch(() => ({}));
       if (!res.ok) {
         const bad = got.error === "bad_json" || got.error === "bad_shape" || got.error === "no_rows" || got.error === "empty";
-        return logLine(esc(T(bad ? "ingInboxBadPaste" : "ingInboxFailed")));
+        return logLine(esc(T(bad ? "ingInboxBadPaste" : "ingInboxFailed")), opts);
       }
-      logLine(esc(fmt("ingInboxManyDoneFmt", { n: got.filled, unsure: got.unsure })));
+      logLine(esc(fmt("ingInboxManyDoneFmt", { n: got.filled, unsure: got.unsure })), opts);
       // 짝을 못 찾은 것을 **조용히 넘기지 않는다** — 그 장은 아무 줄에도 안 들어갔다
       const missed = got.missed || [];
       if (missed.length) {
         logLine(esc(fmt("ingInboxManyMissedFmt", { n: missed.length, names: missed.slice(0, 3).join(", ") })), { add: true });
       }
       if (got.skipped) logLine(esc(fmt("ingInboxManySkippedFmt", { n: got.skipped })), { add: true });
+      const box = $("#ingInboxManyText");
       if (box) box.value = "";
       if ($("#ingInboxManyBox")) $("#ingInboxManyBox").hidden = true;
       await loadInbox();
@@ -1277,6 +1307,7 @@
       if (btn) btn.disabled = false;
     }
   }
+
   /** 전에 붙여넣어 둔 결과를 다시 표에 올린다(서버가 들고 있다). */
   async function useRead(id) {
     const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/read");
@@ -1622,12 +1653,20 @@
       if (zone) {
         zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("ing-drop"); });
         zone.addEventListener("dragleave", () => zone.classList.remove("ing-drop"));
-        zone.addEventListener("drop", (e) => {
+        zone.addEventListener("drop", async (e) => {
           e.preventDefault();
           zone.classList.remove("ing-drop");
-          // 끌어다 놓으면 **대기함에 올린다**(2026-10-06). 그 자리에서 읽지 않는다 —
+          const files = [...((e.dataTransfer && e.dataTransfer.files) || [])];
+          if (!files.length) return;
+          // 묶음 파일(.json)을 끌어다 놓으면 **줄마다 넣는다**(2026-10-17).
+          // 50KB 글을 손으로 복사해 붙여넣는 것은 패드에서 고된 일이다.
+          const didText = await readManyFiles(files);
+          // 사진이면 **대기함에 올린다**(2026-10-06). 그 자리에서 읽지 않는다 —
           // 키 없이 기기 안에서 읽으면 한 줄 통째로 22% 다.
-          uploadToInbox(e.dataTransfer && e.dataTransfer.files);
+          const pics = files.filter((f) => /^image\//.test(f.type || ""));
+          if (pics.length) return uploadToInbox(pics);
+          // 사진도 글도 아니면 **조용히 넘기지 않는다** — 아무 일도 안 일어난 것처럼 보인다
+          if (!didText) logLine(esc(fmt("ingDropWhatFmt", { name: files[0].name || "" })));
         });
       }
       watchEntryFields();
@@ -1649,6 +1688,15 @@
           if (!many.hidden) $("#ingInboxManyText").focus();
         };
         $("#ingInboxManyGo").onclick = () => pasteMany();
+        if ($("#ingInboxManyFile")) {
+          $("#ingInboxManyFile").onclick = () => $("#ingInboxManyFileInput").click();
+          $("#ingInboxManyFileInput").onchange = (ev) => {
+            // value 를 비우면 고른 목록까지 비워진다 — 먼저 베껴 둔다
+            const picked = [...(ev.target.files || [])];
+            ev.target.value = "";
+            readManyFiles(picked);
+          };
+        }
         $("#ingInboxManyCancel").onclick = () => { $("#ingInboxManyBox").hidden = true; };
       }
       if ($("#ingInboxShowSaved")) $("#ingInboxShowSaved").onchange = () => renderInbox();
