@@ -372,6 +372,77 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1000);
   }
 
+  out.push("\n[확인 대기는 확인 대기끼리 — 섞이면 어디까지 했는지 모른다]");
+  {
+    // 2026-10-17 사장님: "확인대기는 확인대기용으로 빠지게 해줘 그래서 거기서 볼 수 있게"
+    //
+    // 묶음 하나로 102줄이 한꺼번에 「확인 대기」가 된다. 「읽기 전」과 섞여
+    // 있으면 아빠가 어디까지 확인했는지 알 수 없다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    // 석 장 올리고 그 중 한 장만 읽은 결과를 넣는다
+    await page.setInputFiles("#ingInboxFile", [
+      { name: "tab-a.png", mimeType: "image/png", buffer: paper },
+      { name: "tab-b.png", mimeType: "image/png", buffer: paper },
+      { name: "tab-c.png", mimeType: "image/png", buffer: paper },
+    ]);
+    await page.waitForTimeout(2000);
+
+    const one = JSON.stringify([{
+      file: "tab-b.png", vendor: "房信菓菜行", date: today, store: "main", total: 60,
+      rows: [{ name: "豆芽", qty: 5, unit: "斤", price: 12, amount: 60, sure: true, band: [0.3, 0.36] }],
+    }]);
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(one);
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(2500);
+
+    const tabs = page.locator(".ing-inbox-tab");
+    check("★★ 상태별 칸이 있다 (전체·읽기 전·확인 대기·저장됨)", (await tabs.count()) === 4, String(await tabs.count()));
+    const readTab = page.locator('[data-inbox-tab="read"]');
+    const readN = Number((await readTab.innerText()).replace(/[^0-9]/g, ""));
+    check("★★ 「확인 대기」 칸에 몇 장인지 적힌다", readN >= 1, await readTab.innerText());
+    const newTab = page.locator('[data-inbox-tab="new"]');
+    check("★ 「읽기 전」도 세어 둔다 (2장)", /읽기 전\s*2/.test((await newTab.innerText()).replace(/\n/g, " ")), await newTab.innerText());
+
+    await readTab.click();
+    await page.waitForTimeout(400);
+    const rows = page.locator(".ing-inbox-row");
+    check("★★ 「확인 대기」를 고르면 그 숫자만큼만 보인다", (await rows.count()) === readN, (await rows.count()) + " vs " + readN);
+    const onlyRead = await rows.evaluateAll((els) => els.every((e) => /확인 대기/.test(e.innerText)));
+    check("★★ 보이는 것이 전부 「확인 대기」다", onlyRead, "");
+    check("★★ 보이는 것이 읽은 그 장이다", /tab-b\.png/.test(await page.locator("#ingInboxList").innerText()), "");
+    check("★ 고른 칸이 눈에 띈다", (await readTab.getAttribute("class")).includes("is-on"), "");
+
+    await newTab.click();
+    await page.waitForTimeout(400);
+    const newN = Number((await newTab.innerText()).replace(/[^0-9]/g, ""));
+    check("★★ 「읽기 전」을 고르면 그 숫자만큼만", (await rows.count()) === newN, (await rows.count()) + " vs " + newN);
+    const onlyNew = await rows.evaluateAll((els) => els.every((e) => /읽기 전/.test(e.innerText)));
+    check("★★ 보이는 것이 전부 「읽기 전」이다", onlyNew, "");
+
+    // 고른 칸은 **그 기기에 남는다** — 새로고침해도 하던 자리로
+    const kept = await page.evaluate(() => localStorage.getItem("hg_admin_inboxTab"));
+    check("★★ 고른 칸이 기기에 남는다", kept === "new", String(kept));
+
+    // 102줄이 들어와도 **화면이 안 늘어난다** — 목록 칸 안에서 굴러야 한다
+    const box = await page.locator("#ingInboxList").evaluate((el) => ({ h: el.clientHeight, scroll: el.scrollHeight > el.clientHeight + 1, over: getComputedStyle(el).overflowY }));
+    check("★★ 목록은 제 칸 안에서 구른다 (페이지가 안 늘어난다)", box.h <= 460 && /auto|scroll/.test(box.over), JSON.stringify(box));
+
+    await page.locator('[data-inbox-tab="all"]').click();
+    await page.waitForTimeout(300);
+    for (const name of ["tab-a.png", "tab-b.png", "tab-c.png"]) {
+      const row = page.locator('.ing-inbox-row:has-text("' + name + '")');
+      if (!(await row.count())) continue;
+      await row.first().locator("[data-inbox-del]").click();
+      await page.waitForTimeout(300);
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(800);
+    }
+  }
+
   out.push("\n[줄 자리를 못 찾으면 — 지어내지 않는다]");
   {
     // 표가 없는 사진(시험용 흰 그림)에 두 줄을 붙여넣는다. 엉뚱한 줄을
@@ -434,10 +505,10 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1800);
     const left = await page.locator(".ing-inbox-row").count();
     check("★★ 저장하면 그 줄이 대기함에서 빠진다 (남은 건 한 장)", left === 1, String(left));
-    await page.locator("#ingInboxShowSaved").check();
+    await page.locator('[data-inbox-tab="saved"]').click();
     await page.waitForTimeout(400);
     const all = await page.locator("#ingInboxList").innerText();
-    check("★ 「저장된 것도 보기」로 보면 남아 있다", /저장됨/.test(all), all.replace(/\n/g, " | ").slice(0, 200));
+    check("★ 「저장됨」 칸으로 보면 남아 있다", /저장됨/.test(all), all.replace(/\n/g, " | ").slice(0, 200));
     const saved = page.locator(".ing-inbox-row").filter({ hasText: "저장됨" }).first();
     check("★★ 저장된 줄에는 「받기」가 없다 — 사진을 지웠다",
       (await saved.locator("a.ing-inbox-btn").count()) === 0, "");
@@ -460,7 +531,7 @@ const PASTED = `읽었습니다:
   {
     await page.locator('#ingVendorChips [data-ing-chip=""]').click();
     await page.waitForTimeout(600);
-    await page.locator("#ingInboxShowSaved").uncheck();
+    await page.locator('[data-inbox-tab="all"]').click();
     await page.waitForTimeout(300);
     const before = await page.locator(".ing-inbox-row").count();
     await page.locator(".ing-inbox-row").first().locator("[data-inbox-del]").click();

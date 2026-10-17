@@ -1159,11 +1159,60 @@
     renderInbox();
   }
 
+  /**
+   * 대기함을 **상태별로 나눠 본다.**
+   *
+   * 2026-10-17 사장님: "확인대기는 확인대기용으로 빠지게 해줘 그래서 거기서
+   * 볼 수 있게" — 묶음 하나로 102줄이 한꺼번에 「확인 대기」가 되는데, 그것이
+   * 「읽기 전」과 섞여 있으면 어디까지 했는지 알 수 없다.
+   *
+   * 고른 칸은 **그 기기에** 남는다(hg_admin_inboxTab). 아빠가 확인하다 화면을
+   * 새로고침해도 하던 자리로 돌아온다.
+   */
+  const INBOX_TABS = ["all", "new", "read", "saved"];
+  let inboxTab = (function () {
+    try { return INBOX_TABS.includes(localStorage.getItem("hg_admin_inboxTab")) ? localStorage.getItem("hg_admin_inboxTab") : "all"; }
+    catch (e) { return "all"; }
+  })();
+
+  function inboxCounts() {
+    const list = inbox.items || [];
+    return {
+      all: list.filter((i) => i.status !== "saved").length,   // 「전체」는 끝난 것 빼고
+      new: list.filter((i) => i.status === "new").length,
+      read: list.filter((i) => i.status === "read").length,
+      saved: list.filter((i) => i.status === "saved").length,
+    };
+  }
+
+  function inboxVisible() {
+    const list = inbox.items || [];
+    if (inboxTab === "all") return list.filter((i) => i.status !== "saved");
+    return list.filter((i) => i.status === inboxTab);
+  }
+
+  function renderInboxTabs() {
+    const box = $("#ingInboxTabs");
+    if (!box) return;
+    const c = inboxCounts();
+    box.innerHTML = INBOX_TABS.map((k) =>
+      '<button type="button" class="ing-inbox-tab' + (inboxTab === k ? " is-on" : "") + '" data-inbox-tab="' + k + '">' +
+      esc(T("ingInboxTab_" + k)) + ' <b>' + c[k] + "</b></button>"
+    ).join("");
+    box.querySelectorAll("[data-inbox-tab]").forEach((b) => {
+      b.onclick = () => {
+        inboxTab = b.dataset.inboxTab;
+        try { localStorage.setItem("hg_admin_inboxTab", inboxTab); } catch (e) { /* 안 되면 이번만 */ }
+        renderInbox();
+      };
+    });
+  }
+
   function renderInbox() {
     const el = $("#ingInboxList");
     if (!el) return;
-    const showSaved = $("#ingInboxShowSaved") && $("#ingInboxShowSaved").checked;
-    const items = (inbox.items || []).filter((i) => showSaved || i.status !== "saved");
+    renderInboxTabs();
+    const items = inboxVisible();
     const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
     const cnt = $("#ingInboxCount");
     if (cnt) cnt.textContent = pending ? fmt("ingInboxCountFmt", { n: pending }) : "";
@@ -1175,7 +1224,7 @@
       all.hidden = !n;
     }
     if (!items.length) {
-      el.innerHTML = '<p class="ing-note">' + esc(T("ingInboxEmpty")) + "</p>";
+      el.innerHTML = '<p class="ing-note">' + esc(T(inboxTab === "all" ? "ingInboxEmpty" : "ingInboxTabEmpty")) + "</p>";
       return;
     }
     el.innerHTML = items.map((i) => {
@@ -1699,7 +1748,6 @@
         }
         $("#ingInboxManyCancel").onclick = () => { $("#ingInboxManyBox").hidden = true; };
       }
-      if ($("#ingInboxShowSaved")) $("#ingInboxShowSaved").onchange = () => renderInbox();
       if ($("#ingEntryPhotoClear")) $("#ingEntryPhotoClear").onclick = () => detachPhoto();
       $("#ingEntryVendor").onchange = () => loadCatalog();
       $("#ingEntryStore").onchange = () => {
