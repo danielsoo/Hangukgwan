@@ -1253,6 +1253,40 @@
     });
   }
 
+  /**
+   * 대기함(올리기·받기·목록)을 **접어 둔다.**
+   *
+   * 2026-10-17 사장님: "유아이가 여전히 조금 보기 어려워" — 확인하러 들어왔는데
+   * 제목·안내문·단추·상태 칸·목록 여덟 줄을 지나야 표가 나왔다. 일하는 표를
+   * 위로 올리고, 올리고 받는 자리는 접어서 밑에 둔다.
+   *
+   * 확인할 것이 하나도 없으면(= 이제 올리거나 붙여넣어야 하면) **저절로
+   * 펴진다** — 접힌 채로 두면 무엇을 해야 할지 안 보인다.
+   */
+  function setInboxFold(open, opts) {
+    const body = $("#ingInboxBody");
+    const btn = $("#ingInboxFold");
+    if (!body || !btn) return;
+    body.hidden = !open;
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    btn.classList.toggle("is-open", !!open);
+    // **저절로 편 것은 기억하지 않는다.** 기억하면 한 번 펴진 뒤로 영영 펴져
+    // 있어서, 접어 둔 뜻이 사라진다.
+    if (opts && opts.remember) {
+      try { localStorage.setItem("hg_admin_inboxFold", open ? "1" : "0"); } catch (e) { /* 이번만 */ }
+    }
+  }
+
+  function autoFoldInbox() {
+    const body = $("#ingInboxBody");
+    if (!body) return;
+    const read = (inbox.items || []).filter((i) => i.status === "read").length;
+    let want;
+    try { want = localStorage.getItem("hg_admin_inboxFold"); } catch (e) { want = null; }
+    // 확인할 것이 없으면 펴 둔다 — 그때는 올리거나 붙여넣는 자리가 할 일이다
+    setInboxFold(read === 0 ? true : want === "1");   // 기억하지 않는다
+  }
+
   /** 확인 칸에 몇 장 기다리는지 적어 둔다 — 다른 칸에 있어도 보이게. */
   function markCheckTab() {
     const b = $("#ingViewCheckTab");
@@ -1335,6 +1369,7 @@
     renderInboxTabs();
     renderCheckChips();          // 영수증마다 칩 — 표 바로 위에서 오간다
     markCheckTab();              // 다른 칸에 있어도 몇 장 기다리는지 보이게
+    autoFoldInbox();             // 확인할 게 없을 때만 올리는 자리를 펴 둔다
     const items = inboxVisible();
     const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
     const cnt = $("#ingInboxCount");
@@ -1892,6 +1927,9 @@
         btn.onclick = () => setIngView(btn.dataset.ingView);
       });
       setIngView(ingView, { quiet: true });
+      if ($("#ingInboxFold")) {
+        $("#ingInboxFold").onclick = () => setInboxFold($("#ingInboxBody").hidden, { remember: true });
+      }
       if ($("#ingCheckPrev")) $("#ingCheckPrev").onclick = () => stepCheck(-1);
       if ($("#ingCheckNext")) $("#ingCheckNext").onclick = () => stepCheck(1);
       if ($("#ingInboxPasteMany")) {

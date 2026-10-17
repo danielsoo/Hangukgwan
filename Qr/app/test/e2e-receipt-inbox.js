@@ -64,6 +64,17 @@ const PASTED = `읽었습니다:
   await page.locator('.admin-tabs button[data-tab="ingredients"]').click();
   await page.waitForTimeout(900);
 
+  // 2026-10-17: 대기함 목록은 접혀 있다(일하는 표를 위로 올리면서). 목록을
+  // 만지는 시험은 펴고 본다 — 이미 펴져 있으면 아무 일도 안 한다.
+  const openInbox = async () => {
+    const fold = page.locator("#ingInboxFold");
+    if (!(await fold.isVisible())) return;
+    if (await page.locator("#ingInboxBody").evaluate((el) => el.hidden)) {
+      await fold.click();
+      await page.waitForTimeout(300);
+    }
+  };
+
   out.push("\n[장부와 영수증 확인은 다른 칸]");
   {
     // 2026-10-17 사장님: "지금은 대기함이 홈에 있는데 그거 홈에 하지 말고
@@ -107,10 +118,12 @@ const PASTED = `읽었습니다:
   }
 
   out.push("[대기함이 있다]");
+  await openInbox();
   check("📥 대기함 카드", await page.locator(".ing-inbox").isVisible(), "");
   check("처음엔 비어 있다고 말한다", /비어 있어요/.test(await page.locator("#ingInboxList").innerText()), await page.locator("#ingInboxList").innerText());
 
   out.push("\n[아빠가 사진을 올린다]");
+  await openInbox();
   await page.setInputFiles("#ingInboxFile", [photoFile("receipt-1.png"), photoFile("receipt-2.png")]);
   await page.waitForTimeout(1500);
   {
@@ -124,6 +137,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[전부 받기 — 한 파일로]");
+  await openInbox();
   {
     // 2026-10-16 사장님: "전부 받기 만들어줘" — 대기함에 115장이 쌓였는데
     // 줄마다 「받기」를 눌러야 했다. 115번 누르고 115개 파일을 찾는 것은 일이 아니다.
@@ -156,6 +170,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[한꺼번에 넣기 — 붙여넣기 한 번으로 두 줄]");
+  await openInbox();
   {
     // 2026-10-17: 대기함에 115장이 쌓였다. 줄마다 붙여넣으면 붙여넣기 115번이고,
     // 어느 줄에 어느 사진 것을 넣었는지 사장님이 세어야 한다.
@@ -214,6 +229,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[진짜 사진 크기도 올라간다]");
+  await openInbox();
   {
     // 2026-10-06: 전역 express.json() 의 기본 한도가 100KB 라 **진짜 사진만**
     // 413 으로 튕겼다. 작은 시험 그림은 지나가서 안 보였고, 화면에는
@@ -230,6 +246,7 @@ const PASTED = `읽었습니다:
     });
   }
   out.push("\n[사장님이 받아서 읽히고, 그 결과를 붙여넣는다]");
+  await openInbox();
   {
     // 「받기」는 그 사진 자체다 — 주소가 대기함 길이어야 한다(손님 사진 길이 아니라).
     const href = await page.locator(".ing-inbox-row").first().locator("a.ing-inbox-btn").getAttribute("href");
@@ -247,6 +264,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[사진의 그 줄을 숫자 밑에]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "실제 사진 어떤 줄에서 이걸 읽어왔는지 옆에 보여주면
     // 비교 검사할 때 매번 영수증 찾아서 줄 일일이 읽는 것보다 빠를 것 같아"
@@ -309,6 +327,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[줄 자리를 적어 보내면 — 표를 안 찾고 그대로 자른다]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "한 번 더 훑어서 102장 전부 정확히 맞춰줘"
     //
@@ -360,6 +379,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[묶음을 파일로 넣는다 — 50KB 를 손으로 복사하지 않게]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "bundle 파일이 안 올라가져 드래그해서"
     //
@@ -415,6 +435,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[확인 대기는 확인 대기끼리 — 섞이면 어디까지 했는지 모른다]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "확인대기는 확인대기용으로 빠지게 해줘 그래서 거기서 볼 수 있게"
     //
@@ -486,6 +507,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[줄 자리를 못 찾으면 — 지어내지 않는다]");
+  await openInbox();
   {
     // 표가 없는 사진(시험용 흰 그림)에 두 줄을 붙여넣는다. 엉뚱한 줄을
     // 보여주느니 **한 장도 안 보여주고** 그렇다고 말해야 한다.
@@ -500,6 +522,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[확실한 줄과 확실치 않은 줄]");
+  await openInbox();
   {
     const lines = page.locator("#ingEntryLines .ing-line[data-i]");
     check("★★ 두 줄이 표에 올라왔다", (await lines.count()) === 2, `${await lines.count()}`);
@@ -523,6 +546,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[사진이 표 옆에 뜬다]");
+  await openInbox();
   {
     const box = page.locator("#ingEntryPhoto");
     check("★★ 사진 칸이 보인다", await box.isVisible(), "");
@@ -542,6 +566,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[아빠가 오케이 → 저장]");
+  await openInbox();
   {
     await page.locator("#ingEntrySave").click();
     await page.waitForTimeout(1800);
@@ -562,6 +587,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[전체 내역에 들어간다]");
+  await openInbox();
     await page.locator('[data-ing-view="book"]').click();
     await page.waitForTimeout(600);
   {
@@ -576,6 +602,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[대기함에서 지우기]");
+  await openInbox();
   {
     await page.locator('#ingVendorChips [data-ing-chip=""]').click();
     await page.waitForTimeout(600);
@@ -594,6 +621,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[엉뚱한 글을 붙여넣으면]");
+  await openInbox();
   {
     await page.setInputFiles("#ingInboxFile", [photoFile("receipt-3.png")]);
     await page.waitForTimeout(1400);
@@ -608,6 +636,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[영수증마다 칩 — 급여의 직원 칩처럼 눌러서 오간다]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
     // 영수증마다 탭이나 그런 걸 해줘서 확인할 수 있게"
@@ -675,6 +704,7 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[확인 대기에서 확인하는 길]");
+  await openInbox();
   {
     // 2026-10-17 사장님: "확인대기에서 확인을 하는 방법이 없어"
     //

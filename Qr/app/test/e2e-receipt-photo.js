@@ -116,7 +116,8 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
   );
   {
     // 2026-10-04 사장님: "급여에서 사진 선택 말고도 드래그로 할 수 있게 해줘"
-    const hint = await page.locator('#tab-ingredients [data-i18n="ingPhotoHint"]').innerText();
+    // 2026-10-17: 긴 안내문을 **올리는 자리(대기함)로** 옮겼다 — 표 위는 짧게.
+    const hint = await page.locator('#tab-ingredients [data-i18n="ingInboxHint"]').innerText();
     check("★ 끌어다 놓을 수 있다고 적혀 있다", /끌어다 놓/.test(hint), hint);
     // 2026-10-06: 대기함을 만들며 사진이 **가게 서버**로 간다(아빠가 올리고
     // 사장님이 받아 보셔야 하므로). 그래서 「기기 밖으로 안 나간다」가 아니라

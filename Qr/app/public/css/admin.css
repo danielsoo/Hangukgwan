@@ -3069,6 +3069,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
 .ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+/* 대기함은 접어 둔다 — 확인하러 들어와서 여덟 층을 지나지 않게(2026-10-17). */
+.ing-fold {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: none; background: transparent; padding: 0; cursor: pointer;
+  font: inherit; text-align: left;
+}
+.ing-fold-mark { margin-left: auto; color: var(--muted); font-size: 13px; transition: transform 0.15s; }
+.ing-fold.is-open .ing-fold-mark { transform: rotate(180deg); }
+.ing-fold-body { margin-top: 10px; }
 /* 식자재 안의 두 칸 — 장부(홈)와 영수증 확인(2026-10-17). */
 .ing-views { display: flex; gap: 8px; margin: 0 0 14px; }
 .ing-view-tab {
