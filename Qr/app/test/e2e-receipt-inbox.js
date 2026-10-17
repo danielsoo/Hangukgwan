@@ -243,7 +243,21 @@ const PASTED = `읽었습니다:
     // 줄마다 다른 자리를 잘랐는가 — 같은 그림을 다섯 번 붙이면 아무 쓸모가 없다
     const srcs = await strips.evaluateAll((els) => els.map((e) => e.src.slice(-80)));
     check("★★ 줄마다 다른 자리를 자른다", new Set(srcs).size === 5, String(new Set(srcs).size));
-    check("★ 몇 줄 붙였는지 말한다", /그 줄 5개/.test(await page.locator("#ingImportLog").innerText()), "");
+    check("★ 몇 줄 붙였는지 말한다", /줄 5개/.test(await page.locator("#ingImportLog").innerText()), "");
+
+    // 줄이 어긋났을 때 — 사장님이 ◀▶ 로 맞추신다. 사진에서 센 줄과 읽은 줄이
+    // 같은 영수증은 사장님 102장 중 7장뿐이라, 자동으로 맞히려 들지 않는다.
+    check("★★ 맞춤 줄(◀▶)이 있다", await page.locator(".ing-strip-bar").isVisible(), "");
+    const before = await strips.first().evaluate((el) => el.src.slice(-60));
+    await page.locator("#ingStripDown").click();
+    await page.waitForTimeout(300);
+    const after = await page.locator(".ing-line-strip img").first().evaluate((el) => el.src.slice(-60));
+    check("★★ ▶ 를 누르면 한 칸 밀린다", before !== after, "");
+    check("★ 몇 칸 밀었는지 보인다", (await page.locator(".ing-strip-off").innerText()).trim() === "+1", await page.locator(".ing-strip-off").innerText());
+    await page.locator("#ingStripUp").click();
+    await page.waitForTimeout(300);
+    const back = await page.locator(".ing-line-strip img").first().evaluate((el) => el.src.slice(-60));
+    check("★ ◀ 로 되돌아온다", back === before, "");
 
     // 치우기 — 화면으로 지운다(서버만 지우면 목록에 유령이 남아 뒤 시험이 깨진다)
     await row.locator("[data-inbox-del]").click();
@@ -263,7 +277,7 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(3000);
     check("★★ 표를 못 찾으면 한 장도 안 붙인다", (await page.locator(".ing-line-strip img").count()) === 0, "");
     const log = await page.locator("#ingImportLog").innerText();
-    check("★★ 조용히 넘기지 않고 이유를 말한다", /줄 자리를 못 찾았어요/.test(log), log.split("\n").join(" | ").slice(0, 160));
+    check("★★ 조용히 넘기지 않고 이유를 말한다", /표 줄을 못 찾았어요/.test(log), log.split("\n").join(" | ").slice(0, 160));
   }
 
   out.push("\n[확실한 줄과 확실치 않은 줄]");

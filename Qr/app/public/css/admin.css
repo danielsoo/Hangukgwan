@@ -3231,6 +3231,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
    짚는 것보다 그림을 한 번 보는 것이 빠르다(2026-10-05). */
 .ing-pic { display: block; max-width: 100%; height: 26px; margin-top: 3px; border: 1px solid #ddd; border-radius: 3px; background: #fff; }
 /* 확실치 않은 줄. 「틀린 값을 표시 없이 넣지 않는다」가 기준이다. */
+.ing-strip-bar {
+  display: flex; align-items: center; gap: 6px; padding: 4px 2px 6px;
+  font-size: 13px; color: var(--muted);
+}
+.ing-strip-bar button {
+  border: 1px solid var(--line); background: #fff; border-radius: 6px;
+  padding: 1px 8px; cursor: pointer; font-size: 13px; line-height: 1.6;
+}
+.ing-strip-off { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; }
 /* 사진의 그 줄 — 숫자 바로 밑에(2026-10-17). 종이를 다시 찾지 않게. */
 .ing-line-strip { grid-column: 1 / -1; padding: 1px 0 5px 2px; }
 .ing-line-strip img {

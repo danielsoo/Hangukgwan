@@ -617,10 +617,30 @@
     return `<img class="ing-pic" src="${esc(src)}" alt="" />`;
   }
 
+  /**
+   * 「사진 줄 맞춤」 줄. 띠가 한 칸 밀렸을 때 사장님이 직접 맞추신다.
+   *
+   * 자동으로 맞히려 들지 않는다 — 사진에서 센 줄과 읽은 줄이 같은 영수증은
+   * 102장 중 7장뿐이었다(합계 줄·지운 줄이 같이 세어진다). 대신 어긋난 띠는
+   * 숫자 바로 옆에 있어 눈에 바로 띈다.
+   */
+  function stripBarHtml() {
+    if (!strips.list.length || !attached || strips.id !== attached.id) return "";
+    return (
+      '<div class="ing-strip-bar">' +
+      '<span>' + esc(fmt("ingStripBarFmt", { n: strips.list.length })) + "</span>" +
+      '<button type="button" id="ingStripUp">◀</button>' +
+      '<span class="ing-strip-off">' + (strips.off > 0 ? "+" : "") + strips.off + "</span>" +
+      '<button type="button" id="ingStripDown">▶</button>' +
+      "</div>"
+    );
+  }
+
   function renderLines() {
     const box = $("#ingEntryLines");
     if (!box) return;
     box.innerHTML = `
+      ${stripBarHtml()}
       <div class="ing-line ing-line-head">
         <span>${esc(T("ingColItem"))}</span><span>${esc(T("ingColQty"))}</span><span>${esc(T("ingColUnit"))}</span>
         <span>${esc(T("ingColPrice"))}</span><span>${esc(T("ingColAmount"))}</span><span></span>
@@ -640,6 +660,9 @@
         </div>`
         )
         .join("")}`;
+
+    if ($("#ingStripUp")) $("#ingStripUp").onclick = () => nudgeStrips(-1);
+    if ($("#ingStripDown")) $("#ingStripDown").onclick = () => nudgeStrips(1);
 
     box.querySelectorAll(".ing-line[data-i]").forEach((el) => {
       const i = Number(el.dataset.i);
@@ -1293,18 +1316,24 @@
    *
    * 붙여넣은 결과에는 **좌표가 없다**(세션에서 읽어 온 숫자뿐이다). 그래서
    * 사진에서 표 줄만 다시 찾아(receipt-ocr) 줄마다 한 장씩 자른다. 숫자를
-   * 읽는 것이 아니라 **자리만** 찾는 것이라, 읽기가 22% 인 것과 상관없다.
+   * 읽는 것이 아니라 **자리만** 찾는 것이다.
    *
-   * **줄 수가 다르면 한 장도 안 보여준다.** 한 줄이라도 밀리면 엉뚱한 줄을
-   * 보시며 「맞다」 하시게 된다 — 종이를 다시 찾는 것만 못하다. 못 찾았으면
-   * 조용히 넘기지 않고 그렇다고 말한다.
+   * **줄 수는 거의 안 맞는다.** 사장님 영수증 102장으로 재보니 표를 찾은 것이
+   * 54장인데 줄 수까지 같은 것은 7장뿐이었다(합계 줄·지운 줄·빈 줄이 같이
+   * 세어진다). 그래서 「같을 때만 보여주기」로 두면 7% 에서만 뜬다.
+   *
+   * 대신 **맞춤 단추(◀▶)** 를 둔다. 어긋난 띠는 숫자와 나란히 있어서 눈에
+   * 바로 띄므로(조용히 틀리지 않는다), 한두 번 눌러 맞추시면 된다. 어긋남은
+   * ±1 이 가장 흔하다.
    */
+  let strips = { id: null, list: [], off: 0 };
+
   async function showRowStrips(id) {
     const RR = window.HG_RECEIPT_READ;
     const R = window.HG_RECEIPT;
+    strips = { id: null, list: [], off: 0 };
     if (!RR || !R || !id) return;
-    const want = entryLines.length;
-    let strips = [];
+    let list = [];
     try {
       const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/image");
       if (!res.ok) return;
@@ -1317,20 +1346,37 @@
         if (!L) continue;
         for (const r of R.usedRows(grid, cs, L.amount)) {
           const box = rowBox(cs, r);
-          strips.push(box ? RR.cropPng(grid, box, { height: 40 }) : null);
+          const png = box ? RR.cropPng(grid, box, { height: 40 }) : null;
+          if (png) list.push(png);
         }
       }
     } catch (e) {
-      strips = [];
+      list = [];
     }
     // 그 사이에 다른 영수증을 고르셨으면 버린다
-    if (!attached || attached.id !== id || entryLines.length !== want) return;
-    if (strips.length !== want || strips.some((x) => !x)) {
-      return logLine(esc(T("ingStripNone")), { add: true });
-    }
-    entryLines.forEach((l, i) => { l.pic = Object.assign({}, l.pic, { row: strips[i] }); });
+    if (!attached || attached.id !== id) return;
+    if (!list.length) return logLine(esc(T("ingStripNone")), { add: true });
+    strips = { id, list, off: 0 };
+    applyStrips();
+    logLine(esc(fmt("ingStripOkFmt", { n: list.length })), { add: true });
+  }
+
+  /** 지금 맞춤(off)대로 줄마다 띠를 다시 붙인다. */
+  function applyStrips() {
+    entryLines.forEach((l, i) => {
+      const png = strips.list[i + strips.off];
+      l.pic = Object.assign({}, l.pic, { row: png || null });
+    });
     renderLines();
-    logLine(esc(fmt("ingStripOkFmt", { n: want })), { add: true });
+  }
+
+  /** ◀▶ — 사진 줄을 한 칸씩 밀어 맞춘다. */
+  function nudgeStrips(d) {
+    if (!strips.list.length) return;
+    const lo = -(entryLines.length - 1);
+    const hi = strips.list.length - 1;
+    strips.off = Math.max(lo, Math.min(hi, strips.off + d));
+    applyStrips();
   }
 
   /** 그 줄의 칸들을 하나로 묶은 네모. 기울기는 칸 자리에 이미 들어 있다. */
