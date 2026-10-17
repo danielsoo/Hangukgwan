@@ -771,6 +771,11 @@
       refundLineNone: "지우기",
       refundPickHint: "돌려줄 품목만 고르세요 — 한 줄씩 수를 더하거나 「전부」. 안 고른 품목은 그대로 둡니다.",
       refundBtn: "↩ 반품·취소",
+      unpayBtn: "↶ 미결제로 되돌리기",
+      unpayConfirm: "{who} · NT${amount} — 결제수단 없이 결제완료가 된 주문이에요.\n\n미결제(서빙 완료)로 되돌릴까요?\n· 그 날 결산 매출에서 빠지고 「⚠ 미결제」에 다시 잡혀요.\n· 실시간 주문판에 다시 떠요. 돈을 받으셨으면 거기서 결제를 다시 찍어 주세요.",
+      unpayDone: "미결제로 되돌렸어요. 실시간 주문판의 「서빙 완료」 칸에 있어요.",
+      unpayFailed: "되돌리지 못했어요 ({err}).",
+      unpayHasMethod: "결제수단이 있는 결제는 되돌릴 수 없어요 — 반품·취소를 써 주세요.",
       refundTitle: "↩ 반품 · 취소",
       refundHint: "조리한 음식은 「취소」, 음료·라면 봉지처럼 돌려받을 수 있는 것은 「반품」으로 남아요. 돌려줄 금액은 실제로 받은 금액(할인 반영) 기준이에요.",
       refundKindCancel: "취소",
@@ -2168,6 +2173,11 @@
       refundLineNone: "清除",
       refundPickHint: "只挑要退的品項 — 逐列加數量或按「全部」。沒挑的品項維持不變。",
       refundBtn: "↩ 退貨·取消",
+      unpayBtn: "↶ 改回未結帳",
+      unpayConfirm: "{who} · NT${amount} — 這筆是沒有付款方式就被標成已結帳的訂單。\n\n要改回未結帳（已上菜）嗎？\n· 會從當天結算營收扣除，重新列入「⚠ 未結帳」。\n· 會重新出現在即時訂單看板。若已收款，請在那裡重新結帳。",
+      unpayDone: "已改回未結帳，在即時訂單看板的「已上菜」欄。",
+      unpayFailed: "無法改回（{err}）。",
+      unpayHasMethod: "有付款方式的結帳無法改回 — 請使用退貨·取消。",
       refundTitle: "↩ 退貨 · 取消",
       refundHint: "已烹調的餐點記為「取消」，飲料、泡麵包等可退回的商品記為「退貨」。退款金額以實際收款（含折扣）為準。",
       refundKindCancel: "取消",
@@ -19227,6 +19237,15 @@
    * 「이거 돌려주세요」 하면 돌려줄 자리가 어디에도 없었다. 결산의 지난 주문은
    * 날짜로 찾아 들어가는 자리라 거기에 둔다 — 며칠 전 것도 된다.
    */
+  // 결제수단 없이 결제완료가 된 주문(예전 「🌙 오후 정산」이 미결제를 그렇게 바꿨다) — 사장님만 되돌린다.
+  // 규칙은 서버(src/routes/orders.js unpayableReason)가 한 번 더 본다.
+  function unpayableHere(o) {
+    if (!o || o.status !== "paid" || currentRole !== "owner" || o.kind === "vip_card_sale") return "";
+    if (o.payment_method || (o.items || []).some((it) => it.payment_method)) return "";
+    if ((o.payment_ids || []).length || o.payment_id) return "";
+    if ((o.refunds || []).length || Number(o.refund_total) > 0) return "";
+    return `<button type="button" class="stl-order-btn stl-order-unpay" data-stl-unpay="${o.id}">${T("unpayBtn")}</button>`;
+  }
   function refundableHere(o) {
     if (!o || o.status !== "paid" || !canCancelOrder()) return "";
     const left = (o.items || []).some((it) => (Number(it.qty) || 0) > (Number(it.refunded_qty) || 0));
@@ -19371,7 +19390,7 @@
                   // 있게 해줘"). 라운드 하나만 뽑으려면 펼쳐서 그 라운드의 버튼.
                   rounds === 1
                     ? `<button type="button" class="stl-order-btn" data-stl-print="${first.id}">${T("printBtn")}</button>
-                       <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>${refundableHere(first)}`
+                       <button type="button" class="stl-order-btn" data-stl-preview="${first.id}">${T("previewBtn")}</button>${refundableHere(first)}${unpayableHere(first)}`
                     : `<button type="button" class="stl-order-btn" data-stl-print-group="${first.id}">${T("settlementOrdersPrintAll")}</button>
                        <button type="button" class="stl-order-btn" data-stl-preview-group="${first.id}">${T("previewBtn")}</button>`
                 }
@@ -19390,7 +19409,7 @@
                             <span>${T("settlementOrdersRoundNo").replace("{n}", i + 1)} · ${String(o.created_at || "").slice(11, 16)}</span>
                             <span class="stl-order-actions">
                               <button type="button" class="stl-order-btn" data-stl-print="${o.id}">${T("printBtn")}</button>
-                              <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>${refundableHere(o)}
+                              <button type="button" class="stl-order-btn" data-stl-preview="${o.id}">${T("previewBtn")}</button>${refundableHere(o)}${unpayableHere(o)}
                             </span>
                           </div>
                           ${renderSettlementOrderBody(o)}
@@ -19445,6 +19464,26 @@
     // previewKitchenTicket). 여기만 따로 만들면 빌지 모양이 언젠가 둘로
     // 갈라지고, 그러면 주방에 두 가지 종이가 나간다.
     const byId = new Map(orders.map((o) => [o.id, o]));
+    listEl.querySelectorAll("[data-stl-unpay]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const o = byId.get(parseInt(btn.dataset.stlUnpay, 10));
+        if (!o) return;
+        const who = o.pickup_number ? `#${o.pickup_number}` : fmtOrderTableTag(o.table_number).replace(/<[^>]+>/g, "");
+        const ask = T("unpayConfirm").replace("{who}", `${String(o.created_at || "").slice(5, 16).replace("-", "/")} ${who}`).replace("{amount}", money(o.total || 0));
+        if (!(await showConfirm(ask))) return;
+        btn.disabled = true;
+        const res = await fetch(`/api/orders/${o.id}/unpay`, { method: "POST" });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          btn.disabled = false;
+          return showAlert(body.error === "has_payment_method" ? T("unpayHasMethod") : T("unpayFailed").replace("{err}", body.error || res.status));
+        }
+        showAlert(T("unpayDone"));
+        // 위 매출·⚠ 미결제와 이 목록을 같이 다시 센다.
+        loadSettlement($("#settlementStartDate") && $("#settlementStartDate").value, $("#settlementEndDate") && $("#settlementEndDate").value);
+      };
+    });
     listEl.querySelectorAll("[data-stl-refund]").forEach((btn) => {
       btn.onclick = (e) => {
         e.stopPropagation();

@@ -1378,6 +1378,33 @@ router.post("/:id/refund", requireAdmin, async (req, res) => {
   await broadcastOrdersChanged(req, [order.id]);
   res.json({ order, refund: record });
 });
+// 결제수단 없이 결제완료가 된 주문을 미결제로 되돌린다 — 사장님만. 규칙은 src/unpay.js.
+// 되돌리면 「서빙 완료」로 돌아가 실시간 주문판에 다시 뜨고, 결산의 「⚠ 미결제」에 잡힌다. 그 날 마감
+// 기록(daily_settlements)도 다시 센다 — 안 그러면 월·연 결산이 옛 매출을 그대로 더한다.
+const unpayRules = require("../unpay");
+router.post("/:id/unpay", requireOwner, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  // 며칠 지난 것도 된다 — 사장님이 결산 > 지난 주문에서 찾은 날이 3일(RECENT_DAYS)보다 오래됐을 수 있다.
+  const order = await require("../db").findOrderById(id);
+  if (order && order.test_session) return res.status(404).json({ error: "not_found" });
+  if (!order) return res.status(404).json({ error: "not_found" });
+  const why = unpayRules.unpayableReason(order);
+  if (why) return res.status(400).json({ error: why });
+
+  unpayRules.revertToUnpaid(order, nowLocal());
+  await saveOrder(order);
+  rememberOrder(order);
+
+  let snapshot = false;
+  try {
+    snapshot = await require("./settlements").refreshDaySnapshot(String(order.created_at || "").slice(0, 10), req);
+  } catch (e) {
+    // 주문은 이미 되돌렸다. 마감 기록은 다음 마감 때 다시 센다.
+    console.warn("되돌린 날 마감 기록 다시 세기 실패:", e && e.message);
+  }
+  await broadcastOrdersChanged(req, [order.id]);
+  res.json({ order, snapshot_refreshed: snapshot });
+});
 // 받은 금액(돌려준 것을 빼고) — src/settlement.js netTotalOf 와 같은 셈.
 function netTotalOfOrder(o) {
   return require("../settlement").netTotalOf(o);

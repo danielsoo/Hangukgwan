@@ -606,6 +606,21 @@ async function backfillMissingSnapshots(list, req) {
   }
 }
 
+/**
+ * 그 날 마감 기록이 있으면 지금 주문으로 다시 센다. 마감 때 적은 칸(day_closed_at·LINE 기록 등)은
+ * 그대로 두고 숫자만 바꾼다(saveSettlementSnapshot 이 있던 줄에 덮는다). 기록이 없는 날은 손대지 않는다 —
+ * 그건 /history 가 주문으로 채운다. 결제를 미결제로 되돌렸을 때 쓴다(src/routes/orders.js /unpay).
+ */
+async function refreshDaySnapshot(date, req) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ""))) return false;
+  const [snap] = await findDocs("daily_settlements", { date, test_session: { $exists: false } });
+  if (!snap) return false;
+  const orders = await ordersInRange(date, date, req);
+  const fresh = computeSettlement(orders, date, date, await halfOpts(date, date, req));
+  await saveSettlementSnapshot({ ...fresh, recounted_at: nowLocal() });
+  return true;
+}
+
 // Manually snapshot a given date (defaults to today) into permanent history.
 // Safe to call more than once for the same date — replaces any existing
 // snapshot for that date rather than duplicating it.
@@ -1269,6 +1284,7 @@ router.get("/cron-close", async (req, res) => {
 
 module.exports = router;
 module.exports.maybeAutoCloseAm = maybeAutoCloseAm;
+module.exports.refreshDaySnapshot = refreshDaySnapshot;
 module.exports.autoAmCutFor = autoAmCutFor;
 module.exports.AUTO_AM_DONE_SETTING = AUTO_AM_DONE_SETTING;
 // 미뤄둔 저녁 마감을 들여다보는 것. 자동 오전 마감과 **같은 자리**에 붙는다
