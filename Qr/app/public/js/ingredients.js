@@ -1103,6 +1103,7 @@
       }
       logLine(esc(fmt("ingInboxAddedFmt", { n: images.length })));
       await loadInbox();
+      setIngView("check");          // 올려 놓고 아무것도 안 보이면 안 된다
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = T("ingInboxAdd"); }
     }
@@ -1223,6 +1224,45 @@
   }
 
   /**
+   * 식자재 탭을 **두 칸으로** 나눈다 — 장부(홈)와 영수증 확인.
+   *
+   * 2026-10-17 사장님: "지금은 대기함이 홈에 있는데 그거 홈에 하지 말고 새
+   * 탭을 만들어서 확인하는 탭을 따로 만들어서 거기서 조절할 수 있게 해줘"
+   *
+   * 비밀번호와 권한은 **그대로 한 영역**이다(사장님만·들어올 때마다). 칸만
+   * 나눈 것이라 직원이 들어오는 길이 새로 생기지 않는다.
+   *
+   * 고른 칸은 그 기기에 남는다. 사진이 들어오거나 묶음을 넣으면 **저절로
+   * 확인 칸으로** 간다 — 안 그러면 올려 놓고 아무것도 안 보인다.
+   */
+  let ingView = (function () {
+    try { return localStorage.getItem("hg_admin_ingView") === "check" ? "check" : "book"; }
+    catch (e) { return "book"; }
+  })();
+
+  function setIngView(v, opts) {
+    ingView = v === "check" ? "check" : "book";
+    if (!(opts && opts.quiet)) {
+      try { localStorage.setItem("hg_admin_ingView", ingView); } catch (e) { /* 안 되면 이번만 */ }
+    }
+    const book = $("#ingViewBook"), check = $("#ingViewCheck");
+    if (book) book.hidden = ingView !== "book";
+    if (check) check.hidden = ingView !== "check";
+    document.querySelectorAll("[data-ing-view]").forEach((b) => {
+      b.classList.toggle("is-on", b.dataset.ingView === ingView);
+    });
+  }
+
+  /** 확인 칸에 몇 장 기다리는지 적어 둔다 — 다른 칸에 있어도 보이게. */
+  function markCheckTab() {
+    const b = $("#ingViewCheckTab");
+    if (!b) return;
+    const n = (inbox.items || []).filter((i) => i.status !== "saved").length;
+    b.textContent = n ? fmt("ingViewCheckNFmt", { n }) : T("ingViewCheck");
+    b.classList.toggle("has-work", !!n);
+  }
+
+  /**
    * **영수증마다 칩** — 급여의 직원 칩과 같은 자리, 같은 쓰임.
    *
    * 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
@@ -1294,6 +1334,7 @@
     if (!el) return;
     renderInboxTabs();
     renderCheckChips();          // 영수증마다 칩 — 표 바로 위에서 오간다
+    markCheckTab();              // 다른 칸에 있어도 몇 장 기다리는지 보이게
     const items = inboxVisible();
     const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
     const cnt = $("#ingInboxCount");
@@ -1437,6 +1478,7 @@
       if (box) box.value = "";
       if ($("#ingInboxManyBox")) $("#ingInboxManyBox").hidden = true;
       await loadInbox();
+      setIngView("check");
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -1846,6 +1888,10 @@
         };
       }
       if ($("#ingInboxGetAll")) $("#ingInboxGetAll").onclick = () => downloadInboxAll();
+      document.querySelectorAll("[data-ing-view]").forEach((btn) => {
+        btn.onclick = () => setIngView(btn.dataset.ingView);
+      });
+      setIngView(ingView, { quiet: true });
       if ($("#ingCheckPrev")) $("#ingCheckPrev").onclick = () => stepCheck(-1);
       if ($("#ingCheckNext")) $("#ingCheckNext").onclick = () => stepCheck(1);
       if ($("#ingInboxPasteMany")) {

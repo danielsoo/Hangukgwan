@@ -100,6 +100,10 @@ const photoFile = (name) => ({ name, mimeType: "image/png", buffer: Buffer.from(
   check("사장님 화면에 식자재 탭", await tab.isVisible(), "");
   await tab.click();
   await page.waitForTimeout(600);
+  // 2026-10-17: 식자재가 「장부」와 「영수증 확인」 두 칸으로 갈렸다 —
+  // 대기함과 영수증 넣기 표는 확인 칸에 있다.
+  await page.locator('[data-ing-view="check"]').click();
+  await page.waitForTimeout(500);
 
   out.push("\n[📷 로 고르거나 끌어다 놓는다]");
   check("📷 영수증 사진 단추가 있다", await page.locator("#ingPhotoBtn").isVisible(), "");

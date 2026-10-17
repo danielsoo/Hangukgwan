@@ -3069,6 +3069,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
 .ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+/* 식자재 안의 두 칸 — 장부(홈)와 영수증 확인(2026-10-17). */
+.ing-views { display: flex; gap: 8px; margin: 0 0 14px; }
+.ing-view-tab {
+  border: 1px solid var(--line); background: #fff; border-radius: 10px;
+  padding: 8px 16px; cursor: pointer; font: inherit; font-size: 15px; font-weight: 600; color: var(--muted);
+}
+.ing-view-tab:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
+.ing-view-tab.is-on { background: #2f3542; border-color: #2f3542; color: #fff; }
+.ing-view-tab.has-work:not(.is-on) { border-color: #e8b100; color: #8a6a00; }
 /* 영수증마다 칩 — 급여의 직원 칩과 같은 쓰임(2026-10-17). 102장이라 옆으로 구른다. */
 .ing-check-bar { margin: 0 0 12px; }
 .ing-check-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13.5px; color: var(--muted); }

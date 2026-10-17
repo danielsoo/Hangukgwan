@@ -64,6 +64,48 @@ const PASTED = `읽었습니다:
   await page.locator('.admin-tabs button[data-tab="ingredients"]').click();
   await page.waitForTimeout(900);
 
+  out.push("\n[장부와 영수증 확인은 다른 칸]");
+  {
+    // 2026-10-17 사장님: "지금은 대기함이 홈에 있는데 그거 홈에 하지 말고
+    // 새 탭을 만들어서 확인하는 탭을 따로 만들어서 거기서 조절할 수 있게 해줘"
+    const tabs = page.locator(".ing-view-tab");
+    check("★★ 식자재 안에 칸이 둘이다 (장부·영수증 확인)", (await tabs.count()) === 2, String(await tabs.count()));
+
+    await page.locator('[data-ing-view="book"]').click();
+    await page.waitForTimeout(400);
+    check("★★ 장부 칸에서는 대기함이 안 보인다", await page.locator("#ingViewCheck").evaluate((el) => el.hidden), "");
+    check("★ 장부 칸에서는 장부가 보인다", !(await page.locator("#ingViewBook").evaluate((el) => el.hidden)), "");
+    check("★★ 대기함도 영수증 넣기 표도 장부 칸에 없다",
+      !(await page.locator(".ing-inbox").isVisible()) && !(await page.locator(".ing-entry").isVisible()), "");
+
+    await page.locator('[data-ing-view="check"]').click();
+    await page.waitForTimeout(400);
+    check("★★ 확인 칸에서는 대기함과 표가 보인다",
+      (await page.locator(".ing-inbox").isVisible()) && (await page.locator(".ing-entry").isVisible()), "");
+    check("★ 장부는 확인 칸에서 안 보인다", await page.locator("#ingViewBook").evaluate((el) => el.hidden), "");
+
+    // 고른 칸은 **그 기기에** 남는다
+    const kept = await page.evaluate(() => localStorage.getItem("hg_admin_ingView"));
+    check("★★ 고른 칸이 기기에 남는다", kept === "check", String(kept));
+
+    // 사진을 올리면 **저절로 확인 칸으로** — 장부 칸에 있으면 올려 놓고 아무것도 안 보인다
+    await page.locator('[data-ing-view="book"]').click();
+    await page.waitForTimeout(400);
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const paper = grayToPng(drawReceipt({ w: 700, h: 1200, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), 700, 1200);
+    await page.setInputFiles("#ingInboxFile", [{ name: "view-1.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(2000);
+    check("★★ 사진을 올리면 저절로 확인 칸으로 간다", !(await page.locator("#ingViewCheck").evaluate((el) => el.hidden)), "");
+    const tab = await page.locator("#ingViewCheckTab").innerText();
+    check("★ 확인 칸 이름에 몇 장 기다리는지 적힌다", /\d/.test(tab), tab);
+
+    const row = page.locator('.ing-inbox-row:has-text("view-1.png")');
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(800);
+  }
+
   out.push("[대기함이 있다]");
   check("📥 대기함 카드", await page.locator(".ing-inbox").isVisible(), "");
   check("처음엔 비어 있다고 말한다", /비어 있어요/.test(await page.locator("#ingInboxList").innerText()), await page.locator("#ingInboxList").innerText());
@@ -520,6 +562,8 @@ const PASTED = `읽었습니다:
   }
 
   out.push("\n[전체 내역에 들어간다]");
+    await page.locator('[data-ing-view="book"]').click();
+    await page.waitForTimeout(600);
   {
     const total = await page.locator("#ingTotal").innerText();
     check("★★ 큰 숫자에 더해진다 (110 + 90 = 200)", /200/.test(total), total);
@@ -535,6 +579,8 @@ const PASTED = `읽었습니다:
   {
     await page.locator('#ingVendorChips [data-ing-chip=""]').click();
     await page.waitForTimeout(600);
+    await page.locator('[data-ing-view="check"]').click();   // 대기함은 확인 칸에 있다
+    await page.waitForTimeout(400);
     await page.locator('[data-inbox-tab="all"]').click();
     await page.waitForTimeout(300);
     const before = await page.locator(".ing-inbox-row").count();

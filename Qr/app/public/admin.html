@@ -439,31 +439,15 @@
          시작이다 — 화면 로직은 public/js/ingredients.js. -->
     <section id="tab-ingredients" class="tab-panel owner-only" hidden>
       <div class="ing-shell">
-        <div class="ing-toolbar">
-          <label class="ing-field">
-            <span data-i18n="ingStore">지점</span>
-            <select id="ingStore">
-              <option value="all" data-i18n="ingStoreAll">전체</option>
-            </select>
-          </label>
-          <label class="ing-field">
-            <span data-i18n="ingStart">시작</span>
-            <input type="date" id="ingStart" />
-          </label>
-          <label class="ing-field">
-            <span data-i18n="ingEnd">끝</span>
-            <input type="date" id="ingEnd" />
-          </label>
-          <button type="button" id="ingAllPeriod" data-i18n="ingAllPeriod">전체 기간</button>
-          <button type="button" id="ingReload" class="primary" data-i18n="ingReload">보기</button>
-          <span class="ing-spacer"></span>
-          <button type="button" id="ingExportBtn" data-i18n="ingExportBtn">⬇️ 엑셀 받기</button>
-          <button type="button" id="ingImportBtn" data-i18n="ingImportBtn">⬆️ 엑셀 가져오기</button>
-          <input type="file" id="ingImportFile" accept=".xlsx" hidden />
+        <!-- 2026-10-17 사장님: "지금은 대기함이 홈에 있는데 그거 홈에 하지 말고
+             새 탭을 만들어서 확인하는 탭을 따로 만들어서 거기서 조절할 수 있게 해줘"
+             — 장부(홈)와 영수증 확인을 나눈다. 비밀번호·권한은 그대로 한 영역이다. -->
+        <div class="ing-views" id="ingViews">
+          <button type="button" class="ing-view-tab is-on" data-ing-view="book" data-i18n="ingViewBook">📊 장부</button>
+          <button type="button" class="ing-view-tab" data-ing-view="check" id="ingViewCheckTab" data-i18n="ingViewCheck">📥 영수증 확인</button>
         </div>
-
-        <p class="ing-note" id="ingMeta"></p>
         <div class="ing-import-log" id="ingImportLog" hidden></div>
+        <div class="ing-view" id="ingViewCheck" hidden>
 
         <!-- 영수증 한 장 넣기. 2026-10-04 사장님: "지금은 계속 종이를 보면서
              엑셀에 기입하고 하는 과정이 너무 귀찮아서."
@@ -563,6 +547,31 @@
             <strong id="ingEntryTotal">NT$0</strong>
           </div>
         </div>
+        </div>
+        <div class="ing-view" id="ingViewBook">
+        <div class="ing-toolbar">
+          <label class="ing-field">
+            <span data-i18n="ingStore">지점</span>
+            <select id="ingStore">
+              <option value="all" data-i18n="ingStoreAll">전체</option>
+            </select>
+          </label>
+          <label class="ing-field">
+            <span data-i18n="ingStart">시작</span>
+            <input type="date" id="ingStart" />
+          </label>
+          <label class="ing-field">
+            <span data-i18n="ingEnd">끝</span>
+            <input type="date" id="ingEnd" />
+          </label>
+          <button type="button" id="ingAllPeriod" data-i18n="ingAllPeriod">전체 기간</button>
+          <button type="button" id="ingReload" class="primary" data-i18n="ingReload">보기</button>
+          <span class="ing-spacer"></span>
+          <button type="button" id="ingExportBtn" data-i18n="ingExportBtn">⬇️ 엑셀 받기</button>
+          <button type="button" id="ingImportBtn" data-i18n="ingImportBtn">⬆️ 엑셀 가져오기</button>
+          <input type="file" id="ingImportFile" accept=".xlsx" hidden />
+        </div>
+        <p class="ing-note" id="ingMeta"></p>
 
         <!-- 한눈에 보기 — 급여 탭과 같은 모양이다(2026-10-06 사장님: "식자재 탭에서
              급여처럼 저런 전체 보기로 결산 보는 것처럼 볼 수 있으면 좋겠는데?").
@@ -619,6 +628,7 @@
           <h3 class="ing-block-title" id="ingPriceTitle"></h3>
           <div id="ingPriceChart" class="ing-price-chart"></div>
           <div class="ing-rows" id="ingPriceRows"></div>
+        </div>
         </div>
       </div>
     </section>
