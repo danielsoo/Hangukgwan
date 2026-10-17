@@ -6153,11 +6153,12 @@
   // 하는 거야"). 처음엔 이미 결제된 주문의 합계만 보여주는 조회용 버튼이었지만,
   // 이제는 실제로 정산을 "마감"한다:
   //   1) 아직 결제 안 된(신규/조리중/서빙완료) 오늘 주문이 있으면 몇 건인지
-  //      먼저 보여주고 확인을 받는다 — 확인하면 그 주문들도 전부(음식이
-  //      나갔든 안 나갔든) 결제완료로 처리해서 실시간 주문판에서 지운다.
-  //      결제수단은 지정하지 않으므로 정산의 결제수단별 집계에는
-  //      "미지정"으로 잡힌다(실제로 어떻게 결제됐는지 모르는 채로 강제
-  //      마감된 것이므로 정직하게 미지정 처리).
+  //      먼저 보여주고 확인을 받는다. 그 주문들은 **손대지 않고 그대로 남긴다**.
+  //      예전에는 확인하면 전부 결제완료(결제수단 「미지정」)로 바꿔 판에서
+  //      지웠는데, 그러면 받았는지 모르는 돈이 매출로 잡히고 결산의 「⚠ 미결제」
+  //      경고가 사라진다(2026-10-16 미결제 2건 NT$5,170 이 다음 날 안 보였다).
+  //      2026-10-17 사장님이 「남겨 두기」(1번)를 고르셨다 — 밤 자동 마감
+  //      (close-hold-unpaid)과 같은 생각이다: 받을 돈은 사람이 정리한다.
   //   2) 그 다음 오늘 날짜로 결산 마감 스냅샷을 찍는다(POST
   //      /api/settlements/shift-close) — 오전에 한 번, 오후에 한 번 더
   //      찍으면 오후 것이 그날 스냅샷을 하루 전체 합계로 덮어써서 자연스럽게
@@ -6199,18 +6200,13 @@
     const confirmMsg =
       openOrders.length > 0
         ? adminLang === "zh"
-          ? `尚有 ${openOrders.length} 筆訂單尚未結帳（合計 NT$${money(openTotal)}，不論餐點是否已出）。結算後將全部標記為已結帳並從看板移除，確定要繼續嗎？`
-          : `아직 결제되지 않은 주문이 ${openOrders.length}건(합계 NT$${money(openTotal)}) 있어요. 음식이 나갔든 안 나갔든 정산하면 전부 결제완료 처리되어 판에서 사라집니다. 진행할까요?`
+          ? `尚有 ${openOrders.length} 筆訂單尚未結帳（合計 NT$${money(openTotal)}，不論餐點是否已出）。這些訂單不會被標記為已結帳，會留在看板上，結算頁也會顯示「⚠ 未結帳」。確定要結算嗎？`
+          : `아직 결제되지 않은 주문이 ${openOrders.length}건(합계 NT$${money(openTotal)}) 있어요. 이 주문들은 결제완료로 바꾸지 않고 판에 그대로 남겨요 — 결산에도 「⚠ 미결제」로 보여요. 정산을 진행할까요?`
         : adminLang === "zh"
         ? "確定要結算嗎？"
         : "정산을 진행할까요?";
     if (!(await showConfirm(confirmMsg))) return;
 
-    if (openOrders.length > 0) {
-      await Promise.all(openOrders.map((o) => updateOrderStatus(o.id, "paid")));
-      await loadOrders();
-      await loadTables();
-    }
 
     // 마감 스냅샷 + LINE 마감 문자. 숫자는 서버가 계산해서 돌려준 것을
     // 그대로 쓴다 — 예전에는 여기서 computeHalfDaySettlement 로 따로 셌는데,
@@ -6252,6 +6248,14 @@
         ? adminLang === "zh"
           ? `\n結帳完成欄的 ${summary.settled_orders} 筆已收起（沒有刪除，結算與桌位歷史仍可查看）。`
           : `\n결제완료 칸의 ${summary.settled_orders}건은 내렸어요. 지운 게 아니라 결산 탭과 테이블 이전 주문에서 그대로 볼 수 있어요.`
+        : "";
+
+    // 남겨 둔 미결제 — 정산이 끝났다는 말만 보고 다 정리된 줄 알지 않게.
+    const unpaidNote =
+      openOrders.length > 0
+        ? adminLang === "zh"
+          ? `\n⚠️ 未結帳 ${openOrders.length} 筆（NT$${money(openTotal)}）仍留在看板上，請確認後再結帳。`
+          : `\n⚠️ 결제 안 된 ${openOrders.length}건(NT$${money(openTotal)})은 판에 그대로 남겨 두었어요. 받았는지 확인하고 결제해 주세요.`
         : "";
 
     // LINE 마감 문자가 왜 안 갔는지는 그 자리에서 알려준다 — 조용히 안 가면
@@ -6306,13 +6310,13 @@
       showAlert(
         (adminLang === "zh"
           ? `🌙 今日全天結算完成：已結帳 ${count} 筆，合計 NT$${money(total)}`
-          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + split + seatNote + settledNote + lineNote
+          : `🌙 오늘 하루 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + split + unpaidNote + seatNote + settledNote + lineNote
       );
     } else {
       showAlert(
         (adminLang === "zh"
           ? `🌅 今日上午結算完成：已結帳 ${count} 筆，合計 NT$${money(total)}`
-          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + seatNote + settledNote + lineNote
+          : `🌅 오늘 오전 정산 마감 완료: 결제 ${count}건, 합계 NT$${money(total)}`) + unpaidNote + seatNote + settledNote + lineNote
       );
     }
   }
