@@ -765,7 +765,12 @@ router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
     });
   }
   if (q.table) filter.table_number = String(q.table);
-  if (q.status) filter.status = String(q.status);
+  // 2026-10-18 사장님: "결제수단 없이 결제된 것들만 모아서 볼 수 있는 것도 만들어줘 결제 안된것들이랑".
+  // 「미결제」는 안 끝난 상태 전부, 「결제수단 없음」은 결제완료 중 결제수단이 하나도 없는 것(src/unpay.js).
+  const wantNoMethod = q.status === "no_method";
+  if (q.status === "unpaid") filter.status = { $in: require("../orderStatus").OPEN };
+  else if (wantNoMethod) filter.status = "paid";
+  else if (q.status) filter.status = String(q.status);
   // 「오전만 보기」 / 「오후만 보기」. 결산 화면에서 오전 칸을 누르면 이
   // 목록도 같이 따라간다 — 위에서는 오전 매출을 보고 있는데 아래 목록만
   // 하루치면, 사장님이 목록을 세어보다가 위 숫자를 의심하게 된다.
@@ -774,7 +779,9 @@ router.get("/history", requireAdmin, requireTodayForStaff, async (req, res) => {
   // 최근 것부터. 한 번에 200건까지 — 그보다 많이 필요하면 날짜를 좁히는
   // 편이 화면에서도 찾기 쉽다.
   const limit = Math.min(500, Math.max(1, parseInt(q.limit, 10) || 200));
-  let list = await findOrders(filter, { sort: { created_at: -1 }, limit });
+  // 「결제수단 없음」은 결제완료를 넉넉히 받아 여기서 거른다 — 200건에서 먼저 자르면 뒤쪽 것을 놓친다.
+  let list = await findOrders(filter, { sort: { created_at: -1 }, limit: wantNoMethod ? 5000 : limit });
+  if (wantNoMethod) list = list.filter(require("../unpay").paidWithoutMethod).slice(0, limit);
 
   // 메뉴 이름·손님 이름·픽업 번호로 훑기. 몇 백 건 안에서 찾는 것이라
   // 여기서 걸러도 충분하고, 이름이 세 언어로 나뉘어 있어 데이터베이스

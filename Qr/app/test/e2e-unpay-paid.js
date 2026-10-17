@@ -61,11 +61,14 @@ function check(name, cond, extra = "") {
   };
   const forced = await make(tables[0], 2, null);
   const cash = await make(tables[1], 1, "cash");
+  // 아직 안 낸 주문 하나
+  await api(boss, `/api/tables/${tables[2].number}/party-size`, json("PUT", { partySize: 2 }));
+  const openOrder = (await api(boss, "/api/orders", json("POST", { tableNumber: tables[2].number, items: [{ itemId: food.id, qty: 1 }] }))).body;
   // 그 날 마감 기록 — 되돌리면 이것도 다시 세야 월·연 결산이 맞는다.
   await api(boss, "/api/settlements/close", json("POST", {}));
   const day = forced.created_at.slice(0, 10);
   const [snap0] = await findDocs("daily_settlements", { date: day, test_session: { $exists: false } });
-  check(`마감 기록에 두 주문이 다 매출로 (NT$${snap0 && snap0.total_revenue})`, snap0 && snap0.total_revenue === forced.total + cash.total, JSON.stringify(snap0 && snap0.total_revenue));
+  check(`마감 기록에 결제완료 두 주문이 다 매출로 (NT$${snap0 && snap0.total_revenue})`, snap0 && snap0.total_revenue === forced.total + cash.total, JSON.stringify(snap0 && snap0.total_revenue));
 
   out.push("\n[결산 > 지난 주문 — 버튼은 결제수단 없는 것에만]");
   await boss.locator('.admin-tabs button[data-tab="settlement"]').click();
@@ -81,6 +84,20 @@ function check(name, cond, extra = "") {
   check(`★★ 줄 머리에 결제수단 — 결제수단 없는 줄은 「⚠ 결제수단 없음」(${tf}), 현금 줄은 「현금」(${tc})`, /결제수단 없음/.test(tf) && /현금/.test(tc) && !/결제수단 없음/.test(tc), JSON.stringify({ tf, tc }));
   check("「결제수단 없음」은 빨간 표", (await boss.locator(`.stl-order[data-order-id="${forced.id}"] .stl-pay-tag.is-none`).count()) === 1, "");
   if (process.env.SHOT_DIR) await boss.locator("#settlementOrdersList").screenshot({ path: require("path").join(process.env.SHOT_DIR, "stl-paytag.png") }).catch(() => {});
+
+  // 2026-10-18 사장님: "결제수단 없이 결제된 것들만 모아서 볼 수 있는 것도 만들어줘 결제 안된것들이랑"
+  out.push("\n[상태로 모아 보기]");
+  const ids = async (status) => {
+    await boss.selectOption("#settlementOrderStatus", status);
+    await boss.waitForTimeout(1000);
+    return boss.locator("#settlementOrdersList .stl-order").evaluateAll((els) => els.map((e) => Number(e.dataset.orderId)));
+  };
+  const nm = await ids("no_method");
+  check(`★★ 「⚠ 결제수단 없이 결제완료」 → 그 주문만 (${nm.join(",")})`, nm.length === 1 && nm[0] === forced.id, JSON.stringify(nm));
+  const up = await ids("unpaid");
+  check(`★★ 「미결제」 → 안 낸 주문만 (${up.join(",")})`, up.length === 1 && up[0] === openOrder.id, JSON.stringify(up));
+  const all = await ids("");
+  check("전체 상태로 돌아오면 셋 다", all.length === 3, JSON.stringify(all));
 
   out.push("\n[서버도 막는다]");
   const r1 = await api(boss, `/api/orders/${cash.id}/unpay`, json("POST"));

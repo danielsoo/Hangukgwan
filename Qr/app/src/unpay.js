@@ -19,6 +19,14 @@ function unpayableReason(o) {
   return null;
 }
 
+/** 결제완료인데 결제수단이 하나도 없나 — 결산 줄의 빨간 「⚠ 결제수단 없음」과 목록 거르기가 같이 쓴다. */
+function paidWithoutMethod(o) {
+  if (!o || o.status !== "paid" || o.kind === "vip_card_sale") return false;
+  if (o.payment_method || (o.items || []).some((it) => it.payment_method)) return false;
+  if ((Array.isArray(o.payment_ids) && o.payment_ids.length) || o.payment_id) return false;
+  return true;
+}
+
 /** 「서빙 완료」로 돌린다. 정산이 결제완료 칸에서 내린 표시도 지우고, 되돌린 기록을 남긴다. */
 function revertToUnpaid(order, at) {
   order.status = "served";
@@ -28,4 +36,4 @@ function revertToUnpaid(order, at) {
   return order;
 }
 
-module.exports = { unpayableReason, revertToUnpaid };
+module.exports = { unpayableReason, revertToUnpaid, paidWithoutMethod };
