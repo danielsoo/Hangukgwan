@@ -179,7 +179,7 @@ const slice = (src, header, end) => {
   // 그대로 타므로, 이 시험이 지키던 「실수령액을 보여준다」는 그대로다.
   check(
     "★ 줄 금액이 실수령액을 보여준다",
-    /class="stl-order-total">\$\{settlementGroupTotalHtml\(group\)\}/.test(admin),
+    /class="stl-order-total">(\$\{settlementPayTagHtml\(group\)\})?\$\{settlementGroupTotalHtml\(group\)\}/.test(admin),
     "total 만 적으면 결산 합계와 안 맞아 보인다"
   );
   check(

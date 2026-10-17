@@ -74,6 +74,14 @@ function check(name, cond, extra = "") {
   check("★★ 결제수단 없는 결제완료 줄에 「↶ 미결제로 되돌리기」", (await boss.locator(`[data-stl-unpay="${forced.id}"]`).count()) === 1, "");
   check("★★ 현금으로 받은 줄에는 없다", (await boss.locator(`[data-stl-unpay="${cash.id}"]`).count()) === 0, "");
 
+  // 2026-10-18 사장님: "결제수단이 있는지 없는지 모르겠어" — 줄 머리에 어떻게 받았나를 적는다.
+  const tagOf = (id) => boss.locator(`.stl-order[data-order-id="${id}"] .stl-pay-tags`).first().innerText().catch(() => "");
+  const tf = await tagOf(forced.id);
+  const tc = await tagOf(cash.id);
+  check(`★★ 줄 머리에 결제수단 — 결제수단 없는 줄은 「⚠ 결제수단 없음」(${tf}), 현금 줄은 「현금」(${tc})`, /결제수단 없음/.test(tf) && /현금/.test(tc) && !/결제수단 없음/.test(tc), JSON.stringify({ tf, tc }));
+  check("「결제수단 없음」은 빨간 표", (await boss.locator(`.stl-order[data-order-id="${forced.id}"] .stl-pay-tag.is-none`).count()) === 1, "");
+  if (process.env.SHOT_DIR) await boss.locator("#settlementOrdersList").screenshot({ path: require("path").join(process.env.SHOT_DIR, "stl-paytag.png") }).catch(() => {});
+
   out.push("\n[서버도 막는다]");
   const r1 = await api(boss, `/api/orders/${cash.id}/unpay`, json("POST"));
   check("★ 현금 결제는 되돌리지 않는다(400 has_payment_method)", r1.status === 400 && r1.body.error === "has_payment_method", JSON.stringify(r1));

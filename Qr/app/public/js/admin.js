@@ -772,6 +772,8 @@
       refundPickHint: "돌려줄 품목만 고르세요 — 한 줄씩 수를 더하거나 「전부」. 안 고른 품목은 그대로 둡니다.",
       refundBtn: "↩ 반품·취소",
       unpayBtn: "↶ 미결제로 되돌리기",
+      payTagNone: "⚠ 결제수단 없음",
+      payTagOpen: "미결제",
       unpayConfirm: "{who} · NT${amount} — 결제수단 없이 결제완료가 된 주문이에요.\n\n미결제(서빙 완료)로 되돌릴까요?\n· 그 날 결산 매출에서 빠지고 「⚠ 미결제」에 다시 잡혀요.\n· 실시간 주문판에 다시 떠요. 돈을 받으셨으면 거기서 결제를 다시 찍어 주세요.",
       unpayDone: "미결제로 되돌렸어요. 실시간 주문판의 「서빙 완료」 칸에 있어요.",
       unpayFailed: "되돌리지 못했어요 ({err}).",
@@ -2178,6 +2180,8 @@
       refundPickHint: "只挑要退的品項 — 逐列加數量或按「全部」。沒挑的品項維持不變。",
       refundBtn: "↩ 退貨·取消",
       unpayBtn: "↶ 改回未結帳",
+      payTagNone: "⚠ 無付款方式",
+      payTagOpen: "未結帳",
       unpayConfirm: "{who} · NT${amount} — 這筆是沒有付款方式就被標成已結帳的訂單。\n\n要改回未結帳（已上菜）嗎？\n· 會從當天結算營收扣除，重新列入「⚠ 未結帳」。\n· 會重新出現在即時訂單看板。若已收款，請在那裡重新結帳。",
       unpayDone: "已改回未結帳，在即時訂單看板的「已上菜」欄。",
       unpayFailed: "無法改回（{err}）。",
@@ -19302,6 +19306,29 @@
    * 시킨 손님은 화면이 예전과 한 글자도 안 달라야 한다. 여기서 따로 계산하면
    * 언젠가 둘이 갈라진다.
    */
+  // 줄마다 **어떻게 받았나**(2026-10-18 사장님: "결제수단이 있는지 없는지 모르겠어"). 현금·카드·LinePay
+  // 를 줄 머리에 적고, 결제수단 없이 결제완료가 된 것(예전 오후 정산이 그렇게 만들었다 — 「↶ 미결제로
+  // 되돌리기」 대상)은 빨갛게 「⚠ 결제수단 없음」. 여러 번 나눠 시킨 묶음은 라운드를 다 모아 적는다.
+  function settlementPayTagHtml(group) {
+    const label = {
+      cash: T("paymentMethodCash"), linepay: T("paymentMethodLinepay"), card: T("paymentMethodCard"),
+      other: T("paymentMethodOther"), online: T("paymentMethodOnline"),
+    };
+    const methods = new Set();
+    let none = false;
+    let open = false;
+    for (const o of group) {
+      if (o.status === "cancelled") continue;
+      if (o.status !== "paid") { open = true; continue; }
+      const here = new Set([o.payment_method, ...(o.items || []).map((it) => it.payment_method)].filter(Boolean));
+      if (!here.size && !(o.payment_ids || []).length && !o.payment_id && o.kind !== "vip_card_sale") none = true;
+      here.forEach((m) => methods.add(m));
+    }
+    const tags = [...methods].map((m) => `<span class="stl-pay-tag">${escapeHtml(label[m] || m)}</span>`);
+    if (none) tags.push(`<span class="stl-pay-tag is-none">${T("payTagNone")}</span>`);
+    if (open) tags.push(`<span class="stl-pay-tag is-open">${T("payTagOpen")}</span>`);
+    return tags.length ? `<span class="stl-pay-tags">${tags.join("")}</span>` : "";
+  }
   function settlementGroupTotalHtml(group) {
     if (group.length === 1) return settlementOrderTotalHtml(group[0]);
     const gross = group.reduce((sum, o) => sum + Number(o.total || 0), 0);
@@ -19390,7 +19417,7 @@
               <span class="stl-order-time">${day} ${time}</span>
               <span class="stl-order-table">${who}${roundsBadge}</span>
               <span class="stl-order-peek">${escapeHtml(peek)}</span>
-              <span class="stl-order-total">${settlementGroupTotalHtml(group)}</span>
+              <span class="stl-order-total">${settlementPayTagHtml(group)}${settlementGroupTotalHtml(group)}</span>
               <span class="stl-order-actions">
                 ${
                   // 여러 번 나눠 시킨 묶음은 머리의 버튼이 **묶음 전체를 한 장으로**
