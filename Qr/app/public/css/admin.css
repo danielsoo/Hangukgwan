@@ -3077,12 +3077,14 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 제목 옆에 「무엇을」 — 어느 영수증을 보고 있는지(2026-10-17). */
 .ing-entry-which { margin-left: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
 /* 대기함은 접어 둔다 — 확인하러 들어와서 여덟 층을 지나지 않게(2026-10-17). */
+.ing-inbox-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.ing-inbox-head .ing-inbox-tools { margin: 0; }
 .ing-fold {
-  display: flex; align-items: center; gap: 10px; width: 100%;
+  display: flex; align-items: center; gap: 10px;
   border: none; background: transparent; padding: 0; cursor: pointer;
   font: inherit; text-align: left;
 }
-.ing-fold-mark { margin-left: auto; color: var(--muted); font-size: 13px; transition: transform 0.15s; }
+.ing-fold-mark { margin-left: 2px; color: var(--muted); font-size: 13px; transition: transform 0.15s; }
 .ing-fold.is-open .ing-fold-mark { transform: rotate(180deg); }
 .ing-fold-body { margin-top: 10px; }
 /* 식자재 안의 두 칸 — 장부(홈)와 영수증 확인(2026-10-17). */

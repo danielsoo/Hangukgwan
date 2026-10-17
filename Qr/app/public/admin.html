@@ -448,6 +448,52 @@
         </div>
         <div class="ing-import-log" id="ingImportLog" hidden></div>
         <div class="ing-view" id="ingViewCheck" hidden>
+
+        <!-- 영수증 한 장 넣기. 2026-10-04 사장님: "지금은 계속 종이를 보면서
+             엑셀에 기입하고 하는 과정이 너무 귀찮아서."
+             2만 줄을 재보니 영수증 한 장이 보통 2줄, 그 업체가 그 달에 사는
+             품목이 보통 4가지다 — 「4개 중 골라 2줄」이면 치는 것보다 빠르다. -->
+        <!-- 영수증 대기함(2026-10-06 사장님: "아빠가 일단 사진을 올려주면 그걸 내가
+             다운받아서 여기다가 칠거야 … 옆에 사진 보여주면서 맞는지 아빠가 오케이 하고
+             저장하게 하는거지"). 올린 사진이 여기 쌓이고, 읽은 결과를 붙여넣으면 아래
+             「영수증 넣기」가 그 값으로 채워진다. 저장하면 사진은 지운다. -->
+        <div class="ing-block ing-inbox">
+          <div class="ing-inbox-head">
+          <button type="button" class="ing-block-title ing-fold" id="ingInboxFold" aria-expanded="false">
+            <span data-i18n="ingInboxTitle">📥 영수증 대기함</span>
+            <span class="ing-inbox-count" id="ingInboxCount"></span>
+            <span class="ing-fold-mark">▾</span>
+          </button>
+          <div class="ing-inbox-tools">
+            <button type="button" id="ingInboxAdd" class="primary" data-i18n="ingInboxAdd">📷 사진 올리기</button>
+            <input type="file" id="ingInboxFile" accept="image/*" multiple hidden />
+            <!-- 2026-10-16 사장님: 대기함에 115장이 쌓였는데 「받기」를 115번 눌러야 했다.
+                 한 파일(zip)로 한 번에 받는다. -->
+            <button type="button" id="ingInboxGetAll" data-i18n="ingInboxGetAll">📥 전부 받기</button>
+            <!-- 2026-10-17: 115장을 줄마다 붙여넣으면 붙여넣기 115번이다.
+                 JSON 한 묶음으로 받아 줄마다 나눠 넣는다. -->
+            <button type="button" id="ingInboxPasteMany" data-i18n="ingInboxPasteMany">📋 한꺼번에 넣기</button>
+          </div>
+          </div>
+          <div class="ing-inbox-many" id="ingInboxManyBox" hidden>
+            <textarea id="ingInboxManyText" rows="4" data-i18n-placeholder="ingInboxManyPh" placeholder="Claude 가 준 JSON 묶음을 그대로 붙여넣으세요 — 여러 장이 한 번에 들어갑니다"></textarea>
+            <div class="ing-inbox-many-tools">
+              <button type="button" id="ingInboxManyGo" class="primary" data-i18n="ingInboxManyGo">줄마다 넣기</button>
+              <!-- 2026-10-17 사장님: "bundle 파일이 안 올라가져 드래그해서" —
+                   50KB 글을 손으로 복사하지 않아도 되게 파일로 받는다. -->
+              <button type="button" id="ingInboxManyFile" data-i18n="ingInboxManyFile">📄 파일에서</button>
+              <input type="file" id="ingInboxManyFileInput" accept=".json,.txt,application/json,text/plain" hidden />
+              <button type="button" id="ingInboxManyCancel" data-i18n="ingInboxManyCancel">닫기</button>
+            </div>
+          </div>
+          <div class="ing-fold-body" id="ingInboxBody" hidden>
+          <p class="ing-note" data-i18n="ingInboxHint">사진을 올려 두면 여기 쌓여요. 받아서 Claude 에게 읽히고, 나온 결과를 「읽은 결과 넣기」에 붙여넣으면 아래 표가 채워져요. 확실치 않은 줄은 노랗고, 사진이 옆에 뜨니 눈으로 맞춰 보고 저장하세요. 저장하면 사진은 지워져요.</p>
+          <!-- 2026-10-17 사장님: "확인대기는 확인대기용으로 빠지게 해줘 그래서 거기서 볼 수 있게"
+               — 한 번에 102줄이 들어오니 섞여 있으면 어디까지 했는지 모른다. -->
+          <div class="ing-inbox-tabs" id="ingInboxTabs"></div>
+          <div class="ing-inbox-list" id="ingInboxList"></div>
+          </div>
+        </div>
         <div class="ing-block ing-entry">
           <h3 class="ing-block-title">
             <span id="ingEntryMode" data-i18n="ingEntryManual">🧾 손으로 넣기</span>
@@ -506,50 +552,6 @@
           <div class="ing-entry-foot">
             <span data-i18n="ingEntryTotal">합계</span>
             <strong id="ingEntryTotal">NT$0</strong>
-          </div>
-        </div>
-
-        <!-- 영수증 한 장 넣기. 2026-10-04 사장님: "지금은 계속 종이를 보면서
-             엑셀에 기입하고 하는 과정이 너무 귀찮아서."
-             2만 줄을 재보니 영수증 한 장이 보통 2줄, 그 업체가 그 달에 사는
-             품목이 보통 4가지다 — 「4개 중 골라 2줄」이면 치는 것보다 빠르다. -->
-        <!-- 영수증 대기함(2026-10-06 사장님: "아빠가 일단 사진을 올려주면 그걸 내가
-             다운받아서 여기다가 칠거야 … 옆에 사진 보여주면서 맞는지 아빠가 오케이 하고
-             저장하게 하는거지"). 올린 사진이 여기 쌓이고, 읽은 결과를 붙여넣으면 아래
-             「영수증 넣기」가 그 값으로 채워진다. 저장하면 사진은 지운다. -->
-        <div class="ing-block ing-inbox">
-          <button type="button" class="ing-block-title ing-fold" id="ingInboxFold" aria-expanded="false">
-            <span data-i18n="ingInboxTitle">📥 영수증 대기함</span>
-            <span class="ing-inbox-count" id="ingInboxCount"></span>
-            <span class="ing-fold-mark">▾</span>
-          </button>
-          <div class="ing-inbox-tools">
-            <button type="button" id="ingInboxAdd" class="primary" data-i18n="ingInboxAdd">📷 사진 올리기</button>
-            <input type="file" id="ingInboxFile" accept="image/*" multiple hidden />
-            <!-- 2026-10-16 사장님: 대기함에 115장이 쌓였는데 「받기」를 115번 눌러야 했다.
-                 한 파일(zip)로 한 번에 받는다. -->
-            <button type="button" id="ingInboxGetAll" data-i18n="ingInboxGetAll">📥 전부 받기</button>
-            <!-- 2026-10-17: 115장을 줄마다 붙여넣으면 붙여넣기 115번이다.
-                 JSON 한 묶음으로 받아 줄마다 나눠 넣는다. -->
-            <button type="button" id="ingInboxPasteMany" data-i18n="ingInboxPasteMany">📋 한꺼번에 넣기</button>
-          </div>
-          <div class="ing-inbox-many" id="ingInboxManyBox" hidden>
-            <textarea id="ingInboxManyText" rows="4" data-i18n-placeholder="ingInboxManyPh" placeholder="Claude 가 준 JSON 묶음을 그대로 붙여넣으세요 — 여러 장이 한 번에 들어갑니다"></textarea>
-            <div class="ing-inbox-many-tools">
-              <button type="button" id="ingInboxManyGo" class="primary" data-i18n="ingInboxManyGo">줄마다 넣기</button>
-              <!-- 2026-10-17 사장님: "bundle 파일이 안 올라가져 드래그해서" —
-                   50KB 글을 손으로 복사하지 않아도 되게 파일로 받는다. -->
-              <button type="button" id="ingInboxManyFile" data-i18n="ingInboxManyFile">📄 파일에서</button>
-              <input type="file" id="ingInboxManyFileInput" accept=".json,.txt,application/json,text/plain" hidden />
-              <button type="button" id="ingInboxManyCancel" data-i18n="ingInboxManyCancel">닫기</button>
-            </div>
-          </div>
-          <div class="ing-fold-body" id="ingInboxBody" hidden>
-          <p class="ing-note" data-i18n="ingInboxHint">사진을 올려 두면 여기 쌓여요. 받아서 Claude 에게 읽히고, 나온 결과를 「읽은 결과 넣기」에 붙여넣으면 아래 표가 채워져요. 확실치 않은 줄은 노랗고, 사진이 옆에 뜨니 눈으로 맞춰 보고 저장하세요. 저장하면 사진은 지워져요.</p>
-          <!-- 2026-10-17 사장님: "확인대기는 확인대기용으로 빠지게 해줘 그래서 거기서 볼 수 있게"
-               — 한 번에 102줄이 들어오니 섞여 있으면 어디까지 했는지 모른다. -->
-          <div class="ing-inbox-tabs" id="ingInboxTabs"></div>
-          <div class="ing-inbox-list" id="ingInboxList"></div>
           </div>
         </div>
         </div>
