@@ -28,72 +28,7 @@ function check(name, cond, extra = "") {
   else { fail++; out.push(`  FAIL ${name}  ${extra}`); }
 }
 
-const PAPER = 232; // 노란 전표도 회색으로 바꾸면 이쯤 밝다
-const LINE = 96;   // 인쇄된 파란 선
-const PEN = 70;    // 손글씨
-const HALO = 150;  // 선 가장자리. 스캔하면 선이 칼같지 않고 번진다 —
-                   // 이 번짐 때문에 칸을 자를 때 여백을 넉넉히 둬야 한다.
-
-/**
- * 영수증 한 장을 그린다.
- * @param o {w,h,rows,cols,skew,margin,ink}
- */
-function drawReceipt(o) {
-  const { w, h } = o;
-  const g = new Uint8Array(w * h).fill(PAPER);
-  const m = o.margin == null ? Math.round(w * 0.06) : o.margin;
-  const skew = o.skew || 0;
-  const x0 = m, x1 = w - m;
-  const y0 = Math.round(h * 0.25), y1 = h - m; // 위쪽은 상호·전화번호 자리
-  const put = (x, y, v) => {
-    const yy = y + Math.round(skew * (x - w / 2));
-    const xx = x;
-    if (xx >= 0 && xx < w && yy >= 0 && yy < h) g[yy * w + xx] = v;
-  };
-  // 가로선
-  for (let r = 0; r <= o.rows; r++) {
-    const y = Math.round(y0 + ((y1 - y0) * r) / o.rows);
-    for (let x = x0; x <= x1; x++) { put(x, y - 1, HALO); put(x, y, LINE); put(x, y + 1, LINE); put(x, y + 2, HALO); }
-  }
-  // 세로선 — 기운 종이에서는 x 가 아래로 갈수록 밀린다
-  //
-  // 칸 너비를 따로 줄 수 있다. 진짜 영수증은 품명 칸이 훨씬 넓고(房信 전표는
-  // 374 · 131 · 131 · 205 · 113), 어느 칸이 금액인지는 그 비율로 가린다
-  // (labelColumns). 다 같은 너비로 그리면 그 함수를 잴 수가 없다.
-  const rel = o.widths && o.widths.length === o.cols ? o.widths : new Array(o.cols).fill(1);
-  const relSum = rel.reduce((a2, b2) => a2 + b2, 0);
-  const edgeAt = (c) => {
-    let acc = 0;
-    for (let i = 0; i < c; i++) acc += rel[i];
-    return Math.round(x0 + ((x1 - x0) * acc) / relSum);
-  };
-  for (let c = 0; c <= o.cols; c++) {
-    const bx = edgeAt(c);
-    for (let y = y0; y <= y1; y++) {
-      const x = bx - Math.round(skew * (y - h / 2));
-      if (x >= 0 && x < w) {
-        const yy = y + Math.round(skew * (x - w / 2));
-        if (yy >= 0 && yy < h) {
-          if (x - 1 >= 0) g[yy * w + x - 1] = HALO;
-          g[yy * w + x] = LINE;
-          if (x + 1 < w) g[yy * w + x + 1] = LINE;
-          if (x + 2 < w) g[yy * w + x + 2] = HALO;
-        }
-      }
-    }
-  }
-  // 칸마다 글씨 몇 점 — 선이 아니라 글씨라는 것을 알아보는지 보려고
-  if (o.ink !== false) {
-    for (let r = 0; r < o.rows; r++) {
-      for (let c = 0; c < o.cols; c++) {
-        const cx = Math.round(edgeAt(c) + (edgeAt(c + 1) - edgeAt(c)) * 0.4);
-        const cy = Math.round(y0 + ((y1 - y0) * (r + 0.5)) / o.rows);
-        for (let dy = -3; dy <= 3; dy++) for (let dx = -6; dx <= 6; dx++) put(cx + dx, cy + dy, PEN);
-      }
-    }
-  }
-  return g;
-}
+const { PAPER, LINE, PEN, HALO, drawReceipt } = require("./draw-receipt");
 
 out.push("[문턱값]");
 {

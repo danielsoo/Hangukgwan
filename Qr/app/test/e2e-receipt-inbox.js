@@ -204,6 +204,68 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1500);
   }
 
+  out.push("\n[사진의 그 줄을 숫자 밑에]");
+  {
+    // 2026-10-17 사장님: "실제 사진 어떤 줄에서 이걸 읽어왔는지 옆에 보여주면
+    // 비교 검사할 때 매번 영수증 찾아서 줄 일일이 읽는 것보다 빠를 것 같아"
+    //
+    // 재는 것은 **줄이 맞게 붙는가**와 **못 찾았을 때 지어내지 않는가**다.
+    // 한 줄이라도 밀리면 엉뚱한 줄을 보시며 「맞다」 하시게 된다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    // 줄 6 = 머리글 한 줄 + 쓴 줄 5. 잉크를 키워야 「쓴 줄」로 센다(칸의 5% 넘게).
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [{ name: "ruled.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1500);
+
+    const row = page.locator('.ing-inbox-row:has-text("ruled.png")');
+    await row.locator("[data-inbox-paste]").click();
+    await page.waitForTimeout(200);
+    const five = {
+      vendor: "房信菓菜行", date: today, store: "main", rows: [
+        { name: "豆芽", qty: 5, unit: "斤", price: 12, amount: 60, sure: true },
+        { name: "紅蘿蔔", qty: 3, unit: "斤", price: 25, amount: 75, sure: true },
+        { name: "蔥", qty: 1, unit: "把", price: 250, amount: 250, sure: true },
+        { name: "蒜頭", qty: 2, unit: "斤", price: 90, amount: 180, sure: true },
+        { name: "芹菜", qty: 1, unit: "把", price: 60, amount: 60, sure: true },
+      ],
+    };
+    await row.locator("textarea").fill(JSON.stringify(five));
+    await row.locator("[data-inbox-go]").click();
+    await page.waitForTimeout(3500);          // 사진에서 표를 찾는 데 걸린다
+
+    const strips = page.locator(".ing-line-strip img");
+    check("★★ 줄마다 사진의 그 줄이 붙는다", (await strips.count()) === 5, String(await strips.count()));
+    const drawn = await strips.first().evaluate((el) => el.naturalWidth > 0 && el.naturalHeight > 0);
+    check("★★ 빈 그림이 아니다", drawn, "");
+    const wide = await strips.first().evaluate((el) => el.naturalWidth > el.naturalHeight * 3);
+    check("★ 줄 한 칸이 아니라 **줄 전체**다 (가로로 길다)", wide, "");
+    // 줄마다 다른 자리를 잘랐는가 — 같은 그림을 다섯 번 붙이면 아무 쓸모가 없다
+    const srcs = await strips.evaluateAll((els) => els.map((e) => e.src.slice(-80)));
+    check("★★ 줄마다 다른 자리를 자른다", new Set(srcs).size === 5, String(new Set(srcs).size));
+    check("★ 몇 줄 붙였는지 말한다", /그 줄 5개/.test(await page.locator("#ingImportLog").innerText()), "");
+
+    // 치우기 — 화면으로 지운다(서버만 지우면 목록에 유령이 남아 뒤 시험이 깨진다)
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1000);
+  }
+
+  out.push("\n[줄 자리를 못 찾으면 — 지어내지 않는다]");
+  {
+    // 표가 없는 사진(시험용 흰 그림)에 두 줄을 붙여넣는다. 엉뚱한 줄을
+    // 보여주느니 **한 장도 안 보여주고** 그렇다고 말해야 한다.
+    await page.locator(".ing-inbox-row").first().locator("[data-inbox-paste]").click();
+    await page.waitForTimeout(200);
+    await page.locator(".ing-inbox-row").first().locator("textarea").fill(PASTED);
+    await page.locator(".ing-inbox-row").first().locator("[data-inbox-go]").click();
+    await page.waitForTimeout(3000);
+    check("★★ 표를 못 찾으면 한 장도 안 붙인다", (await page.locator(".ing-line-strip img").count()) === 0, "");
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★★ 조용히 넘기지 않고 이유를 말한다", /줄 자리를 못 찾았어요/.test(log), log.split("\n").join(" | ").slice(0, 160));
+  }
+
   out.push("\n[확실한 줄과 확실치 않은 줄]");
   {
     const lines = page.locator("#ingEntryLines .ing-line[data-i]");

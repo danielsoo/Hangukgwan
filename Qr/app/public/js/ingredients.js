@@ -635,6 +635,7 @@
           <span><input type="number" step="any" class="ing-in-price" value="${esc(l.price)}" />${pic(l, "price")}</span>
           <span><input type="number" step="any" class="ing-in-amount" value="${esc(l.amount)}" />${pic(l, "amount")}</span>
           <span><button type="button" class="ing-x" title="${esc(T("ingRemoveLine"))}">✕</button></span>
+          ${l.pic && l.pic.row ? `<div class="ing-line-strip"><img src="${esc(l.pic.row)}" alt="" /></div>` : ""}
           <div class="ing-line-warn">${warnHtml(l)}</div>
         </div>`
         )
@@ -1281,6 +1282,69 @@
     attachPhoto(id);
     logLine(esc(fmt("ingPhotoReadFmt", { n: got.rows.length, unsure: got.unsure })));
     if (got.totalOk === false) logLine(esc(fmt("ingInboxTotalOffFmt", { paper: money(got.total), sum: money(Math.round(got.sum || 0)) })));
+    showRowStrips(id);          // 사진의 그 줄을 숫자 밑에 (느리므로 안 기다린다)
+  }
+
+  /**
+   * 사진의 **그 줄**을 숫자 밑에 붙인다.
+   *
+   * 2026-10-17 사장님: "실제 사진 어떤 줄에서 이걸 읽어왔는지 옆에 보여주면
+   * 비교 검사할 때 매번 영수증 찾아서 줄 일일이 읽는 것보다 빠를 것 같아"
+   *
+   * 붙여넣은 결과에는 **좌표가 없다**(세션에서 읽어 온 숫자뿐이다). 그래서
+   * 사진에서 표 줄만 다시 찾아(receipt-ocr) 줄마다 한 장씩 자른다. 숫자를
+   * 읽는 것이 아니라 **자리만** 찾는 것이라, 읽기가 22% 인 것과 상관없다.
+   *
+   * **줄 수가 다르면 한 장도 안 보여준다.** 한 줄이라도 밀리면 엉뚱한 줄을
+   * 보시며 「맞다」 하시게 된다 — 종이를 다시 찾는 것만 못하다. 못 찾았으면
+   * 조용히 넘기지 않고 그렇다고 말한다.
+   */
+  async function showRowStrips(id) {
+    const RR = window.HG_RECEIPT_READ;
+    const R = window.HG_RECEIPT;
+    if (!RR || !R || !id) return;
+    const want = entryLines.length;
+    let strips = [];
+    try {
+      const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/image");
+      if (!res.ok) return;
+      const { gray, w, h } = await RR.toGray(await res.blob());
+      // 한 사진에 전표가 둘일 수 있다 — 찾은 차례대로 줄을 이어 붙인다
+      for (const found of R.findReceipts(gray, w, h)) {
+        const grid = found.grid;
+        const cs = R.cells(grid);
+        const L = R.pickColumns(grid, cs) || R.labelColumns(cs);
+        if (!L) continue;
+        for (const r of R.usedRows(grid, cs, L.amount)) {
+          const box = rowBox(cs, r);
+          strips.push(box ? RR.cropPng(grid, box, { height: 40 }) : null);
+        }
+      }
+    } catch (e) {
+      strips = [];
+    }
+    // 그 사이에 다른 영수증을 고르셨으면 버린다
+    if (!attached || attached.id !== id || entryLines.length !== want) return;
+    if (strips.length !== want || strips.some((x) => !x)) {
+      return logLine(esc(T("ingStripNone")), { add: true });
+    }
+    entryLines.forEach((l, i) => { l.pic = Object.assign({}, l.pic, { row: strips[i] }); });
+    renderLines();
+    logLine(esc(fmt("ingStripOkFmt", { n: want })), { add: true });
+  }
+
+  /** 그 줄의 칸들을 하나로 묶은 네모. 기울기는 칸 자리에 이미 들어 있다. */
+  function rowBox(cs, r) {
+    const row = cs.filter((c) => c.row === r);
+    if (!row.length) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const c of row) {
+      if (c.x0 < x0) x0 = c.x0;
+      if (c.y0 < y0) y0 = c.y0;
+      if (c.x1 > x1) x1 = c.x1;
+      if (c.y1 > y1) y1 = c.y1;
+    }
+    return { x0, y0, x1, y1 };
   }
 
   /** 그 사진을 표 옆에 붙인다. */
