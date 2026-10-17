@@ -1070,6 +1070,64 @@
     }
   }
 
+  /**
+   * 대기함의 **안 끝난 사진을 전부** 한 파일(zip)로 받는다.
+   *
+   * 2026-10-16 사장님: "전부 받기 만들어줘" — 115장이 쌓였는데 줄마다 「받기」를
+   * 눌러야 했다. 115번 누르고 115개 파일을 찾는 것은 일이 아니다.
+   *
+   * 사진은 이미 압축된 JPEG·PNG 라 zip 에 **그냥 담는다**(store) — 다시 줄여
+   * 봐야 거의 안 줄고 115장이면 시간만 든다.
+   *
+   * 이름은 **올린 차례와 날짜**로 붙인다(001_2026-10-16_a.jpg). 세션에 넣어
+   * 읽힐 때 순서가 보이고, 같은 이름이 둘이어도 안 덮인다.
+   */
+  async function downloadInboxAll() {
+    const btn = $("#ingInboxGetAll");
+    const items = (inbox.items || []).filter((i) => i.has_image);
+    if (!items.length) return logLine(esc(T("ingInboxGetAllNone")));
+    const zipper = window.HG_XLSX_WRITE && window.HG_XLSX_WRITE.makeZip;
+    if (!zipper) return logLine(esc(T("ingInboxGetAllNoZip")));
+    const mb = Math.round(items.reduce((n, i) => n + (i.bytes || 0), 0) / 1e5) / 10;
+    if (!(await (A().showConfirm ? A().showConfirm(fmt("ingInboxGetAllAskFmt", { n: items.length, mb })) : Promise.resolve(true)))) return;
+
+    const label = btn ? btn.textContent : "";
+    if (btn) btn.disabled = true;
+    try {
+      const files = [];
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (btn) btn.textContent = fmt("ingInboxGetAllBusyFmt", { done: i + 1, total: items.length });
+        let bytes = null;
+        try {
+          const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(it.id) + "/image");
+          if (res.ok) bytes = new Uint8Array(await res.arrayBuffer());
+        } catch (e) { /* 아래에서 샌 장수를 말한다 */ }
+        if (!bytes) continue;
+        const no = String(i + 1).padStart(3, "0");
+        const day = String(it.at || "").slice(0, 10);
+        const name = String(it.name || "receipt").replace(/[\\/:*?"<>|]/g, "_");
+        const ext = /\.(jpe?g|png|webp)$/i.test(name) ? "" : ".jpg";
+        files.push({ name: `${no}_${day}_${name}${ext}`, bytes, store: true });
+      }
+      if (!files.length) return logLine(esc(T("ingInboxGetAllFailed")));
+      const zip = await zipper(files);
+      const url = URL.createObjectURL(new Blob([zip], { type: "application/zip" }));
+      const a2 = document.createElement("a");
+      a2.href = url;
+      a2.download = `영수증-대기함-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a2);
+      a2.click();
+      a2.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      logLine(esc(fmt("ingInboxGetAllDoneFmt", { n: files.length })));
+      // 한 장이라도 못 받았으면 **조용히 넘기지 않는다**
+      if (files.length < items.length) logLine(esc(fmt("ingInboxGetAllSomeFmt", { n: items.length - files.length })), { add: true });
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = label || T("ingInboxGetAll"); }
+    }
+  }
+
   async function loadInbox() {
     const res = await fetch("/api/ingredients/inbox");
     if (!res.ok) return;
@@ -1085,6 +1143,13 @@
     const pending = (inbox.items || []).filter((i) => i.status !== "saved").length;
     const cnt = $("#ingInboxCount");
     if (cnt) cnt.textContent = pending ? fmt("ingInboxCountFmt", { n: pending }) : "";
+    // 「전부 받기」에 몇 장인지 적어 둔다 — 누르기 전에 규모가 보이게
+    const all = $("#ingInboxGetAll");
+    if (all && !all.disabled) {
+      const n = (inbox.items || []).filter((i) => i.has_image).length;
+      all.textContent = n ? fmt("ingInboxGetAllNFmt", { n }) : T("ingInboxGetAll");
+      all.hidden = !n;
+    }
     if (!items.length) {
       el.innerHTML = '<p class="ing-note">' + esc(T("ingInboxEmpty")) + "</p>";
       return;
@@ -1371,6 +1436,7 @@
           uploadToInbox(files);
         };
       }
+      if ($("#ingInboxGetAll")) $("#ingInboxGetAll").onclick = () => downloadInboxAll();
       if ($("#ingInboxShowSaved")) $("#ingInboxShowSaved").onchange = () => renderInbox();
       if ($("#ingEntryPhotoClear")) $("#ingEntryPhotoClear").onclick = () => detachPhoto();
       $("#ingEntryVendor").onchange = () => loadCatalog();

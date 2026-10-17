@@ -81,6 +81,35 @@ const PASTED = `읽었습니다:
     check("★★ 작은 미리보기가 보인다", thumb, "");
   }
 
+  out.push("\n[전부 받기 — 한 파일로]");
+  {
+    // 2026-10-16 사장님: "전부 받기 만들어줘" — 대기함에 115장이 쌓였는데
+    // 줄마다 「받기」를 눌러야 했다. 115번 누르고 115개 파일을 찾는 것은 일이 아니다.
+    const btn = page.locator("#ingInboxGetAll");
+    check("★ 「전부 받기」 단추가 있다", await btn.isVisible(), "");
+    check("★ 몇 장인지 단추에 적힌다", /\(2\)/.test(await btn.innerText()), await btn.innerText());
+
+    const dl = page.waitForEvent("download", { timeout: 30000 });
+    await btn.click();
+    await page.waitForTimeout(400);
+    // 몇 장·몇 MB 인지 먼저 묻는다
+    const ask = await page.locator("#appDialogMessage").innerText();
+    check("★★ 몇 장을 받는지 묻는다", /2장/.test(ask), ask.slice(0, 80));
+    await page.locator("#appDialogOk").click();
+
+    const file = await dl;
+    const path = await file.path();
+    const buf = require("fs").readFileSync(path);
+    check("★★ 한 파일로 받아진다", buf.length > 0, String(buf.length));
+    check("★★ zip 이다 (PK 로 시작)", buf[0] === 0x50 && buf[1] === 0x4b, `${buf[0]} ${buf[1]}`);
+    // zip 안의 이름 — 올린 차례와 날짜가 붙는다
+    const text = buf.toString("latin1");
+    check("★★ 사진 두 장이 들어 있다", (text.match(/head\.png|receipt-1\.png|receipt-2\.png/g) || []).length >= 2, "");
+    check("★★ 이름에 차례와 날짜", /001_\d{4}-\d{2}-\d{2}_/.test(text), text.slice(0, 120).replace(/[^\x20-\x7e]/g, "."));
+    check("★ 받았다고 말한다", /한 파일로 받았어요/.test(await page.locator("#ingImportLog").innerText()), "");
+    check("★ 단추가 다시 눌린다", !(await btn.isDisabled()), "");
+  }
+
   out.push("\n[진짜 사진 크기도 올라간다]");
   {
     // 2026-10-06: 전역 express.json() 의 기본 한도가 100KB 라 **진짜 사진만**

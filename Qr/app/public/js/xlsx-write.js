@@ -89,9 +89,16 @@
     const central = [];
     let offset = 0;
     for (const e of entries) {
-      const raw = enc.encode(e.text);
+      // 글자(엑셀 XML)와 **바이트**(사진)를 둘 다 담는다.
+      //
+      // 2026-10-16 사장님: 영수증 대기함에 115장이 쌓였는데 「받기」를 115번
+      // 눌러야 했다. 한 파일로 받으려면 zip 에 사진을 넣을 수 있어야 한다.
+      const raw = e.bytes
+        ? (e.bytes instanceof Uint8Array ? e.bytes : new Uint8Array(e.bytes))
+        : enc.encode(e.text);
       const crc = crc32(raw);
-      let data = await deflate(raw);
+      // JPEG·PNG 는 이미 압축돼 있다 — 다시 줄여 봐야 거의 안 줄고 시간만 든다.
+      let data = e.store ? null : await deflate(raw);
       let method = 8;
       // 압축이 안 되는 환경이거나 오히려 커지면 그냥 담는다.
       if (!data || data.length >= raw.length) {
@@ -190,5 +197,5 @@
     return makeZip(files);
   }
 
-  window.HG_XLSX_WRITE = { writeXlsx, sheetXml, colName, crc32 };
+  window.HG_XLSX_WRITE = { writeXlsx, sheetXml, colName, crc32, makeZip };
 })();

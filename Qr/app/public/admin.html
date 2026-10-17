@@ -482,6 +482,9 @@
           <div class="ing-inbox-tools">
             <button type="button" id="ingInboxAdd" class="primary" data-i18n="ingInboxAdd">📷 사진 올리기</button>
             <input type="file" id="ingInboxFile" accept="image/*" multiple hidden />
+            <!-- 2026-10-16 사장님: 대기함에 115장이 쌓였는데 「받기」를 115번 눌러야 했다.
+                 한 파일(zip)로 한 번에 받는다. -->
+            <button type="button" id="ingInboxGetAll" data-i18n="ingInboxGetAll">📥 전부 받기</button>
             <label class="ing-inbox-saved"><input type="checkbox" id="ingInboxShowSaved" /> <span data-i18n="ingInboxShowSaved">저장된 것도 보기</span></label>
           </div>
           <div class="ing-inbox-list" id="ingInboxList"></div>
