@@ -576,11 +576,65 @@
   const blankLine = () => ({ name: "", name_ko: "", qty: "", unit: "", price: "", amount: "", amountEdited: false, pic: null, unsure: false });
   const knownOf = (name) => catalog.items.find((i) => i.name === String(name || "").trim()) || null;
 
-  function recalc(line) {
-    const q = Number(line.qty);
-    const p = Number(line.price);
-    if (!line.amountEdited && Number.isFinite(q) && Number.isFinite(p) && line.qty !== "" && line.price !== "") {
-      line.amount = Math.round(q * p * 100) / 100;
+  /**
+   * 금액 ÷ 단가 로 **무게를 되찾는다.**
+   *
+   * 2026-10-18 사장님: "2근4는 대만에 무게 하는 거에 따라 달라져. 그래서
+   * 개수에 완전 의존하는 것보다 가격과 단가에 따라 무게도 달라질 수 있게
+   * 해야 할 것 같기도 하고."
+   *
+   * 종이에는 무게를 「2斤4」(2근 4냥)라고 쓴다 — 1斤 = 16兩 이니 2.25斤 이다.
+   * 숫자로 읽으면 24 가 되고 24 × 25 = 600 이라 종이 금액 56 과 아무 상관이
+   * 없어진다. 그래서 종이에서 믿을 것은 **단가와 금액**이고 무게는 그 둘이
+   * 정한다(CLAUDE.md 「수량은 종이에서 읽지 않는다」와 같은 규칙이다).
+   *
+   * 나온 값은 **사람이 쓰는 무게로만** 당겨 준다 — 정수 · 半斤 · 4兩 · 2兩.
+   * 당긴 무게 × 단가가 종이 금액과 1원 안으로 맞을 때만 당긴다. 그래서
+   * 56 ÷ 25 = 2.24 는 2.25(2斤4兩)로, 35 ÷ 25 = 1.4 는 1.375(1斤6兩)로
+   * 돌아오고, 238 ÷ 24 = 9.9167 처럼 저울에서 나온 값은 **그대로 둔다** —
+   * 없는 자릿수를 지어내지 않는다.
+   */
+  function niceWeight(amount, price) {
+    const a = Number(amount);
+    const p = Number(price);
+    if (!isFinite(a) || !isFinite(p) || !p) return null;
+    const raw = a / p;
+    if (!isFinite(raw) || raw <= 0) return null;
+    for (const step of [1, 0.5, 0.25, 0.125]) {
+      const c = Math.round(raw / step) * step;
+      if (c > 0 && Math.abs(c * p - a) < 1) return Math.round(c * 10000) / 10000;
+    }
+    return Math.round(raw * 1000) / 1000;
+  }
+
+  /** 2.25 · 斤 → 「2斤4兩」. 딱 떨어질 때만 — 9.9167 은 아무 말도 안 한다. */
+  function catties(qty, unit) {
+    const q = Number(qty);
+    if (String(unit || "").trim() !== "斤" || !isFinite(q) || q <= 0) return "";
+    const t = q * 16;
+    if (Math.abs(t - Math.round(t)) > 0.01) return "";
+    const taels = Math.round(t) % 16;
+    if (!taels) return "";
+    const jin = Math.floor(q);
+    return (jin ? jin + "斤" : "") + taels + "兩";   // 0.5 는 「0斤8兩」이 아니라 「8兩」
+  }
+
+  /**
+   * 한 줄의 셈을 맞춘다. **무엇을 고쳤는지**에 따라 따라오는 칸이 다르다.
+   *
+   * · 종이에서 온 줄(금액이 종이에 적혀 있다) — 단가나 금액을 고치면 **수량**이
+   *   따라온다. 금액은 종이 그대로 둔다.
+   * · 손으로 넣는 줄 — 수량과 단가를 치면 **금액**이 따라온다(예전 그대로).
+   */
+  function recalc(line, changed) {
+    const has = (v) => v !== "" && v != null && isFinite(Number(v));
+    if (line.amountEdited && (changed === "price" || changed === "amount") && has(line.price) && has(line.amount)) {
+      const w = niceWeight(line.amount, line.price);
+      if (w != null) line.qty = w;
+      return;
+    }
+    if (!line.amountEdited && has(line.qty) && has(line.price)) {
+      line.amount = Math.round(Number(line.qty) * Number(line.price) * 100) / 100;
     }
   }
 
@@ -590,7 +644,8 @@
     const q = Number(line.qty) || 0;
     const p = Number(line.price) || 0;
     const a = Number(line.amount) || 0;
-    if (q && p && a && Math.abs(q * p - a) >= 0.5) {
+    // 종이 금액은 **반올림**돼 있다(0.5斤 × 35 = 17.5 → 17). 1원 안은 어긋남이 아니다.
+    if (q && p && a && Math.abs(q * p - a) >= 1) {
       bits.push(`<span class="ing-warn">${esc(fmt("ingWarnMathFmt", { expected: money(Math.round(q * p * 100) / 100) }))}</span>`);
     }
     if (known && known.last_price != null && p && p !== known.last_price) {
@@ -598,6 +653,8 @@
     } else if (known && known.last_price != null) {
       bits.push(`<span class="ing-hint">${esc(fmt("ingLastPriceFmt", { price: money(known.last_price), date: known.last_date }))}</span>`);
     }
+    const kg = catties(line.qty, line.unit);
+    if (kg) bits.push(`<span class="ing-hint">= ${esc(kg)}</span>`);
     if (known === null && String(line.name || "").trim()) {
       bits.push(`<span class="ing-new">${esc(T("ingWarnNewItem"))}</span>`);
     }
@@ -636,6 +693,24 @@
     );
   }
 
+  /**
+   * 마지막 줄 **바로 밑** 한 줄을 사진에서 잘라 보여 준다.
+   *
+   * 2026-10-18 사장님: "총 8개인데 품목은 7개 밖에 없어. 그것도 체크해줘야돼."
+   *
+   * 빠뜨린 줄은 숫자만 봐서는 영영 안 보인다 — 종이에 8줄이 적혀 있어도 표에
+   * 7줄이면 표는 멀쩡해 보인다. 그래서 「그 다음 줄」을 한 장 보여 준다.
+   * 비어 있으면 다 넣은 것이고, 글씨가 보이면 한 줄이 빠진 것이다.
+   */
+  function afterStripHtml() {
+    if (!afterStrip.src || !attached || afterStrip.id !== attached.id) return "";
+    return (
+      '<div class="ing-after-strip">' +
+      "<span>" + esc(T("ingAfterStrip")) + "</span>" +
+      '<img src="' + esc(afterStrip.src) + '" alt="" />' +
+      "</div>"
+    );
+  }
   function renderLines() {
     const box = $("#ingEntryLines");
     if (!box) return;
@@ -659,7 +734,8 @@
           <div class="ing-line-warn">${warnHtml(l)}</div>
         </div>`
         )
-        .join("")}`;
+        .join("")}
+      ${afterStripHtml()}`;
 
     if ($("#ingStripUp")) $("#ingStripUp").onclick = () => nudgeStrips(-1);
     if ($("#ingStripDown")) $("#ingStripDown").onclick = () => nudgeStrips(1);
@@ -667,20 +743,37 @@
     box.querySelectorAll(".ing-line[data-i]").forEach((el) => {
       const i = Number(el.dataset.i);
       const L = entryLines[i];
+      const warnBox = el.querySelector(".ing-line-warn");
+      const FIELDS = [["qty", ".ing-in-qty"], ["price", ".ing-in-price"], ["unit", ".ing-in-unit"], ["amount", ".ing-in-amount"]];
+      /**
+       * 고친 자리만 다시 그린다 — 표를 통째로 다시 그리지 않는다.
+       *
+       * 2026-10-18 사장님: "지금 가격이 수기로 안 고쳐지고". 예전에는 칸을
+       * 떠날 때마다 `renderLines()` 로 표 전체를 새로 만들었다. 패드에서는
+       * 다음 칸을 **손가락으로 짚는 그 순간** 앞 칸이 떠나며 표가 바뀌어서,
+       * 짚은 칸이 사라지고 글판이 닫힌다 — 고쳐지지 않는 것처럼 보인다.
+       * 지금 치고 있는 칸은 건드리지 않고, 따라오는 칸·경고·합계만 고친다.
+       */
+      const refresh = (skip) => {
+        FIELDS.forEach(([k, sel]) => {
+          if (k === skip) return;
+          const f = el.querySelector(sel);
+          if (f && document.activeElement !== f && String(f.value) !== String(L[k])) f.value = L[k];
+        });
+        el.classList.toggle("ing-line-unsure", !!L.unsure);
+        if (warnBox) warnBox.innerHTML = warnHtml(L);
+        updateTotal();
+      };
       const bind = (sel, key, after) => {
         const input = el.querySelector(sel);
         if (!input) return;
-        input.oninput = () => {
+        const take = () => {
           L[key] = input.value;
           if (after) after();
+          refresh(key);
         };
-        // 다 치고 칸을 떠날 때 다시 그린다 — 글자마다 다시 그리면 커서가 튄다.
-        input.onchange = () => {
-          L[key] = input.value;
-          if (after) after();
-          renderLines();
-          updateTotal();
-        };
+        input.oninput = take;
+        input.onchange = take;
       };
       bind(".ing-in-name", "name", () => {
         const k = knownOf(L.name);
@@ -693,22 +786,14 @@
           recalc(L);
         }
       });
-      bind(".ing-in-qty", "qty", () => recalc(L));
-      bind(".ing-in-price", "price", () => recalc(L));
+      bind(".ing-in-qty", "qty", () => recalc(L, "qty"));
+      // 단가·금액을 고치면 **무게가 따라온다** — 종이의 「2斤4」는 2.25斤 이다
+      bind(".ing-in-price", "price", () => recalc(L, "price"));
       bind(".ing-in-unit", "unit");
-      const amt = el.querySelector(".ing-in-amount");
-      if (amt) {
-        amt.oninput = () => {
-          L.amount = amt.value;
-          L.amountEdited = true;
-        };
-        amt.onchange = () => {
-          L.amount = amt.value;
-          L.amountEdited = true;
-          renderLines();
-          updateTotal();
-        };
-      }
+      bind(".ing-in-amount", "amount", () => {
+        L.amountEdited = true;            // 종이에 적힌(또는 손으로 적어 넣은) 금액이다
+        recalc(L, "amount");
+      });
       el.querySelector(".ing-x").onclick = () => {
         entryLines.splice(i, 1);
         if (!entryLines.length) entryLines.push(blankLine());
@@ -1668,8 +1753,17 @@
     if (!res.ok) return null;
     const bmp = await createImageBitmap(await res.blob());
     const out = bands.map((b) => (b ? cropBand(bmp, b) : null));
+    // 마지막 줄 **바로 밑** 한 줄도 같이 자른다 — 빠뜨린 품목이 눈에 띄게.
+    const last = bands.filter(Boolean).pop();
+    let after = null;
+    if (last) {
+      const h = last[1] - last[0];
+      if (h > 0 && last[1] + h <= 1) {
+        after = cropBand(bmp, last.length === 4 ? [last[1], last[1] + h, last[2], last[3]] : [last[1], last[1] + h]);
+      }
+    }
     if (bmp.close) bmp.close();
-    return out;
+    return { rows: out, after };
   }
 
   /** 사진의 [위, 아래] 띠 한 장. 가로는 통째로 — 줄 전체가 보여야 한다. */
@@ -1710,9 +1804,12 @@
    * ±1 이 가장 흔하다.
    */
   let strips = { id: null, list: [], off: 0 };
+  // 마지막 줄 바로 밑 한 줄(사진) — 「총 8개인데 품목은 7개」를 눈으로 잡는다.
+  let afterStrip = { id: null, src: null };
 
   async function showRowStrips(id) {
     strips = { id: null, list: [], off: 0 };
+    afterStrip = { id: null, src: null };
     if (!id) return;
 
     // ① 읽은 쪽이 줄 자리를 적어 보냈으면 그대로 자른다 — 표를 찾을 필요가 없다
@@ -1720,9 +1817,10 @@
       const band = await bandStrips(id);
       if (band) {
         if (!attached || attached.id !== id) return;
-        entryLines.forEach((l, i) => { l.pic = Object.assign({}, l.pic, { row: band[i] || null }); });
+        entryLines.forEach((l, i) => { l.pic = Object.assign({}, l.pic, { row: band.rows[i] || null }); });
+        afterStrip = { id: id, src: band.after || null };
         renderLines();
-        const n = band.filter(Boolean).length;
+        const n = band.rows.filter(Boolean).length;
         return logLine(esc(fmt("ingStripExactFmt", { n })), { add: true });
       }
     } catch (e) { /* 아래 길로 내려간다 */ }

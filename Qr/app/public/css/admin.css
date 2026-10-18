@@ -3407,6 +3407,13 @@ body:not(.role-staff) .staff-only { display: none !important; }
   border-radius: 4px; background: #fff;
 }
 .ing-line-unsure { background: #fff8d8; border-left: 3px solid #e8b100; }
+/* 마지막 줄 **바로 밑** 한 줄(2026-10-18 사장님: "총 8개인데 품목은 7개 밖에 없어").
+   글씨가 보이면 한 줄이 빠진 것이다 — 숫자만 봐서는 영영 안 보인다. */
+.ing-after-strip {
+  margin-top: 6px; padding: 6px 8px; border: 1px dashed var(--line); border-radius: 8px;
+  background: #fcfbf7; font-size: 13px; color: var(--muted);
+}
+.ing-after-strip img { display: block; max-width: 100%; height: auto; margin-top: 4px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 /* 사진을 끌어다 놓는 동안 */
 .ing-drop { outline: 3px dashed #4a90d9; outline-offset: -6px; }
 

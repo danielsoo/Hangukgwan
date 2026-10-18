@@ -404,6 +404,88 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1000);
   }
 
+  out.push("\n[무게는 금액 ÷ 단가 에서 나온다 — 종이의 「2斤4」]");
+  await openInbox();
+  {
+    // 2026-10-18 사장님: "여기보면 1번에 2근4라고 나오잖아 근데 개수가 25개고
+    // 가격이 56이 나오잖아. 그리고 2근4는 대만에 무게 하는 거에 따라 달라져.
+    // 그래서 개수에 완전 의존하는 것보다 가격과 단가에 따라 무게도 달라질 수
+    // 있게 해야 할 것 같기도 하고. 지금 가격이 수기로 안 고쳐지고 총 8개인데
+    // 품목은 7개 밖에 없어. 그것도 체크해줘야돼"
+    //
+    // 재는 것은 셋이다:
+    //   ① 손으로 고친 단가·금액이 **그대로 남는가** (칸이 사라지지 않는가)
+    //   ② 그 둘에서 무게가 따라 나오는가 (56 ÷ 25 = 2.24 → 2斤4兩 = 2.25)
+    //   ③ 마지막 줄 **밑**을 보여주는가 (8줄 중 7줄만 들어온 것을 눈으로 잡게)
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    await page.setInputFiles("#ingInboxFile", [{ name: "weight.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1500);
+
+    const row = page.locator('.ing-inbox-row:has-text("weight.png")');
+    await row.locator("[data-inbox-paste]").click();
+    await page.waitForTimeout(200);
+    await row.locator("textarea").fill(JSON.stringify({
+      vendor: "房信菓菜行", date: today, store: "main", rows: [
+        // 종이에는 「2斤4 · 25 · 56」인데 24 를 숫자로 읽으면 이렇게 들어온다
+        { name: "紅蘿蔔", qty: 2, unit: "斤", price: 8, amount: 16, sure: false, band: [0.30, 0.36] },
+        // 저울에서 나온 무게 — 9.9167 은 사람이 쓰는 무게가 아니다
+        { name: "白蘿蔔", qty: 9.94, unit: "斤", price: 24, amount: 238, sure: false, band: [0.36, 0.42] },
+      ],
+    }));
+    await row.locator("[data-inbox-go]").click();
+    await page.waitForTimeout(3000);
+
+    const price0 = page.locator("#ingEntryLines .ing-in-price").nth(0);
+    const amount0 = page.locator("#ingEntryLines .ing-in-amount").nth(0);
+    const qty0 = page.locator("#ingEntryLines .ing-in-qty").nth(0);
+    // 치기 전의 칸을 손에 쥐고 있는다 — 표를 통째로 다시 그리면 이 칸이 사라진다
+    const held = await amount0.elementHandle();
+
+    // 사장님이 하시는 그대로: 단가를 고치고 **바로 금액 칸을 짚는다**
+    await price0.click();
+    await price0.press("Control+a");
+    await price0.type("25", { delay: 60 });
+    await amount0.click();                       // 앞 칸이 떠나는 그 순간 짚는다
+    await amount0.press("Control+a");
+    await amount0.type("56", { delay: 60 });
+    await amount0.press("Tab");
+    await page.waitForTimeout(500);
+
+    check("★★ 치는 동안 금액 칸이 사라지지 않는다 (표를 통째로 다시 그리지 않는다)",
+      await held.evaluate((el) => el.isConnected), "");
+    check("★★ 손으로 고친 단가가 그대로 남는다", (await price0.inputValue()) === "25", await price0.inputValue());
+    check("★★ 손으로 고친 금액이 그대로 남는다", (await amount0.inputValue()) === "56", await amount0.inputValue());
+    check("★★ 무게가 금액 ÷ 단가 에서 나온다 (2斤4兩 = 2.25)", (await qty0.inputValue()) === "2.25", await qty0.inputValue());
+    const warn0 = await page.locator("#ingEntryLines .ing-line-warn").nth(0).innerText();
+    check("★★ 종이에 적힌 말로 되읽어 준다 (2斤4兩)", /2斤4兩/.test(warn0), warn0);
+    check("★ 셈이 맞으니 경고가 없다", !/\?|≠/.test(warn0) && !/다릅니다|不符/.test(warn0), warn0);
+
+    // 저울 무게는 **지어내지 않는다** — 238 ÷ 24 는 어떤 兩 자리에도 안 떨어진다
+    const price1 = page.locator("#ingEntryLines .ing-in-price").nth(1);
+    await price1.click();
+    await price1.press("Control+a");
+    await price1.type("24", { delay: 50 });
+    await price1.press("Tab");
+    await page.waitForTimeout(400);
+    const q1 = await page.locator("#ingEntryLines .ing-in-qty").nth(1).inputValue();
+    check("★★ 저울에서 나온 무게는 그대로 둔다 (9.917, 兩 자리로 당기지 않는다)", q1 === "9.917", q1);
+    const warn1 = await page.locator("#ingEntryLines .ing-line-warn").nth(1).innerText();
+    check("★ 딱 떨어지지 않으면 兩 으로 말하지 않는다", !/兩/.test(warn1), warn1);
+
+    // ③ 마지막 줄 **밑** 한 줄
+    const after = page.locator(".ing-after-strip img");
+    check("★★ 마지막 줄 밑 한 줄을 보여준다 (빠진 품목을 눈으로 잡게)", (await after.count()) === 1, String(await after.count()));
+    if (await after.count()) {
+      check("★ 그 띠가 실제로 그려져 있다", await after.first().evaluate((el) => el.complete && el.naturalWidth > 0), "");
+    }
+
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1000);
+  }
   out.push("\n[묶음을 파일로 넣는다 — 50KB 를 손으로 복사하지 않게]");
   await openInbox();
   {
