@@ -728,7 +728,13 @@
     } else {
       row("合計", `NT$${money(o.total)}`, sz("total", 16), wt("total", 900), { gapAfter: 6 });
     }
-    if (receipt && receipt.method) row("付款方式", receipt.method, sz("itemPrice", 13), wt("itemPrice", 700), { gapAfter: 6 });
+    if (receipt && receipt.method) row("付款方式", receipt.method, sz("itemPrice", 13), wt("itemPrice", 700), { gapAfter: receipt.tenders ? 2 : 6 });
+    // 나눠 낸 결제(2026-10-18) — 수단마다 한 줄. 손님이 「현금으로 얼마 냈더라」를 종이에서 본다.
+    if (receipt && Array.isArray(receipt.tenders)) {
+      receipt.tenders.forEach((t, k) =>
+        row(`  ${t.label}`, `NT$${money(t.amount)}`, sz("itemPrice", 13), wt("itemPrice", 700), { gapAfter: k === receipt.tenders.length - 1 ? 6 : 2 })
+      );
+    }
     if (priceCopy && !receipt) line("※本單僅供結帳參考，實際折扣依系統結帳畫面為準", sz("orderNote", 11), wt("orderNote", 400), { align: "center" });
     // 整單備註(o.note) 입력칸은 손님 주문 화면에서 완전히 제거됐다(커밋
     // e0f1b86) — 다시는 채워지지 않으므로 렌더링을 지웠다. orderNote

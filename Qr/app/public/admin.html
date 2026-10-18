@@ -2231,6 +2231,19 @@
       <button type="button" class="primary-btn" data-payment-method="card" data-i18n="paymentMethodCard">신용카드</button>
       <button type="button" class="primary-btn" data-payment-method="other" data-i18n="paymentMethodOther">기타</button>
     </div>
+    <!-- 나눠 내기(2026-10-18 사장님: "현금만 그런 거 말고 여러개를 따로 해서 할 수 있게 해줄래?") —
+         「현금 1,000 · 나머지 카드」처럼 금액으로 나눈다. 수단마다 금액을 적고, 남은 돈이 0 이 되어야
+         결제된다. 서버(src/splitTender.js)가 합을 한 번 더 본다. -->
+    <button type="button" id="paySplitOpen" class="pay-split-open" data-i18n="paySplitOpen">➗ 여러 결제수단으로 나눠 내기</button>
+    <div id="paySplitPanel" class="pay-split" hidden>
+      <div class="pay-split-due"><span data-i18n="paySplitDue">낼 돈</span> <b id="paySplitDueAmt"></b></div>
+      <div id="paySplitRows" class="pay-split-rows"></div>
+      <div id="paySplitLeft" class="pay-split-left"></div>
+      <div class="pay-split-actions">
+        <button type="button" id="paySplitBack" class="ghost-btn" data-i18n="paySplitBack">← 하나로 내기</button>
+        <button type="button" id="paySplitGo" class="primary-btn" data-i18n="paySplitGo">나눠서 결제</button>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="danger-btn" id="paymentMethodCancel" data-i18n="appDialogCancel">취소</button>
     </div>

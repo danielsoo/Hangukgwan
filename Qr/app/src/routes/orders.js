@@ -104,6 +104,8 @@ const {
 // payments.js)은 서버가 직접 붙이는 값이라 여기 포함하지 않는다(직원이
 // 고를 수 있는 선택지가 아니므로).
 const PAYMENT_METHODS = ["cash", "linepay", "card", "other"];
+const splitTender = require("../splitTender");
+const { lineTotalOf } = require("../discounts");
 
 // 품목 하나의 카테고리 key — POST /, PATCH /:id/items에서 채워두는
 // category_key 스냅샷을 우선 쓴다(메뉴가 나중에 바뀌거나 삭제돼도 이미
@@ -160,7 +162,18 @@ const isDiscountExcludedItem = (it) =>
 // 여기서 반드시 검증한다(퍼센트는 0~100, 금액은 양수만 — 실제로 청구액을
 // 넘는지는 아래 computeDiscountAmount가 다시 한번 clamp한다).
 function resolvePaymentFields(body) {
-  const paymentMethod = PAYMENT_METHODS.includes(body.paymentMethod) ? body.paymentMethod : null;
+  let paymentMethod = PAYMENT_METHODS.includes(body.paymentMethod) ? body.paymentMethod : null;
+  // 나눠 내기(2026-10-18, src/splitTender.js) — 「현금 1,000 · 나머지 카드」. 수단이 하나뿐이면 그
+  // 수단으로 낸 것과 같다. 금액이 잘못됐으면 결제 자체를 막는다(splitInvalid) — 돈이 걸린 값이라
+  // 위의 「조용히 무시」를 따르면 서랍과 장부가 어긋난다.
+  let tenders = null;
+  let splitInvalid = false;
+  if (body.paymentMethod === "split") {
+    tenders = splitTender.normalizeTenders(body.tenders);
+    if (!tenders) splitInvalid = true;
+    else if (tenders.length === 1) { paymentMethod = tenders[0].method; tenders = null; }
+    else paymentMethod = "split";
+  }
   const rawType = body.vipDiscountType;
   // 特約95折/VIP9折만 여기 들어온다. 예전에는 "직접 입력"도 이 자리에
   // "manual"이라는 값으로 들어와서(둘 중 하나만 고를 수 있었으니까) 두
@@ -174,8 +187,9 @@ function resolvePaymentFields(body) {
   // 재량 할인은 결제수단 제한이 없다 — "할인은 현금만"은 特約95折/VIP9折
   // 물리 카드 프로그램 고유 규칙이므로 그 둘일 때만 적용한다. 둘을 같이
   // 걸면 카드 쪽 규칙이 살아 있으므로 현금만 된다.
+  // 나눠 내기도 막는다 — 카드 프로그램 규칙은 「전부 현금」이다.
   const discountRequiresCash = !!vipDiscountType && paymentMethod !== "cash";
-  return { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash };
+  return { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash, tenders, splitInvalid };
 }
 
 // PATCH /:id, PATCH /:id/split-pay 둘 다 이 함수만 부르면 된다.
@@ -1112,8 +1126,19 @@ router.patch("/:id", requireAdmin, async (req, res) => {
   // 전혀 영향이 없다. discountRequiresCash는 클라이언트가 이미 LinePay/
   // 신용카드 버튼을 잠가주지만, 그건 UI일 뿐이라 여기서 다시 막는다.
   if (status === "paid") {
-    const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
+    const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash, tenders, splitInvalid } = resolvePaymentFields(req.body || {});
+    if (splitInvalid) return res.status(400).json({ error: "invalid_split" });
     if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
+    // 나눠 내기 — 아직 결제수단이 안 찍힌 품목 전부가 이번 결제다. 금액이 그 몫과 맞아야 한다.
+    let splitPaymentId = null;
+    if (tenders) {
+      const breakdown = vipDiscountType || manualDiscount ? computeDiscountAmount(vipDiscountType, manualDiscount, order.items) : null;
+      const due = order.items.filter((it) => !it.payment_method).reduce((a, it) => a + lineTotalOf(it), 0) - (breakdown ? breakdown.total : 0);
+      if (splitTender.totalOf(tenders) !== due) return res.status(400).json({ error: "split_mismatch", due });
+      splitPaymentId = await reserveId("table_payments");
+      order.split_tenders = [...(order.split_tenders || []), { payment_id: splitPaymentId, tenders }];
+      order.payment_ids = [...(order.payment_ids || []), splitPaymentId];
+    }
     if (paymentMethod) {
       order.payment_method = paymentMethod;
       // 이 라운드가 이전에 부분결제(PATCH /:id/split-pay)로 일부 품목만
@@ -1123,7 +1148,9 @@ router.patch("/:id", requireAdmin, async (req, res) => {
       // 있게 하기 위함(사장님 요청 2026-09-07: "정산에서도 서로 분류해서도
       // 집계해줘").
       order.items.forEach((it) => {
-        if (!it.payment_method) it.payment_method = paymentMethod;
+        if (it.payment_method) return;
+        it.payment_method = paymentMethod;
+        if (splitPaymentId) it.split_id = splitPaymentId;
       });
     }
     if (vipDiscountType || manualDiscount) {
@@ -1356,9 +1383,15 @@ router.post("/:id/refund", requireAdmin, async (req, res) => {
   if (amount > received) amount = Math.max(0, received);
 
   const firstPaid = (order.items || []).find((x) => x.payment_method);
+  // 나눠 낸 주문은 수단이 여럿이다 — 직원이 고르지 않았으면 현금(있으면), 아니면 가장 많이 낸 수단.
+  const splitParts = splitTender.tendersOfOrder(order);
+  const splitDefault = splitParts.length
+    ? (splitParts.find((t) => t.method === "cash") || splitParts.slice().sort((a, b) => b.amount - a.amount)[0]).method
+    : null;
+  const firstMethod = firstPaid && firstPaid.payment_method !== "split" ? firstPaid.payment_method : null;
   const method = PAYMENT_METHODS.includes(body.method)
     ? body.method
-    : (firstPaid && firstPaid.payment_method) || order.payment_method || "cash";
+    : splitDefault || firstMethod || (order.payment_method !== "split" && order.payment_method) || "cash";
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 100) : "";
   // 미리 보기 — 화면이 금액을 따로 계산하지 않고 서버 계산을 그대로 보여준다.
   if (body.preview) return res.json({ preview: { method, amount, lines } });
@@ -1492,7 +1525,9 @@ router.patch("/:id/split-pay", requireAdmin, async (req, res) => {
   // "선택/전체 결제 완료")로 이뤄지므로 特約95折/VIP9折 할인·결제 방식도
   // 여기서 받는다. 이번에 실제로 결제되는 품목(selectedIdx, 아래에서 확정)
   // 중 음료·주류를 뺀 금액에만 할인율을 적용한다 — PATCH /:id와 동일 규칙.
-  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
+  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash, tenders, splitInvalid } = resolvePaymentFields(req.body || {});
+  // 나눠 내기는 pay-table·PATCH /:id 만 받는다 — 지금 화면은 이 길을 안 부른다.
+  if (splitInvalid || tenders) return res.status(400).json({ error: "split_not_supported" });
   if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
   // 사장님 피드백(2026-09-05): "결제 완료했다고 사라지진 않았으면 좋겠어"
   // (체크한 품목 기준) — 처음엔 체크한 품목을 새 주문으로 떼어내는 방식으로
@@ -1588,7 +1623,8 @@ router.post("/pay-table", requireAdmin, async (req, res) => {
   const raw = Array.isArray((req.body || {}).selections) ? req.body.selections : null;
   if (!raw || raw.length === 0) return res.status(400).json({ error: "invalid_selection" });
 
-  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash } = resolvePaymentFields(req.body || {});
+  const { paymentMethod, vipDiscountType, manualDiscount, discountRequiresCash, tenders, splitInvalid } = resolvePaymentFields(req.body || {});
+  if (splitInvalid) return res.status(400).json({ error: "invalid_split" });
   if (discountRequiresCash) return res.status(400).json({ error: "discount_requires_cash" });
 
   // 주문을 전부 먼저 모아서 전부 검사한다. 하나라도 결제할 수 없는
@@ -1630,6 +1666,18 @@ router.post("/pay-table", requireAdmin, async (req, res) => {
   // 결산에서 되짚을 때 라운드를 다시 묶을 수 있는 유일한 근거다.
   // 카운터 이름을 "payments" 와 나눠 쓴다 — 그쪽은 손님이 직접 내는 온라인
   // 결제의 번호다(src/routes/payments.js). 섞으면 둘 다 번호가 튄다.
+  // 나눠 내기 — 수단마다 낸 금액의 합이 이번에 낼 돈(할인 뒤)과 꼭 맞아야 한다. 맞으면 라운드마다
+  // 몫을 나눠 둔다(앞 라운드부터 채운다, src/splitTender.js allocate). 아무것도 건드리기 전에 본다.
+  let shares = null;
+  if (tenders) {
+    const dues = picked.map(({ order, selectedIdx }, i) =>
+      selectedIdx.reduce((a, idx) => a + lineTotalOf(order.items[idx]), 0) - breakdown.vipParts[i] - breakdown.manualParts[i]
+    );
+    const due = dues.reduce((a, b) => a + b, 0);
+    if (splitTender.totalOf(tenders) !== due) return res.status(400).json({ error: "split_mismatch", due });
+    shares = splitTender.allocate(tenders, dues);
+  }
+
   const paymentId = await reserveId("table_payments");
   const paidAt = nowLocal();
   const tableNumber = picked[0].order.table_number;
@@ -1641,8 +1689,10 @@ router.post("/pay-table", requireAdmin, async (req, res) => {
       // 결제수단은 품목마다 적는다 — 같은 라운드를 나중에 다른 수단으로
       // 또 나눠 내도 각자 제 수단으로 잡히게(2026-09-07 사장님 요청).
       if (paymentMethod) order.items[idx].payment_method = paymentMethod;
+      if (shares) order.items[idx].split_id = paymentId;
     });
     order.payment_ids = [...(order.payment_ids || []), paymentId];
+    if (shares && shares[i].length) order.split_tenders = [...(order.split_tenders || []), { payment_id: paymentId, tenders: shares[i] }];
     // 재량 할인은 carrier 라운드 **하나에만** 통째로 적힌다. 나머지
     // 라운드에는 자기 몫의 VIP 할인만 적는다 — 그래서 discount_type 도
     // carrier 만 "…+manual" 이 되고, 결산의 할인 종류별 집계에서

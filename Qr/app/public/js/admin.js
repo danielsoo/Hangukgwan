@@ -588,7 +588,15 @@
   // 있게 한다. summaryText는 팝업 위에 보여줄 한 줄 안내(합계/할인/실수령
   // 액, 아래 fmtPaymentSummary 참고) — 이 팝업이 곧 확인 단계를 겸하므로
   // showConfirm을 따로 거치지 않는다. 취소를 누르면 null을 돌려준다.
-  function showPaymentMethodPopup(summaryText, discountActive) {
+  //
+  // 나눠 내기(2026-10-18 사장님: "현금만 그런 거 말고 여러개를 따로 해서 할 수 있게 해줄래?") —
+  // due(이번에 낼 돈, 할인 뒤)를 주면 「➗ 나눠 내기」가 열린다. 수단마다 금액을 적고 남은 돈이 0 이
+  // 되어야 「나눠서 결제」를 누를 수 있다. 돌려주는 값은 한 수단이면 그 문자열 그대로, 둘 이상이면
+  // { method: "split", tenders: [{ method, amount }] }. 서버(src/splitTender.js)가 합을 또 본다.
+  // 特約95折/VIP9折(현금만)이 걸려 있으면 나눠 내기도 잠근다 — 카드 프로그램 규칙은 「전부 현금」이다.
+  const SPLIT_METHODS = ["cash", "linepay", "card", "other"];
+  const payMethodName = (m) => T("paymentMethod" + m.charAt(0).toUpperCase() + m.slice(1));
+  function showPaymentMethodPopup(summaryText, discountActive, due) {
     return new Promise((resolve) => {
       const backdrop = $("#paymentMethodBackdrop");
       $("#paymentMethodSummary").textContent = summaryText || "";
@@ -596,10 +604,24 @@
       hint.hidden = !discountActive;
       hint.textContent = discountActive ? T("paymentMethodCashOnlyHint") : "";
       const btns = $("#paymentMethodBtns").querySelectorAll("[data-payment-method]");
+      const grid = $("#paymentMethodBtns");
+      const openBtn = $("#paySplitOpen");
+      const panel = $("#paySplitPanel");
+      const canSplit = Number.isFinite(due) && due > 0 && !discountActive;
+      const amounts = {};
+      const showGrid = (on) => {
+        grid.hidden = !on;
+        openBtn.hidden = !on || !Number.isFinite(due) || due <= 0;
+        panel.hidden = on;
+      };
       const finish = (result) => {
         backdrop.hidden = true;
         btns.forEach((b) => (b.onclick = null));
         $("#paymentMethodCancel").onclick = null;
+        openBtn.onclick = null;
+        $("#paySplitGo").onclick = null;
+        $("#paySplitBack").onclick = null;
+        showGrid(true);
         resolve(result);
       };
       btns.forEach((btn) => {
@@ -610,9 +632,77 @@
         btn.style.cursor = locked ? "not-allowed" : "pointer";
         btn.onclick = locked ? null : () => finish(method);
       });
+      const sum = () => SPLIT_METHODS.reduce((a, m) => a + (amounts[m] || 0), 0);
+      const paintLeft = () => {
+        const left = due - sum();
+        const el = $("#paySplitLeft");
+        el.className = "pay-split-left " + (left === 0 ? "is-ok" : left > 0 ? "is-short" : "is-over");
+        el.textContent =
+          left === 0 ? T("paySplitLeftOk") : left > 0 ? T("paySplitLeftFmt").replace("{n}", money(left)) : T("paySplitOverFmt").replace("{n}", money(-left));
+        const used = SPLIT_METHODS.filter((m) => amounts[m] > 0).length;
+        $("#paySplitGo").disabled = left !== 0 || used === 0;
+        SPLIT_METHODS.forEach((m) => {
+          const row = panel.querySelector(`[data-split-row="${m}"]`);
+          if (row) row.classList.toggle("has-amount", amounts[m] > 0);
+        });
+      };
+      const renderRows = () => {
+        $("#paySplitDueAmt").textContent = `NT$${money(due)}`;
+        $("#paySplitRows").innerHTML = SPLIT_METHODS.map(
+          (m) => `<div class="pay-split-row" data-split-row="${m}">
+            <label for="paySplit_${m}">${escapeHtml(payMethodName(m))}</label>
+            <input id="paySplit_${m}" type="text" inputmode="numeric" autocomplete="off" placeholder="0" data-split-amt="${m}" />
+            <button type="button" class="pay-split-rest" data-split-rest="${m}">${escapeHtml(T("paySplitRest"))}</button>
+          </div>`
+        ).join("");
+        panel.querySelectorAll("[data-split-amt]").forEach((inp) => {
+          inp.oninput = () => {
+            const digits = inp.value.replace(/[^0-9]/g, "");
+            inp.value = digits;
+            amounts[inp.dataset.splitAmt] = digits ? parseInt(digits, 10) : 0;
+            paintLeft();
+          };
+        });
+        // 「나머지」 — 다른 칸을 뺀 남은 돈을 이 칸에 넣는다. 「현금 1,000 → 카드 나머지」가 두 번 누름이다.
+        panel.querySelectorAll("[data-split-rest]").forEach((b) => {
+          b.onclick = () => {
+            const m = b.dataset.splitRest;
+            const others = sum() - (amounts[m] || 0);
+            amounts[m] = Math.max(0, due - others);
+            $(`#paySplit_${m}`).value = amounts[m] ? String(amounts[m]) : "";
+            paintLeft();
+          };
+        });
+        paintLeft();
+      };
+      openBtn.disabled = !canSplit;
+      openBtn.onclick = canSplit
+        ? () => {
+            showGrid(false);
+            renderRows();
+            const first = $("#paySplit_cash");
+            if (first) first.focus();
+          }
+        : null;
+      $("#paySplitBack").onclick = () => showGrid(true);
+      $("#paySplitGo").onclick = () => {
+        if (due - sum() !== 0) return;
+        const tenders = SPLIT_METHODS.filter((m) => amounts[m] > 0).map((m) => ({ method: m, amount: amounts[m] }));
+        if (!tenders.length) return;
+        finish(tenders.length === 1 ? tenders[0].method : { method: "split", tenders });
+      };
       $("#paymentMethodCancel").onclick = () => finish(null);
+      showGrid(true);
       backdrop.hidden = false;
     });
+  }
+  // 결제 방식 값(문자열 또는 나눠 내기 객체)을 서버로 보낼 모양으로.
+  function paymentMethodBody(method, body) {
+    if (method && typeof method === "object") {
+      body.paymentMethod = "split";
+      body.tenders = method.tenders;
+    } else if (method) body.paymentMethod = method;
+    return body;
   }
 
   // ---------- Admin-panel-wide font size (this browser only) ----------
@@ -1214,6 +1304,17 @@
       paymentMethodLinepay: "LinePay",
       paymentMethodCard: "신용카드",
       paymentMethodOther: "기타",
+      paymentMethodSplit: "나눠 냄",
+      paySplitOpen: "➗ 여러 결제수단으로 나눠 내기",
+      paySplitDue: "낼 돈",
+      paySplitBack: "← 하나로 내기",
+      paySplitGo: "나눠서 결제",
+      paySplitRest: "나머지",
+      paySplitLeftOk: "✓ 딱 맞아요",
+      paySplitLeftFmt: "남은 돈 NT${n}",
+      paySplitOverFmt: "NT${n} 더 많아요",
+      paySplitMismatchFmt: "나눠 낸 금액의 합이 낼 돈과 달라요.\n서버가 센 낼 돈: NT${n}\n금액을 다시 맞춰 주세요.",
+      paySplitInvalid: "나눠 낸 금액이 올바르지 않아요. 다시 넣어 주세요.",
       paymentMethodCashOnlyHint: "선택한 할인은 현금 결제에만 적용돼요.",
       manualDiscountModalTitle: "직접 할인 입력",
       manualDiscountModalHint: "할인 방식을 고르고 값을 입력하세요.",
@@ -2642,6 +2743,17 @@
       paymentMethodLinepay: "LinePay",
       paymentMethodCard: "信用卡",
       paymentMethodOther: "其他",
+      paymentMethodSplit: "分開付款",
+      paySplitOpen: "➗ 分開用多種方式付款",
+      paySplitDue: "應付",
+      paySplitBack: "← 單一方式付款",
+      paySplitGo: "分開付款",
+      paySplitRest: "剩餘",
+      paySplitLeftOk: "✓ 金額剛好",
+      paySplitLeftFmt: "還差 NT${n}",
+      paySplitOverFmt: "多了 NT${n}",
+      paySplitMismatchFmt: "分開付款的金額合計與應付金額不同。\n系統計算的應付：NT${n}\n請重新調整金額。",
+      paySplitInvalid: "分開付款的金額不正確，請重新輸入。",
       paymentMethodCashOnlyHint: "所選折扣僅適用於現金付款。",
       manualDiscountModalTitle: "輸入自訂折扣",
       manualDiscountModalHint: "請選擇折扣方式並輸入數值。",
@@ -7733,8 +7845,7 @@
   // 상태 전환(조리 시작/서빙 완료 등, 큐 카드의 드래그 등)은 그냥 두 인자를
   // 안 넘기면 예전과 동일하게 동작한다.
   async function updateOrderStatus(id, status, paymentMethod, vipDiscountType, manualDiscountValue) {
-    const body = { status };
-    if (paymentMethod) body.paymentMethod = paymentMethod;
+    const body = paymentMethodBody(paymentMethod, { status });
     if (vipDiscountType) body.vipDiscountType = vipDiscountType;
     // 재량 할인은 特約95折/VIP9折와 같이 걸 수 있으므로(2026-09-10) 서로
     // 무관하게 따로 실어 보낸다 — 서버도 따로 받는다(resolvePaymentFields).
@@ -7755,8 +7866,19 @@
     //
     // 실패하면 null. 기존 호출부들은 `if (!ok)` 로 검사하고 있어서 불리언을
     // 객체/null 로 바꿔도 그대로 동작한다.
-    if (!res.ok) return null;
+    if (!res.ok) {
+      await alertSplitRefused(res);
+      return null;
+    }
     return res.json().catch(() => null);
+  }
+  // 나눠 내기를 서버가 거절했으면 까닭을 말한다(조용히 「결제 실패」만 띄우지 않는다). 금액이 안
+  // 맞으면 서버가 센 「낼 돈」을 같이 보여준다 — 화면과 서버의 셈이 갈린 것이라 직원이 다시 맞추면 된다.
+  async function alertSplitRefused(res) {
+    const body = await res.clone().json().catch(() => null);
+    if (!body) return;
+    if (body.error === "split_mismatch") await showAlert(T("paySplitMismatchFmt").replace("{n}", money(body.due)));
+    else if (body.error === "invalid_split") await showAlert(T("paySplitInvalid"));
   }
 
   // 서버가 돌려준 주문 한 건을 로컬 목록에 반영하고 화면을 다시 그린다.
@@ -7830,8 +7952,7 @@
    * 보낸다. 나누는 일은 이제 아무도 하지 않는다.
    */
   async function payTableOrders(selections, paymentMethod, vipDiscountType, manualDiscountValue) {
-    const reqBody = { selections: selections.map((x) => ({ orderId: x.order.id, itemIndexes: x.indexes })) };
-    if (paymentMethod) reqBody.paymentMethod = paymentMethod;
+    const reqBody = paymentMethodBody(paymentMethod, { selections: selections.map((x) => ({ orderId: x.order.id, itemIndexes: x.indexes })) });
     if (vipDiscountType) reqBody.vipDiscountType = vipDiscountType;
     if (manualDiscountValue) {
       reqBody.manualDiscountMode = manualDiscountValue.mode;
@@ -7844,7 +7965,10 @@
     });
     // 실패하면 **전부** 실패다. 서버가 도중에 멈추는 일이 없으므로(주문을
     // 먼저 다 검사하고 나서 손댄다) 반만 결제된 테이블이 남지 않는다.
-    if (!res.ok) return { ok: false, results: selections.map(() => ({ ok: false, updatedOrder: null })) };
+    if (!res.ok) {
+      await alertSplitRefused(res);
+      return { ok: false, results: selections.map(() => ({ ok: false, updatedOrder: null })) };
+    }
     const body = await res.json().catch(() => null);
     const byId = new Map(((body && body.updatedOrders) || []).map((o) => [o.id, o]));
     return {
@@ -7880,8 +8004,13 @@
     const placeTag = isCounterOrder(o) ? fmtCounterOrderTag(o) : `${T("tableLabel")} ${o.table_number}${partyTag(o)}`;
     $("#refundTable").textContent = `${placeTag} · NT$${money(orderPaidAmount(o))}`;
     const methods = ["cash", "card", "linepay", "other"];
-    const firstPaid = (o.items || []).find((x) => x.payment_method);
-    const defMethod = (firstPaid && firstPaid.payment_method) || o.payment_method || "cash";
+    const firstPaid = (o.items || []).find((x) => x.payment_method && x.payment_method !== "split");
+    // 나눠 낸 주문은 현금(있으면), 아니면 가장 많이 낸 수단이 먼저 골라져 있다 — 서버 기본값과 같다.
+    const split = orderTendersOf(o);
+    const splitDef = split && split.length
+      ? (split.find((t) => t.method === "cash") || split.slice().sort((a, b) => b.amount - a.amount)[0]).method
+      : null;
+    const defMethod = splitDef || (firstPaid && firstPaid.payment_method) || o.payment_method || "cash";
     $("#refundMethod").innerHTML = methods
       .map((m) => `<option value="${m}"${m === defMethod ? " selected" : ""}>${escapeHtml(T("paymentMethod" + m.charAt(0).toUpperCase() + m.slice(1)))}</option>`)
       .join("");
@@ -10021,10 +10150,13 @@
             // 고르는 결제수단은 밥값 것이며 카드값은 언제나 현금이다.
             const cardAmount = pendingVipCardAmountFor(tableNumber, orderId);
             const gross = o ? o.total : 0;
+            // 나눠 내기에 쓸 「이번에 낼 돈」 — 서버(PATCH /:id)와 같은 셈: 아직 결제수단이 안 찍힌 품목 − 할인.
+            const due = o ? (o.items || []).filter((it) => !it.payment_method).reduce((a, it) => a + lineTotalOf(it), 0) - breakdown.total : 0;
             const method = await showPaymentMethodPopup(
               fmtPaymentSummary(gross, discountType, manualValue, breakdown) +
                 (cardAmount ? fmtPaymentVipCardPart(gross - breakdown.total, cardAmount) : ""),
-              discountRequiresCashOnly(discountType)
+              discountRequiresCashOnly(discountType),
+              due
             );
             if (!method) return;
             const updated = await updateOrderStatus(orderId, toStatus, method, discountType, manualValue);
@@ -10195,7 +10327,8 @@
           const summary =
             fmtPaymentSummary(total, discountType, manualValue, breakdown) +
             (cardAmount ? fmtPaymentVipCardPart(total - breakdown.total, cardAmount) : "");
-          const method = await showPaymentMethodPopup(summary, discountRequiresCashOnly(discountType));
+          // 나눠 내기는 밥값만 — 얹어 둔 VIP 카드값은 늘 현금이라 따로 받는다(위 cardAmount).
+          const method = await showPaymentMethodPopup(summary, discountRequiresCashOnly(discountType), total - breakdown.total);
           if (!method) return;
           // 2026-09-16 사장님: "한 손님이라면 그냥 전체 가격에서 까면
           // 된다니까? 이해가 안돼?"
@@ -16396,6 +16529,32 @@
    * 「인쇄가 안 될 때 화면이 이유를 말해야 한다」).
    */
   const RECEIPT_METHOD_ZH = { cash: "現金", card: "信用卡", linepay: "LINE Pay", online: "線上付款", other: "其他" };
+  // 영수증의 결제 방식 — 나눠 냈으면(2026-10-18) 「分開付款」 밑에 수단마다 한 줄씩.
+  function receiptPayOf(method, tenders, paidAt) {
+    const list = method && typeof method === "object" ? method.tenders : tenders;
+    if (Array.isArray(list) && list.length > 1) {
+      return { method: "分開付款", tenders: list.map((t) => ({ label: RECEIPT_METHOD_ZH[t.method] || t.method, amount: t.amount })), paidAt };
+    }
+    const one = Array.isArray(list) && list.length === 1 ? list[0].method : method;
+    return { method: RECEIPT_METHOD_ZH[one] || (typeof one === "string" ? one : "") || "", paidAt };
+  }
+  // 주문에 남은 나눠 내기를 수단마다 더한다(src/splitTender.js tendersOfOrder 와 같은 셈). 나눠 내기 말고
+  // 따로 낸 품목이 섞여 있으면 그 품목 금액도 제 수단에 더하고, 돌려준 돈은 돌려준 수단에서 뺀다 —
+  // 영수증에는 손님이 실제로 낸 것이 남는다. 나눠 낸 것이 없으면 null(예전처럼 한 수단).
+  function orderTendersOf(o) {
+    const recs = Array.isArray(o.split_tenders) ? o.split_tenders : [];
+    if (!recs.length) return null;
+    const sum = new Map();
+    const add = (m, a) => sum.set(m, (sum.get(m) || 0) + a);
+    recs.forEach((r) => (r.tenders || []).forEach((t) => add(t.method, Number(t.amount) || 0)));
+    (o.items || []).forEach((it) => {
+      if (it.payment_method && it.payment_method !== "split") add(it.payment_method, lineTotalOf(it));
+    });
+    (o.refunds || []).forEach((r) => {
+      if (sum.has(r.method)) sum.set(r.method, Math.max(0, sum.get(r.method) - (Number(r.amount) || 0)));
+    });
+    return SPLIT_METHODS.concat(["online"]).filter((m) => sum.get(m) > 0).map((m) => ({ method: m, amount: sum.get(m) }));
+  }
   function buildPaymentReceiptOrder(tableNumber, selections, discountTotal, discountLabel, paidAt) {
     const lines = [];
     selections.forEach((x) => x.indexes.forEach((i) => {
@@ -16439,7 +16598,7 @@
     let bytes;
     try {
       bytes = buildEscPosRasterTicket(order, storeName, ticketFontSizes, { tableLabel: opts.tableLabel || `桌號 ${tableNumber}${partyTag(order)}` }, {
-        receipt: { method: RECEIPT_METHOD_ZH[method] || method || "", paidAt: order.created_at },
+        receipt: receiptPayOf(method, opts.tenders, order.created_at),
         discount,
       });
     } catch (e) {
@@ -16503,7 +16662,7 @@
       o.payment_method,
       off,
       off > 0 ? receiptDiscountLabelOf(o.discount_type) : "",
-      { paidAt: paidTimes[paidTimes.length - 1] || o.updated_at || null, tableLabel }
+      { paidAt: paidTimes[paidTimes.length - 1] || o.updated_at || null, tableLabel, tenders: orderTendersOf(o0) }
     );
   }
 
@@ -19378,6 +19537,8 @@
       other: T("paymentMethodOther"), online: T("paymentMethodOnline"),
     };
     const methods = new Set();
+    // 나눠 낸 결제(2026-10-18)는 수단마다 **금액까지** 적는다 — 「현금 1,000」「신용카드 340」.
+    const splitSum = new Map();
     let none = false;
     let open = false;
     for (const o of group) {
@@ -19385,9 +19546,14 @@
       if (o.status !== "paid") { open = true; continue; }
       const here = new Set([o.payment_method, ...(o.items || []).map((it) => it.payment_method)].filter(Boolean));
       if (!here.size && !(o.payment_ids || []).length && !o.payment_id && o.kind !== "vip_card_sale") none = true;
-      here.forEach((m) => methods.add(m));
+      const split = orderTendersOf(o);
+      if (split) split.forEach((t) => splitSum.set(t.method, (splitSum.get(t.method) || 0) + t.amount));
+      else here.forEach((m) => methods.add(m));
     }
+    methods.delete("split");
+    splitSum.forEach((_, m) => methods.delete(m));
     const tags = [...methods].map((m) => `<span class="stl-pay-tag">${escapeHtml(label[m] || m)}</span>`);
+    splitSum.forEach((amt, m) => tags.push(`<span class="stl-pay-tag is-split">${escapeHtml(label[m] || m)} ${money(amt)}</span>`));
     if (none) tags.push(`<span class="stl-pay-tag is-none">${T("payTagNone")}</span>`);
     if (open) tags.push(`<span class="stl-pay-tag is-open">${T("payTagOpen")}</span>`);
     return tags.length ? `<span class="stl-pay-tags">${tags.join("")}</span>` : "";
@@ -19704,7 +19870,7 @@
     // 결제수단·인원수·할인은 나중에 "그때 어떻게 계산했더라"를 확인하는
     // 값들이다. 없으면 그 줄을 아예 안 만든다.
     const meta = [
-      o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentMethodLabelFor(o.payment_method)}` : null,
+      o.payment_method ? `${T("settlementOrdersPaidWith")} ${paymentWithText(o)}` : null,
       o.party_size ? fmtPartyDetail(o) : null,
       // 얼마가 깎였는지뿐 아니라 **무슨 할인이었는지**까지. 사장님이 지난
       // 주문을 되짚는 이유가 대개 그것이다(2026-09-16).
@@ -19717,6 +19883,12 @@
     return `<div class="stl-order-body">${lines}<div class="stl-order-meta">${escapeHtml(meta.join(" · "))}</div></div>`;
   }
 
+  // 「결제: 현금」 — 나눠 냈으면 「결제: 나눠 냄 (현금 1,000 · 신용카드 340)」.
+  const paymentWithText = (o) => {
+    const split = orderTendersOf(o);
+    if (!split) return paymentMethodLabelFor(o.payment_method);
+    return `${T("paymentMethodSplit")} (${split.map((t) => `${paymentMethodLabelFor(t.method)} ${money(t.amount)}`).join(" · ")})`;
+  };
   const paymentMethodLabelFor = (m) =>
     ({
       cash: T("paymentMethodCash"), linepay: T("paymentMethodLinepay"), card: T("paymentMethodCard"),

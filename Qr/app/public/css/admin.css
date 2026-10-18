@@ -1743,6 +1743,37 @@ body:not(.role-staff) .staff-only { display: none !important; }
    흐트러져서, 「지금은 못 누른다」가 「버튼이 사라졌다」로 읽힌다. */
 .pay-method-grid button:disabled { cursor: not-allowed; }
 .payment-method-modal .modal-actions { margin-top: 16px; }
+/* 나눠 내기(2026-10-18). 여는 단추는 위 네 칸보다 작게 — 대부분은 한 수단으로 낸다. */
+.pay-split-open {
+  width: 100%; margin-top: 12px; padding: 14px; border-radius: 14px;
+  border: 1.5px dashed #cfc5b6; background: #fff; color: #2f3542;
+  font-size: 19px; font-weight: 700; cursor: pointer;
+}
+.pay-split-open:hover { border-color: #2f3542; }
+.pay-split-open:disabled { opacity: 0.4; cursor: not-allowed; }
+.pay-split { margin-top: 16px; }
+.pay-split-due { font-size: 20px; color: var(--muted); font-weight: 700; }
+.pay-split-due b { color: var(--ink, #241f1f); font-size: 26px; margin-left: 6px; }
+.pay-split-rows { display: grid; gap: 10px; margin-top: 12px; }
+.pay-split-row { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; }
+.pay-split-row label { font-size: 21px; font-weight: 800; }
+.pay-split-row input {
+  min-width: 0; height: 56px; padding: 0 14px; border: 1.5px solid var(--line); border-radius: 12px;
+  font-size: 26px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums;
+}
+.pay-split-row input:focus { outline: none; border-color: #2f3542; }
+.pay-split-row.has-amount input { border-color: #2f3542; background: #f7f5f1; }
+.pay-split-row .pay-split-rest {
+  height: 56px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--line);
+  background: #fff; font-size: 17px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.pay-split-left { margin-top: 12px; font-size: 21px; font-weight: 800; }
+.pay-split-left.is-short { color: var(--red); }
+.pay-split-left.is-over { color: var(--red); }
+.pay-split-left.is-ok { color: #1f7a3f; }
+.pay-split-actions { display: flex; gap: 10px; margin-top: 14px; }
+.pay-split-actions button { flex: 1; min-height: 64px; font-size: 21px; font-weight: 800; border-radius: 14px; }
+.pay-split-actions .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .payment-method-modal #paymentMethodCancel { padding: 14px 34px; font-size: 20px; border-radius: 12px; }
 /* 폰처럼 좁은 화면에서도 2×2 를 지킨다. 한 줄에 하나씩 쌓으면 창이 세로로
    길어져 「기타」가 화면 밖으로 밀린다. */
@@ -1750,6 +1781,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
   .pay-method-grid { gap: 10px; }
   .pay-method-grid button { min-height: 80px; font-size: 21px; padding: 10px 6px; }
   .payment-method-modal #paymentMethodSummary { font-size: 17px; }
+  .pay-split-row { grid-template-columns: 84px 1fr auto; }
+  .pay-split-row label { font-size: 17px; }
+  .pay-split-row input { font-size: 21px; height: 50px; }
 }
 
 /* 주문 아이템 목록 접기/펼치기 (order-card / table-detail item lines) */
@@ -2199,6 +2233,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-pay-tags { display: inline-flex; gap: 4px; margin-right: 8px; vertical-align: middle; }
 .stl-pay-tag { font-size: 12px; font-weight: 700; color: #3d4a5c; background: #eef1f5; border-radius: 999px; padding: 1px 8px; }
 .stl-pay-tag.is-none { color: #fff; background: #b3261e; }
+/* 나눠 낸 결제 — 수단마다 금액까지(2026-10-18). */
+.stl-pay-tag.is-split { color: #1f4e79; background: #e4eef8; font-variant-numeric: tabular-nums; }
 .stl-pay-tag.is-open { color: #8a4b00; background: #ffe8c2; }
 .stl-order-caret { color: var(--muted); text-align: center; }
 .stl-order-body { padding: 2px 4px 14px 72px; font-size: 14.5px; color: var(--ink); }

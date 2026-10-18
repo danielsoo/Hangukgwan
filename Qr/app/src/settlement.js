@@ -1,6 +1,7 @@
 // Daily settlement (결산) computation — shared by the live admin view
 // (src/routes/settlements.js GET /) and the nightly snapshot the cron job
 // writes into store.daily_settlements for permanent record-keeping.
+const splitTender = require("./splitTender");
 const { taipeiDateString, nowLocal } = require("./time");
 
 // "Problem" = still open (not paid, not cancelled) AND has been sitting
@@ -506,7 +507,10 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   for (const o of paidOrders) {
     const byMethod = new Map();
     for (const it of o.items || []) {
-      const method = it.payment_method || o.payment_method || "unspecified";
+      // 나눠 낸 품목(2026-10-18, src/splitTender.js)은 결제 한 번씩 따로 모았다가 아래에서 그 결제의
+      // 수단별 금액대로 다시 나눈다.
+      const method =
+        it.payment_method === "split" ? `split:${it.split_id}` : it.payment_method || o.payment_method || "unspecified";
       // 줄 금액은 한 곳에서만 센다(위 lineAmount) — 옵션·추가 옵션이 빠지면
       // 결제수단별 비중이 실제와 어긋난다.
       byMethod.set(method, (byMethod.get(method) || 0) + lineAmount(it));
@@ -519,18 +523,36 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     if (!byMethod.size && refunds.length) byMethod.set(o.payment_method || "unspecified", 0);
     const methods = [...byMethod.entries()];
     let assigned = 0;
-    methods.forEach(([method, amount], idx) => {
-      const last = idx === methods.length - 1;
-      // 마지막 하나는 남은 전부를 가져간다 — 반올림으로 1원이 새거나
-      // 남지 않게 하려는 것이다.
-      const share = last ? net - assigned : gross > 0 ? Math.round((amount / gross) * net) : 0;
-      assigned += share;
+    const credit = (method, share, amount) => {
       const entry = paymentMethodMap.get(method) || { method, revenue: 0, gross: 0, order_ids: new Set() };
       entry.revenue += share;
       entry.gross += amount;
       // 건수는 팀 단위(위 doneKeyOf).
       addKey(entry.order_ids, o);
       paymentMethodMap.set(method, entry);
+    };
+    methods.forEach(([method, amount], idx) => {
+      const last = idx === methods.length - 1;
+      // 마지막 하나는 남은 전부를 가져간다 — 반올림으로 1원이 새거나
+      // 남지 않게 하려는 것이다.
+      const share = last ? net - assigned : gross > 0 ? Math.round((amount / gross) * net) : 0;
+      assigned += share;
+      if (!method.startsWith("split:")) return credit(method, share, amount);
+      // 나눠 낸 몫은 그 결제에서 수단마다 낸 금액 비율대로 — 할인이 없으면 낸 금액 그대로다.
+      const tenders = splitTender.tendersFor(o, method.slice(6));
+      if (!tenders) return share || amount ? credit("unspecified", share, amount) : undefined;
+      const paid = splitTender.totalOf(tenders);
+      let given = 0;
+      let givenGross = 0;
+      tenders.forEach((t, k) => {
+        const lastT = k === tenders.length - 1;
+        const ratio = paid > 0 ? t.amount / paid : 0;
+        const part = lastT ? share - given : Math.round(ratio * share);
+        const partGross = lastT ? amount - givenGross : Math.round(ratio * amount);
+        given += part;
+        givenGross += partGross;
+        credit(t.method, part, partGross);
+      });
     });
     for (const r of refunds) {
       const method = r.method || o.payment_method || "unspecified";
