@@ -3098,11 +3098,16 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-view-tab.has-work:not(.is-on) { border-color: #e8b100; color: #8a6a00; }
 /* 영수증마다 칩 — 급여의 직원 칩과 같은 쓰임(2026-10-17). 102장이라 옆으로 구른다. */
 .ing-check-bar { margin: 0 0 12px; }
-.ing-check-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13.5px; color: var(--muted); }
-.ing-check-head button {
-  border: 1px solid var(--line); background: #fff; border-radius: 8px;
-  padding: 2px 10px; cursor: pointer; font-size: 13px;
+.ing-check-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.ing-step {
+  border: 1px solid var(--line); background: #fff; border-radius: 10px;
+  padding: 10px 22px; cursor: pointer; font: inherit; font-size: 16px; font-weight: 700;
+  min-height: 44px;                       /* 패드로 누르는 단추다 */
 }
+.ing-step:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.1); }
+.ing-step:active { background: #f1f1f4; }
+.ing-check-at { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--muted); }
+.ing-check-at b { font-size: 19px; color: var(--ink); font-variant-numeric: tabular-nums; }
 .ing-check-chips {
   display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
   scrollbar-width: thin;

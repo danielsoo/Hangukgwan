@@ -713,8 +713,8 @@ const PASTED = `읽었습니다:
 
     const chips = page.locator(".ing-check-chip");
     check("★★ 확인 대기 영수증마다 칩이 있다", (await chips.count()) >= 3, String(await chips.count()));
-    const bar = await page.locator("#ingCheckCount").innerText();
-    check("★ 몇 장 확인할지 적힌다", /확인할 영수증/.test(bar), bar);
+    const at = await page.locator("#ingCheckAt").innerText();
+    check("★ 몇 번째 / 몇 장인지 적힌다", /[0-9]/.test(at), at);
     const names = await chips.evaluateAll((els) => els.map((e) => e.innerText.replace(/\s+/g, " ")));
     check("★★ 칩에 업체와 날짜가 보인다", names.some((x) => x.includes("阿寶水產") && x.includes("09/03")), names.join(" / ").slice(0, 160));
     check("★★ 확인 필요한 줄이 있으면 칩에 표시", names.some((x) => x.includes("旺旺來") && /1/.test(x)), names.join(" / ").slice(0, 160));
@@ -730,6 +730,18 @@ const PASTED = `읽었습니다:
 
     // 「다음 ▶」으로도 넘어간다
     const before = await page.locator("#ingEntryVendor").inputValue();
+    // 패드로 누르는 단추다 — 작으면 도움이 안 된다(2026-10-17 사장님)
+    const size = await page.locator("#ingCheckNext").evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    });
+    check("★★ 「다음」 단추가 손가락으로 누를 만하다", size.h >= 40 && size.w >= 80, JSON.stringify(size));
+    const where = await page.locator("#ingCheckNext").evaluate((el) => {
+      const head = el.closest(".ing-check-head");
+      const chips = document.getElementById("ingCheckChips");
+      return head && chips ? head.getBoundingClientRect().top < chips.getBoundingClientRect().top : false;
+    });
+    check("★ 칩 줄보다 위에 있다 — 눈이 먼저 닿는 자리", where, "");
     await page.locator("#ingCheckNext").click();
     await page.waitForTimeout(1500);
     check("★★ 「다음 ▶」으로 넘어간다", (await page.locator("#ingEntryVendor").inputValue()) !== before, before + " → " + (await page.locator("#ingEntryVendor").inputValue()));

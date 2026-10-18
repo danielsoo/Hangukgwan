@@ -1315,8 +1315,12 @@
     bar.hidden = !list.length;
     if (!list.length) { box.innerHTML = ""; return; }
 
+    // 몇 번째를 보고 있는지 — 102장을 넘기는 중에 어디까지 왔는지가 보여야 한다
+    const at = attached ? list.findIndex((i) => i.id === attached.id) : -1;
+    const atEl = $("#ingCheckAt");
+    if (atEl) atEl.textContent = at < 0 ? String(list.length) : (at + 1) + " / " + list.length;
     const cnt = $("#ingCheckCount");
-    if (cnt) cnt.textContent = fmt("ingCheckCountFmt", { n: list.length });
+    if (cnt) cnt.textContent = T(at < 0 ? "ingCheckPick" : "ingCheckLeft");
 
     box.innerHTML = list.map((i) => {
       const head = (i.read && i.read.head) || {};
