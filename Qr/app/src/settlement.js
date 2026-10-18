@@ -21,7 +21,7 @@ const { taipeiDateString, nowLocal } = require("./time");
 // 표시 자체를 숨기기"/"지금 그대로 두기").
 // 목록은 src/orderStatus.js 한 곳에서만 정한다.
 const OPEN_STATUSES = require("./orderStatus").OPEN;
-// 「🍽 식사 중」으로 봐주는 것은 앉은 지 이만큼까지(아래 isDining).
+// 「🍽 식사 중」으로 봐주는 것은 그 손님의 마지막 주문부터 이만큼까지(아래 isDining).
 const DINING_MAX_MS = 3 * 60 * 60 * 1000;
 const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 
@@ -416,15 +416,25 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // opts.seatings = { 테이블: 지금 손님이 앉은 시각 } — 그 자리에 인원이 적혀 있고, 주문이 그 뒤에
   // 들어온 것만 식사 중이다. 앞 손님이 남긴 것은 그대로 미결제다. 포장 카운터는 앉는 자리가 아니다.
   //
-  // **앉은 지 3시간까지만**(같은 날 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아"). 「나갔다」는
+  // **3시간까지만**(같은 날 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아"). 「나갔다」는
   // 직원이 결제·「손님 나감」을 눌러야 알 수 있는데, 안 내고 나가거나 누르기를 잊으면 그 자리는 영영
-  // 「앉아 계심」으로 남는다. 그래서 앉은 지 3시간이 넘으면 앉아 계셔도 다시 「⚠ 미결제」다.
+  // 「앉아 계심」으로 남는다. 그래서 3시간이 넘으면 앉아 계셔도 다시 「⚠ 미결제」다.
+  //
+  // 3시간은 **그 손님의 마지막 주문부터** 센다(같은 날 사장님: "마지막 주문 기준 3시간으로 해줘") — 계속
+  // 더 시키는 손님은 아직 드시는 중이고, 마지막 주문 뒤로 3시간 아무것도 없으면 나간 것으로 본다.
   const seatings = opts.seatings || {};
+  const lastOrderAt = {};
+  for (const o of rangeAll) {
+    const t = String(o.table_number);
+    const seat = seatings[t];
+    if (!seat || o.status === "cancelled" || String(o.created_at || "") < seat) continue;
+    if (!lastOrderAt[t] || o.created_at > lastOrderAt[t]) lastOrderAt[t] = o.created_at;
+  }
   const isDining = (o) => {
-    const seat = seatings[String(o.table_number)];
-    if (!seat || String(o.created_at || "") < seat) return false;
-    const seatMs = new Date(seat.replace(" ", "T")).getTime();
-    return nowMs - seatMs < DINING_MAX_MS;
+    const t = String(o.table_number);
+    const seat = seatings[t];
+    if (!seat || String(o.created_at || "") < seat || !lastOrderAt[t]) return false;
+    return nowMs - new Date(lastOrderAt[t].replace(" ", "T")).getTime() < DINING_MAX_MS;
   };
   const diningOrders = staleOpen.filter(isDining);
   const problemOrders = staleOpen.filter((o) => !isDining(o));

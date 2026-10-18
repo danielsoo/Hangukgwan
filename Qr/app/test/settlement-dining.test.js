@@ -50,14 +50,25 @@ check("어느 자리인지 적는다", r.dining_tables.sort().join() === "9,A3",
 check("2시간 안 된 것은 어디에도 안 잡힌다", ![...r.problem_orders.map((o) => o.id)].includes(3), "");
 check("매출은 그대로(낸 것이 없다)", r.total_revenue === 0 && before.total_revenue === 0, "");
 
-// 2026-10-18 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아" — 안 내고 나가도(먹튀·누르기 잊음)
-// 자리에 인원이 남는다. 앉은 지 3시간이 넘으면 앉아 계셔도 다시 미결제다.
-const long = computeSettlement(orders, day, day, { seatings: { A3: ago(3.1), 9: ago(2.4) } });
-check(`★★ 앉은 지 3시간 넘은 A3 는 다시 「⚠ 미결제」 (미결제 ${long.problem_order_count} · 식사 중 ${long.dining_order_count})`,
-  long.problem_orders.map((o) => o.id).sort().join() === "1,2,4,5" && long.dining_order_count === 1 && long.dining_tables.join() === "9",
-  JSON.stringify({ p: long.problem_orders.map((o) => o.id), d: long.dining_tables }));
-const edge = computeSettlement(orders, day, day, { seatings: { A3: ago(2.99) } });
-check("3시간 바로 전까지는 식사 중", edge.dining_tables.includes("A3"), JSON.stringify(edge.dining_tables));
+// 2026-10-18 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아" → "마지막 주문 기준 3시간으로 해줘".
+// 안 내고 나가도(먹튀·누르기 잊음) 자리에 인원이 남는다. 그 손님의 **마지막 주문**부터 3시간이 지나면
+// 앉아 계셔도 다시 미결제다. 계속 더 시키는 손님은 앉은 지 오래돼도 식사 중이다.
+const longStay = [
+  order(11, "A3", 4.5, 2800), // 4시간 반 전에 앉아 첫 주문
+  order(12, "A3", 3.5, 2370), // 3시간 반 전 두 번째
+  order(13, "A3", 1.0, 400),  // 한 시간 전에 또 시켰다 — 아직 드시는 중
+];
+if (ago(5).slice(0, 10) !== day) { console.log("  (자정 직후라 5시간 전이 어제 — 마지막 주문 시험 건너뜀)"); console.log(`\n${pass} passed, ${fail} failed`); process.exit(fail ? 1 : 0); }
+const keep = computeSettlement(longStay, day, day, { seatings: { A3: ago(4.6) } });
+check(`★★ 앉은 지 4시간 반이어도 마지막 주문이 1시간 전이면 「식사 중」 (식사 중 ${keep.dining_order_count} · 미결제 ${keep.problem_order_count})`,
+  keep.dining_order_count === 2 && keep.problem_order_count === 0, JSON.stringify({ d: keep.dining_order_count, p: keep.problem_order_count }));
+const gone = computeSettlement(longStay.slice(0, 2), day, day, { seatings: { A3: ago(4.6) } });
+check(`★★ 마지막 주문(3시간 반 전)부터 3시간이 지나면 앉아 계셔도 다시 「⚠ 미결제」 (미결제 ${gone.problem_order_count})`,
+  gone.problem_order_count === 2 && gone.dining_order_count === 0, JSON.stringify({ d: gone.dining_order_count, p: gone.problem_order_count }));
+const edge = computeSettlement([order(21, "A3", 2.99, 500)], day, day, { seatings: { A3: ago(5) } });
+check("마지막 주문 3시간 바로 전까지는 식사 중", edge.dining_tables.includes("A3"), JSON.stringify(edge.dining_tables));
+const cancelledLast = computeSettlement([order(31, "A3", 3.2, 500), order(32, "A3", 0.5, 300, "cancelled")], day, day, { seatings: { A3: ago(3.5) } });
+check("취소된 주문은 「마지막 주문」으로 안 친다", cancelledLast.problem_order_count === 1, JSON.stringify({ p: cancelledLast.problem_order_count }));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
