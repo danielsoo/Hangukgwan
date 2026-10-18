@@ -649,7 +649,13 @@ const PASTED = `읽었습니다:
     await openInbox();
 
     const title = () => page.locator(".ing-entry .ing-block-title").innerText();
-    check("★ 아무것도 안 골랐으면 「손으로 넣기」", /손으로 넣기/.test(await title()), await title());
+    // 아무것도 안 골랐을 때: 직접 넣기면 그 제목, 확인하기면 제목 대신 「고르세요/없어요」 — 「손으로 넣기」 빈 표가 확인 칸에 섞이지 않는다
+    const st0 = await page.evaluate(() => ({
+      manual: document.querySelector('[data-entry-mode="manual"]').classList.contains("is-on"),
+      titleHidden: document.querySelector(".ing-entry .ing-block-title").hidden,
+      empty: document.getElementById("ingCheckEmpty").hidden ? "" : document.getElementById("ingCheckEmpty").textContent,
+    }));
+    check("★ 아무것도 안 골랐으면 — 직접 넣기면 그 제목, 확인하기면 빈 표 대신 안내", st0.manual ? /직접 넣기/.test(await title()) : st0.titleHidden && !!st0.empty, JSON.stringify(st0));
 
     const one = JSON.stringify([{
       file: "name-1.png", vendor: "龍江興南北商行", date: "2026-09-05", store: "main", total: 60,
@@ -670,9 +676,31 @@ const PASTED = `읽었습니다:
 
     await page.locator("#ingEntryClear").click();
     await page.waitForTimeout(600);
-    const t2 = await title();
-    check("★★ 비우면 다시 「손으로 넣기」로 — 표는 비었는데 제목만 남으면 안 된다", /손으로 넣기/.test(t2), t2);
+    // 2026-10-18 사장님: "손으로 넣는거나 직접 넣는게 같이 있는 게 조금 불편해" — 확인하기에서 비우면
+    // 빈 표가 아니라 「고르세요」가 뜬다. 빈 표는 「직접 넣기」에만 있다.
+    const formHidden = await page.locator("#ingEntryForm").evaluate((el) => el.hidden);
+    const empty = await page.locator("#ingCheckEmpty").innerText().catch(() => "");
+    check("★★ 확인하기에서 비우면 빈 표 대신 「고르세요」 — 제목도 접힌다", formHidden && /고르세요/.test(empty) && (await page.locator(".ing-entry .ing-block-title").evaluate((el) => el.hidden)), JSON.stringify({ formHidden, empty }));
     check("★ 비우면 사진도 떼어진다", await page.locator("#ingEntryPhoto").evaluate((el) => el.hidden), "");
+
+    // 「✍ 직접 넣기」 — 칩도 고른 영수증도 없이 빈 표만
+    await page.locator('.ing-inbox-row:has-text("name-1.png")').locator("[data-inbox-use]").click().catch(async () => { await openInbox(); await page.locator('.ing-inbox-row:has-text("name-1.png")').locator("[data-inbox-use]").click(); });
+    await page.waitForTimeout(1500);
+    await page.locator('[data-entry-mode="manual"]').click();
+    await page.waitForTimeout(500);
+    const manual = await page.evaluate(() => ({
+      bar: document.getElementById("ingCheckBar").hidden,
+      form: !document.getElementById("ingEntryForm").hidden,
+      photo: document.getElementById("ingEntryPhoto").hidden,
+      lines: document.querySelectorAll("#ingEntryLines .ing-line[data-i]").length,
+      name: (document.querySelector("#ingEntryLines .ing-line[data-i] input") || {}).value || "",
+    }));
+    check("★★ 「✍ 직접 넣기」 — 칩 줄이 사라지고 빈 표만, 보던 영수증 사진은 떼어진다", manual.bar && manual.form && manual.photo && manual.lines === 1 && !manual.name, JSON.stringify(manual));
+    check("★ 직접 넣기 제목", /직접 넣기/.test(await title()), await title());
+    await page.locator('[data-entry-mode="check"]').click();
+    await page.waitForTimeout(1500);
+    const back = await title();
+    check("★★ 「✓ 영수증 확인」을 누르면 첫 장이 바로 열린다", /확인하기/.test(back) && /龍江興南北商行/.test(back), back);
 
     await openInbox();
     const row = page.locator('.ing-inbox-row:has-text("name-1.png")');

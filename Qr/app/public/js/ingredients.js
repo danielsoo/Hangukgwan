@@ -1312,7 +1312,7 @@
     const box = $("#ingCheckChips");
     if (!bar || !box) return;
     const list = (inbox.items || []).filter((i) => i.status === "read");
-    bar.hidden = !list.length;
+    bar.hidden = !list.length || entryMode === "manual";
     if (!list.length) { box.innerHTML = ""; return; }
 
     // 몇 번째를 보고 있는지 — 102장을 넘기는 중에 어디까지 왔는지가 보여야 한다
@@ -1372,6 +1372,7 @@
     const el = $("#ingInboxList");
     if (!el) return;
     renderInboxTabs();
+    renderEntryMode();           // 처음 받으면 확인할 것이 있는지로 확인하기/직접 넣기를 정한다
     renderCheckChips();          // 영수증마다 칩 — 표 바로 위에서 오간다
     markCheckTab();              // 다른 칸에 있어도 몇 장 기다리는지 보이게
     autoFoldInbox();             // 확인할 게 없을 때만 올리는 자리를 펴 둔다
@@ -1526,6 +1527,8 @@
 
   /** 전에 붙여넣어 둔 결과를 다시 표에 올린다(서버가 들고 있다). */
   async function useRead(id) {
+    // 영수증을 고르면 확인하기다(대기함 줄·칩·다음 ▶ 어디서 눌러도)
+    if (entryMode !== "check") { entryMode = "check"; renderEntryMode(); }
     const res = await fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/read");
     if (!res.ok) return logLine(esc(T("ingInboxFailed")));
     fillFromRead(id, await res.json());
@@ -1735,7 +1738,57 @@
    * 같은 표가 두 가지로 쓰인다: 대기함에서 고른 영수증을 **확인**하거나,
    * 사진 없이 **손으로** 적거나. 제목이 그걸 말한다.
    */
+  // ───────── 확인하기 / 직접 넣기 ─────────
+  //
+  // 2026-10-18 사장님: "손으로 넣는거나 직접 넣는게 같이 있는 게 조금 불편해" — 한 칸에 칩(확인 대기 102장)과
+  // 빈 표가 같이 있어서, 지금 확인하는 중인지 새로 적는 중인지 헷갈렸다. 둘 중 하나를 고른다.
+  //   · 확인하기: 칩·◀ 다음 ▶ 과 **고른 영수증의 표만**. 안 골랐으면 표 대신 「고르세요」.
+  //   · 직접 넣기: 칩 없이 빈 표만. 넘어오면 붙어 있던 영수증을 떼고 표를 비운다(읽은 결과는 대기함에 그대로).
+  // 처음에는 확인할 것이 있으면 확인하기, 없으면 직접 넣기.
+  let entryMode = null;
+  const pendingReads = () => (inbox.items || []).filter((i) => i.status === "read");
+
+  function setEntryMode(m, opts) {
+    entryMode = m === "manual" ? "manual" : "check";
+    if (entryMode === "manual" && attached) {
+      entryLines = [blankLine()];
+      renderLines();
+      detachPhoto();
+    }
+    renderEntryMode();
+    // 확인하기를 누르면 첫 장을 바로 연다 — 빈 칸만 보이면 할 일이 안 보인다
+    // 직접 적던 줄이 있으면 덮지 않는다(직접 넣기로 돌아가면 그대로 있다)
+    const typed = entryLines.some((l) => String(l.name || "").trim() || String(l.amount || "").trim() || String(l.price || "").trim());
+    if (entryMode === "check" && opts && opts.open && !attached && !typed) {
+      const first = pendingReads()[0];
+      if (first) useRead(first.id);
+    }
+  }
+
+  function renderEntryMode() {
+    const n = pendingReads().length;
+    if (entryMode === null && inbox.items) entryMode = n ? "check" : "manual";
+    const mode = entryMode || "manual";
+    document.querySelectorAll("[data-entry-mode]").forEach((b) => b.classList.toggle("is-on", b.dataset.entryMode === mode));
+    const nEl = $("#ingModeCheckN");
+    if (nEl) nEl.textContent = n ? " " + n : "";
+    const checking = mode === "check";
+    const bar = $("#ingCheckBar");
+    if (bar && !checking) bar.hidden = true;
+    const form = $("#ingEntryForm");
+    if (form) form.hidden = checking && !attached;
+    // 확인하기에서 아직 안 골랐으면 제목도 접는다 — 「직접 넣기」라고 쓰여 있으면 또 헷갈린다
+    const title = document.querySelector(".ing-entry .ing-block-title");
+    if (title) title.hidden = checking && !attached;
+    const empty = $("#ingCheckEmpty");
+    if (empty) {
+      empty.hidden = !(checking && !attached);
+      empty.textContent = T(n ? "ingCheckEmptyPick" : "ingCheckEmptyNone");
+    }
+  }
+
   function renderEntryTitle() {
+    renderEntryMode();
     const mode = $("#ingEntryMode");
     const which = $("#ingEntryWhich");
     if (!mode) return;
@@ -1908,6 +1961,9 @@
         renderLines();
       };
       $("#ingEntrySave").onclick = () => saveEntry();
+      document.querySelectorAll("[data-entry-mode]").forEach((b) => {
+        b.onclick = () => setEntryMode(b.dataset.entryMode, { open: true });
+      });
       $("#ingEntryClear").onclick = () => {
         entryLines = [blankLine()];
         renderLines();

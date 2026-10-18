@@ -495,6 +495,13 @@
           </div>
         </div>
         <div class="ing-block ing-entry">
+          <!-- 2026-10-18 사장님: "손으로 넣는거나 직접 넣는게 같이 있는 게 조금 불편해" — 대기함 영수증을
+               확인하는 일과 종이 없이 적어 넣는 일을 **둘 중 하나**로 고른다. 확인하기에서는 칩과 고른 영수증만,
+               직접 넣기에서는 빈 표만 보인다. -->
+          <div class="ing-entry-modes" id="ingEntryModes">
+            <button type="button" class="ing-entry-mode-btn" data-entry-mode="check"><span data-i18n="ingModeCheck">✓ 영수증 확인</span><b class="ing-mode-n" id="ingModeCheckN"></b></button>
+            <button type="button" class="ing-entry-mode-btn" data-entry-mode="manual" data-i18n="ingModeManual">✍ 직접 넣기</button>
+          </div>
           <h3 class="ing-block-title">
             <span id="ingEntryMode" data-i18n="ingEntryManual">🧾 손으로 넣기</span>
             <span class="ing-entry-which" id="ingEntryWhich"></span>
@@ -510,6 +517,8 @@
             </div>
             <div class="ing-check-chips" id="ingCheckChips"></div>
           </div>
+          <p class="ing-check-empty" id="ingCheckEmpty" hidden></p>
+          <div id="ingEntryForm">
           <div class="ing-entry-head">
             <label class="ing-field">
               <span data-i18n="ingStore">지점</span>
@@ -552,6 +561,7 @@
           <div class="ing-entry-foot">
             <span data-i18n="ingEntryTotal">합계</span>
             <strong id="ingEntryTotal">NT$0</strong>
+          </div>
           </div>
         </div>
         </div>

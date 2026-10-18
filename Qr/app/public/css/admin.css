@@ -3099,6 +3099,16 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-view-tab:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
 .ing-view-tab.is-on { background: #2f3542; border-color: #2f3542; color: #fff; }
 .ing-view-tab.has-work:not(.is-on) { border-color: #e8b100; color: #8a6a00; }
+/* 확인하기 / 직접 넣기 — 둘 중 하나(2026-10-18 사장님: "손으로 넣는거나 직접 넣는게 같이 있는 게 조금 불편해"). */
+.ing-entry-modes { display: flex; gap: 8px; margin: 0 0 14px; }
+.ing-entry-mode-btn {
+  border: 1px solid var(--line); background: #fff; border-radius: 10px; min-height: 44px;
+  padding: 8px 18px; cursor: pointer; font: inherit; font-size: 16px; font-weight: 700; color: var(--muted);
+}
+.ing-entry-mode-btn.is-on { background: #2f3542; border-color: #2f3542; color: #fff; }
+.ing-mode-n { margin-left: 4px; color: #e8b100; }
+.ing-entry-mode-btn.is-on .ing-mode-n { color: #ffd54a; }
+.ing-check-empty { margin: 8px 0 4px; padding: 18px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); font-size: 15px; text-align: center; }
 /* 영수증마다 칩 — 급여의 직원 칩과 같은 쓰임(2026-10-17). 102장이라 옆으로 구른다. */
 .ing-check-bar { margin: 0 0 12px; }
 .ing-check-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
