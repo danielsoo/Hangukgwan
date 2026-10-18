@@ -682,6 +682,8 @@ const PASTED = `읽었습니다:
     await page.locator("#ingEntryClear").click();
     check("★ 비워도 업체·날짜가 그대로면 말이 남는다 — 그 칸 값으로는 아직 있는 영수증이다",
       !(await note.evaluate((el) => el.hidden)), "");
+    await page.locator('[data-entry-mode="manual"]').click();   // 표를 다시 연다
+    await page.waitForTimeout(500);
     await page.locator("#ingEntryVendor").fill("새로운업체");
     await page.locator("#ingEntryVendor").dispatchEvent("change");
     await page.waitForTimeout(600);
