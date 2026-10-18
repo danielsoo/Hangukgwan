@@ -215,6 +215,45 @@ const ING = [
     check("★★ 그 달 숫자가 떠 있다", /100,000/.test(rev), rev);
   }
 
+  out.push("\n[매출이 기록되기 전 달 — 식자재만 있고 매출이 없다]");
+  {
+    // 2026-10-17 사장님: "이 웹사이트를 만든 건 9월부터라서 근데 식자재
+    // 데이터는 그 전 부터 있어서 저렇게 뜨네. 연 결산에 지장갈까봐"
+    //
+    // 5월 식자재를 넣어 두고 5월을 열어 본다. 매출은 9월부터만 있다.
+    await page.evaluate(async () => {
+      await fetch("/api/ingredients/rows", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          store: "main", date: "2026-05-20", vendor: "房信菓菜行",
+          lines: [{ name: "紅蘿蔔", qty: 10, unit: "斤", price: 100, amount: 637169 }],
+        }),
+      });
+    });
+    await page.waitForTimeout(600);
+
+    await page.locator("#periodMonthInput").fill("2026-05");
+    await page.locator("#periodMonthInput").dispatchEvent("change");
+    await page.waitForTimeout(1500);
+
+    const left = await page.locator("#periodLeft").innerText();
+    check("★★ 「남은 것」을 숫자로 안 보여준다 — 그 숫자로 판단하시게 된다", left.trim() === "—", left);
+    const sub = await page.locator("#periodLeftSub").innerText();
+    check("★ 왜 없는지 적는다", /견줄 매출이 없어요/.test(sub), sub);
+    const note = await page.locator("#periodNote").innerText();
+    check("★★ 켜기 전이라고 말한다", /켜기 전/.test(note), note);
+    check("★ 언제부터 매출이 잡히는지도", /\d{4}-\d{2}-\d{2}/.test(note), note);
+    const ing = await page.locator("#periodIngredients").innerText();
+    check("★★ 식자재는 그대로 보여준다 — 산 것은 샀다", /637,169/.test(ing), ing);
+
+    // 9월로 돌아오면 예전과 똑같다
+    await page.locator("#periodMonthInput").fill("2026-09");
+    await page.locator("#periodMonthInput").dispatchEvent("change");
+    await page.waitForTimeout(1500);
+    const left9 = await page.locator("#periodLeft").innerText();
+    check("★★ 매출이 있는 달은 예전과 똑같이 센다", /NT\$/.test(left9) && left9.trim() !== "—", left9);
+  }
+
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
   await browser.close();

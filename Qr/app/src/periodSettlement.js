@@ -67,15 +67,39 @@ const round = (n) => Math.round((Number(n) || 0) * 100) / 100;
  * @param payroll   {total, staff, hours, byMonth: {"2026-09": 금액}}
  * @param opts      {today, daysInRange}
  */
+/**
+ * **가게 시스템을 쓰기 전은 견줄 수가 없다**(2026-10-17).
+ *
+ * 사장님: "이 웹사이트를 만든 건 9월부터라서 근데 식자재 데이터는 그 전
+ * 부터 있어서 저렇게 뜨네. 연 결산에 지장갈까봐"
+ *
+ * 식자재 장부는 2007년부터 16만 줄이다. 매출은 가게 시스템을 켠 날부터만
+ * 있다. 그래서 5월을 열면 「매출 0 − 식자재 63만 = −63만」이 된다. 숫자는
+ * 맞지만 **뜻이 틀렸다** — 그 달에도 장사는 했고, 매출이 여기 없을 뿐이다.
+ *
+ * 그래서 「남은 것」은 **견줄 수 있는 구간**(시작일 이후)에서만 센다. 그 전
+ * 식자재는 빼지 않고 따로 적어 보여준다. 시작일이 없으면 예전과 똑같다.
+ */
+function sinceCut(range, since) {
+  const d = String(since || "").slice(0, 10);
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d)) return null;
+  if (d <= range.start) return null;          // 기간 전체가 시작일 뒤 — 자를 것이 없다
+  if (d > range.end) return "all";            // 기간 전체가 시작일 앞
+  return d;
+}
+
 function summarize(range, days, ingredients, payroll, opts) {
-  const o = Object.assign({ today: "", daysInRange: 0 }, opts || {});
+  const o = Object.assign({ today: "", daysInRange: 0, since: "", before: null }, opts || {});
   const list = (days || []).filter((d) => d && d.date);
   const revenue = list.reduce((a, d) => a + (Number(d.revenue) || 0), 0);
   const orders = list.reduce((a, d) => a + (Number(d.orders) || 0), 0);
   const guests = list.reduce((a, d) => a + (Number(d.guests) || 0), 0);
   const ing = Object.assign({ total: 0, lines: 0, byMonth: {}, vendors: [] }, ingredients || {});
   const pay = Object.assign({ total: 0, staff: 0, hours: 0, byMonth: {} }, payroll || {});
-  const left = revenue - ing.total - pay.total;
+  const cut = sinceCut(range, o.since);
+  // 기간이 통째로 시작일 앞이면 「남은 것」이 없다 — 매출이 아예 안 잡히는 구간이다
+  const left = cut === "all" ? null : revenue - ing.total - pay.total;
+  const before = o.before && o.before.total ? { ingredients: round(o.before.total), until: cut === "all" ? range.end : cut } : null;
 
   // 한 해를 볼 때는 달마다도 같은 셈을 해 준다 — 어느 달이 샜는지 보여야 한다.
   const byDayMonth = {};
@@ -101,9 +125,13 @@ function summarize(range, days, ingredients, payroll, opts) {
     missing_days: Math.max(0, (o.daysInRange || 0) - list.length),
     ingredients: { total: round(ing.total), lines: ing.lines || 0, vendors: (ing.vendors || []).slice(0, 8) },
     payroll: { total: round(pay.total), staff: pay.staff || 0, hours: round(pay.hours || 0) },
-    left: round(left),
+    left: left === null ? null : round(left),
+    // 가게 시스템을 켜기 전 — 매출이 없어 견줄 수 없는 구간
+    since: cut === "all" || cut ? String(o.since).slice(0, 10) : "",
+    before_service: cut === "all" ? "all" : (cut || ""),
+    before,
     // 매출 대비 몇 %가 남았나. 매출이 0 이면 비율이 없다(0 으로 나누지 않는다).
-    left_pct: revenue > 0 ? Math.round((left / revenue) * 1000) / 10 : null,
+    left_pct: left !== null && revenue > 0 ? Math.round((left / revenue) * 1000) / 10 : null,
     cost_pct: {
       ingredients: revenue > 0 ? Math.round((ing.total / revenue) * 1000) / 10 : null,
       payroll: revenue > 0 ? Math.round((pay.total / revenue) * 1000) / 10 : null,
@@ -135,7 +163,7 @@ function lineText(sum, opts) {
   lines.push(`매출 ${nt(sum.revenue.total)}`);
   lines.push(`− 식자재 ${nt(sum.ingredients.total)} (${pct(sum.cost_pct.ingredients)})`);
   lines.push(`− 인건비 ${nt(sum.payroll.total)} (${pct(sum.cost_pct.payroll)})`);
-  lines.push(`= 남은 것 ${nt(sum.left)}${sum.left_pct == null ? "" : ` (${pct(sum.left_pct)})`}`);
+  lines.push(sum.left == null ? `= 남은 것 — (견줄 매출이 없어요)` : `= 남은 것 ${nt(sum.left)}${sum.left_pct == null ? "" : ` (${pct(sum.left_pct)})`}`);
   lines.push("");
   lines.push(`주문 ${Number(sum.revenue.orders || 0).toLocaleString()}건 · 손님 ${Number(sum.revenue.guests || 0).toLocaleString()}명 · 장사한 날 ${sum.revenue.days}일`);
   if (sum.payroll.staff) lines.push(`직원 ${sum.payroll.staff}명 · ${sum.payroll.hours}시간`);
@@ -152,6 +180,16 @@ function lineText(sum, opts) {
       lines.push("");
       lines.push(`가장 많이 판 달: ${Number(best.month.slice(5, 7))}월 ${nt(best.revenue)}`);
     }
+  }
+
+  // 가게 시스템을 켜기 전 구간 — 식자재만 있고 매출이 없다. 말 안 하면
+  // 「남은 것」이 크게 마이너스로 보여 그 숫자로 판단하시게 된다.
+  if (sum.before_service === "all") {
+    lines.push("");
+    lines.push(`⚠️ 이 기간은 가게 시스템을 켜기 전(${sum.since})이라 매출이 안 잡혀요 — 「남은 것」을 셀 수 없어요.`);
+  } else if (sum.before_service) {
+    lines.push("");
+    lines.push(`⚠️ 매출은 ${sum.since}부터 기록돼요. 그 전 식자재 ${nt((sum.before || {}).ingredients || 0)}는 「남은 것」에서 빼지 않았어요.`);
   }
 
   if (sum.missing_days > 0) {

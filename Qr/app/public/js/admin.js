@@ -1297,6 +1297,9 @@
       periodFailed: "불러오지 못했어요. 다시 해보세요.",
       periodOngoing: "⏳ 아직 진행 중인 기간이에요",
       periodMissingFmt: "⚠️ 마감 기록이 없는 날 {n}일 — 그만큼 매출이 덜 잡혀요. 결산 기록 목록을 한 번 열면 지난 날이 채워져요.",
+      periodNoCompare: "견줄 매출이 없어요",
+      periodBeforeAllFmt: "⚠️ 이 기간은 가게 시스템을 켜기 전({since})이에요 — 매출이 안 잡혀서 「남은 것」을 셀 수 없어요. 식자재만 보입니다.",
+      periodBeforeFmt: "⚠️ 매출은 {since}부터 기록돼요. 그 전 식자재 {amount}는 「남은 것」에서 빼지 않았어요(견줄 매출이 없어서요).",
       periodMissingCosts: "※ 임대료·수도광열·세금·카드 수수료는 아직 안 들어갔어요. 「남은 것」은 이익이 아니라 매출에서 식자재와 인건비만 뺀 값이에요.",
       periodColMonth: "달",
       periodColTotal: "합계",
@@ -2706,6 +2709,9 @@
       periodFailed: "載入失敗，請再試一次。",
       periodOngoing: "⏳ 這個期間還沒結束",
       periodMissingFmt: "⚠️ 有 {n} 天沒有結算紀錄 — 營業額會少算。打開結算紀錄清單一次就會補上。",
+      periodNoCompare: "沒有可對照的營收",
+      periodBeforeAllFmt: "⚠️ 這段期間在系統啟用（{since}）之前 — 沒有營收紀錄，無法計算「剩下」。只看得到食材支出。",
+      periodBeforeFmt: "⚠️ 營收從 {since} 起才有紀錄。之前的食材 {amount} 沒有扣在「剩下」裡（沒有可對照的營收）。",
       periodMissingCosts: "※ 房租·水電·稅金·刷卡手續費尚未計入。「剩餘」不是利潤，只是營業額扣掉食材與人事費。",
       periodColMonth: "月",
       periodColTotal: "合計",
@@ -18245,18 +18251,25 @@
     set("#periodPayrollSub", d.payroll.staff
       ? periodPct(d.cost_pct.payroll) + " · " + periodFmt("periodStaffFmt", { n: d.payroll.staff })
       : periodPct(d.cost_pct.payroll));
-    set("#periodLeft", periodMoney(d.left));
-    set("#periodLeftSub", d.left_pct == null ? "" : periodFmt("periodLeftSubFmt", { pct: d.left_pct }));
+    // 가게 시스템을 켜기 전 구간은 **매출이 아예 없다** — 「남은 것」을 숫자로
+    // 보여주면 그 숫자로 판단하시게 된다(2026-10-17 사장님).
+    set("#periodLeft", d.left == null ? "—" : periodMoney(d.left));
+    set("#periodLeftSub", d.left == null ? T("periodNoCompare") : (d.left_pct == null ? "" : periodFmt("periodLeftSubFmt", { pct: d.left_pct })));
     const leftCell = document.querySelector(".stl-period-cell.is-left");
-    if (leftCell) leftCell.classList.toggle("is-minus", Number(d.left) < 0);
+    if (leftCell) leftCell.classList.toggle("is-minus", d.left != null && Number(d.left) < 0);
 
     // 아직 안 끝난 달·해인지, 마감 기록이 빠진 날이 있는지 — 숨기지 않는다.
     const bits = [];
     if (d.ongoing) bits.push(T("periodOngoing"));
     if (d.missing_days > 0) bits.push(periodFmt("periodMissingFmt", { n: d.missing_days }));
+    // 가게 시스템을 켠 날 — 그 전 식자재는 「남은 것」에서 빼지 않는다
+    if (d.before_service === "all") bits.push(periodFmt("periodBeforeAllFmt", { since: d.since }));
+    else if (d.before_service) {
+      bits.push(periodFmt("periodBeforeFmt", { since: d.since, amount: periodMoney((d.before || {}).ingredients || 0) }));
+    }
     set("#periodNote", bits.join("  ·  "));
     const note = $("#periodNote");
-    if (note) note.classList.toggle("is-warn", d.missing_days > 0);
+    if (note) note.classList.toggle("is-warn", d.missing_days > 0 || !!d.before_service);
 
     renderPeriodYear(d);
   }

@@ -326,11 +326,32 @@ function daysUpToToday(range, today) {
   return Math.floor(ms / 86400000) + 1;
 }
 
+/** 그 날의 하루 전(YYYY-MM-DD). 켜기 전 구간의 끝을 잡을 때 쓴다. */
+function prevDay(day) {
+  const t = Date.parse(day + "T00:00:00Z");
+  if (!isFinite(t)) return "";
+  return new Date(t - 86400000).toISOString().slice(0, 10);
+}
+
 async function periodSummary(req, key) {
   const range = PS.rangeOf(key);
   if (!range) return null;
   const today = taipeiDateString();
   const testId = testMode.currentId(req, store);
+  // 매출이 **기록되기 시작한 날**. 그 전은 식자재만 있어서 「매출 0 − 식자재
+  // 63만」이 된다(2026-10-17 사장님: "웹사이트를 만든 건 9월부터라서 … 연
+  // 결산에 지장갈까봐"). 견줄 수 있는 구간만 「남은 것」에 넣는다.
+  //
+  // 「가게를 켠 날」이 아니라 **마감 기록이 처음 있는 날**로 잡는다 — 둘이
+  // 다를 수 있고(시작일을 늦게 적었거나 그 전 마감 기록이 남아 있거나),
+  // 마감 기록이 있는 날은 매출이 있는 날이라 그 날 식자재는 견줄 수 있다.
+  const firstSnap = await findDocs("daily_settlements", {}, { sort: { date: 1 }, limit: 1, projection: { date: 1 } });
+  const startedAt = String(require("../serviceStart").serviceStartedAt(store) || "").slice(0, 10);
+  const firstDay = String((firstSnap[0] || {}).date || "");
+  const since = firstDay && startedAt ? (firstDay < startedAt ? firstDay : startedAt) : (firstDay || startedAt);
+  const allBefore = !!since && since > range.end;          // 기간 전체가 매출 기록 전
+  const costStart = allBefore ? range.start : (since && since > range.start ? since : range.start);
+  const beforeEnd = !allBefore && costStart > range.start ? prevDay(costStart) : "";
 
   // 1) 매출 — 하루 마감 기록. 네 칸만 받는다.
   const snaps = await findDocs(
@@ -350,11 +371,12 @@ async function periodSummary(req, key) {
 
   // 2) 식자재 — 집계는 DB 가 한다(src/ingredients.js summaryPipelines)
   const ing = { total: 0, lines: 0, byMonth: {}, vendors: [] };
+  const before = { total: 0, lines: 0 };
   try {
     await connectDB();
     const G = require("../ingredients");
     const c = getDb().collection(G.PURCHASES);
-    const where = { date: { $gte: range.start, $lte: range.end } };
+    const where = { date: { $gte: costStart, $lte: range.end } };
     const pipes = G.summaryPipelines(where, { items: 1 });
     const [totals, vendors, months] = await Promise.all([
       c.aggregate(pipes.totals).toArray(),
@@ -366,6 +388,18 @@ async function periodSummary(req, key) {
     ing.lines = t.lines || 0;
     ing.vendors = vendors.map((v) => ({ vendor: v._id, amount: Math.round((v.amount || 0) * 100) / 100 }));
     for (const m of months) ing.byMonth[m._id] = m.amount || 0;
+    // 켜기 전 구간은 **빼지 않고** 따로 센다 — 그 달에도 장사는 했고 매출이 여기 없을 뿐이다
+    if (allBefore) {
+      // 통째로 전이면 그 기간 식자재가 곧 「켜기 전 몫」이다
+      before.total = ing.total;
+      before.lines = ing.lines;
+    } else if (beforeEnd) {
+      const pre = await c
+        .aggregate(G.summaryPipelines({ date: { $gte: range.start, $lte: beforeEnd } }, { items: 0 }).totals)
+        .toArray();
+      before.total = (pre[0] || {}).total || 0;
+      before.lines = (pre[0] || {}).lines || 0;
+    }
   } catch (e) {
     // 식자재가 아직 안 들어와 있어도 매출·인건비는 보여야 한다.
     console.warn("[settlement] 식자재 집계 실패:", e && e.message);
@@ -374,7 +408,8 @@ async function periodSummary(req, key) {
   // 3) 인건비 — 급여 쪽 셈을 그대로 부른다(규칙을 베껴 쓰지 않는다)
   const pay = { total: 0, staff: 0, hours: 0, byMonth: {} };
   try {
-    const byMonth = await require("./payroll").monthTotals(PS.monthsOf(range));
+    const months = PS.monthsOf(range).filter((m) => !costStart || m >= costStart.slice(0, 7));
+    const byMonth = await require("./payroll").monthTotals(months);
     for (const [m, v] of Object.entries(byMonth)) {
       pay.byMonth[m] = v.total;
       pay.total += v.total;
@@ -385,7 +420,7 @@ async function periodSummary(req, key) {
     console.warn("[settlement] 인건비 집계 실패:", e && e.message);
   }
 
-  return PS.summarize(range, days, ing, pay, { today, daysInRange: daysUpToToday(range, today) });
+  return PS.summarize(range, days, ing, pay, { today, daysInRange: daysUpToToday(range, today), since, before });
 }
 
 /** 월·연 결산 한 장. key 는 "2026-09"(달) 또는 "2026"(해). */

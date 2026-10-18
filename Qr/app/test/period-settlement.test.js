@@ -128,5 +128,49 @@ const eq = (a, b, m) => { assert.strictEqual(a, b, m); n++; };
   const txt = P.lineText(sum, {});
   ok(!/더 자세히 보시려면/.test(txt), "링크가 없으면 그 줄도 없다");
 }
+// ── 가게 시스템을 켜기 전은 견줄 수가 없다 (2026-10-17)
+//
+// 사장님: "이 웹사이트를 만든 건 9월부터라서 근데 식자재 데이터는 그 전
+// 부터 있어서 저렇게 뜨네. 연 결산에 지장갈까봐"
+//
+// 식자재 장부는 2007년부터다. 매출은 가게 시스템을 켠 날부터만 있다.
+// 그대로 빼면 5월이 「매출 0 − 식자재 63만 = −63만」이 된다 — 숫자는 맞지만
+// **뜻이 틀렸다.** 그 달에도 장사는 했고 매출이 여기 없을 뿐이다.
+{
+  const SINCE = "2026-09-08";
+
+  // ① 기간 전체가 켜기 전
+  const may = P.summarize(P.rangeOf("2026-05"), [], { total: 637169 }, { total: 0 },
+    { today: "2026-10-17", daysInRange: 31, since: SINCE, before: { total: 637169 } });
+  eq(may.left, null, "★★ 켜기 전 달은 「남은 것」을 세지 않는다 — 매출이 아예 없다");
+  eq(may.left_pct, null, "★ 비율도 없다");
+  eq(may.before_service, "all", "★★ 켜기 전이라고 말한다");
+  eq(may.since, SINCE, "★ 언제부터 매출이 잡히는지도");
+  ok(/켜기 전/.test(P.lineText(may, {})), "★★ LINE 문자도 그렇게 말한다");
+  ok(/남은 것 —/.test(P.lineText(may, {})), "★★ 문자에 마이너스 숫자를 적지 않는다");
+
+  // ② 기간이 걸쳐 있다 — 켠 뒤만 견준다
+  const year = P.summarize(P.rangeOf("2026"), [{ date: "2026-10-01", revenue: 5000, orders: 9, guests: 20 }],
+    { total: 40000 }, { total: 9000 },
+    { today: "2026-10-17", daysInRange: 290, since: SINCE, before: { total: 600000 } });
+  eq(year.left, 5000 - 40000 - 9000, "★★ 켠 뒤 것만 빼서 「남은 것」을 센다");
+  eq(year.before.ingredients, 600000, "★★ 켜기 전 식자재는 따로 적어 둔다");
+  eq(year.before_service, SINCE, "★ 언제부터 견줄 수 있는지");
+  ok(/빼지 않았어요/.test(P.lineText(year, {})), "★★ 안 뺐다고 문자에 적는다");
+
+  // ③ 기간이 통째로 켠 뒤 — 예전 그대로
+  const oct = P.summarize(P.rangeOf("2026-10"), [{ date: "2026-10-01", revenue: 1000, orders: 2, guests: 4 }],
+    { total: 300 }, { total: 100 }, { today: "2026-10-17", daysInRange: 17, since: SINCE });
+  eq(oct.left, 600, "★★ 켠 뒤 기간은 예전과 똑같다");
+  eq(oct.before_service, "", "★ 할 말이 없으면 안 한다");
+  eq(oct.before, null, "★ 켜기 전 몫도 없다");
+
+  // ④ 시작일을 안 정했으면 예전과 똑같다
+  const none = P.summarize(P.rangeOf("2026-05"), [], { total: 637169 }, { total: 0 },
+    { today: "2026-10-17", daysInRange: 31 });
+  eq(none.left, -637169, "★ 시작일이 없으면 예전처럼 그대로 뺀다");
+  eq(none.before_service, "", "★ 그때는 말도 안 한다");
+}
+
 
 console.log(`period-settlement: ${n}개 통과`);
