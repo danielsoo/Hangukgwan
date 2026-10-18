@@ -405,11 +405,20 @@ class Collection {
         rows = rows.filter((d) => matches(d, stage.$match));
       } else if (op === "$group") {
         const spec = stage.$group;
-        const key = (d) => (spec._id === null ? "" : String(get(d, String(spec._id).slice(1))));
+        const idOf = (d) => {
+          if (spec._id === null) return null;
+          if (typeof spec._id === "object") {
+            const out = {};
+            for (const [k2, v2] of Object.entries(spec._id)) out[k2] = get(d, String(v2).slice(1));
+            return out;
+          }
+          return get(d, String(spec._id).slice(1));
+        };
+        const key = (d) => (spec._id === null ? "" : JSON.stringify(idOf(d)));
         const by = new Map();
         for (const d of rows) {
           const k = key(d);
-          if (!by.has(k)) by.set(k, { _id: spec._id === null ? null : get(d, String(spec._id).slice(1)), __n: 0 });
+          if (!by.has(k)) by.set(k, { _id: idOf(d), __n: 0 });
           const acc = by.get(k);
           acc.__n++;
           for (const [field, expr] of Object.entries(spec)) {

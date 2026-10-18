@@ -969,7 +969,9 @@
       const el = $("#" + id);
       if (!el || el.dataset.hgWatch) continue;
       el.dataset.hgWatch = "1";
-      const mark = () => { if (!applying) touched.add(id); };
+      // 칸을 고치면 「이미 장부에 있어요」도 따라간다 — 업체·날짜를 바꾸면
+      // 다른 영수증이 된다(2026-10-17)
+      const mark = () => { if (!applying) touched.add(id); renderHaveNote(); };
       el.addEventListener("input", mark);
       el.addEventListener("change", mark);
     }
@@ -1041,6 +1043,7 @@
       logLine(esc(fmt("ingPhotoVendorUnknownFmt", { paper: head.vendor_text })), { add: true });
     }
     renderEntryTitle();
+    renderHaveNote();
     return did;
   }
 
@@ -1172,6 +1175,7 @@
     const res = await fetch("/api/ingredients/inbox");
     if (!res.ok) return;
     inbox = await res.json();
+    await loadHave();            // 이미 장부에 있는 것을 한 번에 받아 둔다
     renderInbox();
   }
 
@@ -1298,6 +1302,57 @@
   }
 
   /**
+   * **이미 장부에 있는 영수증**을 알아 둔다.
+   *
+   * 2026-10-17 사장님: "이미 들어가 있는 건 이미 있는 거라고 덮어씌울건지
+   * 띄워줘" — 저장을 누를 때에야 물으면 열 줄을 다 보고 난 뒤다. 열기 전에
+   * 칩에, 열면 표 위에 보여준다.
+   *
+   * 영수증 한 장 = (지점, 날짜, 업체). 확인 대기 102장을 하나씩 물으면
+   * 102번이라, 그 날짜 범위를 **한 번에** 묶어 받는다.
+   */
+  let have = new Map();
+
+  const haveKey = (store, date, vendor) =>
+    [String(store || ""), String(date || ""), String(vendor || "").trim()].join("|");
+
+  function haveOf(head) {
+    if (!head) return null;
+    return have.get(haveKey(head.store, head.date, head.vendor)) || null;
+  }
+
+  async function loadHave() {
+    const reads = (inbox.items || []).filter((i) => i.read && i.read.head && i.read.head.date);
+    const days = reads.map((i) => String(i.read.head.date)).filter((d) => /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(d)).sort();
+    if (!days.length) { have = new Map(); return; }
+    try {
+      const res = await fetch("/api/ingredients/have?start=" + days[0] + "&end=" + days[days.length - 1]);
+      if (!res.ok) return;
+      const got = await res.json();
+      const m = new Map();
+      for (const h of got.have || []) m.set(haveKey(h.store, h.date, h.vendor), h);
+      have = m;
+    } catch (e) { /* 못 받아도 저장할 때 다시 묻는다 */ }
+  }
+
+  /** 표 위에 「이미 장부에 있어요」 — 손대기 전에 보여야 한다. */
+  function renderHaveNote() {
+    const box = $("#ingEntryHave");
+    if (!box) return;
+    const head = attached && attached.read ? attached.read.head : null;
+    // 사장님이 칸을 고쳤을 수 있으니 **지금 칸 값**으로 본다
+    const now = {
+      store: ($("#ingEntryStore") || {}).value || "",
+      date: ($("#ingEntryDate") || {}).value || "",
+      vendor: ($("#ingEntryVendor") || {}).value || "",
+    };
+    const h = haveOf(now) || (head ? haveOf(head) : null);
+    box.hidden = !h;
+    if (!h) return;
+    box.innerHTML = esc(fmt("ingHaveFmt", { date: h.date, vendor: h.vendor, n: h.lines, amount: money(h.amount) }));
+  }
+
+  /**
    * **영수증마다 칩** — 급여의 직원 칩과 같은 자리, 같은 쓰임.
    *
    * 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
@@ -1329,6 +1384,7 @@
       const day = String(head.date || "").slice(5).replace("-", "/");
       const shop = storeShort(head.store);
       const unsure = (i.read && i.read.unsure) || 0;
+      const got = haveOf(head);            // 이미 장부에 있나
       return (
         '<button type="button" class="ing-check-chip' + (attached && attached.id === i.id ? " is-on" : "") + '"' +
         ' data-check="' + esc(i.id) + '" title="' + esc(i.name || "") + '">' +
@@ -1336,6 +1392,7 @@
         (day ? '<span class="ing-check-day">' + esc(day) + "</span>" : "") +
         (shop ? '<span class="ing-check-store">' + esc(shop) + "</span>" : "") +
         (unsure ? '<span class="ing-check-warn">' + unsure + "</span>" : "") +
+        (got ? '<span class="ing-check-have" title="' + esc(T("ingHaveChipTitle")) + '">' + esc(T("ingHaveChip")) + "</span>" : "") +
         "</button>"
       );
     }).join("");
@@ -1374,6 +1431,7 @@
     renderInboxTabs();
     renderEntryMode();           // 처음 받으면 확인할 것이 있는지로 확인하기/직접 넣기를 정한다
     renderCheckChips();          // 영수증마다 칩 — 표 바로 위에서 오간다
+    renderHaveNote();
     markCheckTab();              // 다른 칸에 있어도 몇 장 기다리는지 보이게
     autoFoldInbox();             // 확인할 게 없을 때만 올리는 자리를 펴 둔다
     const items = inboxVisible();

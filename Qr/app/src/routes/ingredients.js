@@ -219,6 +219,43 @@ async function inboxCol() {
   return c;
 }
 
+/**
+ * **이미 장부에 있는 영수증**이 어느 것인지 한 번에 알려준다.
+ *
+ * 2026-10-17 사장님: "이미 들어가 있는 건 이미 있는 거라고 덮어씌울건지
+ * 띄워줘" — 저장을 누를 때에야 물으면, 열 줄을 다 보고 난 뒤에 「이미
+ * 있다」는 말을 듣는다. 열 때 바로 보여야 한다.
+ *
+ * 영수증 한 장 = (지점, 날짜, 업체)다. 확인 대기 102장을 하나씩 물으면
+ * 102번이라, 그 날짜 범위를 **한 번에** 묶어 받는다(DB 가 묶는다).
+ * 색인 {store, date, vendor} 가 이미 있다.
+ */
+router.get("/have", async (req, res) => {
+  const q = req.query || {};
+  const start = String(q.start || "").slice(0, 10);
+  const end = String(q.end || "").slice(0, 10);
+  if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(start) || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(end)) {
+    return res.status(400).json({ error: "bad_range" });
+  }
+  const c = await col();
+  const rows = await c
+    .aggregate([
+      { $match: { date: { $gte: start, $lte: end } } },
+      { $group: { _id: { store: "$store", date: "$date", vendor: "$vendor" }, lines: { $sum: 1 }, amount: { $sum: "$amount" } } },
+      { $limit: 3000 },
+    ])
+    .toArray();
+  res.json({
+    have: rows.map((r) => ({
+      store: (r._id || {}).store || "",
+      date: (r._id || {}).date || "",
+      vendor: (r._id || {}).vendor || "",
+      lines: r.lines || 0,
+      amount: Math.round((r.amount || 0) * 100) / 100,
+    })),
+  });
+});
+
 /** 대기함 목록. 사진 자체는 안 보낸다 — 작은 미리보기만. */
 router.get("/inbox", async (req, res) => {
   const c = await inboxCol();

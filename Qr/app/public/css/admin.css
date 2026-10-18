@@ -3077,6 +3077,15 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
 .ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
 .ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+/* 이미 장부에 있는 영수증 — 손대기 전에 보여야 한다(2026-10-17). */
+.ing-have {
+  margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
+  background: #fff6d8; border: 1px solid #e8b100; color: #6b5200; font-size: 14.5px;
+}
+.ing-check-have {
+  background: #e8b100; color: #fff; border-radius: 999px;
+  font-size: 11.5px; font-weight: 700; padding: 1px 7px;
+}
 /* 제목 옆에 「무엇을」 — 어느 영수증을 보고 있는지(2026-10-17). */
 .ing-entry-which { margin-left: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
 /* 대기함은 접어 둔다 — 확인하러 들어와서 여덟 층을 지나지 않게(2026-10-17). */

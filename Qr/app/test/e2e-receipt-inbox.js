@@ -635,6 +635,66 @@ const PASTED = `읽었습니다:
     check("★ 표를 엉뚱한 값으로 채우지 않는다", (await page.locator("#ingEntryLines .ing-line[data-i]").count()) <= 1, "");
   }
 
+  out.push("\n[이미 장부에 있으면 손대기 전에 말한다]");
+  await openInbox();
+  {
+    // 2026-10-17 사장님: "이미 들어가 있는 건 이미 있는 거라고 덮어씌울건지
+    // 띄워줘" — 저장을 누를 때에야 물으면 열 줄을 다 보고 난 뒤다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const paper = grayToPng(drawReceipt({ w: 700, h: 1200, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), 700, 1200);
+    const DAY = "2026-08-11", WHO = "品皇食品原料行";
+
+    // 먼저 장부에 한 장 넣어 둔다(손으로 넣은 셈)
+    await page.evaluate(async ({ DAY, WHO }) => {
+      await fetch("/api/ingredients/rows", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store: "main", date: DAY, vendor: WHO,
+          lines: [{ name: "甲", qty: 1, unit: "包", price: 500, amount: 500 }] }),
+      });
+    }, { DAY, WHO });
+    await page.waitForTimeout(800);
+
+    // 같은 (지점·날짜·업체) 영수증을 대기함으로 들여온다
+    await page.setInputFiles("#ingInboxFile", [{ name: "have-1.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(1800);
+    await openInbox();
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(JSON.stringify([{
+      file: "have-1.png", vendor: WHO, date: DAY, store: "main", total: 700,
+      rows: [{ name: "乙", qty: 1, unit: "包", price: 700, amount: 700, sure: true, band: [0.3, 0.36] }],
+    }]));
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(2500);
+
+    const chip = page.locator('.ing-check-chip:has-text("' + WHO + '")');
+    check("★★ 칩에 「장부에 있음」이 붙는다 — 열기 전에 보인다", /장부에 있음/.test(await chip.innerText()), await chip.innerText());
+
+    await chip.click();
+    await page.waitForTimeout(1800);
+    const note = page.locator("#ingEntryHave");
+    check("★★ 열면 표 위에 띄운다", !(await note.evaluate((el) => el.hidden)), "");
+    const t = await note.innerText();
+    check("★★ 몇 줄 얼마가 이미 있는지 적는다", /1줄/.test(t) && /500/.test(t), t);
+    check("★★ 저장하면 덮어쓴다고 말한다", /덮어씁니다/.test(t), t);
+
+    // 다른 영수증으로 넘어가면 사라진다
+    await page.locator("#ingEntryClear").click();
+    check("★ 비워도 업체·날짜가 그대로면 말이 남는다 — 그 칸 값으로는 아직 있는 영수증이다",
+      !(await note.evaluate((el) => el.hidden)), "");
+    await page.locator("#ingEntryVendor").fill("새로운업체");
+    await page.locator("#ingEntryVendor").dispatchEvent("change");
+    await page.waitForTimeout(600);
+    check("★★ 업체를 바꾸면 사라진다 — 다른 영수증이다", await note.evaluate((el) => el.hidden), "");
+
+    await openInbox();
+    const row = page.locator('.ing-inbox-row:has-text("have-1.png")');
+    await row.locator("[data-inbox-del]").click();
+    await page.waitForTimeout(300);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(800);
+  }
+
   out.push("\n[제목이 지금 무엇을 하는 중인지 말한다]");
   await openInbox();
   {
