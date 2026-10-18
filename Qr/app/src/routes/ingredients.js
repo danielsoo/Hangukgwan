@@ -259,6 +259,14 @@ router.get("/have", async (req, res) => {
 /** 대기함 목록. 사진 자체는 안 보낸다 — 작은 미리보기만. */
 router.get("/inbox", async (req, res) => {
   const c = await inboxCol();
+  // 저장한 지 KEEP_SAVED_IMAGE_DAYS 일 지난 사진만 지운다 — 그 사이엔 「↶ 되돌리기」가 사진째 돌려놓는다.
+  try {
+    const cutoff = new Date(Date.now() - INBOX.KEEP_SAVED_IMAGE_DAYS * 86400000).toISOString();
+    await c.updateMany(
+      { status: INBOX.STATUS.SAVED, has_image: true, saved_at: { $lt: cutoff } },
+      { $unset: { image: "" }, $set: { has_image: false } }
+    );
+  } catch (e) { console.warn("[ingredients] 지난 사진 치우기 실패:", e && e.message); }
   const docs = await c.find({}, { projection: { image: 0 } }).sort({ at: -1 }).limit(300).toArray();
   res.json({
     items: docs.map(INBOX.listItem),
@@ -397,6 +405,40 @@ router.get("/inbox/:id/read", async (req, res) => {
   res.json(doc.read);
 });
 
+/**
+ * 저장한 영수증을 **확인 대기로 되돌린다** — 장부에 넣은 줄을 빼고, 그 저장이 덮었던 줄을 돌려놓고,
+ * 표는 저장한 그대로(고친 값까지) 다시 확인할 수 있게 한다. 사진은 아직 있으면 같이 돌아온다.
+ *
+ * 저장한 뒤에 그 영수증(지점·날짜·업체)을 누가 또 고쳤으면 되돌리지 않는다(409 changed) — 그 고친 것을
+ * 조용히 날리면 안 된다. body.force 면 지금 장부의 그 영수증을 지우고 되돌린다.
+ */
+router.post("/inbox/:id/unsave", express.json({ limit: "64kb" }), async (req, res) => {
+  const ic = await inboxCol();
+  let oid;
+  try { oid = new (require("mongodb").ObjectId)(req.params.id); } catch (e) { return res.status(400).json({ error: "bad_id" }); }
+  const doc = await ic.findOne({ _id: oid }, { projection: { image: 0 } });
+  if (!doc) return res.status(404).json({ error: "not_found" });
+  if (doc.status !== INBOX.STATUS.SAVED || !doc.saved_key) return res.status(400).json({ error: "not_undoable" });
+  const key = doc.saved_key;
+  const c = await col();
+  const now = await c.find(key, { projection: { _id: 1 } }).toArray();
+  const same = (a, b) => a.length === b.length && a.map(String).sort().join("|") === b.map(String).sort().join("|");
+  if (!same(now.map((d) => d._id), doc.saved_ids || []) && !(req.body && req.body.force)) {
+    return res.status(409).json({ error: "changed", rows: now.length });
+  }
+  await c.deleteMany(key);
+  const prev = doc.saved_prev || [];
+  if (prev.length) await c.bulkWrite(prev.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
+  await ic.updateOne(
+    { _id: oid },
+    {
+      $set: { status: INBOX.STATUS.READ, read: INBOX.readFromSaved(doc), unsaved_at: new Date().toISOString() },
+      $unset: { saved_at: "", saved_lines: "", saved_key: "", saved_ids: "", saved_rows: "", saved_prev: "" },
+    }
+  );
+  res.json({ ok: true, removed: now.length, restored: prev.length, has_image: !!doc.has_image });
+});
+
 /** 대기함에서 지운다(사진도 같이). */
 router.delete("/inbox/:id", async (req, res) => {
   const c = await inboxCol();
@@ -429,23 +471,30 @@ router.post("/rows", async (req, res) => {
   const rows = lines.map((l) => G.normalizeRow({ ...l, date, vendor, note: l.name_ko }, store)).filter(Boolean);
 
   const c = await col();
+  const inboxId = String(b.inbox_id || "").trim();
+  // 대기함에서 온 것이면 **덮기 전의 줄**을 적어 둔다 — 「↶ 되돌리기」가 그대로 돌려놓는다.
+  const prev = inboxId ? await c.find({ store, date, vendor }).limit(200).toArray() : [];
   // 그 한 장만 갈아끼운다.
   const removed = await c.deleteMany({ store, date, vendor });
-  if (rows.length) {
-    const docs = G.withIds(rows);
+  const docs = rows.length ? G.withIds(rows) : [];
+  if (docs.length) {
     await c.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
   }
-  // 대기함에서 온 것이면 그 줄을 마무리하고 **사진을 지운다.**
-  // 한 달 221장 × 400KB 면 금방 쌓인다 — 확인이 끝난 종이는 들고 있을 이유가 없다.
-  // 줄은 남겨 둬서 「언제 올렸고 언제 저장했나」는 보인다.
-  const inboxId = String(b.inbox_id || "").trim();
+  // 대기함에서 온 것이면 그 줄을 마무리한다. **사진은 바로 지우지 않는다** — KEEP_SAVED_IMAGE_DAYS 일 동안
+  // 들고 있다가(GET /inbox 가 치운다) 그 사이엔 「↶ 되돌리기」로 사진·표째 확인 대기로 돌린다
+  // (2026-10-18 사장님: "확정하고 나면 장부로 넘어가지는데 그거 되돌릴 수 있게 해줘. 사진이랑 정보 다 같이").
   if (inboxId) {
     try {
       const ic = await inboxCol();
       await ic.updateOne(
         { _id: new (require("mongodb").ObjectId)(inboxId) },
-        { $set: { status: INBOX.STATUS.SAVED, saved_at: new Date().toISOString(), saved_lines: rows.length, has_image: false },
-          $unset: { image: "" } }
+        { $set: {
+          status: INBOX.STATUS.SAVED, saved_at: new Date().toISOString(), saved_lines: rows.length,
+          saved_key: { store, date, vendor },
+          saved_ids: docs.map((d) => d._id),
+          saved_rows: rows,
+          saved_prev: prev,
+        } }
       );
     } catch (e) { console.warn("[ingredients] 대기함 마무리 실패:", e && e.message); }
   }

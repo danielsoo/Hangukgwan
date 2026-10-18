@@ -1127,7 +1127,8 @@
    */
   async function downloadInboxAll() {
     const btn = $("#ingInboxGetAll");
-    const items = (inbox.items || []).filter((i) => i.has_image);
+    // 저장한 것도 며칠은 사진을 들고 있다(되돌리기용) — 받는 것은 안 끝난 것만
+    const items = (inbox.items || []).filter((i) => i.has_image && i.status !== "saved");
     if (!items.length) return logLine(esc(T("ingInboxGetAllNone")));
     const zipper = window.HG_XLSX_WRITE && window.HG_XLSX_WRITE.makeZip;
     if (!zipper) return logLine(esc(T("ingInboxGetAllNoZip")));
@@ -1441,7 +1442,7 @@
     // 「전부 받기」에 몇 장인지 적어 둔다 — 누르기 전에 규모가 보이게
     const all = $("#ingInboxGetAll");
     if (all && !all.disabled) {
-      const n = (inbox.items || []).filter((i) => i.has_image).length;
+      const n = (inbox.items || []).filter((i) => i.has_image && i.status !== "saved").length;
       all.textContent = n ? fmt("ingInboxGetAllNFmt", { n }) : T("ingInboxGetAll");
       all.hidden = !n;
     }
@@ -1463,11 +1464,14 @@
         '<span class="ing-inbox-badge is-' + esc(i.status) + '">' + esc(badge) + "</span>" + read +
         "</div>" +
         '<div class="ing-inbox-acts">' +
-        (i.has_image
+        (i.can_undo
+          ? '<button type="button" class="ing-inbox-btn is-undo" data-inbox-undo="' + esc(i.id) + '">' + esc(T("ingInboxUndo")) + "</button>"
+          : "") +
+        (i.has_image && i.status !== "saved"
           ? '<a class="ing-inbox-btn" href="/api/ingredients/inbox/' + esc(i.id) + '/image?download=1" download>' + esc(T("ingInboxGet")) + "</a>" +
             '<button type="button" class="ing-inbox-btn" data-inbox-paste="' + esc(i.id) + '">' + esc(T("ingInboxPaste")) + "</button>"
           : "") +
-        (i.read
+        (i.read && i.status !== "saved"
           ? '<button type="button" class="ing-inbox-btn' + (i.status === "read" ? " is-go" : "") + '" data-inbox-use="' + esc(i.id) + '">' +
             esc(T(i.status === "read" ? "ingInboxCheck" : "ingInboxUse")) + "</button>"
           : "") +
@@ -1491,6 +1495,33 @@
     el.querySelectorAll("[data-inbox-go]").forEach((b) => { b.onclick = () => sendRead(b.dataset.inboxGo); });
     el.querySelectorAll("[data-inbox-use]").forEach((b) => { b.onclick = () => useRead(b.dataset.inboxUse); });
     el.querySelectorAll("[data-inbox-del]").forEach((b) => { b.onclick = () => delInbox(b.dataset.inboxDel); });
+    el.querySelectorAll("[data-inbox-undo]").forEach((b) => { b.onclick = () => undoSaved(b.dataset.inboxUndo); });
+  }
+
+  /**
+   * 저장한 영수증을 확인 대기로 되돌린다 — 장부에서 빼고, 사진·표째 다시 연다.
+   * 2026-10-18 사장님: "영수증 한 번 올리고 확정하고 나면 장부로 넘어가지는데 그거 되돌릴 수 있게 해줘.
+   * 사진이랑 정보 다 같이"
+   */
+  async function undoSaved(id) {
+    const item = (inbox.items || []).find((i) => i.id === id);
+    const ask = (msg) => (A().showConfirm ? A().showConfirm(msg) : Promise.resolve(confirm(msg)));
+    if (!(await ask(fmt("ingInboxUndoAskFmt", { name: (item && item.name) || "", n: (item && item.saved_lines) || 0 })))) return;
+    const go = (force) => fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/unsave", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ force: !!force }),
+    });
+    let res = await go(false);
+    if (res.status === 409) {
+      const b = await res.json().catch(() => ({}));
+      if (!(await ask(fmt("ingInboxUndoChangedFmt", { n: b.rows || 0 })))) return;
+      res = await go(true);
+    }
+    if (!res.ok) return logLine(esc(T("ingInboxUndoFailed")));
+    const got = await res.json();
+    await loadInbox();
+    await loadSummary();
+    await useRead(id);            // 사진·표째 다시 연다 — 확인하기로 간다
+    logLine(esc(fmt(got.has_image ? "ingInboxUndoneFmt" : "ingInboxUndoneNoPhotoFmt", { n: got.removed || 0 })), { add: true });
   }
 
   /** 붙여넣은 결과를 서버에 보내 **한 번 더 검사**하고, 표를 채운다. */

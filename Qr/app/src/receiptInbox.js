@@ -199,6 +199,37 @@ function decodeImage(dataUrl, max) {
   return { mime: m[1], buffer: Buffer.from(m[2], "base64"), bytes };
 }
 
+// 저장한 영수증의 사진을 며칠 들고 있을까 — 그 사이에는 「↶ 되돌리기」로 사진·표째 확인 대기로 돌릴 수 있다
+// (2026-10-18 사장님: "영수증 한 번 올리고 확정하고 나면 장부로 넘어가지는데 그거 되돌릴 수 있게 해줘. 사진이랑
+// 정보 다 같이"). 예전엔 저장하자마자 지웠다(한 달 221장 × 400KB). 7일이면 잘못 넣은 것은 대개 알아챈다.
+const KEEP_SAVED_IMAGE_DAYS = 7;
+
+/**
+ * 되돌릴 때 표에 다시 올릴 「읽은 결과」 — **저장한 그대로**(사장님이 고친 값까지) 만든다.
+ * 줄 자리(band)는 처음 읽은 결과의 같은 차례 줄에서 가져온다(숫자 밑 사진 띠가 그대로 붙게).
+ */
+function readFromSaved(doc) {
+  const d = doc || {};
+  const key = d.saved_key || {};
+  const old = d.read || {};
+  const oldRows = old.rows || [];
+  const rows = (d.saved_rows || []).map((r, i) => {
+    const out = {
+      name: r.name || "", name_ko: r.name_ko || "", unit: r.unit || "",
+      qty: r.qty === 0 || r.qty ? r.qty : "", price: r.price === 0 || r.price ? r.price : "",
+      amount: r.amount === 0 || r.amount ? r.amount : "", sure: true,
+    };
+    const band = oldRows[i] && oldRows[i].band;
+    if (band) out.band = band;
+    return out;
+  });
+  const sum = rows.reduce((n, r) => n + (Number(r.amount) || 0), 0);
+  return {
+    head: Object.assign({}, old.head || {}, { store: key.store, date: key.date, vendor: key.vendor }),
+    rows, unsure: 0, total: sum, sum, totalOk: true, note: old.note || "",
+  };
+}
+
 /** 목록에 보낼 모양 — **사진 자체는 안 보낸다**(작은 미리보기만). */
 function listItem(doc) {
   const d = doc || {};
@@ -215,6 +246,8 @@ function listItem(doc) {
     read: d.read ? { head: d.read.head, rows: (d.read.rows || []).length, unsure: d.read.unsure || 0 } : null,
     saved_at: d.saved_at || "",
     saved_lines: d.saved_lines || 0,
+    // 저장한 것을 확인 대기로 되돌릴 수 있나(저장할 때 무엇을 덮었는지 적어 둔 것만)
+    can_undo: d.status === STATUS.SAVED && !!d.saved_key,
   };
 }
 
@@ -222,4 +255,5 @@ module.exports = {
   matchReceipts, stripZipPrefix,
   COLL, STATUS, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_PER_UPLOAD, MAX_PENDING,
   parsePasted, parsePastedList, normalizeRead, decodeImage, listItem,
+  KEEP_SAVED_IMAGE_DAYS, readFromSaved,
 };

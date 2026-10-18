@@ -577,7 +577,7 @@ const PASTED = `읽었습니다:
     const all = await page.locator("#ingInboxList").innerText();
     check("★ 「저장됨」 칸으로 보면 남아 있다", /저장됨/.test(all), all.replace(/\n/g, " | ").slice(0, 200));
     const saved = page.locator(".ing-inbox-row").filter({ hasText: "저장됨" }).first();
-    check("★★ 저장된 줄에는 「받기」가 없다 — 사진을 지웠다",
+    check("★★ 저장된 줄에는 「받기」가 없다 — 끝난 것이다(사진은 되돌리기용으로 7일만 둔다)",
       (await saved.locator("a.ing-inbox-btn").count()) === 0, "");
     // 저장하면 **다음 확인 대기 줄이 저절로 열린다**(2026-10-17) — 사진 칸은
     // 닫히거나 그 다음 영수증으로 바뀐다. 아무것도 안 남았을 때만 닫힌다.
@@ -599,6 +599,51 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(900);
     const rows = await page.locator("#ingRowsTable").innerText();
     check("★★ 「산 것」에 그 두 줄이 — 날짜·품목·단가까지", /紅蘿蔔/.test(rows) && /洋蔥/.test(rows) && rows.includes(today), rows.replace(/\n/g, " | ").slice(0, 250));
+  }
+
+  // 2026-10-18 사장님: "영수증 한 번 올리고 확정하고 나면 장부로 넘어가지는데 그거 되돌릴 수 있게 해줘.
+  // 사진이랑 정보 다 같이"
+  out.push("\n[저장한 것 되돌리기 — 사진·표째 확인 대기로]");
+  await openInbox();
+  {
+    await page.locator('[data-ing-view="check"]').click();
+    await page.waitForTimeout(400);
+    await page.locator('[data-inbox-tab="saved"]').click();
+    await page.waitForTimeout(400);
+    const savedRow = page.locator(".ing-inbox-row").filter({ hasText: "저장됨" }).first();
+    check("★ 저장된 줄에 「↶ 되돌리기」", (await savedRow.locator("[data-inbox-undo]").count()) === 1, "");
+    const sid = await savedRow.getAttribute("data-inbox");
+    await savedRow.locator("[data-inbox-undo]").click();
+    await page.waitForTimeout(400);
+    const ask = await page.locator("#appDialogMessage").innerText();
+    check("★ 한 번 묻는다 — 장부에서 2줄을 뺀다고", /확인 대기로 되돌릴까요/.test(ask) && /2줄/.test(ask), ask);
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(2500);
+    const st = await page.evaluate((id) => ({
+      photo: !document.getElementById("ingEntryPhoto").hidden,
+      src: document.getElementById("ingEntryPhotoImg").getAttribute("src") || "",
+      names: [...document.querySelectorAll("#ingEntryLines .ing-line[data-i] input")].map((i) => i.value).join(" "),
+      vendor: document.getElementById("ingEntryVendor").value,
+    }), sid);
+    check("★★ 사진이 다시 붙는다", st.photo && st.src.includes(sid), JSON.stringify(st));
+    check("★★ 저장했던 표가 그대로 다시 열린다(紅蘿蔔·洋蔥, 房信菓菜行)", /紅蘿蔔/.test(st.names) && /洋蔥/.test(st.names) && /房信菓菜行/.test(st.vendor), JSON.stringify(st));
+    await page.locator('[data-inbox-tab="read"]').click();
+    await page.waitForTimeout(400);
+    check("★★ 그 줄이 「확인 대기」로 돌아간다", (await page.locator(`.ing-inbox-row[data-inbox="${sid}"]`).innerText()).includes("확인 대기"), "");
+    await page.locator('[data-ing-view="book"]').click();
+    await page.waitForTimeout(900);
+    const total = await page.locator("#ingTotal").innerText();
+    check(`★★ 장부에서 빠진다 (큰 숫자 ${total.replace(/\s+/g, " ")})`, !/200/.test(total), total);
+    // 다시 저장해서 뒤 시험이 보던 상태로
+    await page.locator('[data-ing-view="check"]').click();
+    await page.waitForTimeout(400);
+    await page.locator("#ingEntrySave").click();
+    await page.waitForTimeout(400);
+    if (await page.locator("#appDialogBackdrop").isVisible()) await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(1800);
+    await page.locator('[data-ing-view="book"]').click();
+    await page.waitForTimeout(900);
+    check("다시 저장하면 다시 장부에 (200)", /200/.test(await page.locator("#ingTotal").innerText()), await page.locator("#ingTotal").innerText());
   }
 
   out.push("\n[대기함에서 지우기]");

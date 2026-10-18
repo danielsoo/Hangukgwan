@@ -3108,6 +3108,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-view-tab:hover { box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
 .ing-view-tab.is-on { background: #2f3542; border-color: #2f3542; color: #fff; }
 .ing-view-tab.has-work:not(.is-on) { border-color: #e8b100; color: #8a6a00; }
+/* 저장한 영수증 되돌리기(2026-10-18) */
+.ing-inbox-btn.is-undo { color: #b4541f; border-color: #e8d7d7; }
 /* 확인하기 / 직접 넣기 — 둘 중 하나(2026-10-18 사장님: "손으로 넣는거나 직접 넣는게 같이 있는 게 조금 불편해"). */
 .ing-entry-modes { display: flex; gap: 8px; margin: 0 0 14px; }
 .ing-entry-mode-btn {

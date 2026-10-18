@@ -188,6 +188,12 @@ class Collection {
     this.docs.push(full);
     return { insertedId: _id };
   }
+  // 맞는 문서마다 updateOne 을 한 번씩 — 진짜 몽고처럼 upsert 없이.
+  async updateMany(filter, update) {
+    const hit = this.docs.filter((d) => matches(d, filter));
+    for (const d of hit) await this.updateOne({ _id: d._id }, update);
+    return { matchedCount: hit.length, modifiedCount: hit.length };
+  }
   async updateOne(filter, update, opts = {}) {
     let doc = this.docs.find((d) => matches(d, filter));
     let inserted = false;
