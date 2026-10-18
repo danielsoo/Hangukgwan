@@ -404,11 +404,22 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // process timezone. Mixing this with a real `new Date()` instead would
   // silently be off by Taipei's UTC+8 offset.
   const nowMs = new Date(nowLocal().replace(" ", "T")).getTime();
-  const problemOrders = rangeOrders.filter((o) => {
+  const staleOpen = rangeOrders.filter((o) => {
     if (!OPEN_STATUSES.includes(o.status)) return false;
     const placedMs = new Date(o.created_at.replace(" ", "T")).getTime();
     return nowMs - placedMs >= STALE_OPEN_ORDER_MS;
   });
+  // 아직 앉아 계신 손님 것은 「⚠ 미결제」가 아니라 「🍽 식사 중」이다(2026-10-18 사장님: A3 손님이
+  // 17:34 부터 일곱 번 나눠 시키며 드시는 중이었는데 21:19 에 「⚠ 미결제 2건 · NT$5,170」이 떴다).
+  // opts.seatings = { 테이블: 지금 손님이 앉은 시각 } — 그 자리에 인원이 적혀 있고, 주문이 그 뒤에
+  // 들어온 것만 식사 중이다. 앞 손님이 남긴 것은 그대로 미결제다. 포장 카운터는 앉는 자리가 아니다.
+  const seatings = opts.seatings || {};
+  const isDining = (o) => {
+    const seat = seatings[String(o.table_number)];
+    return !!seat && String(o.created_at || "") >= seat;
+  };
+  const diningOrders = staleOpen.filter(isDining);
+  const problemOrders = staleOpen.filter((o) => !isDining(o));
 
   // 부분결제로 **미리 받은 돈.**
   //
@@ -894,6 +905,10 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
     // 결제 뒤 반품·취소로 돌려준 것(2026-10-03, src/refunds.js). 매출에서는 이미 빠졌다.
     ...refundSummaryOf(paidOrders),
     problem_amount: problemAmount,
+    // 2시간 넘게 안 낸 주문 중 손님이 아직 앉아 계신 것(위 isDining). 경고가 아니라 알림으로 보인다.
+    dining_order_count: diningOrders.length,
+    dining_amount: diningOrders.reduce((sum, o) => sum + (o.total || 0), 0),
+    dining_tables: [...new Set(diningOrders.map((o) => String(o.table_number)))],
     table_breakdown: tableBreakdown,
     // 메뉴판에 있는 것 전부 + 각각 몇 개 팔렸나 (위 menuBreakdown 주석).
     // null 이면 「메뉴를 못 봐서 모른다」는 뜻이다 — 「하나도 안 팔렸다」가

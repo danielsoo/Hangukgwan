@@ -1321,6 +1321,7 @@
       settlementRevenue: "매출 (결제 완료)",
       settlementPaidCount: "결제 완료 주문",
       settlementProblemCount: "⚠️ 미결제/문제 주문",
+      settlementDiningCount: "🍽 식사 중 · 2시간 넘음 ({where})",
       settlementCancelledCount: "취소된 주문",
       settlementPartialPaid: "부분결제로 미리 받은 돈",
       settlementPartialNotCounted: "아직 매출에 안 잡힘",
@@ -2733,6 +2734,7 @@
       settlementRevenue: "營業額（已結帳）",
       settlementPaidCount: "已結帳訂單",
       settlementProblemCount: "⚠️ 未結帳/異常訂單",
+      settlementDiningCount: "🍽 用餐中 · 超過2小時（{where}）",
       settlementCancelledCount: "已取消訂單",
       settlementPartialPaid: "部分結帳已先收款",
       settlementPartialNotCounted: "尚未計入營業額",
@@ -17908,6 +17910,11 @@
     const alerts = [];
     if (data.problem_order_count > 0) {
       alerts.push(`<div class="stl-alert warn">⚠️ ${T("settlementProblemCount").replace("⚠️ ", "")} ${data.problem_order_count}${T("settlementCountSuffix")} · ${nt(data.problem_amount)}</div>`);
+    }
+    // 아직 앉아 계신 손님(2시간 넘게 드시는 중) — 빨간 경고가 아니다(2026-10-18 A3).
+    if (data.dining_order_count > 0) {
+      const where = (data.dining_tables || []).map((n) => fmtOrderTableTag(n).replace(/<[^>]+>/g, "")).join(", ");
+      alerts.push(`<div class="stl-alert dining">${T("settlementDiningCount").replace("{where}", escapeHtml(where))} ${data.dining_order_count}${T("settlementCountSuffix")} · ${nt(data.dining_amount)}</div>`);
     }
     if (data.cancelled_order_count > 0) {
       alerts.push(`<div class="stl-alert info">${T("settlementCancelledCount")} ${data.cancelled_order_count}${T("settlementCountSuffix")} · ${nt(data.cancelled_amount)}</div>`);

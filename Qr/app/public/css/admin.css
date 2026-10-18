@@ -2061,6 +2061,7 @@ body:not(.role-staff) .staff-only { display: none !important; }
 }
 .stl-alert.warn { border-color: var(--red); background: #fdecea; color: var(--red); }
 .stl-alert.info { border-color: #d08700; background: #fff7e6; color: #7a4f00; }
+.stl-alert.dining { border-color: #8aa3c2; background: #eef3fa; color: #2d4a6e; }
 
 .stl-block {
   max-width: 1560px;

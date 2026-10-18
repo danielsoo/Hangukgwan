@@ -9,7 +9,7 @@ const { nextOpenAt } = require("../openHours");
 const { OPEN: OPEN_STATUSES } = require("../orderStatus");
 const { recordStoreSize, sizeWarningLine, SETTING_BYTES } = require("../storeSize");
 const { serviceStartedAt } = require("../serviceStart");
-const { clearIdleSeats } = require("../partySize");
+const { clearIdleSeats, seatingStartOf } = require("../partySize");
 const { nowLocal } = require("../time");
 // formatSettlementSummary 는 이제 안 쓴다 — 밤 크론이 쓰던 간략한 서식이었는데,
 // 2026-09-22 부터 크론도 버튼과 같은 formatShiftSummary 를 쓴다(cron-close).
@@ -144,8 +144,16 @@ router.get("/", requireAdmin, requireTodayForStaff, settlementUnlockedOwner, asy
   // 차트가 전부 이 한 번의 거르기를 따라간다. 화면에서 조각조각 거르면 어느
   // 하나를 빠뜨리고, 그 칸만 조용히 하루치를 보여준다.
   const shift = shiftQ;
+  // 지금 손님이 앉아 계신 자리와 앉은 시각 — 2시간 넘은 미결제 중 그 손님 것은 「식사 중」으로 가른다
+  // (src/settlement.js isDining). 지금 보는 화면에만 쓴다 — 마감 기록에는 넣지 않는다.
+  const seatings = {};
+  for (const t of store.tables || []) {
+    if (!t || t.is_counter) continue;
+    const seat = seatingStartOf(t);
+    if (seat) seatings[String(t.number)] = seat;
+  }
   res.json(
-    Object.assign(computeSettlement(orders, start, end, { ...opts, shift, menu: menuForSettlement() }), {
+    Object.assign(computeSettlement(orders, start, end, { ...opts, shift, seatings, menu: menuForSettlement() }), {
       // 하루만 볼 때는 그날 LINE 마감 문자가 나갔는지도 같이 준다.
       // 안 나갔으면 왜인지까지 — 사장님이 「정산은 됐는데 문자는 안 왔다」를
       // 다음부터는 그 화면에서 바로 본다(2026-09-15).
