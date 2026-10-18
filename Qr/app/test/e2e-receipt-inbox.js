@@ -430,8 +430,8 @@ const PASTED = `읽었습니다:
       vendor: "房信菓菜行", date: today, store: "main", rows: [
         // 종이에는 「2斤4 · 25 · 56」인데 24 를 숫자로 읽으면 이렇게 들어온다
         { name: "紅蘿蔔", qty: 2, unit: "斤", price: 8, amount: 16, sure: false, band: [0.30, 0.36] },
-        // 저울에서 나온 무게 — 9.9167 은 사람이 쓰는 무게가 아니다
-        { name: "白蘿蔔", qty: 9.94, unit: "斤", price: 24, amount: 238, sure: false, band: [0.36, 0.42] },
+        // 어느 눈에도 안 걸리는 무게 — 478 ÷ 35 = 13.657 은 당기지 않는다
+        { name: "高麗菜", qty: 13.6, unit: "斤", price: 35, amount: 478, sure: false, band: [0.36, 0.42] },
       ],
     }));
     await row.locator("[data-inbox-go]").click();
@@ -466,11 +466,11 @@ const PASTED = `읽었습니다:
     const price1 = page.locator("#ingEntryLines .ing-in-price").nth(1);
     await price1.click();
     await price1.press("Control+a");
-    await price1.type("24", { delay: 50 });
+    await price1.type("35", { delay: 50 });
     await price1.press("Tab");
     await page.waitForTimeout(400);
     const q1 = await page.locator("#ingEntryLines .ing-in-qty").nth(1).inputValue();
-    check("★★ 저울에서 나온 무게는 그대로 둔다 (9.917, 兩 자리로 당기지 않는다)", q1 === "9.917", q1);
+    check("★★ 어느 눈에도 안 걸리는 무게는 그대로 둔다 (13.657 — 없는 자릿수를 지어내지 않는다)", q1 === "13.657", q1);
     const warn1 = await page.locator("#ingEntryLines .ing-line-warn").nth(1).innerText();
     check("★ 딱 떨어지지 않으면 兩 으로 말하지 않는다", !/兩/.test(warn1), warn1);
 
