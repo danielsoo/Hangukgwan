@@ -43,7 +43,9 @@ function check(name, cond, extra = "") {
   await boss.patch(`/api/orders/${id}`).send({ status: "paid", paymentMethod: "cash" });
 
   const browser = await launchBrowser();
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  // 가게 패드는 타이베이 시각이다 — 없으면 타이베이 자정 뒤(UTC 16시~)에 주문판이 그 주문을 어제 것으로
+  // 보고 안 그려서 「↩ 반품·취소」 단추를 못 찾았다(2026-10-18, e2e-payment-receipt 와 같은 까닭).
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, timezoneId: "Asia/Taipei" });
   // POS 앱 인쇄를 가로챈다(e2e-payment-receipt.js 와 같은 수). 종이가 나갔는지,
   // 몇 장 나갔는지를 세려는 것이다.
   await ctx.addInitScript(() => {
@@ -149,12 +151,14 @@ function check(name, cond, extra = "") {
     await boss.post("/api/settlements/shift-close").send({ shift: "pm" });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('.admin-tabs button[data-tab="orders"]').click();
-    await page.waitForTimeout(1500);
-    check(
-      "★★ 정산하면 결제 완료 칸에서 내려간다",
-      (await page.locator(`.order-card[data-order-id="${id}"] .order-refund-btn`).count()) === 0,
-      ""
-    );
+    // 정산은 시험이 서버에 바로 보낸 것이라(다른 패드에서 누른 것과 같다) 이 화면은 다음 새로고침에 안다 —
+    // 실시간이 꺼진 시험에서는 2초마다(pollTimer). 1.5초만 기다리면 운에 따라 갈렸다(2026-10-18).
+    let still = 1;
+    for (let k = 0; k < 12 && still; k++) {
+      await page.waitForTimeout(500);
+      still = await page.locator(`.order-card[data-order-id="${id}"] .order-refund-btn`).count();
+    }
+    check("★★ 정산하면 결제 완료 칸에서 내려간다", still === 0, "");
 
     await page.locator('.admin-tabs button[data-tab="settlement"]').click();
     await page.waitForTimeout(2800);

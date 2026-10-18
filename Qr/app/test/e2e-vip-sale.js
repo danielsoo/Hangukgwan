@@ -106,8 +106,14 @@ function check(name, cond, extra = "") {
     check("버튼에 금액이 찍혀 있다", label.includes("300"), label);
   }
 
-  out.push("\n[현금으로만, 그 자리에서]");
+  // 2026-09-10 사장님: "현재 vip 카드 구매 버튼이 있는데 그게 총 결제 금액이랑 더해지게 해줘. 그리고 vip
+  // 카드는 무조건 현금으로 결제할 거라서 나머지 금액은 line, 카드, 현금 으로 선택할 수 있게 해줘."
+  // 그래서 받을 밥값이 남은 자리에서는 「지금 판다」가 아니라 「이번 결제에 얹는다」다(public/js/admin.js
+  // pendingVipCardSale) — 결제 버튼 금액이 밥값+카드값이 되고, 결제하는 순간 카드가 **현금으로** 팔린다.
+  // (이 시험은 그 바뀜 전에 쓰여 「누르면 바로 팔린다」를 재다가 깨져 있었다 — 2026-10-18 고침.)
+  out.push("\n[밥값이 남은 자리 — 이번 결제에 얹었다가, 결제할 때 현금으로]");
   {
+    const foodPrice = store.orders.filter((o) => String(o.table_number) === String(A)).reduce((a, o) => a + o.total, 0);
     await page.locator("#vipSellBtn").click();
     await page.waitForTimeout(250);
     check("판매 창이 열린다", await page.locator("#vipSellBackdrop").isVisible());
@@ -116,37 +122,40 @@ function check(name, cond, extra = "") {
     // 카드번호는 비운 채로 — 사장님이 고른 "선택 입력".
     await page.locator("#vipSellConfirm").click();
     await page.waitForTimeout(500);
-    // 판매를 알리는 확인 창이 뜬다(돈을 받는 일이라 한 번 남긴다).
+    check("★ 아직 팔지 않는다 — 판매 기록이 없다", store.orders.filter((o) => o.kind === "vip_card_sale").length === 0);
+    check("판매 창은 닫힌다", !(await page.locator("#vipSellBackdrop").isVisible()));
+    await page.locator("#tableDetailSelectAll").check();
+    await page.waitForTimeout(300);
+    const payLabel = await page.locator("#tableDetailBody .pay-selected-items-btn").first().innerText();
+    check("★★ 결제 버튼 금액 = 밥값 + 카드값", payLabel.replace(/[^0-9]/g, "") === String(foodPrice + 300), `${payLabel} (밥값 ${foodPrice})`);
+    await page.locator("#tableDetailBody .pay-selected-items-btn").first().click();
+    await page.waitForTimeout(400);
+    await page.locator('#paymentMethodBackdrop [data-payment-method="linepay"]').click();
+    await page.waitForTimeout(1200);
+    // 영수증을 묻는 창(3초 뒤 저절로 취소)이 뜨면 취소한다.
     if (await page.locator("#appDialogBackdrop").isVisible()) {
-      check("얼마를 받았는지 알려준다", (await page.locator("#appDialogBackdrop").innerText()).includes("300"),
-        await page.locator("#appDialogBackdrop").innerText());
-      await page.locator("#appDialogBackdrop .primary-btn").first().click();
-      await page.waitForTimeout(200);
-    } else {
-      check("얼마를 받았는지 알려준다", false, "확인 창이 안 떴다");
+      await page.locator("#appDialogCancel").click();
+      await page.waitForTimeout(300);
     }
     const sold = store.orders.filter((o) => o.kind === "vip_card_sale");
-    check("판매가 한 건 기록된다", sold.length === 1, String(sold.length));
-    check("현금으로 찍힌다", sold[0].payment_method === "cash", sold[0].payment_method);
-    check("이미 결제된 상태다", sold[0].status === "paid", sold[0].status);
-    check("금액이 300", sold[0].total === 300, String(sold[0].total));
-    check("그 자리 것으로 남는다", String(sold[0].table_number) === String(A));
-    check("인원수를 붙이지 않는다", sold[0].party_size == null, String(sold[0].party_size));
-    check("품목 하나뿐", sold[0].items.length === 1 && sold[0].items[0].category_key === "vip_card");
+    check("★★ 결제하는 순간 판매가 한 건 기록된다", sold.length === 1, String(sold.length));
+    check("★★ 카드값은 현금으로 찍힌다(밥값을 LinePay 로 냈어도)", sold[0] && sold[0].payment_method === "cash", sold[0] && sold[0].payment_method);
+    check("이미 결제된 상태다", sold[0] && sold[0].status === "paid", sold[0] && sold[0].status);
+    check("금액이 300", sold[0] && sold[0].total === 300, sold[0] && String(sold[0].total));
+    check("그 자리 것으로 남는다", sold[0] && String(sold[0].table_number) === String(A));
+    check("인원수를 붙이지 않는다", sold[0] && sold[0].party_size == null, sold[0] && String(sold[0].party_size));
+    check("품목 하나뿐", sold[0] && sold[0].items.length === 1 && sold[0].items[0].category_key === "vip_card");
     check("번호를 안 적었으면 카드는 안 만든다", store.vipCards.length === 0, String(store.vipCards.length));
-    // 밥값은 그대로 남아 있어야 한다 — 카드를 팔았다고 밥값이 결제되면 안 된다.
     const food = store.orders.filter((o) => String(o.table_number) === String(A) && o.kind !== "vip_card_sale");
-    check("밥값은 그대로 미결제", food.every((o) => o.status !== "paid"));
-    // 인원수도 건드리면 안 된다 — 손님은 아직 앉아 계신다.
-    const t = store.tables.find((x) => String(x.number) === String(A));
-    check("앉아 계신 손님의 인원수는 그대로", t.party_size === 2, String(t.party_size));
+    check("★ 밥값은 고른 수단(LinePay)으로", food.length > 0 && food.every((o) => o.status === "paid" && o.payment_method === "linepay"),
+      food.map((o) => `${o.status}/${o.payment_method}`).join(","));
   }
 
   out.push("\n[다 먹고 결제까지 끝낸 뒤에 사는 경우]");
   // 여기가 원래 못 팔던 자리다 — 미결제 주문이 하나도 없으면 예전 코드는
   // footer 자체를 안 그렸다.
   {
-    await page.locator("#tableDetailClose").click();
+    if (await page.locator("#tableDetailBackdrop").isVisible()) await page.locator("#tableDetailClose").click();
     await page.waitForTimeout(300);
     // 주문이 아예 없는 빈 자리를 연다.
     const tile = tileFor(B);

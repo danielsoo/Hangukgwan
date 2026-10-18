@@ -33,7 +33,9 @@ function check(name, cond, extra = "") {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
   const base = `http://127.0.0.1:${server.address().port}`;
   const browser = await launchBrowser();
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  // 가게 패드는 타이베이 시각이다. 이 칸이 없으면 기계 시계(UTC)로 「오늘」을 정해서, 타이베이로 자정이
+  // 지난 뒤(UTC 16시~)에는 주문(타이베이 날짜)이 어제 것이 되어 주문판에 안 뜨고 시험이 멈췄다(2026-10-18).
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 }, timezoneId: "Asia/Taipei" });
   await ctx.addInitScript(() => {
     window.__jobs = [];
     window.HangukgwanPrint = {
