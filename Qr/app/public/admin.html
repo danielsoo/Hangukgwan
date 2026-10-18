@@ -460,9 +460,12 @@
         <div class="ing-block ing-inbox">
           <div class="ing-inbox-head">
           <button type="button" class="ing-block-title ing-fold" id="ingInboxFold" aria-expanded="false">
-            <span data-i18n="ingInboxTitle">📥 영수증 대기함</span>
+            <span class="ing-fold-title" data-i18n="ingInboxTitle">📥 영수증 대기함</span>
             <span class="ing-inbox-count" id="ingInboxCount"></span>
-            <span class="ing-fold-mark"><span id="ingInboxFoldText" data-i18n="ingInboxFoldOpen">목록 보기</span> <b>▾</b></span>
+            <span class="ing-fold-mark">
+              <span id="ingInboxFoldText" data-i18n="ingInboxFoldOpen">목록 보기</span>
+              <span class="ing-fold-chev" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 6l4.5 4.5L12.5 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+            </span>
           </button>
           <div class="ing-inbox-tools">
             <button type="button" id="ingInboxAdd" class="primary" data-i18n="ingInboxAdd">📷 사진 올리기</button>

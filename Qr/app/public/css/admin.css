@@ -3076,7 +3076,11 @@ body:not(.role-staff) .staff-only { display: none !important; }
 
 /* 영수증 대기함 — 올린 사진이 읽히기를 기다리는 자리(2026-10-06). */
 .ing-inbox-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
-.ing-inbox-count { margin-left: 8px; font-size: 14px; font-weight: 600; color: var(--brand, #c0392b); }
+.ing-inbox-count {
+  padding: 3px 10px; border-radius: 999px; background: #fdecea;
+  font-size: 13px; font-weight: 700; color: var(--red, #b5232c);
+}
+.ing-inbox-count:empty { display: none; }
 /* 이미 장부에 있는 영수증 — 손대기 전에 보여야 한다(2026-10-17). */
 .ing-have {
   margin: 0 0 12px; padding: 10px 14px; border-radius: 10px;
@@ -3090,24 +3094,38 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-entry-which { margin-left: 10px; font-size: 14px; font-weight: 600; color: var(--muted); }
 /* 대기함은 접어 둔다 — 확인하러 들어와서 여덟 층을 지나지 않게(2026-10-17). */
 .ing-inbox-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-.ing-inbox-head .ing-inbox-tools { margin: 0; }
-/* 눌러서 펴는 단추로 보여야 한다(2026-10-18 사장님: "눌러서 볼 수 있는 거라고 알기가 어려워") —
-   테두리 있는 칸 + 「목록 보기 ▾」 알약. 예전엔 테두리 없는 글자와 작은 ▾ 뿐이었다. */
+.ing-inbox-head .ing-inbox-tools { margin: 0 0 0 auto; gap: 8px; }
+/* 「사진 올리기 · 전부 받기 · 한꺼번에 넣기」 — 예전엔 브라우저 기본 단추(회색 작은 네모) 그대로였다
+   (2026-10-18 사장님: "사진 올리기 이런 버튼도 너무 구리고"). */
+.ing-inbox-tools > button {
+  display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px;
+  border: 1px solid var(--line); border-radius: 10px; background: #fff; color: #2f3542;
+  font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+.ing-inbox-tools > button:hover { border-color: #cfc5b6; box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
+.ing-inbox-tools > button.primary { background: #2f3542; border-color: #2f3542; color: #fff; }
+.ing-inbox-tools > button.primary:hover { background: #3d4555; }
+.ing-inbox-tools > button:disabled { opacity: 0.55; cursor: default; box-shadow: none; }
+/* 눌러서 펴는 머리(2026-10-18 사장님: "눌러서 볼 수 있는 거라고 알기가 어려워" → 테두리·빨간 알약을
+   달았더니 "너무 구식 같아"). 위의 「장부 / 영수증 확인」 칸과 같은 말투로: 장수는 옅은 배지, 끝에 둥근
+   ⌄ 단추, 마우스를 올리면 머리 전체가 옅게 칠해진다. */
 .ing-fold {
-  display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--line, #d9d4cc); border-radius: 10px;
-  background: transparent; padding: 6px 8px 6px 12px; cursor: pointer;
-  font: inherit; color: inherit; text-align: left;
+  display: flex; align-items: center; gap: 10px; margin: -6px 0 -6px -8px;
+  border: none; border-radius: 12px; background: transparent; padding: 6px 8px;
+  cursor: pointer; font: inherit; color: inherit; text-align: left;
+  transition: background 0.15s;
 }
-.ing-fold:hover { border-color: var(--brand, #c0392b); }
-.ing-fold-mark {
-  display: inline-flex; align-items: center; gap: 4px; margin-left: 2px;
-  padding: 3px 10px; border-radius: 999px;
-  background: var(--brand, #c0392b); color: #fff; font-size: 13px; font-weight: 700;
+.ing-fold:hover { background: #f5f1ea; }
+.ing-fold-title { font-weight: 700; }
+.ing-fold-mark { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.ing-fold-chev {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border-radius: 50%; background: #efe9df; color: #2f3542;
+  transition: transform 0.2s, background 0.15s;
 }
-.ing-fold-mark b { display: inline-block; transition: transform 0.15s; }
-.ing-fold.is-open .ing-fold-mark { background: var(--muted, #888); }
-.ing-fold.is-open .ing-fold-mark b { transform: rotate(180deg); }
+.ing-fold:hover .ing-fold-chev { background: #2f3542; color: #fff; }
+.ing-fold.is-open .ing-fold-chev { transform: rotate(180deg); }
 .ing-fold-body { margin-top: 10px; }
 /* 식자재 안의 두 칸 — 장부(홈)와 영수증 확인(2026-10-17). */
 .ing-views { display: flex; gap: 8px; margin: 0 0 14px; }

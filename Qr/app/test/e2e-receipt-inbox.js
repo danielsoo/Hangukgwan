@@ -101,12 +101,18 @@ const PASTED = `읽었습니다:
       const look = async () => fold.evaluate((el) => ({
         open: el.getAttribute("aria-expanded") === "true",
         text: el.querySelector("#ingInboxFoldText").textContent,
-        border: getComputedStyle(el).borderTopStyle !== "none" && parseFloat(getComputedStyle(el).borderTopWidth) > 0,
-        pill: getComputedStyle(el.querySelector(".ing-fold-mark")).backgroundColor,
+        chev: !!el.querySelector(".ing-fold-chev svg"),
       }));
       const a = await look();
-      check("★★ 대기함 머리에 테두리와 색 있는 「목록 보기/접기」 알약이 있다",
-        a.border && a.pill !== "rgba(0, 0, 0, 0)" && (a.open ? /목록 접기/ : /목록 보기/).test(a.text), JSON.stringify(a));
+      check("★★ 대기함 머리에 「목록 보기/접기」와 둥근 ⌄ 단추가 있다",
+        a.chev && (a.open ? /목록 접기/ : /목록 보기/).test(a.text), JSON.stringify(a));
+      // "사진 올리기 이런 버튼도 너무 구리고" — 브라우저 기본 단추(작은 회색 네모)로 남지 않았는지
+      const tools = await page.evaluate(() => [...document.querySelectorAll(".ing-inbox-tools > button")].filter((b) => !b.hidden).map((b) => {
+        const cs = getComputedStyle(b);
+        return { t: b.textContent.trim(), h: b.getBoundingClientRect().height, r: parseFloat(cs.borderTopLeftRadius), bg: cs.backgroundColor };
+      }));
+      check("★★ 대기함 단추가 기본 회색 네모가 아니다(높이 34+ · 둥근 모서리 8+ · 기본 회색 아님)",
+        tools.length >= 2 && tools.every((b) => b.h >= 34 && b.r >= 8 && b.bg !== "rgb(239, 239, 239)" && b.bg !== "rgb(240, 240, 240)"), JSON.stringify(tools));
       await fold.click();
       await page.waitForTimeout(300);
       const b = await look();
