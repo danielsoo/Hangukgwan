@@ -26,8 +26,8 @@ const order = (id, table, h, total, status = "served") => ({
 });
 
 const orders = [
-  order(1, "A3", 3.5, 2800),         // A3 손님 첫 라운드 — 아직 드시는 중
-  order(2, "A3", 2.5, 2370),         // A3 두 번째 — 아직 드시는 중
+  order(1, "A3", 2.8, 2800),         // A3 손님 첫 라운드 — 아직 드시는 중
+  order(2, "A3", 2.1, 2370),         // A3 두 번째 — 아직 드시는 중
   order(3, "A3", 0.5, 400),          // A3 방금 — 2시간 안 됨, 어디에도 안 잡힌다
   order(4, "7", 3, 710),             // 7번 — 자리가 비었는데 안 낸 것: 진짜 미결제
   order(5, "9", 4, 500),             // 9번 앞 손님이 안 내고 간 것 — 지금 손님은 그 뒤에 앉았다
@@ -38,7 +38,7 @@ if (orders.some((o) => o.created_at.slice(0, 10) !== day)) {
   console.log("  (자정 직후라 몇 시간 전이 어제 — 건너뜀)\n\n0 passed, 0 failed");
   process.exit(0);
 }
-const seatings = { A3: ago(3.6), 9: ago(2.4) };
+const seatings = { A3: ago(2.9), 9: ago(2.4) };
 
 const before = computeSettlement(orders, day, day, {});
 check(`예전처럼 앉은 자리를 모르면 2시간 넘은 것은 다 미결제 (${before.problem_order_count}건)`, before.problem_order_count === 5, "");
@@ -49,6 +49,15 @@ check(`★★ 「⚠ 미결제」에는 진짜 안 받은 것만 — 빈 자리 
 check("어느 자리인지 적는다", r.dining_tables.sort().join() === "9,A3", JSON.stringify(r.dining_tables));
 check("2시간 안 된 것은 어디에도 안 잡힌다", ![...r.problem_orders.map((o) => o.id)].includes(3), "");
 check("매출은 그대로(낸 것이 없다)", r.total_revenue === 0 && before.total_revenue === 0, "");
+
+// 2026-10-18 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아" — 안 내고 나가도(먹튀·누르기 잊음)
+// 자리에 인원이 남는다. 앉은 지 3시간이 넘으면 앉아 계셔도 다시 미결제다.
+const long = computeSettlement(orders, day, day, { seatings: { A3: ago(3.1), 9: ago(2.4) } });
+check(`★★ 앉은 지 3시간 넘은 A3 는 다시 「⚠ 미결제」 (미결제 ${long.problem_order_count} · 식사 중 ${long.dining_order_count})`,
+  long.problem_orders.map((o) => o.id).sort().join() === "1,2,4,5" && long.dining_order_count === 1 && long.dining_tables.join() === "9",
+  JSON.stringify({ p: long.problem_orders.map((o) => o.id), d: long.dining_tables }));
+const edge = computeSettlement(orders, day, day, { seatings: { A3: ago(2.99) } });
+check("3시간 바로 전까지는 식사 중", edge.dining_tables.includes("A3"), JSON.stringify(edge.dining_tables));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

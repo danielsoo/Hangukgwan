@@ -21,6 +21,8 @@ const { taipeiDateString, nowLocal } = require("./time");
 // 표시 자체를 숨기기"/"지금 그대로 두기").
 // 목록은 src/orderStatus.js 한 곳에서만 정한다.
 const OPEN_STATUSES = require("./orderStatus").OPEN;
+// 「🍽 식사 중」으로 봐주는 것은 앉은 지 이만큼까지(아래 isDining).
+const DINING_MAX_MS = 3 * 60 * 60 * 1000;
 const STALE_OPEN_ORDER_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 // startDate/endDate are inclusive "YYYY-MM-DD" strings (Taipei business
@@ -413,10 +415,16 @@ function computeSettlement(orders, startDate, endDate = startDate, opts = {}) {
   // 17:34 부터 일곱 번 나눠 시키며 드시는 중이었는데 21:19 에 「⚠ 미결제 2건 · NT$5,170」이 떴다).
   // opts.seatings = { 테이블: 지금 손님이 앉은 시각 } — 그 자리에 인원이 적혀 있고, 주문이 그 뒤에
   // 들어온 것만 식사 중이다. 앞 손님이 남긴 것은 그대로 미결제다. 포장 카운터는 앉는 자리가 아니다.
+  //
+  // **앉은 지 3시간까지만**(같은 날 사장님: "3시간으로 해줘 직원이 누르는 건 불가능 할 것 같아"). 「나갔다」는
+  // 직원이 결제·「손님 나감」을 눌러야 알 수 있는데, 안 내고 나가거나 누르기를 잊으면 그 자리는 영영
+  // 「앉아 계심」으로 남는다. 그래서 앉은 지 3시간이 넘으면 앉아 계셔도 다시 「⚠ 미결제」다.
   const seatings = opts.seatings || {};
   const isDining = (o) => {
     const seat = seatings[String(o.table_number)];
-    return !!seat && String(o.created_at || "") >= seat;
+    if (!seat || String(o.created_at || "") < seat) return false;
+    const seatMs = new Date(seat.replace(" ", "T")).getTime();
+    return nowMs - seatMs < DINING_MAX_MS;
   };
   const diningOrders = staleOpen.filter(isDining);
   const problemOrders = staleOpen.filter((o) => !isDining(o));
