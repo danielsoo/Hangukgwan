@@ -123,7 +123,7 @@ function check(name, cond, extra = "") {
     check("★ 잠긴 식자재는 서버가 안 준다(423)", (await st("/api/ingredients/meta")) === 423, String(await st("/api/ingredients/meta")));
     await tab("ingredients").click();
     await page.waitForTimeout(400);
-    check("★★ 식자재를 누르면 비밀번호 창", (await gate()) && /식자재/.test(await page.locator("#pinGateTitle").innerText()), await page.locator("#pinGateTitle").innerText());
+    check("★★ 영수증 관리를 누르면 비밀번호 창", (await gate()) && /영수증 관리/.test(await page.locator("#pinGateTitle").innerText()), await page.locator("#pinGateTitle").innerText());
     await page.click("#pinGateCancel");
     await page.waitForTimeout(300);
     check("★ 취소하면 식자재가 안 열린다", await page.locator("#tab-ingredients").evaluate((el) => el.hidden), "");
