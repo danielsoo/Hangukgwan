@@ -17655,6 +17655,11 @@
   // out at a glance, not just as a number in the list below.
   function renderHistoryChart(list) {
     const canvas = $("#settlementHistoryChart");
+    // 저장된 기록이 없으면 빈 그래프로 400픽셀을 먹지 않는다 — 왼쪽 목록이 이미 「없다」고 말한다
+    // (2026-10-18, e2e-settlement-ui.js 의 화면 길이).
+    const card = canvas && canvas.closest(".settlement-history-card");
+    if (card) card.hidden = !(list && list.length);
+    if (!list || !list.length) return;
     if (!chartReady(canvas)) return;
     const sorted = [...list].sort((a, b) => a.date.localeCompare(b.date));
     if (settlementHistoryChart) settlementHistoryChart.destroy();

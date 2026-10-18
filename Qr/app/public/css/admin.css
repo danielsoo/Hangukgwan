@@ -3064,6 +3064,8 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .stl-period-op { font-size: 22px; font-weight: 700; color: var(--muted); text-align: center; }
 .stl-period-year { margin-top: 14px; display: grid; gap: 14px; }
 .stl-period-year .settlement-chart-wrap { height: 260px; }
+/* 지난 정산 추이는 날마다 막대 하나 — 낮아도 읽힌다. */
+.settlement-history-card .settlement-chart-wrap { height: 200px; }
 .ing-ov-table td.is-minus { color: #b4541f; }
 @media (max-width: 900px) {
   .stl-period-calc { grid-template-columns: 1fr auto 1fr; }
@@ -3333,7 +3335,9 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 지난 주문을 **날짜로 접는다**(2026-10-07 사장님: "너무 아래로 길게 뻗어나가서
    한 참전에 건 정말 오래 걸려"). 한 달을 봐도 줄이 서른 개다. 목록 자체도
    제 안에서 굴러서 페이지가 아래로 안 늘어난다. */
-.stl-orders { max-height: 560px; overflow-y: auto; }
+/* 440 — 위(.stl-orders 첫 정의)와 같은 값. 560 으로 두었더니 결산 화면이 그만큼 길어져
+   e2e-settlement-ui.js(2,600) · e2e-order-history.js(목록 500) 상한을 넘었다(2026-10-18). */
+.stl-orders { max-height: 440px; overflow-y: auto; }
 .stl-day { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: #fff; }
 .stl-day-head {
   display: grid; grid-template-columns: 18px minmax(96px, auto) 1fr auto; align-items: center; gap: 10px;

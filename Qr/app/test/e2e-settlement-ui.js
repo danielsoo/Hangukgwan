@@ -92,6 +92,22 @@ const D = "2026-09-09";
   // 고치기 전에는 5,000픽셀이 넘었다. 정확한 숫자를 못 박기보다, 다시
   // 아래로 무한정 늘어나는 것을 막는 선을 둔다.
   check("화면이 2,600픽셀을 넘지 않는다", height <= 2600, `${height}px`);
+  check("저장된 기록이 없으면 빈 추이 그래프를 안 띄운다", await page.evaluate(() => document.querySelector(".settlement-history-card").hidden), "");
+  // 실제 가게는 지난 기록이 있어 추이 그래프가 뜬다 — 그 모양으로도 잰다(2026-10-18: 지난 주문 목록 상한이
+  // 440 → 560 으로 커져 2,759픽셀이 됐었다).
+  await page.evaluate(async (d) => {
+    await fetch("/api/settlements/close", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: d }) });
+  }, D);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  await page.locator('.admin-tabs button[data-tab="settlement"]').click();
+  await page.waitForTimeout(900);
+  await page.fill("#settlementStartDate", D);
+  await page.fill("#settlementEndDate", D);
+  await page.waitForTimeout(1400);
+  const height2 = await page.evaluate(() => document.querySelector("#tab-settlement").scrollHeight);
+  const histShown = await page.evaluate(() => !document.querySelector(".settlement-history-card").hidden);
+  check(`지난 기록이 있어 추이 그래프가 뜬 화면도 2,600픽셀을 넘지 않는다 (${height2}px)`, histShown && height2 <= 2600, `${height2}px shown=${histShown}`);
 
   out.push("\n[가장 큰 숫자가 매출인가]");
   const sizes = await page.evaluate(() => {
