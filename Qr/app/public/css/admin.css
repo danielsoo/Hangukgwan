@@ -3091,13 +3091,23 @@ body:not(.role-staff) .staff-only { display: none !important; }
 /* 대기함은 접어 둔다 — 확인하러 들어와서 여덟 층을 지나지 않게(2026-10-17). */
 .ing-inbox-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ing-inbox-head .ing-inbox-tools { margin: 0; }
+/* 눌러서 펴는 단추로 보여야 한다(2026-10-18 사장님: "눌러서 볼 수 있는 거라고 알기가 어려워") —
+   테두리 있는 칸 + 「목록 보기 ▾」 알약. 예전엔 테두리 없는 글자와 작은 ▾ 뿐이었다. */
 .ing-fold {
   display: flex; align-items: center; gap: 10px;
-  border: none; background: transparent; padding: 0; cursor: pointer;
-  font: inherit; text-align: left;
+  border: 1px solid var(--line, #d9d4cc); border-radius: 10px;
+  background: transparent; padding: 6px 8px 6px 12px; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
 }
-.ing-fold-mark { margin-left: 2px; color: var(--muted); font-size: 13px; transition: transform 0.15s; }
-.ing-fold.is-open .ing-fold-mark { transform: rotate(180deg); }
+.ing-fold:hover { border-color: var(--brand, #c0392b); }
+.ing-fold-mark {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 2px;
+  padding: 3px 10px; border-radius: 999px;
+  background: var(--brand, #c0392b); color: #fff; font-size: 13px; font-weight: 700;
+}
+.ing-fold-mark b { display: inline-block; transition: transform 0.15s; }
+.ing-fold.is-open .ing-fold-mark { background: var(--muted, #888); }
+.ing-fold.is-open .ing-fold-mark b { transform: rotate(180deg); }
 .ing-fold-body { margin-top: 10px; }
 /* 식자재 안의 두 칸 — 장부(홈)와 영수증 확인(2026-10-17). */
 .ing-views { display: flex; gap: 8px; margin: 0 0 14px; }

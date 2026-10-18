@@ -95,6 +95,26 @@ const PASTED = `읽었습니다:
       (await page.locator(".ing-inbox").isVisible()) && (await page.locator(".ing-entry").isVisible()), "");
     check("★ 장부는 확인 칸에서 안 보인다", await page.locator("#ingViewBook").evaluate((el) => el.hidden), "");
 
+    // 2026-10-18 사장님: "눌러서 볼 수 있는 거라고 알기가 어려워" — 접힌 대기함 머리가 단추로 보여야 한다
+    {
+      const fold = page.locator("#ingInboxFold");
+      const look = async () => fold.evaluate((el) => ({
+        open: el.getAttribute("aria-expanded") === "true",
+        text: el.querySelector("#ingInboxFoldText").textContent,
+        border: getComputedStyle(el).borderTopStyle !== "none" && parseFloat(getComputedStyle(el).borderTopWidth) > 0,
+        pill: getComputedStyle(el.querySelector(".ing-fold-mark")).backgroundColor,
+      }));
+      const a = await look();
+      check("★★ 대기함 머리에 테두리와 색 있는 「목록 보기/접기」 알약이 있다",
+        a.border && a.pill !== "rgba(0, 0, 0, 0)" && (a.open ? /목록 접기/ : /목록 보기/).test(a.text), JSON.stringify(a));
+      await fold.click();
+      await page.waitForTimeout(300);
+      const b = await look();
+      check("★★ 누르면 글자가 바뀐다(목록 보기 ↔ 목록 접기)", b.open !== a.open && (b.open ? /목록 접기/ : /목록 보기/).test(b.text), JSON.stringify(b));
+      await fold.click();
+      await page.waitForTimeout(300);
+    }
+
     // 고른 칸은 **그 기기에** 남는다
     const kept = await page.evaluate(() => localStorage.getItem("hg_admin_ingView"));
     check("★★ 고른 칸이 기기에 남는다", kept === "check", String(kept));

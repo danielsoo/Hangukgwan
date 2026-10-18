@@ -1276,6 +1276,9 @@
     body.hidden = !open;
     btn.setAttribute("aria-expanded", open ? "true" : "false");
     btn.classList.toggle("is-open", !!open);
+    // 2026-10-18 사장님: "눌러서 볼 수 있는 거라고 알기가 어려워" — 작은 ▾ 하나로는 단추로 안 보였다.
+    const txt = $("#ingInboxFoldText");
+    if (txt) txt.textContent = T(open ? "ingInboxFoldClose" : "ingInboxFoldOpen");
     // **저절로 편 것은 기억하지 않는다.** 기억하면 한 번 펴진 뒤로 영영 펴져
     // 있어서, 접어 둔 뜻이 사라진다.
     if (opts && opts.remember) {
