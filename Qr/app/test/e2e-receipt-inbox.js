@@ -877,6 +877,7 @@ const PASTED = `읽었습니다:
     await page.setInputFiles("#ingInboxFile", [
       { name: "split-old.png", mimeType: "image/png", buffer: paper() },
       { name: "split-new.png", mimeType: "image/png", buffer: paper() },
+      { name: "split-nov.png", mimeType: "image/png", buffer: paper() },
     ]);
     await page.waitForTimeout(2500);
     await openInbox();
@@ -888,6 +889,9 @@ const PASTED = `읽었습니다:
       // 새것 — 게다가 확인할 줄이 하나 있다
       { file: "split-new.png", vendor: NEW, date: DAY, store: "main",
         rows: [{ name: "丙", qty: 1, unit: "桶", price: 90, amount: 90, sure: false, band: [0.3, 0.36] }] },
+      // 업체 이름이 안 찍힌 전표 — 그것만 골라 볼 수 있어야 한다(2026-10-19)
+      { file: "split-nov.png", vendor: "", date: DAY, store: "main",
+        rows: [{ name: "丁", qty: 1, unit: "包", price: 40, amount: 40, sure: true, band: [0.3, 0.36] }] },
     ]));
     await page.locator("#ingInboxManyGo").click();
     await page.waitForTimeout(3000);
@@ -929,6 +933,14 @@ const PASTED = `읽었습니다:
     const unsureChips = await page.locator(".ing-check-chip").count();
     check("★ 「확인할 줄」만 남기기도 된다", unsureChips === n.unsure && unsureChips >= 1, unsureChips + " / " + n.unsure);
 
+    // 업체 이름이 안 찍힌 전표만 — 사장님이 이름을 넣어야 저장이 되는 것들이다
+    const nv = Number((await page.locator("[data-check-filter=\"novendor\"]").innerText()).replace(/[^0-9]/g, ""));
+    check("★★ 「업체 없음」 숫자가 적힌다", nv >= 1, String(nv));
+    await f("novendor").click();
+    await page.waitForTimeout(400);
+    const novChips = await page.locator(".ing-check-chip").count();
+    check("★★ 「업체 없음」을 누르면 그것만 남는다", novChips === nv, novChips + " / " + nv);
+
     await f("all").click();
     await page.waitForTimeout(400);
     check("★ 「전체」로 돌아온다", (await page.locator(".ing-check-chip").count()) === n.all, "");
@@ -958,7 +970,7 @@ const PASTED = `읽었습니다:
       await page.waitForTimeout(500);
     }
 
-    for (const name of ["split-old.png", "split-new.png"]) {
+    for (const name of ["split-old.png", "split-new.png", "split-nov.png"]) {
       const row = page.locator('.ing-inbox-row:has-text("' + name + '")');
       await openInbox();
       if (!(await row.count())) continue;

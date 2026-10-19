@@ -1463,8 +1463,11 @@
     neu: (i) => !haveOf((i.read && i.read.head) || null),
     have: (i) => !!haveOf((i.read && i.read.head) || null),
     unsure: (i) => !!(i.read && i.read.unsure),
+    // 업체 이름이 안 찍힌 전표 — 사장님이 이름을 아셔야 저장이 된다(서버가 빈 업체를 안 받는다).
+    // 2026-10-19 사장님: "그거 업체 없이 올려주면 안돼? 거기서 아빠가 스스로 하게"
+    novendor: (i) => !String(((i.read && i.read.head) || {}).vendor || "").trim(),
   };
-  const CHECK_KEYS = ["all", "neu", "have", "unsure"];
+  const CHECK_KEYS = ["all", "neu", "have", "unsure", "novendor"];
   const checkAll = () => (inbox.items || []).filter((i) => i.status === "read");
   const checkList = () => checkAll().filter(CHECK_FILTERS[checkFilter] || CHECK_FILTERS.all);
 
