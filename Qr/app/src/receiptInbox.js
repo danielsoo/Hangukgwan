@@ -208,10 +208,30 @@ const KEEP_SAVED_IMAGE_DAYS = 7;
  * 되돌릴 때 표에 다시 올릴 「읽은 결과」 — **저장한 그대로**(사장님이 고친 값까지) 만든다.
  * 줄 자리(band)는 처음 읽은 결과의 같은 차례 줄에서 가져온다(숫자 밑 사진 띠가 그대로 붙게).
  */
+/**
+ * 「이 영수증이 장부의 어느 한 장인가」 — 읽은 머리(지점·날짜·업체)로.
+ *
+ * 2026-10-19 사장님: 전에 이미 저장한 것도 되돌릴 수 있게 해 달라고 하셨다.
+ *
+ * 되돌리기가 생긴 2026-10-18 **전에** 저장한 줄에는 saved_key 가 없다. 그때는
+ * 읽은 머리로 가린다 — 셋이 다 있어야 한다. 사장님이 저장하기 전에 칸을 고치셨으면
+ * 다른 장을 가리킬 수 있으므로, 화면이 **몇 줄 얼마를 빼는지 먼저 묻는다.**
+ */
+function keyFromRead(doc) {
+  const h = ((doc || {}).read || {}).head || {};
+  const store = String(h.store || "").trim();
+  const date = String(h.date || "").trim();
+  const vendor = String(h.vendor || "").trim();
+  if (!store || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date) || !vendor) return null;
+  return { store, date, vendor };
+}
+
 function readFromSaved(doc) {
   const d = doc || {};
   const key = d.saved_key || {};
   const old = d.read || {};
+  // 옛 줄에는 저장한 표가 없다 — 그때는 **읽은 것 그대로** 다시 연다
+  if (!Array.isArray(d.saved_rows)) return old && (old.rows || []).length ? old : null;
   const oldRows = old.rows || [];
   const rows = (d.saved_rows || []).map((r, i) => {
     const out = {
@@ -247,7 +267,9 @@ function listItem(doc) {
     saved_at: d.saved_at || "",
     saved_lines: d.saved_lines || 0,
     // 저장한 것을 확인 대기로 되돌릴 수 있나(저장할 때 무엇을 덮었는지 적어 둔 것만)
-    can_undo: d.status === STATUS.SAVED && !!d.saved_key,
+    can_undo: d.status === STATUS.SAVED && (!!d.saved_key || !!keyFromRead(d)),
+    // 되돌리기가 생기기 전에 저장한 줄 — 덮기 전 줄은 되살릴 수 없다(안 적어 뒀다)
+    undo_old: d.status === STATUS.SAVED && !d.saved_key,
   };
 }
 
@@ -255,5 +277,5 @@ module.exports = {
   matchReceipts, stripZipPrefix,
   COLL, STATUS, MAX_IMAGE_BYTES, MAX_THUMB_BYTES, MAX_PER_UPLOAD, MAX_PENDING,
   parsePasted, parsePastedList, normalizeRead, decodeImage, listItem,
-  KEEP_SAVED_IMAGE_DAYS, readFromSaved,
+  KEEP_SAVED_IMAGE_DAYS, readFromSaved, keyFromRead,
 };

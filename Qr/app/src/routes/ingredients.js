@@ -418,25 +418,33 @@ router.post("/inbox/:id/unsave", express.json({ limit: "64kb" }), async (req, re
   try { oid = new (require("mongodb").ObjectId)(req.params.id); } catch (e) { return res.status(400).json({ error: "bad_id" }); }
   const doc = await ic.findOne({ _id: oid }, { projection: { image: 0 } });
   if (!doc) return res.status(404).json({ error: "not_found" });
-  if (doc.status !== INBOX.STATUS.SAVED || !doc.saved_key) return res.status(400).json({ error: "not_undoable" });
-  const key = doc.saved_key;
+  if (doc.status !== INBOX.STATUS.SAVED) return res.status(400).json({ error: "not_undoable" });
+  // 되돌리기가 생긴 2026-10-18 **전에** 저장한 줄에는 saved_key 가 없다 — 읽은 머리로 가린다.
+  // 그때는 **덮기 전 줄을 되살릴 수 없다**(안 적어 뒀다). 화면이 그렇다고 먼저 말한다.
+  const old = !doc.saved_key;
+  const key = doc.saved_key || INBOX.keyFromRead(doc);
+  if (!key) return res.status(400).json({ error: "not_undoable" });
   const c = await col();
   const now = await c.find(key, { projection: { _id: 1 } }).toArray();
   const same = (a, b) => a.length === b.length && a.map(String).sort().join("|") === b.map(String).sort().join("|");
-  if (!same(now.map((d) => d._id), doc.saved_ids || []) && !(req.body && req.body.force)) {
+  if (!old && !same(now.map((d) => d._id), doc.saved_ids || []) && !(req.body && req.body.force)) {
     return res.status(409).json({ error: "changed", rows: now.length });
   }
   await c.deleteMany(key);
   const prev = doc.saved_prev || [];
   if (prev.length) await c.bulkWrite(prev.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
+  const read = INBOX.readFromSaved(doc);
+  const set = { unsaved_at: new Date().toISOString() };
+  if (read) { set.status = INBOX.STATUS.READ; set.read = read; }
+  else set.status = INBOX.STATUS.NEW;        // 읽은 것조차 없으면 「읽기 전」으로
   await ic.updateOne(
     { _id: oid },
     {
-      $set: { status: INBOX.STATUS.READ, read: INBOX.readFromSaved(doc), unsaved_at: new Date().toISOString() },
+      $set: set,
       $unset: { saved_at: "", saved_lines: "", saved_key: "", saved_ids: "", saved_rows: "", saved_prev: "" },
     }
   );
-  res.json({ ok: true, removed: now.length, restored: prev.length, has_image: !!doc.has_image });
+  res.json({ ok: true, removed: now.length, restored: prev.length, has_image: !!doc.has_image, old });
 });
 
 /** 대기함에서 지운다(사진도 같이). */

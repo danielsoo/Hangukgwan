@@ -1668,7 +1668,21 @@
   async function undoSaved(id) {
     const item = (inbox.items || []).find((i) => i.id === id);
     const ask = (msg) => (A().showConfirm ? A().showConfirm(msg) : Promise.resolve(confirm(msg)));
-    if (!(await ask(fmt("ingInboxUndoAskFmt", { name: (item && item.name) || "", n: (item && item.saved_lines) || 0 })))) return;
+    // **몇 줄 얼마를 빼는지 먼저 말한다.** 되돌리기가 생기기 전에 저장한 줄은
+    // 무엇을 덮었는지 안 적혀 있어서, 장부에 지금 있는 것으로만 가릴 수 있다
+    // (2026-10-19 사장님: 전에 저장한 것도 되돌리게 해 달라고 하셨다).
+    const head = (item && item.read && item.read.head) || null;
+    const h = haveOf(head);
+    const msg = item && item.undo_old
+      ? fmt("ingInboxUndoAskOldFmt", {
+          name: (item && item.name) || "",
+          date: (h && h.date) || (head && head.date) || "",
+          vendor: (h && h.vendor) || (head && head.vendor) || "",
+          n: (h && h.lines) || 0,
+          amount: money((h && h.amount) || 0),
+        })
+      : fmt("ingInboxUndoAskFmt", { name: (item && item.name) || "", n: (item && item.saved_lines) || 0 });
+    if (!(await ask(msg))) return;
     const go = (force) => fetch("/api/ingredients/inbox/" + encodeURIComponent(id) + "/unsave", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ force: !!force }),
     });
@@ -1684,6 +1698,8 @@
     await loadSummary();
     await useRead(id);            // 사진·표째 다시 연다 — 확인하기로 간다
     logLine(esc(fmt(got.has_image ? "ingInboxUndoneFmt" : "ingInboxUndoneNoPhotoFmt", { n: got.removed || 0 })), { add: true });
+    // 덮기 전 줄은 못 되살렸다고 **말한다** — 조용히 넘어가면 돌아온 줄 안다
+    if (got.old) logLine(esc(T("ingInboxUndoneOld")), { add: true });
   }
 
   /** 붙여넣은 결과를 서버에 보내 **한 번 더 검사**하고, 표를 채운다. */

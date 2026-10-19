@@ -969,6 +969,87 @@ const PASTED = `읽었습니다:
     }
   }
 
+  out.push("\n[되돌리기가 생기기 전에 저장한 것도 되돌린다]");
+  await openInbox();
+  {
+    // 2026-10-19 사장님: "전에 이미 저장한것도 되돌리는 거 해달라고 했잖아"
+    //
+    // 2026-10-18 전에 저장한 줄에는 **무엇을 덮었는지**가 안 적혀 있다(saved_key·saved_prev).
+    // 그래도 「장부에서 빼고 확인 대기로 되돌리기」까지는 돼야 한다 — 안 그러면 그 영수증은
+    // 영영 못 고친다. 덮기 전 줄은 못 되살린다고 **말하는 것**까지 잰다.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const paper = grayToPng(drawReceipt({ w: 700, h: 1200, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), 700, 1200);
+    const DAY = "2026-07-09", WHO = "玟諭商行";
+
+    await page.setInputFiles("#ingInboxFile", [{ name: "old-save.png", mimeType: "image/png", buffer: paper }]);
+    await page.waitForTimeout(2000);
+    await openInbox();
+    const row = page.locator('.ing-inbox-row:has-text("old-save.png")');
+    await row.locator("[data-inbox-paste]").click();
+    await page.waitForTimeout(200);
+    await row.locator("textarea").fill(JSON.stringify({
+      file: "old-save.png", vendor: WHO, date: DAY, store: "main",
+      rows: [{ name: "丁", qty: 2, unit: "包", price: 150, amount: 300, sure: true, band: [0.3, 0.36] }],
+    }));
+    await row.locator("[data-inbox-go]").click();
+    await page.waitForTimeout(2500);
+    await page.locator("#ingEntrySave").click();
+    await page.waitForTimeout(2500);
+
+    // **되돌리기가 생기기 전처럼** 만든다 — 무엇을 덮었는지 적은 것을 지운다
+    const INBOX = require("../src/receiptInbox");
+    const col = fake.__db.collection(INBOX.COLL);
+    const doc = col.docs.find((d) => d.name === "old-save.png");
+    check("★ 저장된 줄이 있다", !!doc && doc.status === "saved", doc ? doc.status : "없음");
+    for (const k of ["saved_key", "saved_ids", "saved_rows", "saved_prev"]) delete doc[k];
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForTimeout(1200);
+    await page.locator('.admin-tabs button[data-tab="ingredients"]').click();
+    await page.waitForTimeout(900);
+    await page.locator('[data-ing-view="check"]').click();
+    await page.waitForTimeout(500);
+    await openInbox();
+    await page.locator('[data-inbox-tab="saved"]').click();
+    await page.waitForTimeout(500);
+
+    const old = page.locator('.ing-inbox-row:has-text("old-save.png")');
+    check("★★ 옛 줄에도 「되돌리기」가 붙는다", (await old.locator("[data-inbox-undo]").count()) === 1,
+      String(await old.locator("[data-inbox-undo]").count()));
+
+    await old.locator("[data-inbox-undo]").click();
+    await page.waitForTimeout(600);
+    const askText = await page.locator("#appDialogMessage").innerText().catch(() => "");
+    check("★★ 장부에서 무엇을 빼는지 먼저 말한다", new RegExp(WHO).test(askText) && /1줄/.test(askText), askText.replace(/\n/g, " | ").slice(0, 160));
+    check("★★ 덮기 전 줄은 못 되살린다고 미리 말한다", /되살릴 수 없어요/.test(askText), "");
+    await page.locator("#appDialogOk").click();
+    await page.waitForTimeout(2500);
+
+    await openInbox();
+    await page.locator(String.fromCharCode(91) + "data-inbox-tab=" + JSON.stringify("all") + String.fromCharCode(93)).click();   // 되돌아왔으니 저장됨 칸에는 없다
+    await page.waitForTimeout(600);
+    check("★★ 확인 대기로 돌아온다", (await page.locator('.ing-inbox-row:has-text("old-save.png") .ing-inbox-badge').innerText()) !== "저장됨",
+      await page.locator('.ing-inbox-row:has-text("old-save.png") .ing-inbox-badge').innerText());
+    const gone = await page.evaluate(async ({ DAY, WHO }) => {
+      const r = await fetch("/api/ingredients/rows?start=" + DAY + "&end=" + DAY + "&vendor=" + encodeURIComponent(WHO) + "&store=main&limit=50");
+      const b = await r.json().catch(() => ({ rows: [] }));
+      return (b.rows || []).length;
+    }, { DAY, WHO });
+    check("★★ 장부에서 그 한 장이 빠진다", gone === 0, String(gone));
+    const log = await page.locator("#ingImportLog").innerText();
+    check("★★ 못 되살린 것을 조용히 넘기지 않는다", /되살리지 못했어요/.test(log), log.replace(/\n/g, " | ").slice(0, 160));
+
+    await openInbox();
+    await page.locator('[data-inbox-tab="all"]').click();
+    await page.waitForTimeout(400);
+    const del = page.locator('.ing-inbox-row:has-text("old-save.png")');
+    if (await del.count()) {
+      await del.first().locator("[data-inbox-del]").click();
+      await page.waitForTimeout(300);
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(800);
+    }
+  }
+
   out.push("\n[제목이 지금 무엇을 하는 중인지 말한다]");
   await openInbox();
   {
