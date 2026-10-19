@@ -1443,6 +1443,73 @@
   }
 
   /**
+   * **어떤 것이 새것이고 어떤 것이 이미 장부에 있는가** — 칩 줄 위의 거르개.
+   *
+   * 2026-10-19 사장님: "이미 올라간 걸 또 올리면 인식해서 이미 올라갔는데
+   * 수정할까요 이렇게 해주거나 그런 거였으면 좋겠는데? 그리고 지금 올라간것도
+   * 내가 뭘 빼먹었는지도 모르겠고 … 어떤 건 이미 올라가있는 거라고 알려줬으면
+   * 좋겠고 어떤 건 새로 들어가는 거고"
+   *
+   * 한 번에 102장이 들어오면 칩만으로는 어디까지 했는지 안 보인다. **숫자를
+   * 적고, 그 숫자를 누르면 그것만 남는다.** 「이미 장부에 있음」은 저장할 때
+   * 그 날 그 업체 줄을 **갈아끼운다**는 뜻이라 먼저 보여야 한다(표 위의
+   * 「이미 장부에 있어요」와 같은 `have` 를 쓴다).
+   *
+   * 「저장됨」은 칩이 아니다 — 이미 끝난 것이라 대기함의 그 칸으로 보낸다.
+   */
+  let checkFilter = "all";
+  const CHECK_FILTERS = {
+    all: () => true,
+    neu: (i) => !haveOf((i.read && i.read.head) || null),
+    have: (i) => !!haveOf((i.read && i.read.head) || null),
+    unsure: (i) => !!(i.read && i.read.unsure),
+  };
+  const CHECK_KEYS = ["all", "neu", "have", "unsure"];
+  const checkAll = () => (inbox.items || []).filter((i) => i.status === "read");
+  const checkList = () => checkAll().filter(CHECK_FILTERS[checkFilter] || CHECK_FILTERS.all);
+
+  function checkCounts() {
+    const list = checkAll();
+    const n = {};
+    CHECK_KEYS.forEach((k) => { n[k] = list.filter(CHECK_FILTERS[k]).length; });
+    n.saved = (inbox.items || []).filter((i) => i.status === "saved").length;
+    return n;
+  }
+
+  function renderCheckFilters() {
+    const box = $("#ingCheckFilters");
+    if (!box) return;
+    const n = checkCounts();
+    if (!n.all && !n.saved) { box.innerHTML = ""; return; }
+    const btn = (k) =>
+      '<button type="button" class="ing-check-filter' + (checkFilter === k ? " is-on" : "") + '"' +
+      (n[k] || k === "all" ? "" : " disabled") +
+      ' data-check-filter="' + k + '">' + esc(T("ingCheckF_" + k)) + " <b>" + n[k] + "</b></button>";
+    box.innerHTML =
+      CHECK_KEYS.map(btn).join("") +
+      (n.saved
+        ? '<button type="button" class="ing-check-filter is-saved" data-check-saved="1">' +
+          esc(T("ingCheckF_saved")) + " <b>" + n.saved + "</b></button>"
+        : "");
+    box.querySelectorAll("[data-check-filter]").forEach((b) => {
+      b.onclick = () => {
+        checkFilter = b.dataset.checkFilter;
+        renderCheckChips();
+      };
+    });
+    // 「저장됨」은 끝난 것이다 — 대기함을 펴서 그 칸을 보여준다
+    const sv = box.querySelector("[data-check-saved]");
+    if (sv) sv.onclick = () => {
+      inboxTab = "saved";
+      try { localStorage.setItem("hg_admin_inboxTab", inboxTab); } catch (e) { /* 이번만 */ }
+      setInboxFold(true);
+      renderInbox();
+      const el = $("#ingInboxList");
+      if (el && el.scrollIntoView) { try { el.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) { /* 그만 */ } }
+    };
+  }
+
+  /**
    * **영수증마다 칩** — 급여의 직원 칩과 같은 자리, 같은 쓰임.
    *
    * 2026-10-17 사장님: "우리 직원들 개개별로 확인할 수 있게 한 것처럼
@@ -1456,9 +1523,13 @@
     const bar = $("#ingCheckBar");
     const box = $("#ingCheckChips");
     if (!bar || !box) return;
-    const list = (inbox.items || []).filter((i) => i.status === "read");
-    bar.hidden = !list.length || entryMode === "manual";
-    if (!list.length) { box.innerHTML = ""; return; }
+    renderCheckFilters();
+    const all = checkAll();
+    const list = checkList();
+    bar.hidden = !all.length || entryMode === "manual";
+    if (!all.length) { box.innerHTML = ""; return; }
+    // 걸러서 하나도 안 남으면 그렇다고 말한다 — 빈 줄만 있으면 고장으로 보인다
+    if (!list.length) { box.innerHTML = '<span class="ing-check-none">' + esc(T("ingCheckNone")) + "</span>"; return; }
 
     // 몇 번째를 보고 있는지 — 102장을 넘기는 중에 어디까지 왔는지가 보여야 한다
     const at = attached ? list.findIndex((i) => i.id === attached.id) : -1;
@@ -1508,7 +1579,7 @@
 
   /** ◀ 이전 · 다음 ▶ — 칩을 눈으로 찾지 않고 차례로 넘긴다. */
   function stepCheck(d) {
-    const list = (inbox.items || []).filter((i) => i.status === "read");
+    const list = checkList();        // 거르고 있으면 그 안에서만 오간다
     if (!list.length) return;
     const at = attached ? list.findIndex((i) => i.id === attached.id) : -1;
     const next = at < 0 ? (d > 0 ? 0 : list.length - 1) : (at + d + list.length) % list.length;
@@ -1696,7 +1767,11 @@
       const box = $("#ingInboxManyText");
       if (box) box.value = "";
       if ($("#ingInboxManyBox")) $("#ingInboxManyBox").hidden = true;
+      checkFilter = "all";            // 새로 들어왔으니 거르개를 풀고 본다
       await loadInbox();
+      // **어떤 것이 새것이고 어떤 것이 이미 장부에 있는지**를 넣자마자 말한다(2026-10-19)
+      const split = checkCounts();
+      if (split.all) logLine(esc(fmt("ingInboxSplitFmt", { neu: split.neu, have: split.have })), { add: true });
       setIngView("check");
     } finally {
       if (btn) btn.disabled = false;

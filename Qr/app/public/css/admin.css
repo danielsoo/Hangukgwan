@@ -3196,6 +3196,19 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-step:active { background: #f1f1f4; }
 .ing-check-at { display: flex; align-items: baseline; gap: 6px; font-size: 14px; color: var(--muted); }
 .ing-check-at b { font-size: 19px; color: var(--ink); font-variant-numeric: tabular-nums; }
+/* 「어떤 건 이미 올라가 있고 어떤 건 새로 들어가나」 — 숫자를 누르면 그것만 남는다
+   (2026-10-19). 「저장됨」은 칩이 아니라 대기함의 그 칸으로 보낸다. */
+.ing-check-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.ing-check-filter {
+  border: 1px solid var(--line); background: #fff; border-radius: 999px;
+  padding: 6px 12px; cursor: pointer; font: inherit; font-size: 13.5px; color: var(--muted);
+  min-height: 34px;
+}
+.ing-check-filter b { color: var(--ink, #241f1f); font-variant-numeric: tabular-nums; }
+.ing-check-filter.is-on { background: var(--cream, #faf7f1); border-color: #c9b89a; color: var(--ink, #241f1f); font-weight: 700; }
+.ing-check-filter[disabled] { opacity: 0.45; cursor: default; }
+.ing-check-filter.is-saved { border-style: dashed; }
+.ing-check-none { color: var(--muted); font-size: 13.5px; padding: 4px 2px; }
 .ing-check-chips {
   display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
   scrollbar-width: thin;

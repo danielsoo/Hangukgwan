@@ -850,6 +850,100 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(800);
   }
 
+  out.push("\n[새것과 이미 장부에 있는 것을 갈라 보여준다]");
+  await openInbox();
+  {
+    // 2026-10-19 사장님: "이미 올라간 걸 또 올리면 인식해서 이미 올라갔는데 수정할까요
+    // 이렇게 해주거나 … 지금 올라간것도 내가 뭘 빼먹었는지도 모르겠고 … 어떤 건 이미
+    // 올라가있는 거라고 알려줬으면 좋겠고 어떤 건 새로 들어가는 거고"
+    //
+    // 102장을 한 번에 넣으면 칩만으로는 어디까지 했는지 안 보인다. 재는 것은
+    // ① 넣자마자 숫자로 가르는가 ② 그 숫자를 누르면 그것만 남는가.
+    const { drawReceipt, grayToPng } = require("./draw-receipt");
+    const W = 700, H = 1200;
+    const paper = () => grayToPng(drawReceipt({ w: W, h: H, rows: 6, cols: 5, widths: [3, 1, 1, 1.4, 1], inkW: 14, inkH: 30 }), W, H);
+    const DAY = "2026-08-12", OLD = "思皓興業有限公司", NEW = "鈞寶企業有限公司";
+
+    // 한 장은 **이미 장부에 있는** 날·업체로 만든다
+    await page.evaluate(async ({ DAY, OLD }) => {
+      await fetch("/api/ingredients/rows", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ store: "main", date: DAY, vendor: OLD,
+          lines: [{ name: "甲", qty: 1, unit: "包", price: 500, amount: 500 }] }),
+      });
+    }, { DAY, OLD });
+    await page.waitForTimeout(800);
+
+    await page.setInputFiles("#ingInboxFile", [
+      { name: "split-old.png", mimeType: "image/png", buffer: paper() },
+      { name: "split-new.png", mimeType: "image/png", buffer: paper() },
+    ]);
+    await page.waitForTimeout(2500);
+    await openInbox();
+    await page.locator("#ingInboxPasteMany").click();
+    await page.waitForTimeout(200);
+    await page.locator("#ingInboxManyText").fill(JSON.stringify([
+      { file: "split-old.png", vendor: OLD, date: DAY, store: "main",
+        rows: [{ name: "乙", qty: 1, unit: "包", price: 700, amount: 700, sure: true, band: [0.3, 0.36] }] },
+      // 새것 — 게다가 확인할 줄이 하나 있다
+      { file: "split-new.png", vendor: NEW, date: DAY, store: "main",
+        rows: [{ name: "丙", qty: 1, unit: "桶", price: 90, amount: 90, sure: false, band: [0.3, 0.36] }] },
+    ]));
+    await page.locator("#ingInboxManyGo").click();
+    await page.waitForTimeout(3000);
+    const log = await page.locator("#ingImportLog").innerText();   // 영수증을 열기 **전에** 읽는다(열면 그 줄로 바뀐다)
+    check("★★ 넣자마자 새것과 이미 있는 것을 숫자로 말한다",
+      /새로 들어갈 것 \d+장/.test(log) && /이미 장부에 있는 것 [1-9]\d*장/.test(log), log.replace(/\n/g, " | ").slice(0, 200));
+    check("★★ 이미 있는 것은 갈아끼운다고 미리 말한다", /갈아끼워요/.test(log), "");
+
+    await page.locator(String.fromCharCode(91) + "data-entry-mode=" + JSON.stringify("check") + String.fromCharCode(93)).click();
+    await page.waitForTimeout(800);
+    const f = (k) => page.locator('[data-check-filter="' + k + '"]');
+    const num = async (k) => Number((await f(k).innerText()).replace(/[^0-9]/g, ""));
+    const n = { all: await num("all"), neu: await num("neu"), have: await num("have"), unsure: await num("unsure") };
+    check("★★ 거르개에 「전체·새것·장부에 있음·확인할 줄」 숫자가 적힌다",
+      n.all > 0 && n.have >= 1 && n.neu >= 1, JSON.stringify(n));
+    check("★★ 새것 + 장부에 있음 = 전체", n.neu + n.have === n.all, JSON.stringify(n));
+
+    // ② 누르면 그것만 남는다
+    await f("have").click();
+    await page.waitForTimeout(400);
+    const haveChips = await page.locator(".ing-check-chip").count();
+    const allHave = await page.locator(".ing-check-chip").evaluateAll((els) => els.every((e) => /장부에 있음/.test(e.textContent || "")));
+    check("★★ 「장부에 있음」을 누르면 그것만 남는다", haveChips === n.have && allHave, haveChips + " / " + n.have);
+
+    await f("neu").click();
+    await page.waitForTimeout(400);
+    const newChips = await page.locator(".ing-check-chip").count();
+    const noneHave = await page.locator(".ing-check-chip").evaluateAll((els) => els.every((e) => !/장부에 있음/.test(e.textContent || "")));
+    check("★★ 「새것」에는 장부에 있는 것이 안 보인다", newChips === n.neu && noneHave, newChips + " / " + n.neu);
+
+    // ◀ 이전 · 다음 ▶ 도 거른 목록 안에서만 돈다
+    await page.locator("#ingCheckNext").click();
+    await page.waitForTimeout(1500);
+    const at = await page.locator("#ingCheckAt").innerText();
+    check("★★ ◀▶ 도 거른 목록 안에서만 돈다", at.endsWith("/ " + n.neu), at);
+
+    await f("unsure").click();
+    await page.waitForTimeout(400);
+    const unsureChips = await page.locator(".ing-check-chip").count();
+    check("★ 「확인할 줄」만 남기기도 된다", unsureChips === n.unsure && unsureChips >= 1, unsureChips + " / " + n.unsure);
+
+    await f("all").click();
+    await page.waitForTimeout(400);
+    check("★ 「전체」로 돌아온다", (await page.locator(".ing-check-chip").count()) === n.all, "");
+
+    for (const name of ["split-old.png", "split-new.png"]) {
+      const row = page.locator('.ing-inbox-row:has-text("' + name + '")');
+      await openInbox();
+      if (!(await row.count())) continue;
+      await row.first().locator("[data-inbox-del]").click();
+      await page.waitForTimeout(300);
+      await page.locator("#appDialogOk").click();
+      await page.waitForTimeout(800);
+    }
+  }
+
   out.push("\n[제목이 지금 무엇을 하는 중인지 말한다]");
   await openInbox();
   {
