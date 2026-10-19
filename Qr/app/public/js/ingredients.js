@@ -1502,8 +1502,10 @@
     if (sv) sv.onclick = () => {
       inboxTab = "saved";
       try { localStorage.setItem("hg_admin_inboxTab", inboxTab); } catch (e) { /* 이번만 */ }
-      setInboxFold(true);
       renderInbox();
+      // **펴는 것은 renderInbox 뒤에.** 그 안의 autoFoldInbox 가 「확인할 것이 남았으면 접는다」라서
+      // 먼저 펴면 그 자리에서 도로 접힌다 — 눌러도 아무 일도 안 일어난 것처럼 보였다(2026-10-19).
+      setInboxFold(true, { remember: true });
       const el = $("#ingInboxList");
       if (el && el.scrollIntoView) { try { el.scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) { /* 그만 */ } }
     };

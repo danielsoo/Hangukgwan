@@ -933,6 +933,31 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(400);
     check("★ 「전체」로 돌아온다", (await page.locator(".ing-check-chip").count()) === n.all, "");
 
+    // 「✅ 저장됨」은 칩이 아니라 **대기함의 그 칸**으로 보낸다. 2026-10-19 사장님: "저장딤은 안 눌려" —
+    // 펴자마자 renderInbox 안의 autoFoldInbox 가 도로 접어서 아무 일도 안 일어난 것처럼 보였다.
+    const saved = page.locator("[data-check-saved]");
+    if (await saved.count()) {
+      // 사장님 패드와 같은 자리에서 잰다 — **대기함을 접어 둔 채**로. 펴 둔 채로 누르면
+      // 예전 코드도 펴져 있어서 이 시험이 아무것도 못 잡는다.
+      const body = page.locator("#ingInboxBody");
+      if (!(await body.evaluate((el) => el.hidden))) {
+        await page.locator("#ingInboxFold").click();
+        await page.waitForTimeout(400);
+      }
+      check("★ 누르기 전에는 접혀 있다", await body.evaluate((el) => el.hidden), "");
+      await saved.click();
+      await page.waitForTimeout(900);
+      check("★★ 「저장됨」을 누르면 대기함이 펴진다 — 접힌 채로 두면 눌러도 아무 일이 없다",
+        !(await page.locator("#ingInboxBody").evaluate((el) => el.hidden)), "");
+      const on = await page.locator(".ing-inbox-tab.is-on").innerText();
+      check("★★ 저장됨 칸이 골라진다", /저장|已儲存/.test(on), on);
+      const rows = await page.locator(".ing-inbox-row").count();
+      check("★ 저장한 줄이 보인다", rows >= 1, String(rows));
+      // 칸은 **그 기기에 남는다**(localStorage) — 뒤 토막이 확인 대기 줄을 못 찾게 되므로 되돌려 둔다
+      await page.locator(String.fromCharCode(91) + "data-inbox-tab=" + JSON.stringify("all") + String.fromCharCode(93)).click();
+      await page.waitForTimeout(500);
+    }
+
     for (const name of ["split-old.png", "split-new.png"]) {
       const row = page.locator('.ing-inbox-row:has-text("' + name + '")');
       await openInbox();
