@@ -1597,46 +1597,19 @@
    * 보고 있는 칩을 가운데로 데려온다 — 어디까지 왔는지가 보여야 한다.
    */
   /**
-   * 업체가 한눈에 — 지금 거르개(새것·장부에 있음…)에 남은 영수증을 업체로 묶어 몇 장인지. 누르면 그 업체 것만
-   * 아래 칩에 남고, 다시 누르면 다 보인다. 예전엔 칩 한 줄을 옆으로 끌어가며 찾았다(2026-10-21).
+   * 영수증을 **업체마다 한 줄**로 — 줄 머리는 업체와 몇 장, 그 옆에 날짜순 영수증.
+   *
+   * 2026-10-21 사장님: "업체가 한눈에 들어오게 … 드래그하면서 찾지 않고 바로 보여지게" → 업체 칸과 칩 줄을 따로
+   * 뒀더니 "너무 지저분하게 나열되어있어" — 같은 업체가 위아래 두 번, 칩은 업체·날짜가 뒤섞여 있었다. 이제 한
+   * 덩어리다. 업체 이름을 누르면 그 업체만 남고(◀ 이전 · 다음 ▶ 도 그 안에서) 첫 장이 열린다, 다시 누르면 다.
    */
-  function renderCheckVendors() {
-    const box = $("#ingCheckVendors");
-    if (!box) return;
-    const by = new Map();
-    for (const i of checkByStatus()) { const v = vendorOfItem(i); by.set(v, (by.get(v) || 0) + 1); }
-    if (checkVendor && !by.has(checkVendor)) checkVendor = "";   // 거르개를 바꿔 그 업체가 없어졌으면 푼다
-    const list = [...by.entries()].sort((a, b) => (a[0] === NO_VENDOR) - (b[0] === NO_VENDOR) || b[1] - a[1] || a[0].localeCompare(b[0]));
-    if (!list.length) { box.innerHTML = ""; return; }
-    const total = list.reduce((a, [, n]) => a + n, 0);
-    const btn = (v, label, n) =>
-      '<button type="button" class="ing-check-vendor' + (checkVendor === v ? " is-on" : "") + (v === NO_VENDOR ? " is-none" : "") + '" data-check-vendor="' + esc(v) + '">' +
-      '<span class="ing-check-vendor-name">' + esc(label) + "</span><b>" + n + "</b></button>";
-    box.innerHTML =
-      '<div class="ing-check-vendors-title">' + esc(fmt("ingCheckVendorsFmt", { n: list.length })) + "</div>" +
-      '<div class="ing-check-vendors-grid">' +
-      btn("", T("ingCheckVendorAll"), total) +
-      list.map(([v, n]) => btn(v, v === NO_VENDOR ? T("ingCheckF_novendor") : v, n)).join("") +
-      "</div>";
-    box.querySelectorAll("[data-check-vendor]").forEach((b) => {
-      b.onclick = () => {
-        const v = b.dataset.checkVendor;
-        checkVendor = checkVendor === v ? "" : v;
-        renderCheckChips();
-        // 한 업체만 골랐으면 그 첫 장을 바로 연다 — 고르고 또 칩을 찾게 하지 않는다
-        const first = checkVendor && checkList()[0];
-        if (first && (!attached || vendorOfItem((inbox.items || []).find((x) => x.id === attached.id) || {}) !== checkVendor)) useRead(first.id);
-      };
-    });
-  }
-
   function renderCheckChips() {
     const bar = $("#ingCheckBar");
     const box = $("#ingCheckChips");
     if (!bar || !box) return;
     renderCheckFilters();
-    renderCheckVendors();
     const all = checkAll();
+    if (checkVendor && !checkByStatus().some((i) => vendorOfItem(i) === checkVendor)) checkVendor = "";   // 거르개를 바꿔 그 업체가 없어졌으면 푼다
     const list = checkList();
     bar.hidden = !all.length || entryMode === "manual";
     if (!all.length) { box.innerHTML = ""; return; }
@@ -1650,33 +1623,68 @@
     const cnt = $("#ingCheckCount");
     if (cnt) cnt.textContent = T(at < 0 ? "ingCheckPick" : "ingCheckLeft");
 
-    box.innerHTML = list.map((i) => {
+    const groups = new Map();
+    for (const i of list) {
+      const v = vendorOfItem(i);
+      if (!groups.has(v)) groups.set(v, []);
+      groups.get(v).push(i);
+    }
+    const dateOf = (i) => String(((i.read && i.read.head) || {}).date || "");
+    const rows = [...groups.entries()].sort((a, b) =>
+      (a[0] === NO_VENDOR) - (b[0] === NO_VENDOR) || b[1].length - a[1].length || a[0].localeCompare(b[0]));
+    const chip = (i, v) => {
       const head = (i.read && i.read.head) || {};
-      // 업체가 안 읽힌 전표는 파일 이름으로 — 빈 칩이면 어느 것인지 모른다
-      const name = head.vendor || String(i.name || "").replace(/\.[a-z0-9]+$/i, "");
-      const day = String(head.date || "").slice(5).replace("-", "/");
+      const day = dateOf(i).slice(5).replace("-", "/");
       const shop = storeShort(head.store);
       const unsure = (i.read && i.read.unsure) || 0;
       const got = haveOf(head);            // 이미 장부에 있나
+      // 업체가 안 읽힌 전표는 파일 이름으로 — 날짜만으로는 어느 종이인지 모른다
+      const label = v === NO_VENDOR ? String(i.name || "").replace(/\.[a-z0-9]+$/i, "") : "";
       return (
         '<button type="button" class="ing-check-chip' + (attached && attached.id === i.id ? " is-on" : "") + '"' +
         ' data-check="' + esc(i.id) + '" title="' + esc(i.name || "") + '">' +
-        (checkVendor ? "" : '<span class="ing-check-name">' + esc(name) + "</span>") +
+        // 업체 이름은 줄 머리에 있다 — 칩에는 화면 읽기용으로만 둔다
+        '<span class="sr-only">' + esc(v === NO_VENDOR ? T("ingCheckF_novendor") : v) + " </span>" +
+        (label ? '<span class="ing-check-name">' + esc(label) + "</span>" : "") +
         (day ? '<span class="ing-check-day">' + esc(day) + "</span>" : "") +
         (shop ? '<span class="ing-check-store">' + esc(shop) + "</span>" : "") +
         (unsure ? '<span class="ing-check-warn">' + unsure + "</span>" : "") +
         (got ? '<span class="ing-check-have" title="' + esc(T("ingHaveChipTitle")) + '">' + esc(T("ingHaveChip")) + "</span>" : "") +
         "</button>"
       );
+    };
+    box.innerHTML = rows.map(([v, items]) => {
+      const on = checkVendor === v;
+      items = items.slice().sort((a, b) => dateOf(a).localeCompare(dateOf(b)) || String(a.name || "").localeCompare(String(b.name || "")));
+      return (
+        '<div class="ing-check-row' + (on ? " is-on" : "") + '">' +
+        '<button type="button" class="ing-check-vendor' + (on ? " is-on" : "") + (v === NO_VENDOR ? " is-none" : "") + '" data-check-vendor="' + esc(v) + '"' +
+        ' title="' + esc(T(on ? "ingCheckVendorAll" : "ingCheckVendorOnly")) + '">' +
+        '<span class="ing-check-vendor-name">' + esc(v === NO_VENDOR ? T("ingCheckF_novendor") : v) + "</span><b>" + items.length + "</b>" +
+        (on ? '<span class="ing-check-vendor-x">✕</span>' : "") + "</button>" +
+        '<div class="ing-check-dates">' + items.map((i) => chip(i, v)).join("") + "</div>" +
+        "</div>"
+      );
     }).join("");
 
     box.querySelectorAll("[data-check]").forEach((b) => {
       b.onclick = () => useRead(b.dataset.check);
     });
-    // 보고 있는 칩을 가운데로 — 102장이면 눈으로 못 찾는다
-    const on = box.querySelector(".is-on");
-    if (on && on.scrollIntoView) {
-      try { on.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" }); } catch (e) { /* 안 돼도 그만 */ }
+    box.querySelectorAll("[data-check-vendor]").forEach((b) => {
+      b.onclick = () => {
+        const v = b.dataset.checkVendor;
+        checkVendor = checkVendor === v ? "" : v;
+        renderCheckChips();
+        // 한 업체만 골랐으면 그 첫 장을 바로 연다 — 고르고 또 칩을 찾게 하지 않는다
+        const first = checkVendor && checkList()[0];
+        if (first && (!attached || vendorOfItem((inbox.items || []).find((x) => x.id === attached.id) || {}) !== checkVendor)) useRead(first.id);
+      };
+    });
+    // 보고 있는 칩이 칸 밖이면 칸 안에서만 그 자리로 — 페이지는 안 움직인다
+    const onChip = box.querySelector(".ing-check-chip.is-on");
+    if (onChip) {
+      const top = onChip.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop;
+      if (top < box.scrollTop || top > box.scrollTop + box.clientHeight - onChip.offsetHeight) box.scrollTop = Math.max(0, top - 8);
     }
   }
 

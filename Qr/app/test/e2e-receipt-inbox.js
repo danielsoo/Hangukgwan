@@ -1206,29 +1206,30 @@ const PASTED = `읽었습니다:
 
     // 2026-10-21 사장님: "이 부분으로 업체가 한눈에 들어오게 만들어줘. 드래그하면서 찾지 않고 바로 보여지게"
     // — 칩 한 줄을 옆으로 끌어가며 찾았다. 빈 자리(◀ 이전 · 다음 ▶ 옆)에 업체를 다 보이고, 칩은 줄을 바꾼다.
+    // → 같은 날 "너무 지저분하게 나열되어있어" — 업체 칸과 칩 구름을 합쳐 **업체마다 한 줄**(머리 + 날짜순 영수증).
     const vend = await page.evaluate(() => {
-      const box = document.getElementById("ingCheckVendors");
-      const head = document.querySelector(".ing-check-head");
       const chips = document.getElementById("ingCheckChips");
-      const rb = box.getBoundingClientRect(), rh = head.getBoundingClientRect(), rc = chips.getBoundingClientRect();
+      const rows = [...chips.querySelectorAll(".ing-check-row")];
       return {
-        names: [...box.querySelectorAll("[data-check-vendor]")].map((b) => b.innerText.replace(/\s+/g, " ")),
-        beside: rb.left >= rh.right - 1 && rb.top < rc.top,
-        wrap: getComputedStyle(chips).flexWrap,
+        rows: rows.map((r) => ({
+          head: r.querySelector("[data-check-vendor]").innerText.replace(/\s+/g, " "),
+          n: r.querySelectorAll(".ing-check-chip").length,
+        })),
         sideways: chips.scrollWidth > chips.clientWidth + 1,
+        oneVendorBox: !document.getElementById("ingCheckVendors"),
       };
     });
-    check("★★ 업체가 한눈에 — 업체마다 몇 장인지", ["龍江興南北商行", "阿寶水產", "旺旺來"].every((v) => vend.names.some((x) => x.includes(v) && /1/.test(x))) && vend.names.some((x) => /모든 업체/.test(x)), JSON.stringify(vend.names));
-    check("★★ 업체 칸은 ◀ 이전 · 다음 ▶ 옆 빈 자리에 있다", vend.beside, JSON.stringify(vend));
-    check("★★ 칩은 옆으로 구르지 않고 줄을 바꾼다", vend.wrap === "wrap" && !vend.sideways, JSON.stringify(vend));
-    await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
+    check("★★ 업체마다 한 줄 — 줄 머리에 업체와 몇 장", ["龍江興南北商行", "阿寶水產", "旺旺來"].every((v) => vend.rows.some((r) => r.head.includes(v) && /1/.test(r.head) && r.n === 1)), JSON.stringify(vend.rows));
+    check("★★ 같은 업체가 두 군데 안 나온다(업체 칸이 따로 없다)", vend.oneVendorBox && new Set(vend.rows.map((r) => r.head)).size === vend.rows.length, JSON.stringify(vend));
+    check("★★ 옆으로 구르지 않는다", !vend.sideways, JSON.stringify(vend));
+    await page.locator('#ingCheckChips [data-check-vendor="旺旺來"]').click();
     await page.waitForTimeout(1500);
     const only = await page.locator(".ing-check-chip").evaluateAll((els) => els.map((e) => e.innerText));
     // 고른 업체 이름은 칩에서 뺀다(위 업체 칸에 이미 켜져 있다 — 2026-10-21 「깔끔하게」)
-    const onVendor = await page.locator("#ingCheckVendors .ing-check-vendor.is-on").innerText();
+    const onVendor = await page.locator("#ingCheckChips .ing-check-vendor.is-on").innerText();
     check("★★ 업체를 누르면 그 업체 칩만 남는다", only.length === 1 && only[0].includes("09/04") && onVendor.includes("旺旺來"), JSON.stringify({ only, onVendor }));
     check("★ 그 업체 첫 장이 바로 열린다", (await page.locator("#ingEntryVendor").inputValue()) === "旺旺來", await page.locator("#ingEntryVendor").inputValue());
-    await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
+    await page.locator('#ingCheckChips [data-check-vendor="旺旺來"]').click();
     await page.waitForTimeout(500);
     check("★ 다시 누르면 다 보인다", (await page.locator(".ing-check-chip").count()) >= 3, String(await page.locator(".ing-check-chip").count()));
 
