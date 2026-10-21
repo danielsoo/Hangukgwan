@@ -171,6 +171,30 @@ function check(name, cond, extra = "") {
     check("★ 안 정했으면 그 명령을 안 보낸다 — 예전 빌지 그대로", !txtL.off.includes(String.fromCharCode(0x1d) + "L"), JSON.stringify(txtL.off.slice(0, 10)));
   }
 
+  out.push("\n[수량이 한 자리든 두 자리든 이름은 같은 자리에서]");
+  {
+    // 2026-10-21 사장님: "숫자에 따라 글씨가 들여쓰는 게 다른데 그거 다 일관되게 해줘"
+    // x2 · x13 · x1 이 섞인 종이에서 이름 x 가 다 같아야 한다.
+    const mix = await drawn({}, "ticket", [
+      { name_zh: "石鍋拌飯", qty: 2, unit_price: 230 },
+      { name_zh: "辣炒年糕", qty: 13, unit_price: 190 },
+      { name_zh: "部隊鍋", qty: 1, unit_price: 380 },
+    ]);
+    const names = ["石鍋拌飯", "辣炒年糕", "部隊鍋"].map((t) => mix.find((e) => e.t === t));
+    check("★★ 세 줄의 이름이 다 같은 x 에서 시작한다", names.every(Boolean) && new Set(names.map((e) => e.x)).size === 1, JSON.stringify(names.map((e) => e && [e.t, e.x])));
+    const qtys = mix.filter((e) => /^x\d+$/.test(e.t));
+    check("★ 수량은 셋 다 왼쪽 끝에서 시작한다", qtys.length === 3 && new Set(qtys.map((e) => e.x)).size === 1, JSON.stringify(qtys.map((e) => [e.t, e.x])));
+    const one = await drawn({}, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]);
+    const oneName = one.find((e) => e.t === "石鍋拌飯");
+    check("★ 한 자리뿐인 종이는 칸이 그만큼 좁다 — 쓸데없이 안 밀린다", !!oneName && oneName.x < names[0].x, JSON.stringify({ one: oneName && oneName.x, mix: names[0].x }));
+    const txtMix = await page.evaluate(() => {
+      const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }, { name_zh: "辣炒年糕", qty: 13, unit_price: 190 }], total: 100 };
+      return window.buildEscPosTicket(o, "韓國館", {}).split("\n").map((l) => l.replace(/\x1bE./g, "").replace(/\x1b./g, "").replace(/[\x00-\x1f]/g, ""));
+    });
+    const at = (name) => { const l = txtMix.find((x) => x.includes(name)); return l ? l.indexOf(name) : -1; };
+    check("★★ 글자 빌지도 이름 자리가 같다", at("石鍋拌飯") > 0 && at("石鍋拌飯") === at("辣炒年糕"), JSON.stringify([at("石鍋拌飯"), at("辣炒年糕")]));
+  }
+
   out.push("\n[개수와 메뉴 사이 — 사장님: 「간격도 조절할 수 있게 해줘」]");
   {
     const gapOf = (arr) => {
@@ -178,10 +202,11 @@ function check(name, cond, extra = "") {
       const nm = arr.find((e) => e.t === "石鍋拌飯");
       return q && nm && q.y === nm.y ? nm.x - q.x : null;
     };
-    const g0 = gapOf(await drawn({ qtyGap: 0, leftMargin: 0 }));
-    const g10 = gapOf(await drawn({ qtyGap: 10, leftMargin: 0 }));
+    // 한 줄짜리 종이로 잰다 — 수량 칸은 그 종이에서 가장 긴 수량에 맞춰지므로
+    const g0 = gapOf(await drawn({ qtyGap: 0, leftMargin: 0 }, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]));
+    const g10 = gapOf(await drawn({ qtyGap: 10, leftMargin: 0 }, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]));
     check("★★ 간격을 키운 만큼 이름이 더 밀린다 (0mm → 10mm = 80점)", g0 !== null && g10 !== null && g10 - g0 === 80, JSON.stringify({ g0, g10 }));
-    check("★ 0mm 면 수량 글자 바로 뒤", g0 !== null && g0 > 0 && g0 < 40, JSON.stringify(g0));
+    check("★ 0mm 면 수량 칸 바로 뒤(「x2」 너비만큼만)", g0 !== null && g0 > 0 && g0 < 40, JSON.stringify(g0));
     const txtG = await page.evaluate(() => {
       const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460 };
       const strip = (t) => t.split("\n").map((l) => l.replace(/\x1bE./g, "").replace(/\x1b./g, "").replace(/[\x00-\x1f]/g, ""));

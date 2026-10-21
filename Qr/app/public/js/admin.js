@@ -7276,6 +7276,8 @@
     const discountInfo = priceCopy ? computeTicketDiscountInfo(o) : { active: false };
     let hasDrinkItem = false;
 
+    // 수량 칸은 한 종이 안에서 같은 너비 — 그림 빌지(escpos.js LEAD_COL)와 같은 생각이다
+    const qtyCol = (o.items || []).reduce((w, it) => Math.max(w, String(`x${it.qty}`).length), 0);
     const itemRows = o.items
       .map((it) => {
         // 結帳單 에서는 한글로 떨어지지 않는다 — 中文 → English 순으로
@@ -7359,7 +7361,7 @@
           }
         }
         return `<div class="item-row">
-          <div class="item-main"><span class="item-qty">x${it.qty}</span><span class="item-name">${name}</span></div>
+          <div class="item-main"><span class="item-qty" style="min-width:${qtyCol}ch">x${it.qty}</span><span class="item-name">${name}</span></div>
           ${detailLines.join("")}
         </div>`;
       })
