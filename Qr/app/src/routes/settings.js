@@ -665,7 +665,7 @@ const TICKET_WEIGHT_KEYS = TICKET_FONT_KEYS.map((k) => `${k}Weight`);
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
   const out = {};
-  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin", "rightMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
+  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin", "rightMargin", "leftMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
   return out;
 }
 
@@ -708,6 +708,14 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
     const v = Number(b.rightMargin);
     if (b.rightMargin !== undefined && b.rightMargin !== null && b.rightMargin !== "" && Number.isFinite(v)) {
       store.settings.ticket_font_sizes.rightMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
+    }
+  }
+  // 왼쪽 여백(mm, 0.5 단위, 0~30, 안 정하면 3). 2026-10-21 사장님: "왼쪽 여백 조절도 가능하게 해줘" —
+  // 수량이 메뉴 앞으로 오면서 종이 왼쪽 끝이 읽는 자리가 됐다.
+  {
+    const v = Number(b.leftMargin);
+    if (b.leftMargin !== undefined && b.leftMargin !== null && b.leftMargin !== "" && Number.isFinite(v)) {
+      store.settings.ticket_font_sizes.leftMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
     }
   }
   // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).

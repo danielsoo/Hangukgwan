@@ -890,6 +890,7 @@
       settlementRefundReturn: "반품 {n}개 −{amount}",
       tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
       tfsRightMargin: "수량 열 오른쪽 여백 — 지금은 수량이 메뉴 앞에 있어 품목 줄에는 안 쓰여요",
+      tfsLeftMargin: "왼쪽 여백 (종이 왼쪽 끝 ~ 글자)",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -2367,6 +2368,7 @@
       settlementRefundReturn: "退貨 {n} 份 −{amount}",
       tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
       tfsRightMargin: "數量欄右側留白 — 現在數量在品名前面，品項列不再使用",
+      tfsLeftMargin: "左側留白（紙張左緣～文字）",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -7200,6 +7202,9 @@
     // 오른쪽 여백(mm). 2026-10-06 사장님: "주방으로 들어가는 빌지의 숫자탭이 오른쪽 끝에 있는데 그걸 조금
     // 들여 쓸 수 있을까? 빌지가 조금이라도 겹치면 안보인대" — 겹쳐 걸면 수량(x2)이 가린다.
     rightMargin: 8,
+    // 왼쪽 여백(mm). 2026-10-21 사장님: "왼쪽 여백 조절도 가능하게 해줘" — 수량이 메뉴 앞으로
+    // 오면서 종이 왼쪽 끝이 읽는 자리가 됐다. 3mm 가 예전 고정값(앱 빌지 24점)이다.
+    leftMargin: 3,
   };
   let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
 
@@ -7449,7 +7454,7 @@
     font-family: "Noto Sans KR", "Noto Sans TC", "PMingLiU", sans-serif;
     color: #000;
   }
-  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; padding-top: ${Number.isFinite(Number(fs.topMargin)) ? Math.max(0, Math.min(30, Number(fs.topMargin))) : 3}mm; }
+  .receipt { width: 80mm; background: #fff; padding: 3mm 4mm; padding-top: ${Number.isFinite(Number(fs.topMargin)) ? Math.max(0, Math.min(30, Number(fs.topMargin))) : 3}mm; padding-left: ${Number.isFinite(Number(fs.leftMargin)) ? Math.max(0, Math.min(30, Number(fs.leftMargin))) : 3}mm; }
   .header { text-align: center; margin-bottom: 2mm; }
   .store-name { font-size: ${fs.storeName}px; font-weight: ${fs.storeNameWeight}; }
   .divider { border-top: 1px dashed #000; margin: 2mm 0; }
@@ -7759,6 +7764,7 @@
     printTimeWeight: "tfsPrintTimeWeight",
     topMargin: "tfsTopMargin",
     rightMargin: "tfsRightMargin",
+    leftMargin: "tfsLeftMargin",
   };
 
   // A small sample order for the live actual-size preview in the settings
@@ -7805,7 +7811,7 @@
     for (const k of Object.keys(TICKET_FONT_INPUT_IDS)) {
       const el = $("#" + TICKET_FONT_INPUT_IDS[k]);
       // 위 여백은 0.5mm 단위라 소수를 받는다. 나머지는 정수.
-      const v = el ? (k === "topMargin" || k === "rightMargin" ? parseFloat(el.value) : parseInt(el.value, 10)) : NaN;
+      const v = el ? (k === "topMargin" || k === "rightMargin" || k === "leftMargin" ? parseFloat(el.value) : parseInt(el.value, 10)) : NaN;
       if (Number.isFinite(v)) out[k] = v;
     }
     return out;
@@ -16090,8 +16096,8 @@
       // raw 데이터 2개를 순서대로 넣으면 같은 프린터에서 이어서 2장이
       // 나온다(각 티켓 끝에 이미 FEED_AND_CUT이 들어있어 장마다 알아서
       // 커팅됨).
-      const rawKitchen = buildEscPosTicket(o, storeName, { rightMargin: ticketFontSizes.rightMargin });
-      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o), rightMargin: ticketFontSizes.rightMargin });
+      const rawKitchen = buildEscPosTicket(o, storeName, { rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin });
+      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o), rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin });
       const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
       await qz.print(config, [
         { type: "raw", format: "command", flavor: "plain", data: topFeedText() + rawKitchen },

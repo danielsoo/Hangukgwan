@@ -211,6 +211,14 @@
     return !!(o && o.test_session);
   }
 
+  /** GS L — 글자 빌지의 왼쪽 여백(점). 설정했을 때만 보낸다(안 받는 프린터도 있다). */
+  function leftMarginCmd(fs) {
+    const mm = Number(fs && fs.leftMargin);
+    if (!Number.isFinite(mm) || fs.leftMargin === null || fs.leftMargin === "") return "";
+    const dots = Math.max(0, Math.min(240, Math.round(Math.max(0, Math.min(30, mm)) * 8)));
+    return "\x1dL" + String.fromCharCode(dots % 256) + String.fromCharCode(Math.floor(dots / 256));
+  }
+
   function buildEscPosTicket(o, storeName, opts) {
     const priceCopy = !!(opts && opts.priceCopy);
     // 수량 열의 오른쪽 여백(그림 빌지의 ticketRightMarginMm 과 같은 값) — 글자 한 칸이 12점 = 1.5mm.
@@ -224,7 +232,8 @@
     const discount = (opts && opts.discount) || { active: false };
     let hasDrinkItem = false;
     const time = new Date(o.created_at.replace(" ", "T")).toLocaleString("zh-TW");
-    let out = CMD.INIT;
+    // 왼쪽 여백 — 설정했을 때만(2026-10-21). 그림 빌지의 PAD 와 같은 값이다.
+    let out = CMD.INIT + leftMarginCmd(opts || {});
 
     if (isTestOrder(o)) {
       // 結帳單 에는 한글을 안 찍는다(2026-09-16 사장님). 廚房出單 은 주방이
@@ -509,9 +518,25 @@
     return RASTER_PAD + Math.round(ticketRightMarginMm(fs) * 8);
   }
 
+  // 왼쪽 여백(mm) — 2026-10-21 사장님: "왼쪽 여백 조절도 가능하게 해줘". 수량이 이름 앞으로
+  // 오면서 종이 **왼쪽 끝**이 읽는 자리가 됐다. 안 정하면 예전 그대로 3mm(RASTER_PAD 24점).
+  const DEFAULT_LEFT_MARGIN_MM = RASTER_PAD / 8;
+  const MAX_LEFT_MARGIN_MM = 30;
+  function ticketLeftMarginMm(fs) {
+    const mm = Number(fs && fs.leftMargin);
+    return Number.isFinite(mm) && fs.leftMargin !== null && fs.leftMargin !== ""
+      ? Math.max(0, Math.min(MAX_LEFT_MARGIN_MM, mm))
+      : DEFAULT_LEFT_MARGIN_MM;
+  }
+  /** 종이 왼쪽 끝에서 첫 글자까지(점). 203dpi 라 1mm = 8점. */
+  function ticketLeftPadDots(fs) {
+    return Math.round(ticketLeftMarginMm(fs) * 8);
+  }
+
   function buildEscPosRasterTicket(o, storeName, fontSizes, labelInfo, opts) {
     const fs = fontSizes || {};
     const QTY_PAD = ticketRightPadDots(fs); // 수량 열만 이만큼 들인다
+    const PAD = ticketLeftPadDots(fs);     // 왼쪽 여백 — 오른쪽(RASTER_PAD)은 그대로
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
@@ -549,14 +574,14 @@
     function line(text, px, weight, opts) {
       opts = opts || {};
       mctx.font = rasterFont(px, weight);
-      const maxWidth = RASTER_DOTS_WIDE - RASTER_PAD * 2;
+      const maxWidth = RASTER_DOTS_WIDE - PAD - RASTER_PAD;
       const align = opts.align || "left";
       // 왼쪽 정렬 줄(「  └ 옵션」 등)은 넘치면 다음 줄로, 「└」 뒤에 맞춰 들여서. 가운데 줄·취소선 줄은 예전처럼.
       if (!opts.noFit && align === "left" && !opts.strike && mctx.measureText(text).width > maxWidth) {
         const m = /^\s*└\s*/.exec(text);
         const indent = m ? Math.round(mctx.measureText(m[0]).width) : 0;
         wrapText(mctx, text, maxWidth, maxWidth - indent).forEach((t, k) => {
-          ops.push({ type: "text", text: t, px, weight, align, y, x: RASTER_PAD + (k ? indent : 0), strike: null });
+          ops.push({ type: "text", text: t, px, weight, align, y, x: PAD + (k ? indent : 0), strike: null });
           y += Math.round(px * PX_TO_DOTS * 1.4);
         });
         y += opts.gapAfter || 0;
@@ -590,7 +615,7 @@
       // 뱃지와 같은 자리 계산이다 — 그만큼 이름을 밀고, 넘쳐서 다음 줄로 간 이름도 같은 자리에 맞춘다.
       const lead = opts.lead || null;
       const leadWidth = lead ? Math.round(mctx.measureText(lead + "  ").width) : 0;
-      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap - leadWidth;
+      const leftMax = RASTER_DOTS_WIDE - PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap - leadWidth;
       // 넘치면 다음 줄로(위 wrapText). 수량은 첫 줄 오른쪽에 그대로, 다음 줄은 이름 시작에 맞춰 수량 칸 앞까지.
       const lines = wrapText(mctx, left, leftMax, leftMax);
       const fittedLeft = lines[0];
@@ -602,7 +627,7 @@
       ops.push({ type: "row", left: fittedLeft, right, rightPad, px, weight, y, badge, badgeSize, badgeGap, lead, leadWidth, strikePrefix: opts.strikePrefix || null });
       y += Math.round(px * PX_TO_DOTS * 1.4);
       for (const t of lines.slice(1)) {
-        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: RASTER_PAD + (badge ? badgeSize + badgeGap : 0) + leadWidth, strike: null });
+        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: PAD + (badge ? badgeSize + badgeGap : 0) + leadWidth, strike: null });
         y += Math.round(px * PX_TO_DOTS * 1.4);
       }
       y += opts.gapAfter || 0;
@@ -764,7 +789,7 @@
       if (op.type === "divider") {
         ctx.beginPath();
         ctx.setLineDash([6, 4]);
-        ctx.moveTo(RASTER_PAD, op.y);
+        ctx.moveTo(PAD, op.y);
         ctx.lineTo(canvas.width - RASTER_PAD, op.y);
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -773,12 +798,12 @@
       }
       if (op.type === "row") {
         ctx.font = rasterFont(op.px, op.weight);
-        let leftX = RASTER_PAD;
+        let leftX = PAD;
         if (op.badge) {
           // 꽉 찬 검정이라 1비트로 잘려도 잃을 것이 없다. 좌표를 점 경계에
           // 맞춘다 — 반 점에 걸치면 자를 때 가장자리가 들쭉날쭉해진다.
           const s = op.badgeSize;
-          const x = RASTER_PAD;
+          const x = PAD;
           const top = Math.round(op.y);
           ctx.fillStyle = "#000";
           ctx.fillRect(x, top, s, s);
@@ -810,10 +835,10 @@
       }
       ctx.font = rasterFont(op.px, op.weight);
       ctx.textAlign = op.align === "center" ? "center" : "left";
-      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : op.x || RASTER_PAD, op.y);
+      ctx.fillText(op.text, op.align === "center" ? canvas.width / 2 : (op.x === 0 ? 0 : op.x || PAD), op.y);
       if (op.strike && op.align !== "center") {
         // 왼쪽 정렬이라 앞 토막의 폭만큼 밀어서 긋는다.
-        const x0 = RASTER_PAD + ctx.measureText(op.strike.before || "").width;
+        const x0 = PAD + ctx.measureText(op.strike.before || "").width;
         const w = ctx.measureText(op.strike.text).width;
         const midY = op.y + Math.round(op.px * PX_TO_DOTS * 0.52);
         ctx.fillRect(x0, midY, w, Math.max(2, Math.round(op.px * PX_TO_DOTS * 0.09)));

@@ -146,6 +146,29 @@ function check(name, cond, extra = "") {
   const shortItem = txt.short.find((l) => l.includes("x2"));
   check("★★ 「오른쪽 여백」 30mm 여도 글자 빌지의 품목 줄은 그대로", /^x2 石鍋拌飯\s*$/.test(shortItem || ""), JSON.stringify(shortItem));
 
+  out.push("\n[왼쪽 여백 — 사장님: 「왼쪽 여백 조절도 가능하게 해줘」]");
+  {
+    const d0 = await drawn({ leftMargin: 0 });
+    const d10 = await drawn({ leftMargin: 10 });
+    const first = (arr) => arr.find((e) => /^x\d+$/.test(e.t));
+    check("★★ 0mm 면 글자가 종이 왼쪽 끝(0점)에서 시작한다", !!first(d0) && first(d0).x === 0, JSON.stringify(first(d0)));
+    check("★★ 10mm 면 80점 안으로", !!first(d10) && first(d10).x === 80, JSON.stringify(first(d10)));
+    const name10 = d10.find((e) => e.t === "石鍋拌飯");
+    check("★ 이름도 같이 밀린다", !!name10 && name10.x > 80, JSON.stringify(name10));
+    const edge10 = d10.filter((e) => e.align === "right" && e.t !== "");
+    check("★★ 오른쪽 끝은 그대로 552점 — 왼쪽만 민다", edge10.length >= 3 && edge10.every((e) => e.x === 552), JSON.stringify(edge10.map((e) => [e.t, e.x])));
+    const big = await drawn({ leftMargin: 30 });
+    check("★ 30mm 까지 — 칸이 줄어도 이름은 안 사라진다", big.some((e) => /石鍋拌飯/.test(e.t)), JSON.stringify(big.map((e) => e.t)));
+    const mk = (fsx) => ({ table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460, fsx });
+    const txtL = await page.evaluate(() => {
+      const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460 };
+      return { on: window.buildEscPosTicket(o, "韓國館", { leftMargin: 10 }), off: window.buildEscPosTicket(o, "韓國館", {}) };
+    });
+    const GSL = String.fromCharCode(0x1d) + "L" + String.fromCharCode(80) + String.fromCharCode(0);
+    check("★★ 글자 빌지(QZ)는 ESC/POS 「왼쪽 여백」 명령(GS L 80점)으로 보낸다", txtL.on.includes(GSL), JSON.stringify(txtL.on.slice(0, 10)));
+    check("★ 안 정했으면 그 명령을 안 보낸다 — 예전 빌지 그대로", !txtL.off.includes(String.fromCharCode(0x1d) + "L"), JSON.stringify(txtL.off.slice(0, 10)));
+  }
+
   out.push("\n[미리보기 — 화면에서도 개수가 먼저]");
   await page.locator('.admin-tabs button[data-tab="settings"]').click();
   await page.locator('.settings-nav-btn[data-category="print"]').click();
@@ -157,6 +180,30 @@ function check(name, cond, extra = "") {
     return [...row.children].map((c) => c.className);
   });
   check("★★ 미리보기도 수량 → 이름 차례", Array.isArray(order) && order[0] === "item-qty" && order[1] === "item-name", JSON.stringify(order));
+
+  // 왼쪽 여백 칸 — 보이고, 미리보기에 바로 비치고, 저장되고, 다시 열어도 남는다
+  const li = page.locator("#tfsLeftMargin");
+  check("★ 「왼쪽 여백」 칸이 보인다", await li.isVisible(), "");
+  check("기본값 3mm — 예전 빌지 그대로", (await li.inputValue()) === "3", await li.inputValue());
+  await li.fill("12");
+  await li.dispatchEvent("input");
+  await page.waitForTimeout(500);
+  const padLeft = await page.evaluate(() => {
+    const d = document.querySelector("#ticketFontPreviewFrame").contentDocument;
+    const r = d && d.querySelector(".receipt");
+    return r ? [getComputedStyle(r).paddingLeft, getComputedStyle(r).paddingRight] : [];
+  });
+  check("★★ 미리보기에 바로 보인다 — 왼쪽만 12mm, 오른쪽은 그대로 4mm",
+    Math.abs(parseFloat(padLeft[0]) - 12 * 96 / 25.4) < 1 && Math.abs(parseFloat(padLeft[1]) - 4 * 96 / 25.4) < 1, JSON.stringify(padLeft));
+  await page.locator("#saveTicketFontSizesBtn").click();
+  await page.waitForTimeout(700);
+  check("★ 저장된다", store.settings.ticket_font_sizes.leftMargin === 12, JSON.stringify(store.settings.ticket_font_sizes.leftMargin));
+  await page.reload({ waitUntil: "networkidle" });
+  await page.waitForTimeout(1400);
+  await page.locator('.admin-tabs button[data-tab="settings"]').click();
+  await page.locator('.settings-nav-btn[data-category="print"]').click();
+  await page.waitForTimeout(700);
+  check("다시 열어도 12mm", (await page.locator("#tfsLeftMargin").inputValue()) === "12", await page.locator("#tfsLeftMargin").inputValue());
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);
