@@ -8,6 +8,7 @@ const express = require("express");
 const { getDb, connectDB } = require("../db");
 const { requireOwner } = require("../auth");
 const G = require("../ingredients");
+const VAT = require("../ingredientVat");
 
 const router = express.Router();
 router.use(requireOwner);
@@ -38,6 +39,12 @@ async function col() {
     }
   }
   return c;
+}
+
+// 영수증마다 고른 부가세 방법 · 업체 기억값(src/ingredientVat.js).
+async function vatCol() {
+  await connectDB();
+  return getDb().collection(VAT.COLL);
 }
 
 /**
@@ -104,6 +111,12 @@ router.post("/import", express.json({ limit: "8mb" }), async (req, res) => {
   const docs = G.withIds(rows);
   // 같은 열쇠가 덩이 안에서 겹치면(있을 수 없지만) 마지막 것이 남게 한다.
   await c.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
+  // 그 날짜를 통째로 지웠으므로 「부가세 더해야 함」으로 고른 영수증의 5% 줄도 같이 지워졌다 — 다시 맞춘다.
+  const vc = await vatCol();
+  for (const { store: s, dates } of covered) {
+    const marked = await vc.find({ kind: "receipt", store: s, date: { $in: dates }, mode: "add" }).toArray();
+    for (const m of marked) await VAT.sync(c, vc, { store: m.store, date: m.date, vendor: m.vendor });
+  }
   res.json({ ok: true, inserted: docs.length, skipped, removed, dates: covered.reduce((n, x) => n + x.dates.length, 0) });
 });
 
@@ -147,7 +160,7 @@ router.get("/prices", async (req, res) => {
   if (!name) return res.status(400).json({ error: "no_name" });
   const c = await col();
   const rows = await c.find({ ...rangeQuery(req.query), name }, { projection: { _id: 0 } }).toArray();
-  res.json({ name, points: G.priceHistory(rows) });
+  res.json({ name, points: G.priceHistory(rows.filter((r) => !r.vat)) });
 });
 
 /** 줄 목록. 많으면 잘라서 주고, 잘렸다고 말한다. */
@@ -194,7 +207,8 @@ router.get("/catalog", async (req, res) => {
     });
   }
 
-  const rows = await c.find({ ...where, vendor }, { projection: { _id: 0 } }).toArray();
+  // 「營業稅 5%」 줄은 산 물건이 아니다 — 고르는 목록에 안 넣는다.
+  const rows = (await c.find({ ...where, vendor }, { projection: { _id: 0 } }).toArray()).filter((r) => !r.vat);
   // 「최근」은 90일로 본다 — 철 지난 재료가 목록 맨 위에 올라오지 않게.
   const recentFrom = new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10);
   res.json({ vendor, items: G.buildCatalog(rows, { recentFrom }) });
@@ -268,8 +282,24 @@ router.get("/inbox", async (req, res) => {
     );
   } catch (e) { console.warn("[ingredients] 지난 사진 치우기 실패:", e && e.message); }
   const docs = await c.find({}, { projection: { image: 0 } }).sort({ at: -1 }).limit(300).toArray();
+  // 저장한 영수증마다 부가세를 무엇으로 골랐나 — 「저장됨」 줄에 적는다(안 골랐으면 「부가세 ?」).
+  const keys = docs.filter((d) => d.status === INBOX.STATUS.SAVED && d.saved_key).map((d) => VAT.receiptId(d.saved_key));
+  const vatBy = new Map();
+  if (keys.length) {
+    try {
+      const vc = await vatCol();
+      for (const v of await vc.find({ _id: { $in: keys } }).toArray()) vatBy.set(v._id, v.mode);
+    } catch (e) { console.warn("[ingredients] 부가세 읽기 실패:", e && e.message); }
+  }
   res.json({
-    items: docs.map(INBOX.listItem),
+    items: docs.map((d) => {
+      const item = INBOX.listItem(d);
+      if (d.status === INBOX.STATUS.SAVED && d.saved_key) {
+        item.saved_key = d.saved_key;
+        item.vat = vatBy.get(VAT.receiptId(d.saved_key)) || null;
+      }
+      return item;
+    }),
     // 키가 있으면 대기함에서 바로 읽을 수 있다. 없으면 화면이 그 단추를 안 띄운다.
     ai_on: !!process.env.ANTHROPIC_API_KEY,
     pending: docs.filter((d) => d.status !== INBOX.STATUS.SAVED).length,
@@ -425,7 +455,8 @@ router.post("/inbox/:id/unsave", express.json({ limit: "64kb" }), async (req, re
   const key = doc.saved_key || INBOX.keyFromRead(doc);
   if (!key) return res.status(400).json({ error: "not_undoable" });
   const c = await col();
-  const now = await c.find(key, { projection: { _id: 1 } }).toArray();
+  // 「營業稅 5%」 줄은 저장 뒤에 따로 붙는 줄이라 「누가 고쳤나」를 볼 때 뺀다.
+  const now = (await c.find(key, { projection: { _id: 1, vat: 1 } }).toArray()).filter((d) => !d.vat);
   const same = (a, b) => a.length === b.length && a.map(String).sort().join("|") === b.map(String).sort().join("|");
   if (!old && !same(now.map((d) => d._id), doc.saved_ids || []) && !(req.body && req.body.force)) {
     return res.status(409).json({ error: "changed", rows: now.length });
@@ -433,6 +464,8 @@ router.post("/inbox/:id/unsave", express.json({ limit: "64kb" }), async (req, re
   await c.deleteMany(key);
   const prev = doc.saved_prev || [];
   if (prev.length) await c.bulkWrite(prev.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
+  // 되살린 줄(또는 빈 영수증)에 맞춰 5% 줄을 다시 맞춘다 — 빠진 영수증에 5% 만 남으면 안 된다.
+  await VAT.sync(c, await vatCol(), key);
   const read = INBOX.readFromSaved(doc);
   const set = { unsaved_at: new Date().toISOString() };
   if (read) { set.status = INBOX.STATUS.READ; set.read = read; }
@@ -488,6 +521,12 @@ router.post("/rows", async (req, res) => {
   if (docs.length) {
     await c.bulkWrite(docs.map((d) => ({ replaceOne: { filter: { _id: d._id }, replacement: d, upsert: true } })));
   }
+  // 부가세(2026-10-21, src/ingredientVat.js) — 화면이 고른 값, 없으면 이 영수증·업체에 전에 고른 값.
+  // 「더해야 함」이면 5% 줄을 넣는다(줄을 갈아끼웠으므로 늘 다시 맞춘다).
+  const vc = await vatCol();
+  const vatKey = { store, date, vendor };
+  const vat = await VAT.decideOnSave(vc, vatKey, b.vat, !!b.vat_remember);
+  const vatAmount = await VAT.sync(c, vc, vatKey);
   // 대기함에서 온 것이면 그 줄을 마무리한다. **사진은 바로 지우지 않는다** — KEEP_SAVED_IMAGE_DAYS 일 동안
   // 들고 있다가(GET /inbox 가 치운다) 그 사이엔 「↶ 되돌리기」로 사진·표째 확인 대기로 돌린다
   // (2026-10-18 사장님: "확정하고 나면 장부로 넘어가지는데 그거 되돌릴 수 있게 해줘. 사진이랑 정보 다 같이").
@@ -506,7 +545,47 @@ router.post("/rows", async (req, res) => {
       );
     } catch (e) { console.warn("[ingredients] 대기함 마무리 실패:", e && e.message); }
   }
-  res.json({ ok: true, saved: rows.length, removed: (removed && removed.deletedCount) || 0, inbox: inboxId || null });
+  res.json({ ok: true, saved: rows.length, removed: (removed && removed.deletedCount) || 0, inbox: inboxId || null, vat, vat_amount: vatAmount });
+});
+
+/**
+ * 한 영수증(또는 업체)의 부가세 방법.
+ * GET  ?store&date&vendor → { mode, from, amount }   (from: "receipt" 이 영수증에 고름 · "vendor" 업체 기억값)
+ * GET  ?vendor            → { mode } 그 업체 기억값만 — 새 영수증을 적을 때 미리 골라 두려고
+ * POST { store, date, vendor, mode, remember } → 고르고 5% 줄을 맞춘다. mode 가 null 이면 「안 고름」으로.
+ */
+router.get("/vat", async (req, res) => {
+  const q = req.query || {};
+  const vendor = G.canonicalVendor(q.vendor);
+  if (!vendor) return res.status(400).json({ error: "no_vendor" });
+  const vc = await vatCol();
+  const date = G.anyDate(q.date);
+  const store = String(q.store || "").trim();
+  if (!date || !G.storeByKey(store)) {
+    const v = await vc.findOne({ _id: VAT.vendorId(vendor) });
+    return res.json({ vendor, mode: (v && v.mode) || null });
+  }
+  const k = { store, date, vendor };
+  const got = await VAT.modeFor(vc, k);
+  const c = await col();
+  const row = await c.findOne({ _id: VAT.vatRowId(k) });
+  res.json({ ...got, amount: row ? row.amount : 0 });
+});
+
+router.post("/vat", async (req, res) => {
+  const b = req.body || {};
+  const store = String(b.store || "").trim();
+  if (!G.storeByKey(store)) return res.status(400).json({ error: "unknown_store" });
+  const date = G.anyDate(b.date);
+  if (!date) return res.status(400).json({ error: "bad_date" });
+  const vendor = G.canonicalVendor(b.vendor);
+  if (!vendor) return res.status(400).json({ error: "no_vendor" });
+  if (b.mode != null && !VAT.MODES.includes(b.mode)) return res.status(400).json({ error: "bad_mode" });
+  const k = { store, date, vendor };
+  const vc = await vatCol();
+  const mode = await VAT.setMode(vc, k, b.mode || null, !!b.remember);
+  const amount = await VAT.sync(await col(), vc, k);
+  res.json({ ok: true, mode, amount });
 });
 
 /**

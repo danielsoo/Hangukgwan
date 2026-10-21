@@ -3465,3 +3465,29 @@ body:not(.role-staff) .staff-only { display: none !important; }
   white-space: nowrap; flex: 0 0 auto;
 }
 .refund-step .refund-all:hover { background: #faf6ef; }
+
+/* 영수증 부가세 5%(2026-10-21) — 영수증마다 셋 중 하나. 위 「영수증 확인 / 직접 넣기」 칸과 같은 말투. */
+.ing-vat { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: #fcfaf6; }
+.ing-vat-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ing-vat-title { font-weight: 800; font-size: 15px; }
+.ing-vat-remember { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.ing-vat-opts, .ing-inbox-vat { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.ing-vat-opt {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px;
+  border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: #2f3542; cursor: pointer; text-align: left;
+}
+.ing-vat-opt b { font-size: 15px; }
+.ing-vat-opt small { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.ing-vat-opt:hover { border-color: #cfc5b6; }
+.ing-vat-opt.is-on { border-color: #2f3542; background: #2f3542; color: #fff; }
+.ing-vat-opt.is-on small { color: #d9dde4; }
+.ing-vat-note { margin: 10px 0 0; font-size: 14px; font-weight: 600; color: #2f3542; }
+.ing-vat-note.is-warn { color: #8a6a00; }
+.ing-inbox-vat { grid-column: 1 / -1; }
+.ing-vat-chip {
+  margin-left: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line);
+  background: #fff; font-size: 12px; font-weight: 700; color: #2f3542; cursor: pointer;
+}
+.ing-vat-chip.is-unset { background: #fff6d6; border-color: #e8b100; color: #8a6a00; }
+.ing-vat-chip.is-add { background: #e4eef8; border-color: #b9cfe6; color: #1f4e79; }
+@media (max-width: 600px) { .ing-vat-opts, .ing-inbox-vat { grid-template-columns: 1fr; } }

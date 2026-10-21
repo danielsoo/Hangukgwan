@@ -808,6 +808,67 @@
   function updateTotal() {
     const sum = entryLines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
     if ($("#ingEntryTotal")) $("#ingEntryTotal").textContent = `NT$${money(Math.round(sum * 100) / 100)}`;
+    renderVat();
+  }
+
+  // ───────── 부가세 5% (2026-10-21) ─────────
+  //
+  // 사장님: "영수증의 부가세 첨부 방법이 업체들마다 다른데 … 1. 합계금액의 5%를 넣는 업체 2. 각 항목마다
+  // 5%를 넣는 업체 3. 월말에 한꺼번에 5% 청구하는 업체 4. 부가세가 아예 없는 업체" → 영수증마다 셋 중 하나:
+  //   이미 포함(1·2) · +5% 더하기(3, 장부에 「營業稅 5%」 줄이 붙는다) · 없음(4).
+  // 업체마다 방법이 정해져 있어서 「이 업체는 늘 이렇게」를 켜 두면 그 업체의 다음 영수증은 그 값으로 시작한다.
+  // 규칙과 5% 줄은 서버(src/ingredientVat.js)가 맡는다 — 화면은 고르고 보여줄 뿐이다.
+  const VAT_MODES = ["included", "add", "none"];
+  let entryVat = { mode: null, from: null };
+  let paperTotal = null;          // 읽은 영수증의 종이 合計 — 줄에 부가세가 빠졌는지 견주려고
+  let vatSeq = 0;
+  const vatLabel = (m) => T({ included: "ingVatIncluded", add: "ingVatAdd", none: "ingVatNone" }[m] || "ingVatUnset");
+  function renderVat() {
+    const box = $("#ingVatOpts");
+    if (!box) return;
+    if (!box.children.length) {
+      box.innerHTML = VAT_MODES.map((m) =>
+        '<button type="button" class="ing-vat-opt" data-vat="' + m + '"><b>' + esc(vatLabel(m)) + "</b><small>" +
+        esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + "</small></button>"
+      ).join("");
+      box.querySelectorAll("[data-vat]").forEach((b) => {
+        b.onclick = () => {
+          // 다시 누르면 「안 고름」으로 — 잘못 누른 것을 되돌릴 길
+          entryVat = { mode: entryVat.mode === b.dataset.vat ? null : b.dataset.vat, from: "picked" };
+          renderVat();
+        };
+      });
+    }
+    box.querySelectorAll("[data-vat]").forEach((b) => b.classList.toggle("is-on", b.dataset.vat === entryVat.mode));
+    const sum = Math.round(entryLines.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100;
+    const vat = Math.round(sum * 5) / 100;
+    const note = $("#ingVatNote");
+    const parts = [];
+    if (entryVat.mode === "add") parts.push(fmt("ingVatAddNoteFmt", { total: money(Math.round((sum + vat) * 100) / 100), sum: money(sum), vat: money(vat) }));
+    else if (entryVat.mode) parts.push(fmt("ingVatSameNoteFmt", { total: money(sum) }));
+    else parts.push(T("ingVatUnsetNote"));
+    if (entryVat.from === "vendor") parts.push(T("ingVatFromVendor"));
+    // 종이 合計가 줄 합계보다 딱 5% 많으면 부가세 줄이 표에 안 들어온 것이다(1항 업체) — 그대로 두면 5% 가 빠진다.
+    const paperHint = entryVat.mode !== "add" && paperTotal && sum > 0 && Math.abs(paperTotal - (sum + vat)) <= Math.max(1, sum * 0.002);
+    if (paperHint) parts.push(fmt("ingVatPaperHintFmt", { paper: money(paperTotal), sum: money(sum) }));
+    note.innerHTML = parts.map((x) => esc(x)).join("<br>");
+    note.classList.toggle("is-warn", !entryVat.mode || !!paperHint);
+  }
+  /** 이 영수증(또는 업체)에 전에 고른 값을 불러와 미리 골라 둔다. 사장님이 이미 고르셨으면 건드리지 않는다. */
+  async function loadVat() {
+    const vendor = ($("#ingEntryVendor").value || "").trim();
+    const seq = ++vatSeq;
+    if (!vendor) { if (entryVat.from !== "picked") entryVat = { mode: null, from: null }; return renderVat(); }
+    const q = new URLSearchParams({ vendor, store: $("#ingEntryStore").value || "", date: $("#ingEntryDate").value || "" });
+    const got = await fetch("/api/ingredients/vat?" + q).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (seq !== vatSeq || entryVat.from === "picked") return;
+    entryVat = got && got.mode ? { mode: got.mode, from: got.from || "vendor" } : { mode: null, from: null };
+    renderVat();
+  }
+  function resetVat() {
+    entryVat = { mode: null, from: null };
+    paperTotal = null;
+    renderVat();
   }
 
   async function loadCatalog() {
@@ -875,12 +936,17 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // 대기함에서 온 것이면 그 줄도 마무리된다(서버가 사진을 지운다)
-        body: JSON.stringify({ store, date, vendor, lines, inbox_id: attached ? attached.id : "" }),
+        body: JSON.stringify({
+          store, date, vendor, lines, inbox_id: attached ? attached.id : "",
+          vat: entryVat.mode, vat_remember: !!($("#ingVatRemember") && $("#ingVatRemember").checked),
+        }),
       });
       if (!res.ok) throw new Error(`${res.status}`);
       const got = await res.json();
-      logLine(esc(fmt("ingEntrySavedFmt", { n: got.saved })));
+      logLine(esc(fmt("ingEntrySavedFmt", { n: got.saved })) +
+        (got.vat_amount > 0 ? " " + esc(fmt("ingVatSavedAddFmt", { vat: money(got.vat_amount) })) : got.vat ? " " + esc(fmt("ingVatSavedFmt", { mode: vatLabel(got.vat) })) : " " + esc(T("ingVatSavedUnset"))));
       entryLines = [blankLine()];
+      resetVat();
       renderLines();
       const cameFrom = attached ? attached.id : "";
       if (attached) { detachPhoto(); await loadInbox(); }
@@ -1627,6 +1693,11 @@
         '<div class="ing-inbox-meta"><strong>' + esc(i.name || "—") + "</strong>" +
         '<span class="ing-inbox-when">' + esc(when) + '</span>' +
         '<span class="ing-inbox-badge is-' + esc(i.status) + '">' + esc(badge) + "</span>" + read +
+        // 저장한 영수증의 부가세 — 안 골랐으면 노랗게 「부가세 ?」(2026-10-21)
+        (i.saved_key
+          ? '<button type="button" class="ing-vat-chip' + (i.vat ? " is-" + esc(i.vat) : " is-unset") + '" data-inbox-vat="' + esc(i.id) + '">' +
+            esc(fmt("ingVatChipFmt", { mode: vatLabel(i.vat) })) + "</button>"
+          : "") +
         "</div>" +
         '<div class="ing-inbox-acts">' +
         (i.can_undo
@@ -1642,6 +1713,14 @@
           : "") +
         '<button type="button" class="ing-inbox-btn is-del" data-inbox-del="' + esc(i.id) + '">' + esc(T("ingInboxDel")) + "</button>" +
         "</div>" +
+        (i.saved_key
+          ? '<div class="ing-inbox-vat" id="vat-' + esc(i.id) + '" hidden>' +
+            VAT_MODES.map((m) =>
+              '<button type="button" class="ing-vat-opt' + (i.vat === m ? " is-on" : "") + '" data-vat-set="' + esc(i.id) + '" data-vat-mode="' + m + '"><b>' +
+              esc(vatLabel(m)) + "</b><small>" + esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + "</small></button>"
+            ).join("") +
+            "</div>"
+          : "") +
         '<div class="ing-inbox-paste" id="paste-' + esc(i.id) + '" hidden>' +
         '<textarea rows="4" data-inbox-text="' + esc(i.id) + '" placeholder="' + esc(T("ingInboxPastePh")) + '"></textarea>' +
         '<button type="button" class="primary" data-inbox-go="' + esc(i.id) + '">' + esc(T("ingInboxPasteGo")) + "</button>" +
@@ -1661,6 +1740,28 @@
     el.querySelectorAll("[data-inbox-use]").forEach((b) => { b.onclick = () => useRead(b.dataset.inboxUse); });
     el.querySelectorAll("[data-inbox-del]").forEach((b) => { b.onclick = () => delInbox(b.dataset.inboxDel); });
     el.querySelectorAll("[data-inbox-undo]").forEach((b) => { b.onclick = () => undoSaved(b.dataset.inboxUndo); });
+    el.querySelectorAll("[data-inbox-vat]").forEach((b) => {
+      b.onclick = () => { const box = $("#vat-" + b.dataset.inboxVat); if (box) box.hidden = !box.hidden; };
+    });
+    el.querySelectorAll("[data-vat-set]").forEach((b) => { b.onclick = () => setSavedVat(b.dataset.vatSet, b.dataset.vatMode); });
+  }
+
+  /** 저장한 영수증의 부가세를 고른다(고쳐 고른다). 그 업체의 다음 영수증도 이 값으로 시작한다. */
+  async function setSavedVat(id, mode) {
+    const item = (inbox.items || []).find((i) => i.id === id);
+    if (!item || !item.saved_key) return;
+    const res = await fetch("/api/ingredients/vat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...item.saved_key, mode, remember: true }),
+    }).catch(() => null);
+    if (!res || !res.ok) return logLine(esc(T("ingVatFailed")));
+    const got = await res.json();
+    logLine(esc(got.amount > 0
+      ? fmt("ingVatSetAddFmt", { vendor: item.saved_key.vendor, date: item.saved_key.date, vat: money(got.amount) })
+      : fmt("ingVatSetFmt", { vendor: item.saved_key.vendor, date: item.saved_key.date, mode: vatLabel(got.mode) })));
+    await loadInbox();
+    await loadSummary();
   }
 
   /**
@@ -1827,6 +1928,9 @@
     if (!entryLines.length) entryLines.push(blankLine());
     renderLines();
     applyHead(got.head, { force: true });   // 고른 영수증이다 — 앞 영수증 업체가 남으면 안 된다
+    entryVat = { mode: null, from: null };
+    paperTotal = Number(got.total) > 0 ? Number(got.total) : null;
+    loadVat();
     attachPhoto(id);
     showEntry();                // 표가 화면 아래면 눌러도 아무 일도 안 일어난 것처럼 보인다
     logLine(esc(fmt("ingPhotoReadFmt", { n: got.rows.length, unsure: got.unsure })));
@@ -2039,6 +2143,7 @@
     entryMode = m === "manual" ? "manual" : "check";
     if (entryMode === "manual" && attached) {
       entryLines = [blankLine()];
+      resetVat();
       renderLines();
       detachPhoto();
     }
@@ -2253,6 +2358,7 @@
       });
       $("#ingEntryClear").onclick = () => {
         entryLines = [blankLine()];
+        resetVat();
         renderLines();
         if (attached) detachPhoto();
       };
@@ -2326,11 +2432,13 @@
         $("#ingInboxManyCancel").onclick = () => { $("#ingInboxManyBox").hidden = true; };
       }
       if ($("#ingEntryPhotoClear")) $("#ingEntryPhotoClear").onclick = () => detachPhoto();
-      $("#ingEntryVendor").onchange = () => loadCatalog();
+      $("#ingEntryVendor").onchange = () => { loadCatalog(); loadVat(); };
       $("#ingEntryStore").onchange = () => {
         loadVendorList();
         loadCatalog();
+        loadVat();
       };
+      $("#ingEntryDate").addEventListener("change", () => loadVat());
       // 오늘 날짜로 시작한다 — 거의 늘 오늘 받은 영수증이다.
       if (!$("#ingEntryDate").value) $("#ingEntryDate").value = new Date().toISOString().slice(0, 10);
       renderLines();
