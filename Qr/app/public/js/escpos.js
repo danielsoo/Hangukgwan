@@ -243,13 +243,16 @@
 
     o.items.forEach((it) => {
       // 넘치면 다음 줄로(2026-10-06 — 잘리면 「(草莓)」·「(牛奶)」를 못 가린다).
+      // 수량이 **이름 앞**에 온다(2026-10-21 사장님). 다음 줄은 그 폭만큼 들여 이름 시작에 맞춘다.
+      const head = `x${it.qty} `;
+      const indent = " ".repeat(head.length);
       let rest = itemName(it, priceCopy);
-      const first = truncateToWidth(rest, W - 6).replace(/…$/, "");
+      const first = truncateToWidth(rest, W - head.length).replace(/…$/, "");
       rest = rest.slice(first.length);
-      out += CMD.BOLD_ON + padLine(first, `x${it.qty}`, W) + CMD.BOLD_OFF + "\n";
+      out += CMD.BOLD_ON + head + first + CMD.BOLD_OFF + "\n";
       while (rest) {
-        const part = truncateToWidth(rest, W - 6).replace(/…$/, "") || rest.slice(0, 1);
-        out += CMD.BOLD_ON + part + CMD.BOLD_OFF + "\n";
+        const part = truncateToWidth(rest, W - head.length).replace(/…$/, "") || rest.slice(0, 1);
+        out += CMD.BOLD_ON + indent + part + CMD.BOLD_OFF + "\n";
         rest = rest.slice(part.length);
       }
       // 값이 붙는 옵션(크기 등)은 얼마가 붙었는지 같이 찍는다 — 손님이
@@ -583,7 +586,11 @@
       const badgeGap = badge ? 14 : 0;
       // opts.qty — 품목 줄의 수량(x2). 그 열만 오른쪽 여백만큼 안으로.
       const rightPad = opts.qty ? QTY_PAD : RASTER_PAD;
-      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap;
+      // opts.lead — 이름 **앞**에 붙는 수량(2026-10-21 사장님: 「메뉴 개수」를 「개수 메뉴」로).
+      // 뱃지와 같은 자리 계산이다 — 그만큼 이름을 밀고, 넘쳐서 다음 줄로 간 이름도 같은 자리에 맞춘다.
+      const lead = opts.lead || null;
+      const leadWidth = lead ? Math.round(mctx.measureText(lead + "  ").width) : 0;
+      const leftMax = RASTER_DOTS_WIDE - RASTER_PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap - leadWidth;
       // 넘치면 다음 줄로(위 wrapText). 수량은 첫 줄 오른쪽에 그대로, 다음 줄은 이름 시작에 맞춰 수량 칸 앞까지.
       const lines = wrapText(mctx, left, leftMax, leftMax);
       const fittedLeft = lines[0];
@@ -592,10 +599,10 @@
       // 2026-09-16 사장님: "프린트는 빨간색이 안나와서 총 금액을 긋고 하는
       // 게 나을 거 같아." 래스터는 우리가 직접 그리는 그림이라 진짜 선을
       // 그을 수 있다(텍스트 모드에는 그런 명령이 없어 화살표를 쓴다).
-      ops.push({ type: "row", left: fittedLeft, right, rightPad, px, weight, y, badge, badgeSize, badgeGap, strikePrefix: opts.strikePrefix || null });
+      ops.push({ type: "row", left: fittedLeft, right, rightPad, px, weight, y, badge, badgeSize, badgeGap, lead, leadWidth, strikePrefix: opts.strikePrefix || null });
       y += Math.round(px * PX_TO_DOTS * 1.4);
       for (const t of lines.slice(1)) {
-        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: RASTER_PAD + (badge ? badgeSize + badgeGap : 0), strike: null });
+        ops.push({ type: "text", text: t, px, weight, align: "left", y, x: RASTER_PAD + (badge ? badgeSize + badgeGap : 0) + leadWidth, strike: null });
         y += Math.round(px * PX_TO_DOTS * 1.4);
       }
       y += opts.gapAfter || 0;
@@ -648,7 +655,7 @@
       // 읽혀야 한다. 취소를 추가로 읽으면 만들지 말아야 할 것을 만든다.
       if (it.__delta === "-") line(priceCopy ? "[取消]" : "[취소 / 取消]", sz("itemDetail", 13), 900);
       else if (it.__delta === "+") line(priceCopy ? "[追加]" : "[추가 / 追加]", sz("itemDetail", 13), 900);
-      row(itemName(it, priceCopy), `x${it.qty}`, sz("itemName", 16), wt("itemName", 900), { qty: true });
+      row(itemName(it, priceCopy), "", sz("itemName", 16), wt("itemName", 900), { lead: `x${it.qty}` });
       if (it.option_choice) line("  └ " + optionLine(it), sz("itemDetail", 13), wt("itemDetail", 400));
       // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
@@ -786,6 +793,8 @@
           leftX = x + s + op.badgeGap;
         }
         ctx.textAlign = "left";
+        // 수량이 **이름 앞**에 온다 — 빌지를 겹쳐 걸어도 왼쪽은 안 가린다
+        if (op.lead) { ctx.fillText(op.lead, leftX, op.y); leftX += op.leadWidth; }
         ctx.fillText(op.left, leftX, op.y);
         ctx.textAlign = "right";
         ctx.fillText(op.right, canvas.width - op.rightPad, op.y);

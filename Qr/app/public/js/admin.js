@@ -889,7 +889,7 @@
       settlementRefundCancel: "취소 {n}개 −{amount}",
       settlementRefundReturn: "반품 {n}개 −{amount}",
       tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
-      tfsRightMargin: "수량 열 오른쪽 여백 (겹쳐 걸어도 수량이 보이게)",
+      tfsRightMargin: "수량 열 오른쪽 여백 — 지금은 수량이 메뉴 앞에 있어 품목 줄에는 안 쓰여요",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -2366,7 +2366,7 @@
       settlementRefundCancel: "取消 {n} 份 −{amount}",
       settlementRefundReturn: "退貨 {n} 份 −{amount}",
       tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
-      tfsRightMargin: "數量欄右側留白（單子疊掛時也看得到數量）",
+      tfsRightMargin: "數量欄右側留白 — 現在數量在品名前面，品項列不再使用",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -6932,7 +6932,7 @@
     // takeout line here, since the header badge alone can't say which dish
     // needs to-go packaging.
     const itemLines = o.items.map((it) => {
-      const label = `${it.code ? `${it.code} ` : ""}${itemName(it)} x${it.qty}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${it.takeout_choice ? `(${it.takeout_choice})` : ""}`;
+      const label = `x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${it.takeout_choice ? `(${it.takeout_choice})` : ""}`;
       const perItemTag =
         o.order_type === "mixed" && it.order_type === "takeout"
           ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
@@ -7350,7 +7350,7 @@
           }
         }
         return `<div class="item-row">
-          <div class="item-main"><span class="item-name">${name}</span><span class="item-qty">x${it.qty}</span></div>
+          <div class="item-main"><span class="item-qty">x${it.qty}</span><span class="item-name">${name}</span></div>
           ${detailLines.join("")}
         </div>`;
       })
@@ -7469,9 +7469,11 @@
   .order-time { font-size: ${fs.time}px; font-weight: ${fs.timeWeight}; }
   .item-row { padding: 2mm 0; border-bottom: 1px dotted #999; }
   .item-row:last-child { border-bottom: none; }
-  .item-main { display: flex; justify-content: space-between; gap: 3mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
+  /* 2026-10-21 사장님: 「메뉴 개수」를 「개수 메뉴」로 — 수량이 이름 **앞**에 온다.
+     그래서 설정 「수량 열 오른쪽 여백」은 품목 줄을 더 이상 밀지 않는다(수량이 오른쪽 끝에 없다). */
+  .item-main { display: flex; gap: 2mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
   .item-name { flex: 1; }
-  .item-qty { white-space: nowrap; margin-right: ${fs.rightMargin != null && Number.isFinite(Number(fs.rightMargin)) ? Math.max(0, Math.min(30, Number(fs.rightMargin))) : 8}mm; }
+  .item-qty { white-space: nowrap; }
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
   .item-takeout { font-size: ${fs.itemTakeout}px; font-weight: ${fs.itemTakeoutWeight}; color: #000; }
   .item-price { font-size: ${fs.itemPrice}px; font-weight: ${fs.itemPriceWeight}; color: #000; }
@@ -8229,7 +8231,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""} x${it.qty}${
+            <span>x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${
               Number(it.refunded_qty) > 0 ? ` <span class="order-refunded-tag">${escapeHtml(T("refundDetailTag").replace("{n}", it.refunded_qty))}</span>` : ""
             }${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${money(lineTotalOf(it))}</span>
@@ -11172,7 +11174,7 @@
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-            <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""} x${it.qty}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
+            <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
             <span class="pay-amount-cell">${vipPriceHtml(discountBaseOfClient(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
           </div>${payItemSubLinesHtml(it, !isPaidItem && !vipExcludedIds.has(it.item_id))}
         </div>`;
@@ -12635,7 +12637,7 @@
       .map((o) => ({
         id: o.id,
         time: (o.created_at || "").slice(11, 16),
-        summary: (o.items || []).map((it) => `${itemName(it)}×${it.qty}`).join(", "),
+        summary: (o.items || []).map((it) => `×${it.qty} ${itemName(it)}`).join(", "),
       }));
     const toNum = toTable.label || toTable.number;
     return {
@@ -18100,7 +18102,7 @@
               afterLabel: (ctx) => {
                 const h = byHour.get(ctx.dataIndex);
                 if (!h || !h.top_items || h.top_items.length === 0) return "";
-                const names = h.top_items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
+                const names = h.top_items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join(", ");
                 return `${T("settlementHourlyTopItems")}: ${names}`;
               },
             },
@@ -18216,7 +18218,7 @@
       $("#settlementProblemList").innerHTML = data.problem_orders
         .map((o) => {
           const time = o.created_at.slice(11, 16);
-          const itemsText = o.items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join(", ");
+          const itemsText = o.items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join(", ");
           return `
             <div class="settlement-problem-row">
               <div class="settlement-problem-head">
@@ -19700,7 +19702,7 @@
           ? `📦 ${first.pickup_number}${T("settlementOrdersPickupSuffix")} ${escapeHtml(first.customer_name)}`
           : fmtOrderTableTag(first.table_number);
         const peek = group
-          .flatMap((o) => (o.items || []).map((it) => `${itemDisplayName(it)} x${it.qty}`))
+          .flatMap((o) => (o.items || []).map((it) => `x${it.qty} ${itemDisplayName(it)}`))
           .join(", ");
         // 묶음 전체가 취소된 것일 때만 취소로 보인다. 한 라운드만 취소된
         // 것을 묶음째 취소로 칠하면 받은 돈이 안 받은 것처럼 보인다.
@@ -19931,7 +19933,7 @@
         ].filter(Boolean);
         return `
           <div class="stl-order-line">
-            <span>${itemDisplayName(it)} <span style="color:var(--muted)">x${it.qty}</span></span>
+            <span><span style="color:var(--muted)">x${it.qty}</span> ${itemDisplayName(it)}</span>
             <span>NT$${money(lineTotalOf(it))}</span>
           </div>
           ${extras.length ? `<div class="stl-order-line-sub">└ ${escapeHtml(extras.join(" · "))}</div>` : ""}`;
@@ -20117,7 +20119,7 @@
     rows.push(["미결제 주문 상세"]);
     rows.push(["시간", "테이블", "상태", "금액", "주문 내역"]);
     data.problem_orders.forEach((o) =>
-      rows.push([o.created_at, o.table_number, statusLabel(o.status), o.total, o.items.map((it) => `${itemDisplayName(it)} x${it.qty}`).join("; ")])
+      rows.push([o.created_at, o.table_number, statusLabel(o.status), o.total, o.items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join("; ")])
     );
     return "﻿" + rows.map((r) => r.map(csvEscape).join(",")).join("\n");
   }
