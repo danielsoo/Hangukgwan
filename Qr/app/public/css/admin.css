@@ -3209,10 +3209,30 @@ body:not(.role-staff) .staff-only { display: none !important; }
 .ing-check-filter[disabled] { opacity: 0.45; cursor: default; }
 .ing-check-filter.is-saved { border-style: dashed; }
 .ing-check-none { color: var(--muted); font-size: 13.5px; padding: 4px 2px; }
+/* 칩은 옆으로 구르지 않고 **줄을 바꿔** 다 보인다(2026-10-21 사장님: "드래그하면서 찾지 않고 바로 보여지게").
+   많으면 다섯 줄쯤에서 칸 안으로 내려간다 — 표가 화면 밖으로 밀리지 않게. 위 업체 칸으로 좁히면 몇 장 안 된다. */
 .ing-check-chips {
-  display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px;
-  scrollbar-width: thin;
+  display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 4px;
+  max-height: 196px; overflow-y: auto; scrollbar-width: thin;
 }
+/* 위 칸: 왼쪽은 ◀ 이전 · 다음 ▶ 과 거르개, 오른쪽 빈 자리에 업체가 한눈에. */
+.ing-check-top { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; margin-bottom: 10px; }
+.ing-check-left .ing-check-filters { margin-bottom: 0; }
+.ing-check-vendors { min-width: 0; }
+.ing-check-vendors-title { font-size: 12.5px; color: var(--muted); margin: 2px 0 6px; }
+.ing-check-vendors-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.ing-check-vendor {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px;
+  border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 6px 10px;
+  cursor: pointer; font: inherit; font-size: 13.5px; color: var(--ink, #241f1f); text-align: left;
+}
+.ing-check-vendor:hover { border-color: #cfc5b6; box-shadow: 0 2px 8px rgba(36, 31, 31, 0.08); }
+.ing-check-vendor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ing-check-vendor b { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+.ing-check-vendor.is-on { background: #2f3542; border-color: #2f3542; color: #fff; }
+.ing-check-vendor.is-on b { color: #ffd54a; }
+.ing-check-vendor.is-none { border-style: dashed; }
+@media (max-width: 900px) { .ing-check-top { grid-template-columns: 1fr; } }
 .ing-check-chip {
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
   border: 1px solid var(--line); background: #fff; border-radius: 999px;

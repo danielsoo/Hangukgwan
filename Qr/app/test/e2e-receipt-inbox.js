@@ -1204,6 +1204,32 @@ const PASTED = `읽었습니다:
     await page.waitForTimeout(1500);
     check("★ 「◀ 이전」으로 돌아온다", (await page.locator("#ingEntryVendor").inputValue()) === before, await page.locator("#ingEntryVendor").inputValue());
 
+    // 2026-10-21 사장님: "이 부분으로 업체가 한눈에 들어오게 만들어줘. 드래그하면서 찾지 않고 바로 보여지게"
+    // — 칩 한 줄을 옆으로 끌어가며 찾았다. 빈 자리(◀ 이전 · 다음 ▶ 옆)에 업체를 다 보이고, 칩은 줄을 바꾼다.
+    const vend = await page.evaluate(() => {
+      const box = document.getElementById("ingCheckVendors");
+      const head = document.querySelector(".ing-check-head");
+      const chips = document.getElementById("ingCheckChips");
+      const rb = box.getBoundingClientRect(), rh = head.getBoundingClientRect(), rc = chips.getBoundingClientRect();
+      return {
+        names: [...box.querySelectorAll("[data-check-vendor]")].map((b) => b.innerText.replace(/\s+/g, " ")),
+        beside: rb.left >= rh.right - 1 && rb.top < rc.top,
+        wrap: getComputedStyle(chips).flexWrap,
+        sideways: chips.scrollWidth > chips.clientWidth + 1,
+      };
+    });
+    check("★★ 업체가 한눈에 — 업체마다 몇 장인지", ["龍江興南北商行", "阿寶水產", "旺旺來"].every((v) => vend.names.some((x) => x.includes(v) && /1/.test(x))) && vend.names.some((x) => /모든 업체/.test(x)), JSON.stringify(vend.names));
+    check("★★ 업체 칸은 ◀ 이전 · 다음 ▶ 옆 빈 자리에 있다", vend.beside, JSON.stringify(vend));
+    check("★★ 칩은 옆으로 구르지 않고 줄을 바꾼다", vend.wrap === "wrap" && !vend.sideways, JSON.stringify(vend));
+    await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
+    await page.waitForTimeout(1500);
+    const only = await page.locator(".ing-check-chip").evaluateAll((els) => els.map((e) => e.innerText));
+    check("★★ 업체를 누르면 그 업체 칩만 남는다", only.length === 1 && only[0].includes("旺旺來"), JSON.stringify(only));
+    check("★ 그 업체 첫 장이 바로 열린다", (await page.locator("#ingEntryVendor").inputValue()) === "旺旺來", await page.locator("#ingEntryVendor").inputValue());
+    await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
+    await page.waitForTimeout(500);
+    check("★ 다시 누르면 다 보인다", (await page.locator(".ing-check-chip").count()) >= 3, String(await page.locator(".ing-check-chip").count()));
+
     // 치우기
     await page.locator('[data-inbox-tab="all"]').click();
     await page.waitForTimeout(400);

@@ -513,6 +513,8 @@
                영수증마다 탭이나 그런 걸 해줘서 확인할 수 있게" — 급여의 직원 칩과
                같은 자리, 같은 쓰임. 확인 대기 영수증을 여기서 눌러 오간다. -->
           <div class="ing-check-bar" id="ingCheckBar" hidden>
+            <div class="ing-check-top">
+            <div class="ing-check-left">
             <div class="ing-check-head">
               <button type="button" class="ing-step" id="ingCheckPrev" data-i18n="ingCheckPrev">◀ 이전</button>
               <span class="ing-check-at"><b id="ingCheckAt">—</b><span id="ingCheckCount"></span></span>
@@ -521,6 +523,11 @@
             <!-- 2026-10-19 사장님: "어떤 건 이미 올라가있는 거라고 알려줬으면 좋겠고 어떤 건 새로
                  들어가는 거고" — 숫자를 적고, 누르면 그것만 남는다. -->
             <div class="ing-check-filters" id="ingCheckFilters"></div>
+            </div>
+            <!-- 업체가 한눈에(2026-10-21 사장님: "이 부분으로 업체가 한눈에 들어오게 만들어줘. 드래그하면서
+                 찾지 않고 바로 보여지게") — 업체마다 몇 장인지, 누르면 그 업체 것만 아래에 남는다. -->
+            <div class="ing-check-vendors" id="ingCheckVendors"></div>
+            </div>
             <div class="ing-check-chips" id="ingCheckChips"></div>
           </div>
           <p class="ing-check-empty" id="ingCheckEmpty" hidden></p>

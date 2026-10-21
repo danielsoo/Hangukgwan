@@ -1535,7 +1535,12 @@
   };
   const CHECK_KEYS = ["all", "neu", "have", "unsure", "novendor"];
   const checkAll = () => (inbox.items || []).filter((i) => i.status === "read");
-  const checkList = () => checkAll().filter(CHECK_FILTERS[checkFilter] || CHECK_FILTERS.all);
+  // 고른 업체(「업체가 한눈에」, 2026-10-21). "" 는 모든 업체, NO_VENDOR 는 업체가 안 읽힌 전표.
+  let checkVendor = "";
+  const NO_VENDOR = "__none__";
+  const vendorOfItem = (i) => String(((i.read && i.read.head) || {}).vendor || "").trim() || NO_VENDOR;
+  const checkByStatus = () => checkAll().filter(CHECK_FILTERS[checkFilter] || CHECK_FILTERS.all);
+  const checkList = () => checkByStatus().filter((i) => !checkVendor || vendorOfItem(i) === checkVendor);
 
   function checkCounts() {
     const list = checkAll();
@@ -1590,11 +1595,46 @@
    * 열리고, 지금 보고 있는 칩은 눈에 띈다. 102장이라 옆으로 굴러가게 두고
    * 보고 있는 칩을 가운데로 데려온다 — 어디까지 왔는지가 보여야 한다.
    */
+  /**
+   * 업체가 한눈에 — 지금 거르개(새것·장부에 있음…)에 남은 영수증을 업체로 묶어 몇 장인지. 누르면 그 업체 것만
+   * 아래 칩에 남고, 다시 누르면 다 보인다. 예전엔 칩 한 줄을 옆으로 끌어가며 찾았다(2026-10-21).
+   */
+  function renderCheckVendors() {
+    const box = $("#ingCheckVendors");
+    if (!box) return;
+    const by = new Map();
+    for (const i of checkByStatus()) { const v = vendorOfItem(i); by.set(v, (by.get(v) || 0) + 1); }
+    if (checkVendor && !by.has(checkVendor)) checkVendor = "";   // 거르개를 바꿔 그 업체가 없어졌으면 푼다
+    const list = [...by.entries()].sort((a, b) => (a[0] === NO_VENDOR) - (b[0] === NO_VENDOR) || b[1] - a[1] || a[0].localeCompare(b[0]));
+    if (!list.length) { box.innerHTML = ""; return; }
+    const total = list.reduce((a, [, n]) => a + n, 0);
+    const btn = (v, label, n) =>
+      '<button type="button" class="ing-check-vendor' + (checkVendor === v ? " is-on" : "") + (v === NO_VENDOR ? " is-none" : "") + '" data-check-vendor="' + esc(v) + '">' +
+      '<span class="ing-check-vendor-name">' + esc(label) + "</span><b>" + n + "</b></button>";
+    box.innerHTML =
+      '<div class="ing-check-vendors-title">' + esc(fmt("ingCheckVendorsFmt", { n: list.length })) + "</div>" +
+      '<div class="ing-check-vendors-grid">' +
+      btn("", T("ingCheckVendorAll"), total) +
+      list.map(([v, n]) => btn(v, v === NO_VENDOR ? T("ingCheckF_novendor") : v, n)).join("") +
+      "</div>";
+    box.querySelectorAll("[data-check-vendor]").forEach((b) => {
+      b.onclick = () => {
+        const v = b.dataset.checkVendor;
+        checkVendor = checkVendor === v ? "" : v;
+        renderCheckChips();
+        // 한 업체만 골랐으면 그 첫 장을 바로 연다 — 고르고 또 칩을 찾게 하지 않는다
+        const first = checkVendor && checkList()[0];
+        if (first && (!attached || vendorOfItem((inbox.items || []).find((x) => x.id === attached.id) || {}) !== checkVendor)) useRead(first.id);
+      };
+    });
+  }
+
   function renderCheckChips() {
     const bar = $("#ingCheckBar");
     const box = $("#ingCheckChips");
     if (!bar || !box) return;
     renderCheckFilters();
+    renderCheckVendors();
     const all = checkAll();
     const list = checkList();
     bar.hidden = !all.length || entryMode === "manual";
