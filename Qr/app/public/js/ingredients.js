@@ -827,9 +827,10 @@
     const box = $("#ingVatOpts");
     if (!box) return;
     if (!box.children.length) {
+      // 설명은 단추 위에 올리면 보인다(title) — 세 줄짜리 카드 셋이 칸을 꽉 채웠다(2026-10-21)
       box.innerHTML = VAT_MODES.map((m) =>
-        '<button type="button" class="ing-vat-opt" data-vat="' + m + '"><b>' + esc(vatLabel(m)) + "</b><small>" +
-        esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + "</small></button>"
+        '<button type="button" class="ing-vat-opt" data-vat="' + m + '" title="' +
+        esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + '">' + esc(vatLabel(m)) + "</button>"
       ).join("");
       box.querySelectorAll("[data-vat]").forEach((b) => {
         b.onclick = () => {
@@ -1660,7 +1661,7 @@
       return (
         '<button type="button" class="ing-check-chip' + (attached && attached.id === i.id ? " is-on" : "") + '"' +
         ' data-check="' + esc(i.id) + '" title="' + esc(i.name || "") + '">' +
-        '<span class="ing-check-name">' + esc(name) + "</span>" +
+        (checkVendor ? "" : '<span class="ing-check-name">' + esc(name) + "</span>") +
         (day ? '<span class="ing-check-day">' + esc(day) + "</span>" : "") +
         (shop ? '<span class="ing-check-store">' + esc(shop) + "</span>" : "") +
         (unsure ? '<span class="ing-check-warn">' + unsure + "</span>" : "") +
@@ -1756,8 +1757,8 @@
         (i.saved_key
           ? '<div class="ing-inbox-vat" id="vat-' + esc(i.id) + '" hidden>' +
             VAT_MODES.map((m) =>
-              '<button type="button" class="ing-vat-opt' + (i.vat === m ? " is-on" : "") + '" data-vat-set="' + esc(i.id) + '" data-vat-mode="' + m + '"><b>' +
-              esc(vatLabel(m)) + "</b><small>" + esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + "</small></button>"
+              '<button type="button" class="ing-vat-opt' + (i.vat === m ? " is-on" : "") + '" data-vat-set="' + esc(i.id) + '" data-vat-mode="' + m + '" title="' +
+              esc(T({ included: "ingVatIncludedHint", add: "ingVatAddHint", none: "ingVatNoneHint" }[m])) + '">' + esc(vatLabel(m)) + "</button>"
             ).join("") +
             "</div>"
           : "") +
@@ -2205,6 +2206,9 @@
     const nEl = $("#ingModeCheckN");
     if (nEl) nEl.textContent = n ? " " + n : "";
     const checking = mode === "check";
+    // 확인하기에서는 직접 넣을 때만 쓰는 것(📷 · 안내 글)을 접는다 — 칸이 꽉 차 보였다(2026-10-21)
+    const entryBox = document.querySelector(".ing-entry");
+    if (entryBox) entryBox.classList.toggle("is-checking", checking);
     const bar = $("#ingCheckBar");
     if (bar && !checking) bar.hidden = true;
     const form = $("#ingEntryForm");

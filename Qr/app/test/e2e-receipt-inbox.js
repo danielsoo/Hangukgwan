@@ -1224,7 +1224,9 @@ const PASTED = `읽었습니다:
     await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
     await page.waitForTimeout(1500);
     const only = await page.locator(".ing-check-chip").evaluateAll((els) => els.map((e) => e.innerText));
-    check("★★ 업체를 누르면 그 업체 칩만 남는다", only.length === 1 && only[0].includes("旺旺來"), JSON.stringify(only));
+    // 고른 업체 이름은 칩에서 뺀다(위 업체 칸에 이미 켜져 있다 — 2026-10-21 「깔끔하게」)
+    const onVendor = await page.locator("#ingCheckVendors .ing-check-vendor.is-on").innerText();
+    check("★★ 업체를 누르면 그 업체 칩만 남는다", only.length === 1 && only[0].includes("09/04") && onVendor.includes("旺旺來"), JSON.stringify({ only, onVendor }));
     check("★ 그 업체 첫 장이 바로 열린다", (await page.locator("#ingEntryVendor").inputValue()) === "旺旺來", await page.locator("#ingEntryVendor").inputValue());
     await page.locator('#ingCheckVendors [data-check-vendor="旺旺來"]').click();
     await page.waitForTimeout(500);
