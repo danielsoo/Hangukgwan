@@ -891,6 +891,7 @@
       tfsTopMargin: "위 여백 (종이 맨 위 ~ 첫 글자)",
       tfsRightMargin: "수량 열 오른쪽 여백 — 지금은 수량이 메뉴 앞에 있어 품목 줄에는 안 쓰여요",
       tfsLeftMargin: "왼쪽 여백 (종이 왼쪽 끝 ~ 글자)",
+      tfsQtyGap: "개수와 메뉴 사이",
       receiptPrintFailed: "영수증을 인쇄하지 못했어요.",
       printerPickLabel: "🖨️ 이 기기 프린터",
       printerPickTest: "테스트",
@@ -2369,6 +2370,7 @@
       tfsTopMargin: "上方留白（紙張頂端 ~ 第一行）",
       tfsRightMargin: "數量欄右側留白 — 現在數量在品名前面，品項列不再使用",
       tfsLeftMargin: "左側留白（紙張左緣～文字）",
+      tfsQtyGap: "數量與品名之間",
       receiptPrintFailed: "收據列印失敗。",
       printerPickLabel: "🖨️ 這台的印表機",
       printerPickTest: "測試",
@@ -7205,6 +7207,8 @@
     // 왼쪽 여백(mm). 2026-10-21 사장님: "왼쪽 여백 조절도 가능하게 해줘" — 수량이 메뉴 앞으로
     // 오면서 종이 왼쪽 끝이 읽는 자리가 됐다. 3mm 가 예전 고정값(앱 빌지 24점)이다.
     leftMargin: 3,
+    // 개수와 메뉴 사이(mm). 2026-10-21 사장님: "개수와 메뉴 사이에 간격도 조절할 수 있게 해줘".
+    qtyGap: 2.5,
   };
   let ticketFontSizes = { ...DEFAULT_TICKET_FONT_SIZES };
 
@@ -7476,7 +7480,7 @@
   .item-row:last-child { border-bottom: none; }
   /* 2026-10-21 사장님: 「메뉴 개수」를 「개수 메뉴」로 — 수량이 이름 **앞**에 온다.
      그래서 설정 「수량 열 오른쪽 여백」은 품목 줄을 더 이상 밀지 않는다(수량이 오른쪽 끝에 없다). */
-  .item-main { display: flex; gap: 2mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
+  .item-main { display: flex; gap: ${Number.isFinite(Number(fs.qtyGap)) ? Math.max(0, Math.min(20, Number(fs.qtyGap))) : 2.5}mm; font-size: ${fs.itemName}px; font-weight: ${fs.itemNameWeight}; }
   .item-name { flex: 1; }
   .item-qty { white-space: nowrap; }
   .item-detail { font-size: ${fs.itemDetail}px; font-weight: ${fs.itemDetailWeight}; color: #333; margin-top: 0.5mm; padding-left: 1mm; }
@@ -7765,6 +7769,7 @@
     topMargin: "tfsTopMargin",
     rightMargin: "tfsRightMargin",
     leftMargin: "tfsLeftMargin",
+    qtyGap: "tfsQtyGap",
   };
 
   // A small sample order for the live actual-size preview in the settings
@@ -7811,7 +7816,7 @@
     for (const k of Object.keys(TICKET_FONT_INPUT_IDS)) {
       const el = $("#" + TICKET_FONT_INPUT_IDS[k]);
       // 위 여백은 0.5mm 단위라 소수를 받는다. 나머지는 정수.
-      const v = el ? (k === "topMargin" || k === "rightMargin" || k === "leftMargin" ? parseFloat(el.value) : parseInt(el.value, 10)) : NaN;
+      const v = el ? (["topMargin", "rightMargin", "leftMargin", "qtyGap"].includes(k) ? parseFloat(el.value) : parseInt(el.value, 10)) : NaN;
       if (Number.isFinite(v)) out[k] = v;
     }
     return out;
@@ -16096,8 +16101,8 @@
       // raw 데이터 2개를 순서대로 넣으면 같은 프린터에서 이어서 2장이
       // 나온다(각 티켓 끝에 이미 FEED_AND_CUT이 들어있어 장마다 알아서
       // 커팅됨).
-      const rawKitchen = buildEscPosTicket(o, storeName, { rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin });
-      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o), rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin });
+      const rawKitchen = buildEscPosTicket(o, storeName, { rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin, qtyGap: ticketFontSizes.qtyGap });
+      const rawPriceCopy = buildEscPosTicket(o, storeName, { priceCopy: true, discount: computeTicketDiscountInfo(o), rightMargin: ticketFontSizes.rightMargin, leftMargin: ticketFontSizes.leftMargin, qtyGap: ticketFontSizes.qtyGap });
       const config = qz.configs.create(cfg.printerName, { encoding: "UTF-8" });
       await qz.print(config, [
         { type: "raw", format: "command", flavor: "plain", data: topFeedText() + rawKitchen },

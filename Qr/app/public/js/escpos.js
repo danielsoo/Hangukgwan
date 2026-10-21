@@ -253,7 +253,8 @@
     o.items.forEach((it) => {
       // 넘치면 다음 줄로(2026-10-06 — 잘리면 「(草莓)」·「(牛奶)」를 못 가린다).
       // 수량이 **이름 앞**에 온다(2026-10-21 사장님). 다음 줄은 그 폭만큼 들여 이름 시작에 맞춘다.
-      const head = `x${it.qty} `;
+      const gapChars = Math.max(1, Math.round((ticketQtyGapMm(opts || {}) * 8) / 12));
+      const head = `x${it.qty}` + " ".repeat(gapChars);
       const indent = " ".repeat(head.length);
       let rest = itemName(it, priceCopy);
       const first = truncateToWidth(rest, W - head.length).replace(/…$/, "");
@@ -528,6 +529,20 @@
       ? Math.max(0, Math.min(MAX_LEFT_MARGIN_MM, mm))
       : DEFAULT_LEFT_MARGIN_MM;
   }
+  // 개수와 메뉴 사이(mm) — 2026-10-21 사장님: "개수와 메뉴 사이에 간격도 조절할 수 있게 해줘".
+  // 글자 수가 아니라 mm 로 잰다(글자 크기를 바꿔도 간격이 그대로이게). 기본 2.5mm(20점).
+  const DEFAULT_QTY_GAP_MM = 2.5;
+  const MAX_QTY_GAP_MM = 20;
+  function ticketQtyGapMm(fs) {
+    const mm = Number(fs && fs.qtyGap);
+    return Number.isFinite(mm) && fs.qtyGap !== null && fs.qtyGap !== ""
+      ? Math.max(0, Math.min(MAX_QTY_GAP_MM, mm))
+      : DEFAULT_QTY_GAP_MM;
+  }
+  function ticketQtyGapDots(fs) {
+    return Math.round(ticketQtyGapMm(fs) * 8);
+  }
+
   /** 종이 왼쪽 끝에서 첫 글자까지(점). 203dpi 라 1mm = 8점. */
   function ticketLeftPadDots(fs) {
     return Math.round(ticketLeftMarginMm(fs) * 8);
@@ -537,6 +552,7 @@
     const fs = fontSizes || {};
     const QTY_PAD = ticketRightPadDots(fs); // 수량 열만 이만큼 들인다
     const PAD = ticketLeftPadDots(fs);     // 왼쪽 여백 — 오른쪽(RASTER_PAD)은 그대로
+    const QTY_GAP = ticketQtyGapDots(fs);  // 개수와 메뉴 사이
     const sz = (k, d) => fs[k] || d;
     const wt = (k, d) => fs[k + "Weight"] || d;
     labelInfo = labelInfo || {};
@@ -614,7 +630,7 @@
       // opts.lead — 이름 **앞**에 붙는 수량(2026-10-21 사장님: 「메뉴 개수」를 「개수 메뉴」로).
       // 뱃지와 같은 자리 계산이다 — 그만큼 이름을 밀고, 넘쳐서 다음 줄로 간 이름도 같은 자리에 맞춘다.
       const lead = opts.lead || null;
-      const leadWidth = lead ? Math.round(mctx.measureText(lead + "  ").width) : 0;
+      const leadWidth = lead ? Math.round(mctx.measureText(lead).width) + QTY_GAP : 0;
       const leftMax = RASTER_DOTS_WIDE - PAD - rightPad - rightWidth - 16 - badgeSize - badgeGap - leadWidth;
       // 넘치면 다음 줄로(위 wrapText). 수량은 첫 줄 오른쪽에 그대로, 다음 줄은 이름 시작에 맞춰 수량 칸 앞까지.
       const lines = wrapText(mctx, left, leftMax, leftMax);

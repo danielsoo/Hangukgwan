@@ -139,12 +139,14 @@ function check(name, cond, extra = "") {
     return { lines: s.split("\n").map(strip), short: short.split("\n").map(strip) };
   });
   const itemLine = txt.lines.find((l) => l.includes("x2"));
-  check("★★ 품목 줄이 「x2 」로 시작한다", !!itemLine && /^x2 \S/.test(itemLine), JSON.stringify(itemLine));
+  check("★★ 품목 줄이 「x2」로 시작한다(그 뒤는 「개수와 메뉴 사이」만큼 띈다)", !!itemLine && /^x2 +\S/.test(itemLine), JSON.stringify(itemLine));
   const next = txt.lines[txt.lines.indexOf(itemLine) + 1] || "";
-  check("★★ 다음 줄로 넘어간 이름은 그 폭만큼 들여진다", /^ {3}\S/.test(next), JSON.stringify(next));
+  const headLen = (itemLine || "").length - (itemLine || "").replace(/^x2 +/, "").length;
+  check("★★ 다음 줄로 넘어간 이름은 그 폭(「x2」 + 띈 칸)만큼 들여진다",
+    headLen > 2 && new RegExp("^ {" + headLen + "}\\S").test(next), JSON.stringify({ headLen, next }));
   check("★ 이름이 다 찍힌다", (txt.lines.join("").match(/草莓/g) || []).length === 2, "");
   const shortItem = txt.short.find((l) => l.includes("x2"));
-  check("★★ 「오른쪽 여백」 30mm 여도 글자 빌지의 품목 줄은 그대로", /^x2 石鍋拌飯\s*$/.test(shortItem || ""), JSON.stringify(shortItem));
+  check("★★ 「오른쪽 여백」 30mm 여도 글자 빌지의 품목 줄은 그대로", /^x2 +石鍋拌飯\s*$/.test(shortItem || ""), JSON.stringify(shortItem));
 
   out.push("\n[왼쪽 여백 — 사장님: 「왼쪽 여백 조절도 가능하게 해줘」]");
   {
@@ -167,6 +169,27 @@ function check(name, cond, extra = "") {
     const GSL = String.fromCharCode(0x1d) + "L" + String.fromCharCode(80) + String.fromCharCode(0);
     check("★★ 글자 빌지(QZ)는 ESC/POS 「왼쪽 여백」 명령(GS L 80점)으로 보낸다", txtL.on.includes(GSL), JSON.stringify(txtL.on.slice(0, 10)));
     check("★ 안 정했으면 그 명령을 안 보낸다 — 예전 빌지 그대로", !txtL.off.includes(String.fromCharCode(0x1d) + "L"), JSON.stringify(txtL.off.slice(0, 10)));
+  }
+
+  out.push("\n[개수와 메뉴 사이 — 사장님: 「간격도 조절할 수 있게 해줘」]");
+  {
+    const gapOf = (arr) => {
+      const q = arr.find((e) => e.t === "x2");
+      const nm = arr.find((e) => e.t === "石鍋拌飯");
+      return q && nm && q.y === nm.y ? nm.x - q.x : null;
+    };
+    const g0 = gapOf(await drawn({ qtyGap: 0, leftMargin: 0 }));
+    const g10 = gapOf(await drawn({ qtyGap: 10, leftMargin: 0 }));
+    check("★★ 간격을 키운 만큼 이름이 더 밀린다 (0mm → 10mm = 80점)", g0 !== null && g10 !== null && g10 - g0 === 80, JSON.stringify({ g0, g10 }));
+    check("★ 0mm 면 수량 글자 바로 뒤", g0 !== null && g0 > 0 && g0 < 40, JSON.stringify(g0));
+    const txtG = await page.evaluate(() => {
+      const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460 };
+      const strip = (t) => t.split("\n").map((l) => l.replace(/\x1bE./g, "").replace(/\x1b./g, "").replace(/[\x00-\x1f]/g, ""));
+      return { wide: strip(window.buildEscPosTicket(o, "韓國館", { qtyGap: 9 })), tight: strip(window.buildEscPosTicket(o, "韓國館", { qtyGap: 0 })) };
+    });
+    const lineOf = (ls) => ls.find((l) => l.includes("x2"));
+    check("★★ 글자 빌지도 칸 수로 띈다 (9mm ≈ 6칸)", /^x2 {6}石鍋拌飯/.test(lineOf(txtG.wide) || ""), JSON.stringify(lineOf(txtG.wide)));
+    check("★ 0mm 여도 한 칸은 띈다 — 붙으면 숫자와 이름이 한 덩어리로 읽힌다", /^x2 石鍋拌飯/.test(lineOf(txtG.tight) || ""), JSON.stringify(lineOf(txtG.tight)));
   }
 
   out.push("\n[미리보기 — 화면에서도 개수가 먼저]");
@@ -204,6 +227,21 @@ function check(name, cond, extra = "") {
   await page.locator('.settings-nav-btn[data-category="print"]').click();
   await page.waitForTimeout(700);
   check("다시 열어도 12mm", (await page.locator("#tfsLeftMargin").inputValue()) === "12", await page.locator("#tfsLeftMargin").inputValue());
+  const gi = page.locator("#tfsQtyGap");
+  check("★ 「개수와 메뉴 사이」 칸이 보인다", await gi.isVisible(), "");
+  check("기본값 2.5mm", (await gi.inputValue()) === "2.5", await gi.inputValue());
+  await gi.fill("6");
+  await gi.dispatchEvent("input");
+  await page.waitForTimeout(500);
+  const gapCss = await page.evaluate(() => {
+    const d = document.querySelector("#ticketFontPreviewFrame").contentDocument;
+    const m = d && d.querySelector(".item-main");
+    return m ? getComputedStyle(m).gap : "";
+  });
+  check("★★ 미리보기 간격도 6mm 로", Math.abs(parseFloat(gapCss) - 6 * 96 / 25.4) < 1, JSON.stringify(gapCss));
+  await page.locator("#saveTicketFontSizesBtn").click();
+  await page.waitForTimeout(700);
+  check("★ 저장된다", store.settings.ticket_font_sizes.qtyGap === 6, JSON.stringify(store.settings.ticket_font_sizes.qtyGap));
 
   console.log(out.join("\n"));
   console.log(`\n${pass} passed, ${fail} failed`);

@@ -665,7 +665,7 @@ const TICKET_WEIGHT_KEYS = TICKET_FONT_KEYS.map((k) => `${k}Weight`);
 function ticketFontSizesStatus() {
   const saved = store.settings.ticket_font_sizes || {};
   const out = {};
-  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin", "rightMargin", "leftMargin"]) if (typeof saved[k] === "number") out[k] = saved[k];
+  for (const k of [...TICKET_FONT_KEYS, ...TICKET_WEIGHT_KEYS, "topMargin", "rightMargin", "leftMargin", "qtyGap"]) if (typeof saved[k] === "number") out[k] = saved[k];
   return out;
 }
 
@@ -716,6 +716,14 @@ router.put("/ticket-print", requireOwner, async (req, res) => {
     const v = Number(b.leftMargin);
     if (b.leftMargin !== undefined && b.leftMargin !== null && b.leftMargin !== "" && Number.isFinite(v)) {
       store.settings.ticket_font_sizes.leftMargin = Math.max(0, Math.min(30, Math.round(v * 2) / 2));
+    }
+  }
+  // 개수와 메뉴 사이(mm, 0.5 단위, 0~20, 안 정하면 2.5). 2026-10-21 사장님: "개수와 메뉴 사이에
+  // 간격도 조절할 수 있게 해줘".
+  {
+    const v = Number(b.qtyGap);
+    if (b.qtyGap !== undefined && b.qtyGap !== null && b.qtyGap !== "" && Number.isFinite(v)) {
+      store.settings.ticket_font_sizes.qtyGap = Math.max(0, Math.min(20, Math.round(v * 2) / 2));
     }
   }
   // 작은 값 한 칸만 쓴다(CLAUDE.md — store 를 통째로 쓰지 않는다).
