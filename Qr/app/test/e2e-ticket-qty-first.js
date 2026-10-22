@@ -80,7 +80,7 @@ function check(name, cond, extra = "") {
         total: 2930,
       };
       try {
-        if (kind === "move") window.buildEscPosMoveSlip({ from: "3", to: "7", at: "12:00", partySize: 4, orders: [{ id: 12, time: "11:50", summary: "2x 石鍋拌飯" }] }, "韓國館", fs);
+        if (kind === "move") window.buildEscPosMoveSlip({ from: "3", to: "7", at: "12:00", partySize: 4, orders: [{ id: 12, time: "11:50", summary: "2 × 石鍋拌飯" }] }, "韓國館", fs);
         else window.buildEscPosRasterTicket(o, "韓國館", fs, { tableLabel: "桌號 7" }, kind === "price" ? { priceCopy: true } : undefined);
       } finally {
         P.fillText = ft; P.fillRect = fr; P.lineTo = lt;
@@ -91,25 +91,25 @@ function check(name, cond, extra = "") {
 
   out.push("\n[앱 빌지(그림) — 개수가 먼저]");
   const d = await drawn({});
-  const qty = d.filter((e) => /^\d+x$/.test(e.t));
-  check("★★ 수량(2x·13x)이 둘 다 찍힌다", qty.length === 2, JSON.stringify(qty));
+  const qty = d.filter((e) => /^\d+ x$/.test(e.t));
+  check("★★ 수량(2 x·13 x)이 둘 다 찍힌다", qty.length === 2, JSON.stringify(qty));
   check("★★ 수량은 종이 왼쪽 끝(24점)에서 시작한다 — 겹쳐 걸어도 왼쪽은 안 가린다",
     qty.length === 2 && qty.every((e) => e.x === 24 && e.align === "left"), JSON.stringify(qty));
   const name1 = d.find((e) => e.t === "石鍋拌飯");
-  const qty1 = qty.find((e) => e.t === "2x");
+  const qty1 = qty.find((e) => e.t === "2 x");
   check("★★ 메뉴 이름은 같은 줄, 수량 뒤에", !!(name1 && qty1 && name1.y === qty1.y && name1.x > qty1.x), JSON.stringify({ qty1, name1 }));
   check("★★ 오른쪽 끝에는 수량이 없다 — 더 이상 그 열이 아니다",
-    !d.some((e) => e.align === "right" && /^\d+x$/.test(e.t)), JSON.stringify(d.filter((e) => e.align === "right").map((e) => e.t)));
+    !d.some((e) => e.align === "right" && /^\d+ x$/.test(e.t)), JSON.stringify(d.filter((e) => e.align === "right").map((e) => e.t)));
   const edge = d.filter((e) => e.align === "right" && e.t !== "");
   check("混合·合計·구분선은 그대로 종이 끝 552점", edge.length >= 3 && edge.every((e) => e.x === 552), JSON.stringify(edge.map((e) => [e.t, e.x])));
 
   const d30 = await drawn({ rightMargin: 30 });
-  const qty30 = d30.filter((e) => /^\d+x$/.test(e.t));
+  const qty30 = d30.filter((e) => /^\d+ x$/.test(e.t));
   check("★★ 「수량 열 오른쪽 여백」을 30mm 로 해도 수량 자리는 그대로(24점)",
     qty30.length === 2 && qty30.every((e) => e.x === 24), JSON.stringify(qty30));
 
   const dp = await drawn({}, "price");
-  const qtyP = dp.filter((e) => /^\d+x$/.test(e.t));
+  const qtyP = dp.filter((e) => /^\d+ x$/.test(e.t));
   check("결제용(금액) 사본도 개수가 먼저", qtyP.length === 2 && qtyP.every((e) => e.x === 24 && e.align === "left"), JSON.stringify(qtyP));
   const mv = await drawn({ rightMargin: 30 }, "move");
   check("자리 이동 빌지는 손대지 않는다(수량 열이 없다)", mv.filter((e) => e.align === "right").every((e) => e.x === 552), JSON.stringify(mv.map((e) => [e.t, e.x])));
@@ -123,8 +123,8 @@ function check(name, cond, extra = "") {
   check("★★ 「…」로 자르지 않는다", !/…/.test(all), all);
   check("★★ 「(草莓)」까지 다 찍힌다(다음 줄로)", long.some((e) => /草莓\)?$/.test(e.t)) && long.some((e) => /^Pororo/.test(e.t)), all);
   const head = long.find((e) => /^Pororo/.test(e.t));
-  const lead = long.find((e) => e.t === "2x");
-  check("★★ 수량 2x 는 이름 앞, 같은 줄에", !!(head && lead && head.y === lead.y && head.x > lead.x), JSON.stringify({ lead, head }));
+  const lead = long.find((e) => e.t === "2 x");
+  check("★★ 수량 2 x 는 이름 앞, 같은 줄에", !!(head && lead && head.y === lead.y && head.x > lead.x), JSON.stringify({ lead, head }));
   const cont = long.filter((e) => head && e.y > head.y && /草莓/.test(e.t) && !/^Pororo ZERO/.test(e.t));
   check("★★ 넘쳐서 다음 줄로 간 이름은 이름 시작에 맞춰 들여진다",
     cont.length >= 1 && cont.some((e) => e.x === head.x), JSON.stringify({ headX: head && head.x, cont: cont.map((e) => [e.t, e.x]) }));
@@ -138,21 +138,21 @@ function check(name, cond, extra = "") {
     const short = window.buildEscPosTicket({ ...o, items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }] }, "韓國館", { rightMargin: 30 });
     return { lines: s.split("\n").map(strip), short: short.split("\n").map(strip) };
   });
-  const itemLine = txt.lines.find((l) => l.includes("2x"));
-  check("★★ 품목 줄이 「2x」로 시작한다(그 뒤는 「개수와 메뉴 사이」만큼 띈다)", !!itemLine && /^2x +\S/.test(itemLine), JSON.stringify(itemLine));
+  const itemLine = txt.lines.find((l) => l.includes("2 x"));
+  check("★★ 품목 줄이 「2 x」로 시작한다(그 뒤는 「개수와 메뉴 사이」만큼 띈다)", !!itemLine && /^2 x +\S/.test(itemLine), JSON.stringify(itemLine));
   const next = txt.lines[txt.lines.indexOf(itemLine) + 1] || "";
-  const headLen = (itemLine || "").length - (itemLine || "").replace(/^2x +/, "").length;
-  check("★★ 다음 줄로 넘어간 이름은 그 폭(「2x」 + 띈 칸)만큼 들여진다",
+  const headLen = (itemLine || "").length - (itemLine || "").replace(/^2 x +/, "").length;
+  check("★★ 다음 줄로 넘어간 이름은 그 폭(「2 x」 + 띈 칸)만큼 들여진다",
     headLen > 2 && new RegExp("^ {" + headLen + "}\\S").test(next), JSON.stringify({ headLen, next }));
   check("★ 이름이 다 찍힌다", (txt.lines.join("").match(/草莓/g) || []).length === 2, "");
-  const shortItem = txt.short.find((l) => l.includes("2x"));
-  check("★★ 「오른쪽 여백」 30mm 여도 글자 빌지의 품목 줄은 그대로", /^2x +石鍋拌飯\s*$/.test(shortItem || ""), JSON.stringify(shortItem));
+  const shortItem = txt.short.find((l) => l.includes("2 x"));
+  check("★★ 「오른쪽 여백」 30mm 여도 글자 빌지의 품목 줄은 그대로", /^2 x +石鍋拌飯\s*$/.test(shortItem || ""), JSON.stringify(shortItem));
 
   out.push("\n[왼쪽 여백 — 사장님: 「왼쪽 여백 조절도 가능하게 해줘」]");
   {
     const d0 = await drawn({ leftMargin: 0 });
     const d10 = await drawn({ leftMargin: 10 });
-    const first = (arr) => arr.find((e) => /^\d+x$/.test(e.t));
+    const first = (arr) => arr.find((e) => /^\d+ x$/.test(e.t));
     check("★★ 0mm 면 글자가 종이 왼쪽 끝(0점)에서 시작한다", !!first(d0) && first(d0).x === 0, JSON.stringify(first(d0)));
     check("★★ 10mm 면 80점 안으로", !!first(d10) && first(d10).x === 80, JSON.stringify(first(d10)));
     const name10 = d10.find((e) => e.t === "石鍋拌飯");
@@ -174,7 +174,7 @@ function check(name, cond, extra = "") {
   out.push("\n[수량이 한 자리든 두 자리든 이름은 같은 자리에서]");
   {
     // 2026-10-21 사장님: "숫자에 따라 글씨가 들여쓰는 게 다른데 그거 다 일관되게 해줘"
-    // 2x · 13x · 1x 이 섞인 종이에서 이름 x 가 다 같아야 한다.
+    // 2 x · 13 x · 1 x 이 섞인 종이에서 이름 x 가 다 같아야 한다.
     const mix = await drawn({}, "ticket", [
       { name_zh: "石鍋拌飯", qty: 2, unit_price: 230 },
       { name_zh: "辣炒年糕", qty: 13, unit_price: 190 },
@@ -182,7 +182,7 @@ function check(name, cond, extra = "") {
     ]);
     const names = ["石鍋拌飯", "辣炒年糕", "部隊鍋"].map((t) => mix.find((e) => e.t === t));
     check("★★ 세 줄의 이름이 다 같은 x 에서 시작한다", names.every(Boolean) && new Set(names.map((e) => e.x)).size === 1, JSON.stringify(names.map((e) => e && [e.t, e.x])));
-    const qtys = mix.filter((e) => /^\d+x$/.test(e.t));
+    const qtys = mix.filter((e) => /^\d+ x$/.test(e.t));
     check("★ 수량은 셋 다 왼쪽 끝에서 시작한다", qtys.length === 3 && new Set(qtys.map((e) => e.x)).size === 1, JSON.stringify(qtys.map((e) => [e.t, e.x])));
     const one = await drawn({}, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]);
     const oneName = one.find((e) => e.t === "石鍋拌飯");
@@ -198,7 +198,7 @@ function check(name, cond, extra = "") {
   out.push("\n[개수와 메뉴 사이 — 사장님: 「간격도 조절할 수 있게 해줘」]");
   {
     const gapOf = (arr) => {
-      const q = arr.find((e) => e.t === "2x");
+      const q = arr.find((e) => e.t === "2 x");
       const nm = arr.find((e) => e.t === "石鍋拌飯");
       return q && nm && q.y === nm.y ? nm.x - q.x : null;
     };
@@ -206,15 +206,15 @@ function check(name, cond, extra = "") {
     const g0 = gapOf(await drawn({ qtyGap: 0, leftMargin: 0 }, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]));
     const g10 = gapOf(await drawn({ qtyGap: 10, leftMargin: 0 }, "ticket", [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }]));
     check("★★ 간격을 키운 만큼 이름이 더 밀린다 (0mm → 10mm = 80점)", g0 !== null && g10 !== null && g10 - g0 === 80, JSON.stringify({ g0, g10 }));
-    check("★ 0mm 면 수량 칸 바로 뒤(「2x」 너비만큼만)", g0 !== null && g0 > 0 && g0 < 40, JSON.stringify(g0));
+    check("★ 0mm 면 수량 칸 바로 뒤(「2 x」 너비 44점만큼만 — 숫자와 x 사이 한 칸까지)", g0 !== null && g0 > 0 && g0 < 56, JSON.stringify(g0));
     const txtG = await page.evaluate(() => {
       const o = { table_number: "7", order_type: "dine_in", created_at: "2026-10-06 12:00:00", items: [{ name_zh: "石鍋拌飯", qty: 2, unit_price: 230 }], total: 460 };
       const strip = (t) => t.split("\n").map((l) => l.replace(/\x1bE./g, "").replace(/\x1b./g, "").replace(/[\x00-\x1f]/g, ""));
       return { wide: strip(window.buildEscPosTicket(o, "韓國館", { qtyGap: 9 })), tight: strip(window.buildEscPosTicket(o, "韓國館", { qtyGap: 0 })) };
     });
-    const lineOf = (ls) => ls.find((l) => l.includes("2x"));
-    check("★★ 글자 빌지도 칸 수로 띈다 (9mm ≈ 6칸)", /^2x {6}石鍋拌飯/.test(lineOf(txtG.wide) || ""), JSON.stringify(lineOf(txtG.wide)));
-    check("★ 0mm 여도 한 칸은 띈다 — 붙으면 숫자와 이름이 한 덩어리로 읽힌다", /^2x 石鍋拌飯/.test(lineOf(txtG.tight) || ""), JSON.stringify(lineOf(txtG.tight)));
+    const lineOf = (ls) => ls.find((l) => l.includes("2 x"));
+    check("★★ 글자 빌지도 칸 수로 띈다 (9mm ≈ 6칸)", /^2 x {6}石鍋拌飯/.test(lineOf(txtG.wide) || ""), JSON.stringify(lineOf(txtG.wide)));
+    check("★ 0mm 여도 한 칸은 띈다 — 붙으면 숫자와 이름이 한 덩어리로 읽힌다", /^2 x 石鍋拌飯/.test(lineOf(txtG.tight) || ""), JSON.stringify(lineOf(txtG.tight)));
   }
 
   out.push("\n[미리보기 — 화면에서도 개수가 먼저]");

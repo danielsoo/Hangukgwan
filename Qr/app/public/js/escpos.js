@@ -250,13 +250,13 @@
     out += time + "\n";
     out += divider() + "\n";
 
-    const qtyCol = (o.items || []).reduce((w, it) => Math.max(w, String(`${it.qty}x`).length), 0);
+    const qtyCol = (o.items || []).reduce((w, it) => Math.max(w, String(`${it.qty} x`).length), 0);
     o.items.forEach((it) => {
       // 넘치면 다음 줄로(2026-10-06 — 잘리면 「(草莓)」·「(牛奶)」를 못 가린다).
       // 수량이 **이름 앞**에 온다(2026-10-21 사장님). 다음 줄은 그 폭만큼 들여 이름 시작에 맞춘다.
       const gapChars = Math.max(1, Math.round((ticketQtyGapMm(opts || {}) * 8) / 12));
       // 수량 칸은 이 종이에서 가장 긴 것(x13)에 맞춘다 — 이름이 다 같은 자리에서 시작한다
-      const head = `${it.qty}x`.padEnd(qtyCol) + " ".repeat(gapChars);
+      const head = `${it.qty} x`.padEnd(qtyCol) + " ".repeat(gapChars);
       const indent = " ".repeat(head.length);
       let rest = itemName(it, priceCopy);
       const first = truncateToWidth(rest, W - head.length).replace(/…$/, "");
@@ -700,14 +700,14 @@
 
     // 이 종이에서 가장 넓은 수량(x13 등) — 모든 줄이 그 너비를 쓴다
     mctx.font = rasterFont(sz("itemName", 16), wt("itemName", 900));
-    const LEAD_COL = (o.items || []).reduce((w, it) => Math.max(w, Math.round(mctx.measureText(`${it.qty}x`).width)), 0);
+    const LEAD_COL = (o.items || []).reduce((w, it) => Math.max(w, Math.round(mctx.measureText(`${it.qty} x`).width)), 0);
 
     o.items.forEach((it) => {
       // 변경 빌지의 각 줄은 「추가」인지 「취소」인지가 품목 이름보다 먼저
       // 읽혀야 한다. 취소를 추가로 읽으면 만들지 말아야 할 것을 만든다.
       if (it.__delta === "-") line(priceCopy ? "[取消]" : "[취소 / 取消]", sz("itemDetail", 13), 900);
       else if (it.__delta === "+") line(priceCopy ? "[追加]" : "[추가 / 追加]", sz("itemDetail", 13), 900);
-      row(itemName(it, priceCopy), "", sz("itemName", 16), wt("itemName", 900), { lead: `${it.qty}x`, leadCol: LEAD_COL });
+      row(itemName(it, priceCopy), "", sz("itemName", 16), wt("itemName", 900), { lead: `${it.qty} x`, leadCol: LEAD_COL });
       if (it.option_choice) line("  └ " + optionLine(it), sz("itemDetail", 13), wt("itemDetail", 400));
       // 「基本」만 안 찍는다 — 평소대로라는 뜻이라 주방에 새로 알려줄 말이
       // 없다. 사장님이 써 넣은 「基本(中辣)」는 그대로 나간다
