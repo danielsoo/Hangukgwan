@@ -1978,7 +1978,7 @@
         const addonsSuffix = (it.selected_addons || []).length ? ` +${it.selected_addons.map((a) => a.name).join(", ")}` : "";
         const optionSuffix = [it.option_choice, it.takeout_choice].filter(Boolean).join(", ");
         row.innerHTML = `
-          <span class="history-item-name"><span class="history-item-qty">x${it.qty}</span>${name}${optionSuffix ? ` (${optionSuffix})` : ""}${addonsSuffix}</span>
+          <span class="history-item-name"><span class="history-item-qty">${it.qty}x</span>${name}${optionSuffix ? ` (${optionSuffix})` : ""}${addonsSuffix}</span>
           <span class="history-item-price">${money(lineTotalOf(it))}${isPaid ? `<span class="history-paid-badge">${t("historyPaidBadge")}</span>` : ""}</span>
         `;
         list.appendChild(row);

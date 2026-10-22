@@ -6936,7 +6936,7 @@
     // takeout line here, since the header badge alone can't say which dish
     // needs to-go packaging.
     const itemLines = o.items.map((it) => {
-      const label = `x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${it.takeout_choice ? `(${it.takeout_choice})` : ""}`;
+      const label = `${it.qty}x ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${it.takeout_choice ? `(${it.takeout_choice})` : ""}`;
       const perItemTag =
         o.order_type === "mixed" && it.order_type === "takeout"
           ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>`
@@ -7277,7 +7277,7 @@
     let hasDrinkItem = false;
 
     // 수량 칸은 한 종이 안에서 같은 너비 — 그림 빌지(escpos.js LEAD_COL)와 같은 생각이다
-    const qtyCol = (o.items || []).reduce((w, it) => Math.max(w, String(`x${it.qty}`).length), 0);
+    const qtyCol = (o.items || []).reduce((w, it) => Math.max(w, String(`${it.qty}x`).length), 0);
     const itemRows = o.items
       .map((it) => {
         // 結帳單 에서는 한글로 떨어지지 않는다 — 中文 → English 순으로
@@ -7361,7 +7361,7 @@
           }
         }
         return `<div class="item-row">
-          <div class="item-main"><span class="item-qty" style="min-width:${qtyCol}ch">x${it.qty}</span><span class="item-name">${name}</span></div>
+          <div class="item-main"><span class="item-qty" style="min-width:${qtyCol}ch">${it.qty}x</span><span class="item-name">${name}</span></div>
           ${detailLines.join("")}
         </div>`;
       })
@@ -8244,7 +8244,7 @@
       .map(
         (it) =>
           `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
-            <span>x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${
+            <span>${it.qty}x ${it.code ? `${it.code} ` : ""}${itemName(it)} ${it.option_choice ? `(${optionLabel(it.option_choice)})` : ""}${
               Number(it.refunded_qty) > 0 ? ` <span class="order-refunded-tag">${escapeHtml(T("refundDetailTag").replace("{n}", it.refunded_qty))}</span>` : ""
             }${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${(it.selected_addons || []).length ? `<br/><small style="color:var(--muted);">+${it.selected_addons.map((a) => a.name).join(", ")}</small>` : ""}${it.note ? `<br/><small style="color:#999;">${T("memoLabel")}: ${it.note}</small>` : ""}</span>
             <span>NT$${money(lineTotalOf(it))}</span>
@@ -11187,7 +11187,7 @@
       const isRowClickable = withItemCheckboxes && !isPaidItem;
       return `<div ${isRowClickable ? `data-select-item-row="${o.id}:${idx}"` : ""} style="font-size:16px;padding:5px 6px;margin:0 -6px;border-radius:6px;${isRowClickable ? "cursor:pointer;" : ""}${isSelected ? "background:#fdf1ea;" : ""}${isPaidItem ? "opacity:0.55;" : ""}">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;">
-            <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>x${it.qty} ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
+            <span style="display:flex;align-items:flex-start;">${checkboxHtml}<span>${it.qty}x ${it.code ? `${it.code} ` : ""}${itemName(it)}${it.option_choice ? ` (${optionLabel(it.option_choice)})` : ""}${paidBadgeHtml}${it.order_type === "takeout" ? ` <span class="order-card-type-badge takeout">${T("orderCardTakeoutBadge")}</span>` : ""}${it.takeout_choice ? ` <span class="order-card-type-badge takeout">${it.takeout_choice}</span>` : ""}${it.note ? `<br/><small style="color:var(--muted);font-size:14px;">${T("memoLabel")}: ${it.note}</small>` : ""}</span></span>
             <span class="pay-amount-cell">${vipPriceHtml(discountBaseOfClient(it), !isPaidItem && !vipExcludedIds.has(it.item_id))}</span>
           </div>${payItemSubLinesHtml(it, !isPaidItem && !vipExcludedIds.has(it.item_id))}
         </div>`;
@@ -12650,7 +12650,7 @@
       .map((o) => ({
         id: o.id,
         time: (o.created_at || "").slice(11, 16),
-        summary: (o.items || []).map((it) => `×${it.qty} ${itemName(it)}`).join(", "),
+        summary: (o.items || []).map((it) => `${it.qty}× ${itemName(it)}`).join(", "),
       }));
     const toNum = toTable.label || toTable.number;
     return {
@@ -18115,7 +18115,7 @@
               afterLabel: (ctx) => {
                 const h = byHour.get(ctx.dataIndex);
                 if (!h || !h.top_items || h.top_items.length === 0) return "";
-                const names = h.top_items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join(", ");
+                const names = h.top_items.map((it) => `${it.qty}x ${itemDisplayName(it)}`).join(", ");
                 return `${T("settlementHourlyTopItems")}: ${names}`;
               },
             },
@@ -18231,7 +18231,7 @@
       $("#settlementProblemList").innerHTML = data.problem_orders
         .map((o) => {
           const time = o.created_at.slice(11, 16);
-          const itemsText = o.items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join(", ");
+          const itemsText = o.items.map((it) => `${it.qty}x ${itemDisplayName(it)}`).join(", ");
           return `
             <div class="settlement-problem-row">
               <div class="settlement-problem-head">
@@ -19715,7 +19715,7 @@
           ? `📦 ${first.pickup_number}${T("settlementOrdersPickupSuffix")} ${escapeHtml(first.customer_name)}`
           : fmtOrderTableTag(first.table_number);
         const peek = group
-          .flatMap((o) => (o.items || []).map((it) => `x${it.qty} ${itemDisplayName(it)}`))
+          .flatMap((o) => (o.items || []).map((it) => `${it.qty}x ${itemDisplayName(it)}`))
           .join(", ");
         // 묶음 전체가 취소된 것일 때만 취소로 보인다. 한 라운드만 취소된
         // 것을 묶음째 취소로 칠하면 받은 돈이 안 받은 것처럼 보인다.
@@ -19946,7 +19946,7 @@
         ].filter(Boolean);
         return `
           <div class="stl-order-line">
-            <span><span style="color:var(--muted)">x${it.qty}</span> ${itemDisplayName(it)}</span>
+            <span><span style="color:var(--muted)">${it.qty}x</span> ${itemDisplayName(it)}</span>
             <span>NT$${money(lineTotalOf(it))}</span>
           </div>
           ${extras.length ? `<div class="stl-order-line-sub">└ ${escapeHtml(extras.join(" · "))}</div>` : ""}`;
@@ -20132,7 +20132,7 @@
     rows.push(["미결제 주문 상세"]);
     rows.push(["시간", "테이블", "상태", "금액", "주문 내역"]);
     data.problem_orders.forEach((o) =>
-      rows.push([o.created_at, o.table_number, statusLabel(o.status), o.total, o.items.map((it) => `x${it.qty} ${itemDisplayName(it)}`).join("; ")])
+      rows.push([o.created_at, o.table_number, statusLabel(o.status), o.total, o.items.map((it) => `${it.qty}x ${itemDisplayName(it)}`).join("; ")])
     );
     return "﻿" + rows.map((r) => r.map(csvEscape).join(",")).join("\n");
   }
