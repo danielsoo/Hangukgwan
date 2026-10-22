@@ -171,7 +171,9 @@
       if (!res.ok) return;
       const data = await res.json();
       if (!data || typeof data !== "object") return;
-      for (const [url, body] of Object.entries(data)) bootCache.set(url, body);
+      // auth/me 는 checkAuth() 가 따로 묻는다(화면을 먼저 바꾸려고). 그 답까지
+      // 담아 두면 나중에 auth/me 를 다시 묻는 곳이 로그인 때의 옛 답을 받는다.
+      for (const [url, body] of Object.entries(data)) if (url !== "/api/auth/me") bootCache.set(url, body);
     } catch (e) {
       // 못 받아오면 아무 일도 안 일어난다. 화면이 예전처럼 하나씩 부른다.
     }
@@ -1358,7 +1360,7 @@
       settingsCatVipSub: "카드 판매 · 구글 로그인",
       vipSaleReadonly: "보기만 할 수 있어요 — 바꾸려면 사장님께.",
       settingsCatPrint: "인쇄",
-      settingsCatPrintSub: "주방 프린터 · 빌지 글자",
+      settingsCatPrintSub: "주방 프린터 · 패드 프로필 · 빌지",
       testBannerMine: "테스터 모드 — 이 기기에서 만드는 것은 종료할 때 전부 사라집니다",
       testBannerOther: "테스터 모드가 켜져 있어요 — 이 기기는 평소 그대로입니다. 여기서 넣는 주문은 진짜로 남고, 테스트 주문은 이 화면에 안 보입니다",
       testBannerNobody: "테스터 모드가 켜져 있는데 참여한 기기가 없어요. 아무도 테스트 중이 아닙니다.",
@@ -2834,7 +2836,7 @@
       settingsCatVipSub: "卡片販售 · Google 登入",
       vipSaleReadonly: "只能查看 — 要修改請找老闆。",
       settingsCatPrint: "列印",
-      settingsCatPrintSub: "廚房印表機 · 出單字級",
+      settingsCatPrintSub: "廚房印表機 · 平板設定檔 · 出單",
       testBannerMine: "測試模式 — 這台裝置建立的資料，結束時會全部刪除",
       testBannerOther: "測試模式已開啟 — 這台裝置照常運作。在這裡送出的訂單會真實保留，測試訂單不會顯示在這個畫面",
       testBannerNobody: "測試模式已開啟，但沒有任何裝置參與中。目前沒有人在測試。",

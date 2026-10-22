@@ -94,6 +94,13 @@ const ALWAYS = [
   ["/api/settings/storage", "../routes/settings", "/storage"],
   ["/api/test-mode", "../routes/testMode", "/"],
   ["/api/vip-cards/sale-settings", "../routes/vipCards", "/sale-settings"],
+  // 나중에 붙은 기능들이 showDashboard() 에서 부르는 것. 여기 안 넣으면 그 기능
+  // 하나마다 요청이 하나씩 다시 늘어난다(test/e2e-login-requests.js 가 센다).
+  // 메뉴 휴지통 버튼의 숫자(2026-09-15) — loadMenu() 가 부른다.
+  ["/api/menu/admin/trash", "../routes/menu", "/admin/trash"],
+  // 가게 프린터 목록 · 패드 프로필(2026-09-29) — 이 기기 프린터·「이 기기는 어디인가요?」.
+  ["/api/settings/printers", "../routes/settings", "/printers"],
+  ["/api/settings/pad-profiles", "../routes/settings", "/pad-profiles"],
 ];
 // 사장만 부르는 것들. 직원 화면은 애초에 안 부르므로 넣지 않는다 — 넣으면
 // 권한 검사에 걸려 403 만 열 줄 늘어난다.

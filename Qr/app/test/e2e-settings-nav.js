@@ -37,6 +37,11 @@ function check(name, cond, extra = "") {
 }
 
 const MAX_CARDS_PER_CATEGORY = 4;
+// 인쇄만 여섯 장까지. 2026-09-29 사장님이 「가게 프린터 목록」과 「패드 프로필」을
+// 설정 > 인쇄에 두라고 하셨고(CLAUDE.md 「인쇄 담당 기기」), 그 뒤로 빌지 여백들도
+// 「설정 > 인쇄」로 안내해 왔다. 나누면 그 안내가 다 틀어진다. 대신 분류 설명줄에
+// 무엇이 들었는지 적고, 아래에서 「패드 프로필」로 찾히는지 잰다. 다른 분류는 그대로 넷.
+const MAX_CARDS_FOR = { print: 6 };
 
 (async () => {
   const server = await new Promise((r) => { const s = app.listen(0, () => r(s)); });
@@ -63,8 +68,8 @@ const MAX_CARDS_PER_CATEGORY = 4;
     }))
   );
   for (const c of perCat) out.push(`  ·    ${c.id}: ${c.cards}장 — ${c.titles.join(" / ")}`);
-  const overloaded = perCat.filter((c) => c.cards > MAX_CARDS_PER_CATEGORY);
-  check(`어느 분류도 ${MAX_CARDS_PER_CATEGORY}장을 넘지 않는다`, overloaded.length === 0,
+  const overloaded = perCat.filter((c) => c.cards > (MAX_CARDS_FOR[c.id] || MAX_CARDS_PER_CATEGORY));
+  check(`어느 분류도 ${MAX_CARDS_PER_CATEGORY}장을 넘지 않는다 (인쇄만 ${MAX_CARDS_FOR.print})`, overloaded.length === 0,
     overloaded.map((c) => `${c.id}=${c.cards}`).join(", "));
   check("주문 규칙이 따로 있다", perCat.some((c) => c.id === "order" && c.cards >= 2));
 
@@ -110,6 +115,13 @@ const MAX_CARDS_PER_CATEGORY = 4;
     const hits = await searchFor("프린터");
     check("「프린터」로 찾힌다", hits.length > 0, JSON.stringify(hits));
     check("인쇄 분류라고 알려준다", hits.some((h) => h.cat.includes("인쇄")), JSON.stringify(hits));
+  }
+  {
+    // 인쇄가 여섯 장이라 늦게 붙은 카드가 묻히지 않는지.
+    const hits = await searchFor("패드 프로필");
+    check("「패드 프로필」이 인쇄에 있다고 알려준다", hits.some((h) => h.cat.includes("인쇄")), JSON.stringify(hits));
+    const sub = navs.find((n) => n.cat === "print");
+    check("인쇄 설명줄에 패드 프로필이 적혀 있다", !!sub && sub.sub.includes("패드 프로필"), sub && sub.sub);
   }
   {
     // 카드 제목에 없는 말도 찾힌다 — 사장님이 기억하는 단어가 제목에 있으리란

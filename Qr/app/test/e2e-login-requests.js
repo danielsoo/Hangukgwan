@@ -51,14 +51,19 @@ function check(name, cond, extra = "") {
 
   await page.goto(`${base}/admin`, { waitUntil: "networkidle" });
 
+  // auth/me 는 일부러 따로 나간다(admin.js checkAuth). 「누구인가」만 먼저 받아
+  // 화면을 대시보드로 바꾸고, 주문·메뉴까지 든 큰 bootstrap 은 뒤에서 나란히
+  // 받는다 — 큰 것을 다 기다리는 동안 로그인 화면이 떠 있던 것을 고친 것이다.
+  // 그래서 여기서 허락하는 것은 그 둘(과 아래 로고 그림)뿐이다.
+  const BOOT_PAIR = ["GET /api/bootstrap", "GET /api/auth/me"];
   out.push("[로그인 화면을 띄우는 데 몇 번 묻나]");
   const beforeLogin = api.slice();
   check(
-    "★ 로그인 화면은 요청 한 번으로 뜬다",
-    beforeLogin.length <= 1,
+    "★ 로그인 화면은 bootstrap + auth/me 두 번으로 뜬다",
+    beforeLogin.length <= 2 && beforeLogin.every((x) => BOOT_PAIR.includes(x)),
     beforeLogin.join(", ")
   );
-  check("그 한 번은 /api/bootstrap 이다", beforeLogin[0] === "GET /api/bootstrap", beforeLogin.join(", "));
+  check("/api/bootstrap 을 부른다", beforeLogin.includes("GET /api/bootstrap"), beforeLogin.join(", "));
 
   api.length = 0;
   await page.locator("#loginPassword").pressSequentially("ownerpass123", { delay: 5 });
@@ -72,13 +77,22 @@ function check(name, cond, extra = "") {
   const gets = api.filter((x) => x.startsWith("GET "));
   out.push("\n[관리자 화면을 띄우는 데 몇 번 묻나]");
   out.push("  나간 것: " + gets.join(", "));
+  // 로고 미리보기는 JSON 이 아니라 그림(img.src)이라 bootstrap 에 담을 수 없다.
+  const ALLOWED = BOOT_PAIR.concat(["GET /api/settings/logo-preview"]);
   check(
-    `★ GET 요청이 두 번을 넘지 않는다 (예전 열세 번)`,
-    gets.length <= 2,
+    `★ GET 요청이 세 번을 넘지 않는다 (예전 열세 번)`,
+    gets.length <= 3,
     `${gets.length}번 — ${gets.join(", ")}`
   );
+  // 새 기능이 showDashboard() 에 load 를 하나 더 붙이면 여기서 그 이름이 나온다.
+  // 고칠 곳은 이 시험이 아니라 src/routes/bootstrap.js 의 목록이다.
+  const extra = gets.filter((g) => !ALLOWED.includes(g));
+  check("★ bootstrap 에 안 실린 요청이 없다", extra.length === 0, extra.join(", "));
   check("★ /api/bootstrap 을 부른다", gets.some((g) => g === "GET /api/bootstrap"), gets.join(", "));
-  for (const gone of ["GET /api/auth/me", "GET /api/orders", "GET /api/menu/admin", "GET /api/tables", "GET /api/settings"]) {
+  for (const gone of [
+    "GET /api/orders", "GET /api/menu/admin", "GET /api/tables", "GET /api/settings",
+    "GET /api/menu/admin/trash", "GET /api/settings/printers", "GET /api/settings/pad-profiles",
+  ]) {
     check(`${gone} 이 따로 안 나간다`, !gets.includes(gone), gets.join(", "));
   }
 
@@ -91,6 +105,7 @@ function check(name, cond, extra = "") {
     "/api/settings/ticket-print", "/api/settings/move-slip", "/api/settings/escpos",
     "/api/settings/order-hours", "/api/settings/print-device", "/api/test-mode",
     "/api/vip-cards/sale-settings",
+    "/api/menu/admin/trash", "/api/settings/printers", "/api/settings/pad-profiles",
   ]) {
     check(`${k} 의 답이 들어 있다`, k in (boot || {}), keys.join(", "));
   }
